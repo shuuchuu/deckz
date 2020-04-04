@@ -1,7 +1,7 @@
 # `deckz`
 
-[![CI Status](https://github.com/m09/decks/workflows/CI/badge.svg)](https://github.com/m09/decks/actions?query=workflow%3ACI)
-[![CD Status](https://github.com/m09/decks/workflows/CD/badge.svg)](https://github.com/m09/decks/actions?query=workflow%3ACD)
+[![CI Status](https://github.com/m09/deckz/workflows/CI/badge.svg)](https://github.com/m09/deckz/actions?query=workflow%3ACI)
+[![CD Status](https://github.com/m09/deckz/workflows/CD/badge.svg)](https://github.com/m09/deckz/actions?query=workflow%3ACD)
 
 Tool to handle multiple beamer decks with common parts.
 
@@ -13,5 +13,4 @@ With `pip`:
 
 ## Usage
 
-    deckz -h
-
+    deckz --help
