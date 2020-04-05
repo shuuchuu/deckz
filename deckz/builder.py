@@ -6,7 +6,7 @@ from shutil import copyfile
 from subprocess import CalledProcessError, run
 from sys import exit
 from tempfile import NamedTemporaryFile
-from typing import Any, List, Tuple
+from typing import Any, List, Optional, Tuple
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
@@ -107,7 +107,9 @@ def _write_main_latex(
 def _link_includes(includes: List[str], paths: Paths) -> None:
     for include in includes:
         name = f"{include}.tex"
-        _setup_link(paths.build_dir / name, Path(name))
+        _setup_link(
+            paths.build_dir / name, Path(name), backup_dir=paths.shared_latex_dir
+        )
 
 
 def _compile(path: Path, silent_latexmk: bool, paths: Paths) -> bool:
@@ -125,16 +127,27 @@ def _compile(path: Path, silent_latexmk: bool, paths: Paths) -> bool:
         return False
 
 
-def _setup_link(source: Path, target: Path) -> None:
-    target = target.resolve()
+def _setup_link(source: Path, target: Path, backup_dir: Optional[Path] = None) -> None:
     if not target.exists():
-        _logger.critical(
-            f"{target} could not be found. Please make sure it exists before "
-            "proceeding."
-        )
-        exit(1)
+        if not target.is_absolute() and backup_dir is not None:
+            backup_target = backup_dir / target
+            if backup_target.exists():
+                target = backup_target
+            else:
+                _logger.critical(
+                    f"{target} could not be found, and neither could {backup_target}. "
+                    "Please make sure one exists before proceeding."
+                )
+                exit(1)
+        else:
+            _logger.critical(
+                f"{target} could not be found. Please make sure it exists before "
+                "proceeding."
+            )
+            exit(1)
+    target = target.resolve()
     if source.is_symlink():
-        if source.resolve().samefile(target.resolve()):
+        if source.resolve().samefile(target):
             return
         _logger.critical(
             f"{source} already exists in the build directory and does not point to "
