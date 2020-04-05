@@ -2,7 +2,7 @@ from filecmp import cmp
 from logging import getLogger
 from os import unlink
 from pathlib import Path
-from shutil import copyfile
+from shutil import copyfile, move
 from subprocess import CalledProcessError, run
 from sys import exit
 from tempfile import NamedTemporaryFile
@@ -96,7 +96,7 @@ def _write_main_latex(
             )
             fh.write("\n")
         if not output_path.exists() or not cmp(fh.name, str(output_path)):
-            Path(fh.name).replace(output_path)
+            move(fh.name, output_path)
     finally:
         try:
             unlink(fh.name)
