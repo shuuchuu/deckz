@@ -1,7 +1,8 @@
-from pathlib import Path
 from typing import Any, Dict, List, NamedTuple
 
 from yaml import safe_load as yaml_safe_load
+
+from deckz.paths import Paths
 
 
 class Section(NamedTuple):
@@ -27,10 +28,7 @@ class Target(NamedTuple):
         )
 
 
-def get_targets(debug: bool) -> List[Target]:
-    if debug:
-        path = Path("targets-debug.yml")
-    else:
-        path = Path("targets.yml")
-    with path.open("r", encoding="utf8") as fh:
+def get_targets(debug: bool, paths: Paths) -> List[Target]:
+    targets = paths.targets_debug if debug else paths.targets
+    with targets.open("r", encoding="utf8") as fh:
         return [Target.from_dict(target) for target in yaml_safe_load(fh)]

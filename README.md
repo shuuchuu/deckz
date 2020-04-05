@@ -18,39 +18,41 @@ With `pip`:
 `deckz` works with big assumptions on the directory structure of your presentation repository. Among those assumptions:
 
 - your directory should be a git repository
-- it should contain folders to share images (`img`), code snippets (`code-illustration`) and LaTeX files (`template`)
-- it should contain a jinja2 LaTeX template in `jinja2/deckz_main_template.tex.jinja2`
-- your deck folders should be contained in an organization/company folder. This is meant to avoid repeating the company details all over the place.
+- it should contain a `shared` folder for everything that will be shared by all decks during compilation (images, code snippets, etc)
+- it should contain jinja2 LaTeX templates in the `jinja2` directory, with a specific name (`$VERSION.tex.jinja2`) containing a version for reference in configuration, for example: `v1.tex.jinja2`
+- your deck folders should be contained in an organization/company folder. This is meant to avoid repeating the company details all over the place
+- several configuration should be present to customize the decks efficiently (more on that later)
 
 ```
-git-repository
-│
+root (git repository)
 ├── global-config.yml
 ├── jinja2
-│   ├── deckz_main_template.tex.jinja2
-├── img
-│   ├── image1.png
-│   ├── image2.jpg
-├── code-illustration
-│   ├── snippet1.py
-│   ├── snippet2.js
-├── template
-│   ├── module1.tex
-│   ├── module2.tex
+│   ├── v1.tex.jinja2
+│   └── v2.tex.jinja2
+├── shared
+│   ├── img
+│   │   ├── image1.png
+│   │   └── image2.jpg
+│   ├── code
+│   │   ├── snippet1.py
+│   │   └── snippet2.js
+│   └── latex
+│       ├── module1.tex
+│       └── module2.tex
 ├── company1
 │   ├── company-config.yml
-│   ├── deck1
-│   │   ├── session-config.yml
-│   │   ├── deck-config.yml
-│   │   ├── targets.yml
-│   │   ├── module3.tex
-├── company2
-│   ├── company-config.yml
-│   ├── deck2
-│   │   ├── session-config.yml
-│   │   ├── deck-config.yml
-│   │   ├── targets.yml
-│   │   ├── module4.tex
+│   └── deck1
+│       ├── session-config.yml
+│       ├── deck-config.yml
+│       ├── targets.yml
+│       └── module3.tex
+└── company2
+    ├── company-config.yml
+    └── deck2
+        ├── session-config.yml
+        ├── deck-config.yml
+        ├── targets.yml
+        └── module4.tex
 ```
 
 ## Configuration

@@ -1,16 +1,14 @@
 from functools import partial
 from logging import getLogger, INFO
-from pathlib import Path
 from pprint import pformat
-from sys import exit
 
 from click import command, option
 from coloredlogs import install as coloredlogs_install
 
 from deckz.builder import build
 from deckz.config import get_config
+from deckz.paths import Paths
 from deckz.targets import get_targets
-from deckz.utils import get_workdir_path
 
 
 option = partial(option, show_default=True)  # type: ignore
@@ -46,24 +44,11 @@ def main(
         level=INFO, fmt="%(asctime)s %(name)s %(message)s", datefmt="%H:%M:%S",
     )
     logger = getLogger(__name__)
-    workdir = get_workdir_path()
-    if workdir is None:
-        logger.critical(
-            "Could not find the path of the current git working directory. "
-            "Are you in one?"
-        )
-        exit(1)
-    if not Path(".").resolve().relative_to(workdir.resolve()).match("*/*"):
-        logger.critical(
-            f"Not deep enough from root {workdir}. "
-            "Please follow the directory hierarchy root > company > deck and invoke "
-            "this tool from the deck directory."
-        )
-        exit(1)
-    config = get_config()
+    paths = Paths(".")
+    config = get_config(paths=paths)
     if print_config:
         logger.info(f"Resolved config as:\n{pformat(config)}")
-    targets = get_targets(debug=debug)
+    targets = get_targets(debug=debug, paths=paths)
     for i, target in enumerate(targets, start=1):
         if handout:
             logger.info(f"Building handout for target {i}/{len(targets)}")
@@ -72,6 +57,7 @@ def main(
                 target=target,
                 handout=True,
                 silent_latexmk=silent_latexmk,
+                paths=paths,
             )
         if presentation:
             logger.info(f"Building presentation for target {i}/{len(targets)}")
@@ -80,4 +66,5 @@ def main(
                 target=target,
                 handout=False,
                 silent_latexmk=silent_latexmk,
+                paths=paths,
             )
