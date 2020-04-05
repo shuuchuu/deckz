@@ -1,8 +1,13 @@
+from logging import getLogger
+from sys import exit
 from typing import Any, Dict, List, NamedTuple
 
 from yaml import safe_load as yaml_safe_load
 
 from deckz.paths import Paths
+
+
+_logger = getLogger(__name__)
 
 
 class Section(NamedTuple):
@@ -28,7 +33,13 @@ class Target(NamedTuple):
         )
 
 
-def get_targets(debug: bool, paths: Paths) -> List[Target]:
+def get_targets(debug: bool, paths: Paths, fail_on_missing: bool) -> List[Target]:
     targets = paths.targets_debug if debug else paths.targets
+    if not targets.exists():
+        if fail_on_missing:
+            _logger.critical(f"Could not find {targets}.")
+            exit(1)
+        else:
+            return []
     with targets.open("r", encoding="utf8") as fh:
         return [Target.from_dict(target) for target in yaml_safe_load(fh)]

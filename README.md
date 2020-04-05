@@ -136,12 +136,12 @@ session_start: 27/04/2020
 
 ## Usage
 
-Here are the current options:
+There are currently three commands: `run`, `print-config` and `clean-latex`. Here is the documentation of the main command (`run`):
 
 ```
-Usage: deckz [OPTIONS]
+Usage: deckz run [OPTIONS]
 
-  Entry point of the deckz tool.
+  Compile targets.
 
 Options:
   --handout / --no-handout        Compile the handout.  [default: True]
@@ -153,11 +153,7 @@ Options:
 
   --silent-latexmk / --no-silent-latexmk
                                   Make latexmk silent.  [default: True]
-  --print-config / --no-print-config
-                                  Print the resolved configuration.  [default:
-                                  False]
-
   --help                          Show this message and exit.
 ```
 
-Most common use case will be to just run `deckz` in the folder of a deck to generate everything according to the resolved configuration.
+Most common use case will be to just run `deckz run` in the folder of a deck to generate everything (presentations and handouts) according to the resolved configuration.
