@@ -1,8 +1,10 @@
 -c requirements.txt
+black
 flake8
 flake8-bugbear
 flake8-docstrings
 flake8-import-order
-pylint
 mypy
-black
+pylint
+twine
+wheel
