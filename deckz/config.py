@@ -1,4 +1,4 @@
-from collections import ChainMap
+from collections import ChainMap, OrderedDict
 from logging import getLogger
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -12,8 +12,8 @@ from deckz.paths import Paths
 _logger = getLogger(__name__)
 
 
-def get_config(paths: Paths) -> List[Tuple[str, Any]]:
-    return [
+def get_config(paths: Paths) -> Dict[str, Any]:
+    return OrderedDict(
         (k, v)
         for k, v in sorted(
             ChainMap(
@@ -29,7 +29,7 @@ def get_config(paths: Paths) -> List[Tuple[str, Any]]:
                 ],
             ).items()
         )
-    ]
+    )
 
 
 def _get_or_create_config(

@@ -6,7 +6,7 @@ from shutil import copyfile, move
 from subprocess import CalledProcessError, run
 from sys import exit
 from tempfile import NamedTemporaryFile
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
@@ -18,7 +18,7 @@ _logger = getLogger(__name__)
 
 
 def build(
-    config: List[Tuple[str, Any]],
+    config: Dict[str, Any],
     target: Target,
     handout: bool,
     verbose_latexmk: bool,
@@ -56,7 +56,7 @@ def _setup_build_dir(paths: Paths) -> None:
 
 
 def _write_main_latex(
-    config: List[Tuple[str, Any]],
+    config: Dict[str, Any],
     target_sections: List[Section],
     target_title: str,
     handout: bool,
