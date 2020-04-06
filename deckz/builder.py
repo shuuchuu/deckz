@@ -1,39 +1,42 @@
 from filecmp import cmp
 from logging import getLogger
 from os import unlink
+from os.path import join as path_join
 from pathlib import Path
 from shutil import copyfile, move
 from subprocess import CalledProcessError, run
 from sys import exit
 from tempfile import NamedTemporaryFile
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
 from deckz.paths import Paths
-from deckz.targets import Section, Target
+from deckz.targets import Target
 
 
 _logger = getLogger(__name__)
 
 
 def build(
-    config: List[Tuple[str, Any]],
+    config: Dict[str, Any],
     target: Target,
     handout: bool,
     verbose_latexmk: bool,
     paths: Paths,
 ) -> None:
-    filename = target.name
+    filename = f"{config['deck_acronym']}-{target.name}".lower()
     if handout:
         filename += "-handout"
     latex_path = paths.build_dir / f"{filename}.tex"
     build_pdf_path = latex_path.with_suffix(".pdf")
     output_pdf_path = paths.pdf_dir / f"{filename}.pdf"
     _setup_build_dir(paths)
-    _write_main_latex(config, target.sections, target.title, handout, latex_path, paths)
+    _write_main_latex(config, target, handout, latex_path, paths)
     _link_includes(
-        [link for section in target.sections for link in section.includes], paths
+        [link for section in target.sections for link in section.includes],
+        target.name,
+        paths,
     )
 
     return_ok = _compile(
@@ -56,9 +59,8 @@ def _setup_build_dir(paths: Paths) -> None:
 
 
 def _write_main_latex(
-    config: List[Tuple[str, Any]],
-    target_sections: List[Section],
-    target_title: str,
+    config: Dict[str, Any],
+    target: Target,
     handout: bool,
     output_path: Path,
     paths: Paths,
@@ -77,6 +79,7 @@ def _write_main_latex(
         autoescape=False,
     )
     env.filters["camelcase"] = _to_camel_case
+    env.filters["path_join"] = lambda paths: path_join(*paths)
 
     try:
         filename = paths.get_jinja2_template_path("v1").name
@@ -86,14 +89,7 @@ def _write_main_latex(
         exit(1)
     try:
         with NamedTemporaryFile("w", encoding="utf8", delete=False) as fh:
-            fh.write(
-                template.render(
-                    config=config,
-                    target_title=target_title,
-                    handout=handout,
-                    sections=target_sections,
-                )
-            )
+            fh.write(template.render(config=config, target=target, handout=handout))
             fh.write("\n")
         if not output_path.exists() or not cmp(fh.name, str(output_path)):
             move(fh.name, output_path)
@@ -104,12 +100,16 @@ def _write_main_latex(
             pass
 
 
-def _link_includes(includes: List[str], paths: Paths) -> None:
+def _link_includes(includes: List[str], target_name: str, paths: Paths) -> None:
     for include in includes:
         name = f"{include}.tex"
-        _setup_link(
-            paths.build_dir / name, Path(name), backup_dir=paths.shared_latex_dir
-        )
+        source = paths.build_dir / target_name / name
+        local_target = Path(target_name) / name
+        shared_target = paths.shared_latex_dir / name
+        if local_target.exists():
+            _setup_link(source, local_target)
+        else:
+            _setup_link(source, shared_target)
 
 
 def _compile(path: Path, verbose_latexmk: bool, paths: Paths) -> bool:
@@ -127,24 +127,13 @@ def _compile(path: Path, verbose_latexmk: bool, paths: Paths) -> bool:
         return False
 
 
-def _setup_link(source: Path, target: Path, backup_dir: Optional[Path] = None) -> None:
+def _setup_link(source: Path, target: Path) -> None:
     if not target.exists():
-        if not target.is_absolute() and backup_dir is not None:
-            backup_target = backup_dir / target
-            if backup_target.exists():
-                target = backup_target
-            else:
-                _logger.critical(
-                    f"{target} could not be found, and neither could {backup_target}. "
-                    "Please make sure one exists before proceeding."
-                )
-                exit(1)
-        else:
-            _logger.critical(
-                f"{target} could not be found. Please make sure it exists before "
-                "proceeding."
-            )
-            exit(1)
+        _logger.critical(
+            f"{target} could not be found. Please make sure it exists before "
+            "proceeding."
+        )
+        exit(1)
     target = target.resolve()
     if source.is_symlink():
         if source.resolve().samefile(target):

@@ -1,7 +1,6 @@
 from argparse import ArgumentParser
 from logging import getLogger
 from pathlib import Path
-from pprint import pformat
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set
 
 from deckz.builder import build
@@ -132,7 +131,10 @@ def print_config() -> None:
     """Print the resolved configuration."""
     paths = Paths(".")
     config = get_config(paths=paths)
-    _logger.info(f"Resolved config as:\n{pformat(config)}")
+    _logger.info(
+        "Resolved config as:\n%s",
+        "\n".join((f"  - {k}: {v}") for k, v in config.items()),
+    )
 
 
 @register_command()
