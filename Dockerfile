@@ -4,16 +4,20 @@ WORKDIR /workdir
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-    git
+    curl \
+    git \
+    && curl -sSL \
+    https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py \
+    | python
 
-COPY requirements.txt .
+COPY poetry.lock .
+COPY pyproject.toml .
 
-RUN pip install --no-cache-dir -r requirements.txt
+RUN /root/.poetry/bin/poetry install --no-root --no-dev
 
 COPY README.md .
-COPY setup.py .
 COPY deckz ./deckz
 
-RUN pip install --no-cache-dir -e .
+RUN /root/.poetry/bin/poetry install --no-dev
 
-ENTRYPOINT ["deckz"]
+ENTRYPOINT ["/root/.poetry/bin/poetry", "run", "deckz"]
