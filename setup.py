@@ -19,7 +19,7 @@ setup(
     python_requires=">=3.6.0",
     url="https://github.com/m09/deckz",
     packages=find_packages(exclude=["tests"]),
-    entry_points={"console_scripts": ["deckz=deckz.__main__:cli"]},
+    entry_points={"console_scripts": ["deckz=deckz.__main__:main"]},
     install_requires=["appdirs", "click", "coloredlogs", "Jinja2", "pygit2", "PyYAML"],
     include_package_data=True,
     classifiers=[

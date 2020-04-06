@@ -21,7 +21,7 @@ def build(
     config: List[Tuple[str, Any]],
     target: Target,
     handout: bool,
-    silent_latexmk: bool,
+    verbose_latexmk: bool,
     paths: Paths,
 ) -> None:
     filename = target.name
@@ -38,7 +38,7 @@ def build(
 
     return_ok = _compile(
         latex_path.relative_to(paths.build_dir),
-        silent_latexmk=silent_latexmk,
+        verbose_latexmk=verbose_latexmk,
         paths=paths,
     )
     if not return_ok:
@@ -112,13 +112,13 @@ def _link_includes(includes: List[str], paths: Paths) -> None:
         )
 
 
-def _compile(path: Path, silent_latexmk: bool, paths: Paths) -> bool:
+def _compile(path: Path, verbose_latexmk: bool, paths: Paths) -> bool:
     try:
         command = [
             "latexmk",
             "-pdflatex=xelatex -shell-escape -interaction=nonstopmode %O %S",
         ]
-        if silent_latexmk:
+        if not verbose_latexmk:
             command.append("-silent")
         command.append(str(path))
         run(command, cwd=paths.build_dir, check=True)
