@@ -136,24 +136,4 @@ session_start: 27/04/2020
 
 ## Usage
 
-There are currently three commands: `run`, `print-config` and `clean-latex`. Here is the documentation of the main command (`run`):
-
-```
-Usage: deckz run [OPTIONS]
-
-  Compile targets.
-
-Options:
-  --handout / --no-handout        Compile the handout.  [default: True]
-  --presentation / --no-presentation
-                                  Compile the presentation.  [default: True]
-  --debug / --no-debug            Activate debug mode: targets-debug.yml will
-                                  be used instead of targets.yml  [default:
-                                  False]
-
-  --silent-latexmk / --no-silent-latexmk
-                                  Make latexmk silent.  [default: True]
-  --help                          Show this message and exit.
-```
-
-Most common use case will be to just run `deckz run` in the folder of a deck to generate everything (presentations and handouts) according to the resolved configuration.
+See the `-h` flag of the `deckz` command line tool.
