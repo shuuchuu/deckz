@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 from logging import getLogger
+from os.path import join as path_join
 from pathlib import Path
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set
 
@@ -184,7 +185,7 @@ def clean_latex() -> None:
     _logger.info(f"Cleaning unused LaTeX files")
     paths = Paths(".")
     includes = set(
-        include
+        path_join(target.name, include)
         for target in get_targets(
             debug=False, paths=paths, fail_on_missing=False, whitelist=[]
         )
@@ -192,7 +193,7 @@ def clean_latex() -> None:
         for include in section.includes
     )
     includes |= set(
-        include
+        path_join(target.name, include)
         for target in get_targets(
             debug=True, paths=paths, fail_on_missing=False, whitelist=[]
         )
