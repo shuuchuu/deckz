@@ -45,6 +45,11 @@ def register_command(
 
 def _define_run_parser(parser: ArgumentParser) -> None:
     parser.add_argument(
+        "targets",
+        nargs="*",
+        help="Targets to restrict to. No argument = consider everything.",
+    )
+    parser.add_argument(
         "--no-handout",
         dest="handout",
         action="store_false",
@@ -62,17 +67,25 @@ def _define_run_parser(parser: ArgumentParser) -> None:
 
 
 @register_command(parser_definer=_define_run_parser)
-def run(handout: bool, presentation: bool, verbose_latexmk: bool) -> None:
+def run(
+    targets: List[str], handout: bool, presentation: bool, verbose_latexmk: bool
+) -> None:
     """Compile main targets."""
     _run(
         handout=handout,
         presentation=presentation,
         verbose_latexmk=verbose_latexmk,
         debug=False,
+        target_whitelist=targets,
     )
 
 
 def _define_debug_parser(parser: ArgumentParser) -> None:
+    parser.add_argument(
+        "targets",
+        nargs="*",
+        help="Targets to restrict to. No argument = consider everything.",
+    )
     parser.add_argument(
         "--handout", action="store_true", help="Compile the handout.",
     )
@@ -91,20 +104,31 @@ def _define_debug_parser(parser: ArgumentParser) -> None:
 
 
 @register_command(parser_definer=_define_debug_parser)
-def debug(handout: bool, presentation: bool, verbose_latexmk: bool) -> None:
+def debug(
+    targets: List[str], handout: bool, presentation: bool, verbose_latexmk: bool
+) -> None:
     """Compile debug targets."""
     _run(
         handout=handout,
         presentation=presentation,
         verbose_latexmk=verbose_latexmk,
         debug=True,
+        target_whitelist=targets if targets else None,
     )
 
 
-def _run(handout: bool, presentation: bool, verbose_latexmk: bool, debug: bool) -> None:
+def _run(
+    handout: bool,
+    presentation: bool,
+    verbose_latexmk: bool,
+    debug: bool,
+    target_whitelist: List[str],
+) -> None:
     paths = Paths(".")
     config = get_config(paths=paths)
-    targets = get_targets(debug=debug, paths=paths, fail_on_missing=True)
+    targets = get_targets(
+        debug=debug, paths=paths, fail_on_missing=True, whitelist=target_whitelist,
+    )
     for i, target in enumerate(targets, start=1):
         if handout:
             _logger.info(f"Building handout for target {i}/{len(targets)}")
@@ -161,13 +185,17 @@ def clean_latex() -> None:
     paths = Paths(".")
     includes = set(
         include
-        for target in get_targets(debug=False, paths=paths, fail_on_missing=False)
+        for target in get_targets(
+            debug=False, paths=paths, fail_on_missing=False, whitelist=[]
+        )
         for section in target.sections
         for include in section.includes
     )
     includes |= set(
         include
-        for target in get_targets(debug=True, paths=paths, fail_on_missing=False)
+        for target in get_targets(
+            debug=True, paths=paths, fail_on_missing=False, whitelist=[]
+        )
         for section in target.sections
         for include in section.includes
     )
