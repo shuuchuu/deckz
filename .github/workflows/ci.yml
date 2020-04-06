@@ -18,7 +18,14 @@ jobs:
         uses: actions/setup-python@v1
         with:
           python-version: 3.8
+      - name: Set up Poetry
+        run: curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python
       - name: Setup the checking tools
-        run: pip install -r dev-requirements.txt
+        run: |
+          python -m venv env
+          source env/bin/activate
+          $HOME/.poetry/bin/poetry install
       - name: Test the package style conventions
-        run: make check
+        run: |
+          source env/bin/activate
+          make check

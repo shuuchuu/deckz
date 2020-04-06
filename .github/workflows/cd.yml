@@ -16,15 +16,15 @@ jobs:
         uses: actions/setup-python@v1
         with:
           python-version: "3.8"
+      - name: Set up Poetry
+        run: curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python
       - name: Build wheel and deploy on PyPI
         run: |
           export TAG=${GITHUB_REF##*/}
-          test $(python3 setup.py --version) == $TAG
+          test $($HOME/.poetry/bin/poetry version | cut -f 2 -d " ") == $TAG
           echo Building for tag "$TAG"
-          pip3 install pip-tools
-          pip-sync requirements.txt dev-requirements.txt
-          python3 setup.py sdist bdist_wheel
-          python3 -m twine upload dist/* -u "${{ secrets.PYPI_LOGIN }}" -p "${{ secrets.PYPI_PASSWORD }}"
+          $HOME/.poetry/bin/poetry build
+          $HOME/.poetry/bin/poetry publish -u "${{ secrets.PYPI_LOGIN }}" -p "${{ secrets.PYPI_PASSWORD }}"
   deploy-docker:
     name: Deploy to Docker Hub
     runs-on: ubuntu-latest
