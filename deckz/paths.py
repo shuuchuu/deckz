@@ -3,7 +3,8 @@ from pathlib import Path
 from typing import Optional
 
 from appdirs import user_config_dir
-from pygit2 import discover_repository, Repository
+from git import Repo
+from git.exc import InvalidGitRepositoryError
 
 from deckz import app_name
 
@@ -43,15 +44,15 @@ class Paths:
     @property
     def git_dir(self) -> Optional[Path]:
         if not hasattr(self, "_git_dir"):
-            repository_path = discover_repository(str(self.working_dir))
-            if repository_path is None:
+            try:
+                repository = Repo(str(self.working_dir), search_parent_directories=True)
+            except InvalidGitRepositoryError:
                 _logger.critical(
                     "Could not find the path of the current git working directory. "
                     "Are you in one?"
                 )
                 exit(1)
-            repository = Repository(repository_path)
-            self._git_dir = Path(repository.workdir).resolve()
+            self._git_dir = Path(repository.git.rev_parse("--show-toplevel")).resolve()
         return self._git_dir
 
     def get_jinja2_template_path(self, version: str) -> Path:
