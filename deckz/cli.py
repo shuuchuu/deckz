@@ -165,6 +165,18 @@ def fill() -> None:
 
 
 @register_command()
+def init() -> None:
+    """Create an initial targets.yml."""
+
+    if paths.targets.exists():
+        _logger.info(f"Nothing to do: {paths.targets} already exists")
+
+    else:
+        _logger.info(f"Copying {paths.template_targets} to current directory")
+        shutil_copy(str(paths.template_targets), str(paths.working_dir))
+
+
+@register_command()
 def print_config() -> None:
     """Print the resolved configuration."""
     config = get_config()
