@@ -1,9 +1,11 @@
 from argparse import ArgumentParser
 from logging import getLogger
+from shutil import copy as shutil_copy
 from typing import Any, Callable, List, NamedTuple, Optional
 
 from deckz.builder import build
 from deckz.config import get_config
+from deckz.paths import paths
 from deckz.targets import Dependencies, Targets
 
 
@@ -141,6 +143,25 @@ def _run(
                 handout=False,
                 verbose_latexmk=verbose_latexmk,
             )
+
+
+@register_command()
+def fill() -> None:
+    """Fill the dependency directories with templates for missing targets."""
+
+    dependencies = Dependencies.merge(
+        Targets(debug=False, fail_on_missing=False, whitelist=[]).get_dependencies(),
+        Targets(debug=True, fail_on_missing=False, whitelist=[]).get_dependencies(),
+    )
+    if dependencies.missing:
+        _logger.info(
+            "Creating the following missing dependencies:\n%s",
+            "\n".join(f"  - {str(d)}" for d in sorted(dependencies.missing)),
+        )
+        for dependency in dependencies.missing:
+            shutil_copy(str(paths.template_latex), str(dependency))
+    else:
+        _logger.info("All targets have a matching LaTeX files")
 
 
 @register_command()
