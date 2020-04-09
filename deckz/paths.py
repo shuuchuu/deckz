@@ -23,6 +23,7 @@ class _Paths:
         self.shared_latex_dir = self.shared_dir / "latex"
         self.templates_dir = self.git_dir / "templates"
         self.template_latex = self.templates_dir / "subsection.tex"
+        self.template_targets = self.templates_dir / "targets.yml"
         self.jinja2_dir = self.git_dir / "jinja2"
         self.user_config_dir = Path(user_config_dir(app_name))
         self.global_config = self.git_dir / "global-config.yml"
