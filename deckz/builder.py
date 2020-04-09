@@ -11,7 +11,7 @@ from typing import Any, Dict, List
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
-from deckz.paths import Paths
+from deckz.paths import paths
 from deckz.targets import Target
 
 
@@ -19,11 +19,7 @@ _logger = getLogger(__name__)
 
 
 def build(
-    config: Dict[str, Any],
-    target: Target,
-    handout: bool,
-    verbose_latexmk: bool,
-    paths: Paths,
+    config: Dict[str, Any], target: Target, handout: bool, verbose_latexmk: bool,
 ) -> None:
     filename = f"{config['deck_acronym']}-{target.name}".lower()
     if handout:
@@ -31,19 +27,13 @@ def build(
     latex_path = paths.build_dir / f"{filename}.tex"
     build_pdf_path = latex_path.with_suffix(".pdf")
     output_pdf_path = paths.pdf_dir / f"{filename}.pdf"
-    _setup_build_dir(paths)
-    _write_main_latex(config, target, handout, latex_path, paths)
+    _setup_build_dir()
+    _write_main_latex(config, target, handout, latex_path)
     _link_includes(
-        [link for section in target.sections for link in section.includes],
-        target.name,
-        paths,
+        [link for section in target.sections for link in section.includes], target.name,
     )
 
-    return_ok = _compile(
-        latex_path.relative_to(paths.build_dir),
-        verbose_latexmk=verbose_latexmk,
-        paths=paths,
-    )
+    return_ok = _compile(latex_path.relative_to(paths.build_dir), verbose_latexmk)
     if not return_ok:
         _logger.critical(f"latexmk errored for {build_pdf_path}.")
         exit(1)
@@ -52,18 +42,14 @@ def build(
         copyfile(build_pdf_path, output_pdf_path)
 
 
-def _setup_build_dir(paths: Paths) -> None:
+def _setup_build_dir() -> None:
     paths.build_dir.mkdir(parents=True, exist_ok=True)
     for item in paths.shared_dir.iterdir():
         _setup_link(paths.build_dir / item.name, item)
 
 
 def _write_main_latex(
-    config: Dict[str, Any],
-    target: Target,
-    handout: bool,
-    output_path: Path,
-    paths: Paths,
+    config: Dict[str, Any], target: Target, handout: bool, output_path: Path,
 ) -> None:
     env = Environment(
         loader=FileSystemLoader(searchpath=paths.jinja2_dir),
@@ -100,7 +86,7 @@ def _write_main_latex(
             pass
 
 
-def _link_includes(includes: List[str], target_name: str, paths: Paths) -> None:
+def _link_includes(includes: List[str], target_name: str) -> None:
     for include in includes:
         name = f"{include}.tex"
         source = paths.build_dir / target_name / name
@@ -112,7 +98,7 @@ def _link_includes(includes: List[str], target_name: str, paths: Paths) -> None:
             _setup_link(source, shared_target)
 
 
-def _compile(path: Path, verbose_latexmk: bool, paths: Paths) -> bool:
+def _compile(path: Path, verbose_latexmk: bool) -> bool:
     try:
         command = [
             "latexmk",

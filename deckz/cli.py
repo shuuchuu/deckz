@@ -1,13 +1,10 @@
 from argparse import ArgumentParser
 from logging import getLogger
-from os.path import join as path_join
-from pathlib import Path
-from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set
+from typing import Any, Callable, List, NamedTuple, Optional
 
 from deckz.builder import build
 from deckz.config import get_config
-from deckz.paths import Paths
-from deckz.targets import get_targets
+from deckz.targets import Dependencies, Targets
 
 
 _logger = getLogger(__name__)
@@ -125,11 +122,8 @@ def _run(
     debug: bool,
     target_whitelist: List[str],
 ) -> None:
-    paths = Paths(".")
-    config = get_config(paths=paths)
-    targets = get_targets(
-        debug=debug, paths=paths, fail_on_missing=True, whitelist=target_whitelist,
-    )
+    config = get_config()
+    targets = Targets(debug=debug, fail_on_missing=True, whitelist=target_whitelist)
     for i, target in enumerate(targets, start=1):
         if handout:
             _logger.info(f"Building handout for target {i}/{len(targets)}")
@@ -138,7 +132,6 @@ def _run(
                 target=target,
                 handout=True,
                 verbose_latexmk=verbose_latexmk,
-                paths=paths,
             )
         if presentation:
             _logger.info(f"Building presentation for target {i}/{len(targets)}")
@@ -147,67 +140,42 @@ def _run(
                 target=target,
                 handout=False,
                 verbose_latexmk=verbose_latexmk,
-                paths=paths,
             )
 
 
 @register_command()
 def print_config() -> None:
     """Print the resolved configuration."""
-    paths = Paths(".")
-    config = get_config(paths=paths)
+    config = get_config()
     _logger.info(
         "Resolved config as:\n%s",
         "\n".join((f"  - {k}: {v}") for k, v in config.items()),
     )
 
 
-@register_command()
-def clean_latex() -> None:
+def _define_clean_latex_parser(parser: ArgumentParser) -> None:
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Print what would be removed.",
+    )
+
+
+@register_command(parser_definer=_define_clean_latex_parser)
+def clean_latex(dry_run: bool) -> None:
     """Clean LaTeX files that are not used in `targets*.yml`."""
 
-    def find_includes(input_dict: Dict[str, Any]) -> Set[str]:
-        includes: Set[str] = set()
-
-        for key, value in input_dict.items():
-            if key == "includes":
-                includes.update(value)
-
-            elif isinstance(value, dict):
-                includes.update(find_includes(value))
-
-            elif isinstance(value, list):
-                for item in value:
-                    if isinstance(item, dict):
-                        includes.update(find_includes(item))
-        return includes
-
     _logger.info(f"Cleaning unused LaTeX files")
-    paths = Paths(".")
-    includes = set(
-        path_join(target.name, include)
-        for target in get_targets(
-            debug=False, paths=paths, fail_on_missing=False, whitelist=[]
-        )
-        for section in target.sections
-        for include in section.includes
+    dependencies = Dependencies.merge(
+        Targets(debug=False, fail_on_missing=False, whitelist=[]).get_dependencies(),
+        Targets(debug=True, fail_on_missing=False, whitelist=[]).get_dependencies(),
     )
-    includes |= set(
-        path_join(target.name, include)
-        for target in get_targets(
-            debug=True, paths=paths, fail_on_missing=False, whitelist=[]
+    if dependencies.unused:
+        _logger.info(
+            "%s the following unused dependencies:\n%s",
+            "Would remove" if dry_run else "Removing",
+            "\n".join(f"  - {str(d)}" for d in sorted(dependencies.unused)),
         )
-        for section in target.sections
-        for include in section.includes
-    )
-
-    latex_files = set()
-    for item in paths.working_dir.glob("**/*.tex"):
-        try:
-            item.relative_to(paths.build_dir)
-        except ValueError:
-            latex_files.add(str(item.relative_to(paths.working_dir).with_suffix("")))
-
-    for extra in latex_files - includes:
-        _logger.info(f"Removing {extra}")
-        Path(extra).with_suffix(".tex").unlink()
+    else:
+        _logger.info("All LaTeX files are used, nothing to remove")
+    if not dry_run:
+        for dependency in dependencies.unused:
+            dependency.unlink()
