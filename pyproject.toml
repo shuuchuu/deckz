@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "deckz"
-version = "2.4.0"
+version = "2.4.1"
 description = "Tool to handle multiple beamer decks."
 authors = ["m09 <142691+m09@users.noreply.github.com>"]
 license = "Apache-2.0"

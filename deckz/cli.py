@@ -149,16 +149,34 @@ def _run(
 def fill() -> None:
     """Fill the dependency directories with templates for missing targets."""
 
-    dependencies = Dependencies.merge(
-        Targets(debug=False, fail_on_missing=False, whitelist=[]).get_dependencies(),
-        Targets(debug=True, fail_on_missing=False, whitelist=[]).get_dependencies(),
-    )
+    if paths.targets.exists():
+        if paths.targets_debug.exists():
+            dependencies = Dependencies.merge(
+                Targets(
+                    debug=False, fail_on_missing=False, whitelist=[]
+                ).get_dependencies(),
+                Targets(
+                    debug=True, fail_on_missing=False, whitelist=[]
+                ).get_dependencies(),
+            )
+        else:
+            dependencies = Targets(
+                debug=False, fail_on_missing=False, whitelist=[]
+            ).get_dependencies()
+    elif paths.targets_debug.exists():
+        dependencies = Targets(
+            debug=True, fail_on_missing=False, whitelist=[]
+        ).get_dependencies()
+    else:
+        _logger.critical("Could not find any target file.")
+        exit(1)
     if dependencies.missing:
         _logger.info(
             "Creating the following missing dependencies:\n%s",
             "\n".join(f"  - {str(d)}" for d in sorted(dependencies.missing)),
         )
         for dependency in dependencies.missing:
+            dependency.parent.mkdir(exist_ok=True, parents=True)
             shutil_copy(str(paths.template_latex), str(dependency))
     else:
         _logger.info("All targets have a matching LaTeX files")
