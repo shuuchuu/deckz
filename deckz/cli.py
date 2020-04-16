@@ -1,7 +1,13 @@
 from argparse import ArgumentParser
 from logging import getLogger
+from pathlib import Path
 from shutil import copy as shutil_copy
+from threading import Lock
+from time import time
 from typing import Any, Callable, List, NamedTuple, Optional
+
+from watchdog.events import FileSystemEvent
+from watchdog.observers import Observer
 
 from deckz.builder import build
 from deckz.config import get_config
@@ -143,6 +149,128 @@ def _run(
                 handout=False,
                 verbose_latexmk=verbose_latexmk,
             )
+
+
+def _define_watch_parser(parser: ArgumentParser) -> None:
+    parser.add_argument(
+        "target_whitelist",
+        nargs="*",
+        metavar="targets",
+        help="Targets to restrict to. No argument = consider everything.",
+    )
+    parser.add_argument(
+        "--minimum-delay",
+        type=int,
+        default=5,
+        help="Minimum delay before recompiling.",
+    )
+    parser.add_argument(
+        "--no-debug",
+        dest="debug",
+        action="store_false",
+        help="Use main targets, not debug targets.",
+    )
+    parser.add_argument(
+        "--handout", action="store_true", help="Compile the handout.",
+    )
+    parser.add_argument(
+        "--no-presentation",
+        dest="presentation",
+        action="store_false",
+        help="Don't compile the presentation.",
+    )
+    parser.add_argument(
+        "--silent-latexmk",
+        dest="verbose_latexmk",
+        action="store_false",
+        help="Make latexmk silent.",
+    )
+
+
+@register_command(parser_definer=_define_watch_parser)
+def watch(
+    minimum_delay: int,
+    handout: bool,
+    presentation: bool,
+    verbose_latexmk: bool,
+    debug: bool,
+    target_whitelist: List[str],
+) -> None:
+    """Compile on change."""
+
+    class LatexCompilerEventHandler:
+        def __init__(
+            self,
+            minimum_delay: int,
+            handout: bool,
+            presentation: bool,
+            verbose_latexmk: bool,
+            debug: bool,
+            target_whitelist: List[str],
+        ):
+            self._minimum_delay = minimum_delay
+            self._last_compile = 0.0
+            self._handout = handout
+            self._presentation = presentation
+            self._verbose_latexmk = verbose_latexmk
+            self._debug = debug
+            self._target_whitelist = target_whitelist
+            self._lock = Lock()
+            self._compiling = False
+
+        def dispatch(self, event: FileSystemEvent) -> None:
+            try:
+                Path(event.src_path).relative_to(paths.build_dir)
+            except ValueError:
+                pass
+            else:
+                return
+            with self._lock:
+                current_time = time()
+                if self._last_compile + self._minimum_delay > current_time:
+                    return
+                elif self._compiling:
+                    _logger.info("Still on last build, not starting a new build")
+                    return
+                else:
+                    self._last_compile = current_time
+            try:
+                self._compiling = True
+                _logger.info("Detected changes, starting a new build")
+                _run(
+                    handout=self._handout,
+                    presentation=self._presentation,
+                    verbose_latexmk=self._verbose_latexmk,
+                    debug=self._debug,
+                    target_whitelist=self._target_whitelist,
+                )
+            finally:
+                self._compiling = False
+
+    _logger.info(f"Watching current and shared directories")
+    observer = Observer()
+    event_handler = LatexCompilerEventHandler(
+        minimum_delay,
+        handout=handout,
+        presentation=presentation,
+        verbose_latexmk=verbose_latexmk,
+        debug=debug,
+        target_whitelist=target_whitelist,
+    )
+    observer.schedule(event_handler, str(paths.shared_dir), recursive=True)
+    observer.schedule(event_handler, str(paths.working_dir), recursive=True)
+    observer.start()
+    try:
+        while observer.isAlive():
+            observer.join(1)
+    except KeyboardInterrupt:
+        observer.stop()
+        observer.join()
+        _logger.info("Quitting")
+        exit(0)
+    observer.join()
+    _logger.info("Stopped watching current and shared directories")
+    exit(1)
 
 
 @register_command()
