@@ -91,11 +91,19 @@ class Targets(Iterable[Target]):
             else:
                 self.targets = []
         with path.open("r", encoding="utf8") as fh:
-            self.targets = [
-                Target.from_dict(target)
-                for target in yaml_safe_load(fh)
-                if not whitelist or target["name"] in whitelist
-            ]
+            targets = [Target.from_dict(target) for target in yaml_safe_load(fh)]
+        target_names = set(target.name for target in targets)
+        whiteset = set(whitelist)
+        unmatched = whiteset - target_names
+        if unmatched:
+            _logger.critical(
+                "Could not find the following targets:\n%s",
+                "\n".join("  - %s" % name for name in unmatched),
+            )
+            exit(1)
+        self.targets = [
+            target for target in targets if not whiteset or target.name in whiteset
+        ]
 
     def get_dependencies(self) -> Dependencies:
         return Dependencies.merge(*(t.get_dependencies() for t in self.targets))
