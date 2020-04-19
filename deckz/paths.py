@@ -12,7 +12,7 @@ from deckz import app_name
 _logger = getLogger(__name__)
 
 
-class _Paths:
+class Paths:
     def __init__(self, working_dir: str) -> None:
         self.working_dir = Path(working_dir).resolve()
         self.build_dir = self.working_dir / "build"
@@ -60,6 +60,3 @@ class _Paths:
 
     def get_jinja2_template_path(self, version: str) -> Path:
         return self.jinja2_dir / f"{version}.tex.jinja2"
-
-
-paths = _Paths(".")

@@ -9,7 +9,7 @@ on:
       - master
 jobs:
   style:
-    name: Check style conventions
+    name: Check style conventions and test the package
     runs-on: ubuntu-latest
     steps:
       - name: Clone repository
@@ -20,7 +20,7 @@ jobs:
           python-version: 3.8
       - name: Set up Poetry
         run: curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python
-      - name: Setup the checking tools
+      - name: Install the package
         run: |
           python -m venv env
           source env/bin/activate
@@ -29,3 +29,9 @@ jobs:
         run: |
           source env/bin/activate
           make check
+      - name: Install LaTeX
+        run: sudo apt install texlive texlive-xetex latexmk
+      - name: Run the tests
+        run: |
+          source env/bin/activate
+          pytest

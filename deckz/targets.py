@@ -5,7 +5,7 @@ from typing import Any, Dict, Iterable, Iterator, List, NamedTuple, Set
 
 from yaml import safe_load as yaml_safe_load
 
-from deckz.paths import paths
+from deckz.paths import Paths
 
 
 _logger = getLogger(__name__)
@@ -60,8 +60,8 @@ class Target(NamedTuple):
             sections=[Section.from_dict(section) for section in input_dict["sections"]],
         )
 
-    def get_dependencies(self) -> Dependencies:
-        dependencies_dir = Path(self.name)
+    def get_dependencies(self, paths: Paths) -> Dependencies:
+        dependencies_dir = paths.working_dir / self.name
         dependencies = Dependencies()
         dependencies.unused = set(d.resolve() for d in dependencies_dir.glob("*.tex"))
         for section in self.sections:
@@ -81,8 +81,9 @@ class Target(NamedTuple):
 
 class Targets(Iterable[Target]):
     def __init__(
-        self, debug: bool, fail_on_missing: bool, whitelist: List[str]
+        self, paths: Paths, debug: bool, fail_on_missing: bool, whitelist: List[str]
     ) -> None:
+        self._paths = paths
         path = paths.targets_debug if debug else paths.targets
         if not path.exists():
             if fail_on_missing:
@@ -106,7 +107,9 @@ class Targets(Iterable[Target]):
         ]
 
     def get_dependencies(self) -> Dependencies:
-        return Dependencies.merge(*(t.get_dependencies() for t in self.targets))
+        return Dependencies.merge(
+            *(t.get_dependencies(self._paths) for t in self.targets)
+        )
 
     def __iter__(self) -> Iterator[Target]:
         return iter(self.targets)

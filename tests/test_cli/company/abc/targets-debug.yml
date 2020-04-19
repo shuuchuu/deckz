@@ -1,0 +1,25 @@
+- name: p1
+  title: Part 1
+  sections:
+    - title: First section
+      includes:
+        - about
+        - questions
+  sections:
+    - title: Second section
+      includes:
+        - about
+        - questions
+
+- name: p2
+  title: Part 2
+  sections:
+    - title: Second part
+      includes:
+        - about
+        - questions
+  sections:
+    - title: Second section
+      includes:
+        - about
+        - questions

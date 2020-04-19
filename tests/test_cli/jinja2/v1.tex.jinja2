@@ -1,0 +1,39 @@
+%% for k, v in config.items()
+\newcommand{\\VAR{k | camelcase}}{\VAR{v}}
+%% endfor
+
+\documentclass[\PresentationSize\BLOCK{if handout},handout\BLOCK{endif}]{beamer}
+
+\usetheme[sectionpage=none,subsectionpage=progressbar]{metropolis}
+\setbeamercolor{normal text}{bg=white}
+\setbeamertemplate{bibliography item}{\insertbiblabel}
+\setbeamertemplate{frame footer}{\CompanyName{} --- \DeckTitle}
+
+\author{\vfill\UserName}
+\institute{%
+  \vfill%
+  \includegraphics[height=\CompanyLogoHeight]{\CompanyLogo}%
+  \newline%
+  \url{\CompanyWebsite}%
+}
+\date{\vfill\SessionStart--\SessionEnd}
+
+\title{\DeckTitle}
+\subtitle{\VAR{target.title}}
+
+\begin{document}
+
+\maketitle
+
+\begin{frame}{Program}
+\tableofcontents[subsectionstyle=hide]
+\end{frame}
+
+%% for section in target.sections:
+\section{\VAR{section.title}}
+%% for include in section.includes:
+\input{\VAR{[target.name, include] | path_join}}
+%% endfor
+%% endfor
+
+\end{document}
