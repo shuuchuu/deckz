@@ -6,13 +6,13 @@ from typing import Any, Dict, List, Tuple
 from click import prompt
 from yaml import dump as yaml_dump, safe_load as yaml_safe_load
 
-from deckz.paths import paths
+from deckz.paths import Paths
 
 
 _logger = getLogger(__name__)
 
 
-def get_config() -> Dict[str, Any]:
+def get_config(paths: Paths) -> Dict[str, Any]:
     return OrderedDict(
         (k, v)
         for k, v in sorted(
