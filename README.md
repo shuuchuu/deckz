@@ -2,7 +2,7 @@
 
 [![CI Status](https://img.shields.io/github/workflow/status/m09/deckz/CI?label=CI&style=for-the-badge)](https://github.com/m09/deckz/actions?query=workflow%3ACI)
 [![CD Status](https://img.shields.io/github/workflow/status/m09/deckz/CD?label=CD&style=for-the-badge)](https://github.com/m09/deckz/actions?query=workflow%3ACD)
-[![Test Coverage](https://img.shields.io/codecov/c/github/m09/deckz?style=for-the-badge)(https://codecov.io/gh/m09/deckz)
+[![Test Coverage](https://img.shields.io/codecov/c/github/m09/deckz?style=for-the-badge)](https://codecov.io/gh/m09/deckz)
 [![PyPI Project](https://img.shields.io/pypi/v/deckz?style=for-the-badge)](https://pypi.org/project/deckz/)
 [![Docker Hub Image](https://img.shields.io/docker/v/hugomougard/deckz?label=DOCKER&style=for-the-badge)](https://hub.docker.com/r/hugomougard/deckz)
 
