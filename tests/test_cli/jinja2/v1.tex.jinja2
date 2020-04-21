@@ -2,12 +2,50 @@
 \newcommand{\\VAR{k | camelcase}}{\VAR{v}}
 %% endfor
 
+
 \documentclass[\PresentationSize\BLOCK{if handout},handout\BLOCK{endif}]{beamer}
 
-\usetheme[sectionpage=none,subsectionpage=progressbar]{metropolis}
+\usepackage[export]{adjustbox}
+\usepackage{soul}
+
+\usetheme[block=fill,sectionpage=progressbar,subsectionpage=progressbar,progressbar=frametitle]{metropolis}
+
+\makeatletter
+\setlength{\metropolis@frametitle@padding}{1.9ex}% <- default 2.2 ex
+\renewcommand{\metropolis@frametitlestrut@start}{%
+  \rule{0pt}{\metropolis@frametitle@padding}%
+}
+\renewcommand{\metropolis@frametitlestrut@end}{%
+  \rule[-\metropolis@frametitle@padding]{0pt}{\metropolis@frametitle@padding}%
+}
+\setbeamertemplate{frametitle}{%
+    \nointerlineskip%
+    \begin{beamercolorbox}[%
+        wd=\paperwidth,%
+        sep=0pt,%
+        leftskip=\metropolis@frametitle@padding,%
+        rightskip=\metropolis@frametitle@padding,%
+        ]{frametitle}%
+        \metropolis@frametitlestrut@start%
+        \ifdefempty{\insertsectionhead}{}{%
+          {%
+            \scriptsize%
+            \insertsectionhead%
+            \ifdefempty{\insertsubsectionhead}{}{ > \insertsubsectionhead}%
+            \newline%
+          }%
+        }%
+        \insertframetitle%
+        \nolinebreak%
+        \metropolis@frametitlestrut@end%
+    \end{beamercolorbox}
+    \usebeamertemplate*{progress bar in head/foot}
+}
+
+\setlength{\metropolis@progressinheadfoot@linewidth}{1pt}
 \setbeamercolor{normal text}{bg=white}
 \setbeamertemplate{bibliography item}{\insertbiblabel}
-\setbeamertemplate{frame footer}{\CompanyName{} --- \DeckTitle}
+\setbeamertemplate{blocks}[rounded]
 
 \author{\vfill\UserName}
 \institute{%
@@ -31,8 +69,11 @@
 
 %% for section in target.sections:
 \section{\VAR{section.title}}
-%% for include in section.includes:
-\input{\VAR{[target.name, include] | path_join}}
+%% for path, subsection in section.inputs:
+%% if subsection != None:
+\subsection{\VAR{subsection}}
+%% endif
+\input{\VAR{path}}
 %% endfor
 %% endfor
 

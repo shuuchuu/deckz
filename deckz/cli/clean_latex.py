@@ -24,7 +24,7 @@ def clean_latex(paths: Paths, dry_run: bool) -> None:
     """Clean LaTeX files that are not used in `targets*.yml`."""
     logger = getLogger(__name__)
     logger.info(f"Cleaning unused LaTeX files")
-    dependencies = Dependencies.merge(
+    dependencies_dict = Dependencies.merge_dicts(
         Targets(
             paths=paths, debug=False, fail_on_missing=False, whitelist=[]
         ).get_dependencies(),
@@ -32,14 +32,16 @@ def clean_latex(paths: Paths, dry_run: bool) -> None:
             paths=paths, debug=True, fail_on_missing=False, whitelist=[]
         ).get_dependencies(),
     )
-    if dependencies.unused:
-        logger.info(
-            "%s the following unused dependencies:\n%s",
-            "Would remove" if dry_run else "Removing",
-            "\n".join(f"  - {str(d)}" for d in sorted(dependencies.unused)),
-        )
-    else:
-        logger.info("All LaTeX files are used, nothing to remove")
-    if not dry_run:
-        for dependency in dependencies.unused:
-            dependency.unlink()
+    for target_name, dependencies in dependencies_dict.items():
+        logger.info(f"Processing target {target_name}")
+        if dependencies.unused:
+            logger.info(
+                "%s the following unused dependencies:\n%s",
+                "Would remove" if dry_run else "Removing",
+                "\n".join(f"  - {str(d)}" for d in sorted(dependencies.unused)),
+            )
+        else:
+            logger.info("All LaTeX files are used, nothing to remove")
+        if not dry_run:
+            for dependency in dependencies.unused:
+                dependency.unlink()
