@@ -1,3 +1,4 @@
+from enum import Enum
 from filecmp import cmp
 from logging import getLogger
 from os import unlink
@@ -7,12 +8,17 @@ from shutil import copyfile, move
 from subprocess import CalledProcessError, run
 from sys import exit
 from tempfile import NamedTemporaryFile
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
 from deckz.paths import Paths
 from deckz.targets import Target, Targets
+
+
+class CompileType(Enum):
+    Handout = "handout"
+    Presentation = "presentation"
 
 
 class Builder:
@@ -30,32 +36,37 @@ class Builder:
             if handout:
                 self._logger.info(f"Building handout for target {i}/{len(targets)}")
                 self.build(
-                    target=target, handout=True, verbose_latexmk=verbose_latexmk,
+                    target=target,
+                    compile_type=CompileType.Handout,
+                    verbose_latexmk=verbose_latexmk,
                 )
             if presentation:
                 self._logger.info(
                     f"Building presentation for target {i}/{len(targets)}"
                 )
                 self.build(
-                    target=target, handout=False, verbose_latexmk=verbose_latexmk,
+                    target=target,
+                    compile_type=CompileType.Presentation,
+                    verbose_latexmk=verbose_latexmk,
                 )
 
-    def build(self, target: Target, handout: bool, verbose_latexmk: bool,) -> None:
-        filename = f"{self.config['deck_acronym']}-{target.name}".lower()
-        if handout:
-            filename += "-handout"
-        latex_path = self.paths.build_dir / f"{filename}.tex"
+    def build(
+        self, target: Target, compile_type: CompileType, verbose_latexmk: bool,
+    ) -> None:
+        target_build_dir = self._setup_build_dir(target, compile_type)
+        filename = (
+            f"{self.config['deck_acronym']}-{target.name}-{compile_type.value}".lower()
+        )
+        latex_path = target_build_dir / f"{filename}.tex"
         build_pdf_path = latex_path.with_suffix(".pdf")
         output_pdf_path = self.paths.pdf_dir / f"{filename}.pdf"
-        self._setup_build_dir()
-        self._write_main_latex(target, handout, latex_path)
-        self._link_includes(
-            [link for section in target.sections for link in section.includes],
-            target.name,
-        )
+        self._write_main_latex(target, compile_type, latex_path)
+        self._link_dependencies(target, target_build_dir)
 
         return_ok = self._compile(
-            latex_path.relative_to(self.paths.build_dir), verbose_latexmk
+            latex_path=latex_path.relative_to(target_build_dir),
+            target_build_dir=target_build_dir,
+            verbose_latexmk=verbose_latexmk,
         )
         if not return_ok:
             self._logger.critical(f"latexmk errored for {build_pdf_path}.")
@@ -64,13 +75,15 @@ class Builder:
             self.paths.pdf_dir.mkdir(parents=True, exist_ok=True)
             copyfile(build_pdf_path, output_pdf_path)
 
-    def _setup_build_dir(self) -> None:
-        self.paths.build_dir.mkdir(parents=True, exist_ok=True)
+    def _setup_build_dir(self, target: Target, compile_type: CompileType) -> Path:
+        target_build_dir = self.paths.build_dir / target.name / compile_type.value
+        target_build_dir.mkdir(parents=True, exist_ok=True)
         for item in self.paths.shared_dir.iterdir():
-            self._setup_link(self.paths.build_dir / item.name, item)
+            self._setup_link(target_build_dir / item.name, item)
+        return target_build_dir
 
     def _write_main_latex(
-        self, target: Target, handout: bool, output_path: Path,
+        self, target: Target, compile_type: CompileType, output_path: Path,
     ) -> None:
         env = Environment(
             loader=FileSystemLoader(searchpath=self.paths.jinja2_dir),
@@ -99,7 +112,11 @@ class Builder:
         try:
             with NamedTemporaryFile("w", encoding="utf8", delete=False) as fh:
                 fh.write(
-                    template.render(config=self.config, target=target, handout=handout)
+                    template.render(
+                        config=self.config,
+                        target=target,
+                        handout=compile_type is CompileType.Handout,
+                    )
                 )
                 fh.write("\n")
             if not output_path.exists() or not cmp(fh.name, str(output_path)):
@@ -110,18 +127,25 @@ class Builder:
             except FileNotFoundError:
                 pass
 
-    def _link_includes(self, includes: List[str], target_name: str) -> None:
-        for include in includes:
-            name = f"{include}.tex"
-            source = self.paths.build_dir / target_name / name
-            local_target = Path(target_name) / name
-            shared_target = self.paths.shared_latex_dir / name
-            if local_target.exists():
-                self._setup_link(source, local_target)
-            else:
-                self._setup_link(source, shared_target)
+    def _link_dependencies(self, target: Target, target_build_dir: Path) -> None:
+        for dependency in target.dependencies.shared:
+            link_dir = (
+                target_build_dir / dependency.relative_to(self.paths.shared_latex_dir)
+            ).parent
+            link_dir.mkdir(parents=True, exist_ok=True)
+            self._setup_link(link_dir / dependency.name, dependency)
 
-    def _compile(self, path: Path, verbose_latexmk: bool) -> bool:
+        for dependency in target.dependencies.local:
+            link_dir = (
+                target_build_dir
+                / dependency.relative_to(self.paths.working_dir / target.name)
+            ).parent
+            link_dir.mkdir(parents=True, exist_ok=True)
+            self._setup_link(link_dir / dependency.name, dependency)
+
+    def _compile(
+        self, latex_path: Path, target_build_dir: Path, verbose_latexmk: bool
+    ) -> bool:
         try:
             command = [
                 "latexmk",
@@ -132,8 +156,8 @@ class Builder:
             ]
             if not verbose_latexmk:
                 command.append("-silent")
-            command.append(str(path))
-            run(command, cwd=self.paths.build_dir, check=True)
+            command.append(str(latex_path))
+            run(command, cwd=target_build_dir, check=True)
             return True
         except CalledProcessError:
             return False

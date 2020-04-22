@@ -1,23 +1,9 @@
 - name: p1
   title: Part 1
   sections:
-    - title: First section
-      includes:
-        - about
-        - questions
-    - title: Second section
-      includes:
-        - about
-        - questions
+    - first-section
 
 - name: p2
   title: Part 2
   sections:
-    - title: First section
-      includes:
-        - about
-        - questions
-    - title: Second section
-      includes:
-        - about
-        - questions
+    - about

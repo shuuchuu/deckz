@@ -8,7 +8,8 @@ from deckz.runner import run
 
 def _parser_definer(parser: ArgumentParser) -> None:
     parser.add_argument(
-        "targets",
+        "target_whitelist",
+        metavar="targets",
         nargs="*",
         help="Targets to restrict to. No argument = consider everything.",
     )
@@ -39,7 +40,7 @@ def _parser_definer(parser: ArgumentParser) -> None:
 @register_command(parser_definer=_parser_definer)
 def debug(
     paths: Paths,
-    targets: List[str],
+    target_whitelist: List[str],
     handout: bool,
     presentation: bool,
     verbose_latexmk: bool,
@@ -51,5 +52,5 @@ def debug(
         presentation=presentation,
         verbose_latexmk=verbose_latexmk,
         debug=True,
-        target_whitelist=targets if targets else None,
+        target_whitelist=target_whitelist,
     )

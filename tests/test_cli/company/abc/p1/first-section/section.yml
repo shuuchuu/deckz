@@ -1,0 +1,4 @@
+title: First section
+includes:
+  - path: about
+    title: About

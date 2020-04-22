@@ -18,6 +18,8 @@ def run(
     targets = Targets(
         paths=paths, debug=debug, fail_on_missing=True, whitelist=target_whitelist
     )
+    for t in targets:
+        print(t)
     builder = Builder(config, paths)
     builder.build_all(
         targets,
