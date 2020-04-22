@@ -20,11 +20,11 @@ def get_config(paths: Paths) -> Dict[str, Any]:
                 *[
                     _get_or_create_config(f, p)
                     for f, p in [
-                        (_global_data, paths.global_config),
-                        (_user_data, paths.user_config),
-                        (_company_data, paths.company_config),
-                        (_deck_data, paths.deck_config),
                         (_session_data, paths.session_config),
+                        (_deck_data, paths.deck_config),
+                        (_company_data, paths.company_config),
+                        (_user_data, paths.user_config),
+                        (_global_data, paths.global_config),
                     ]
                 ],
             ).items()
