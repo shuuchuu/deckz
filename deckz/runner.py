@@ -7,21 +7,9 @@ from deckz.targets import Targets
 
 
 def run(
-    paths: Paths,
-    handout: bool,
-    presentation: bool,
-    verbose_latexmk: bool,
-    debug: bool,
-    target_whitelist: List[str],
+    paths: Paths, handout: bool, presentation: bool, target_whitelist: List[str],
 ) -> None:
     config = get_config(paths)
-    targets = Targets(
-        paths=paths, debug=debug, fail_on_missing=True, whitelist=target_whitelist
-    )
+    targets = Targets(paths=paths, fail_on_missing=True, whitelist=target_whitelist)
     builder = Builder(config, paths)
-    builder.build_all(
-        targets,
-        handout=handout,
-        presentation=presentation,
-        verbose_latexmk=verbose_latexmk,
-    )
+    builder.build_all(targets, handout=handout, presentation=presentation)

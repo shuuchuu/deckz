@@ -33,7 +33,6 @@ class Paths:
         self.deck_config = self.working_dir / "deck-config.yml"
         self.session_config = self.working_dir / "session-config.yml"
         self.targets = self.working_dir / "targets.yml"
-        self.targets_debug = self.working_dir / "targets-debug.yml"
 
         self.user_config_dir.mkdir(parents=True, exist_ok=True)
 

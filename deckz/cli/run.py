@@ -14,17 +14,8 @@ from deckz.runner import run as runner_run
 @option(
     "--presentation/--no-presentation", default=True, help="Compile the presentation.",
 )
-@option(
-    "--verbose-latexmk/--no-verbose-latexmk",
-    default=False,
-    help="Make latexmk verbose.",
-)
 def run(
-    deck_path: str,
-    target_whitelist: List[str],
-    handout: bool,
-    presentation: bool,
-    verbose_latexmk: bool,
+    deck_path: str, target_whitelist: List[str], handout: bool, presentation: bool,
 ) -> None:
     """Compile main targets."""
     paths = Paths(deck_path)
@@ -32,7 +23,5 @@ def run(
         paths=paths,
         handout=handout,
         presentation=presentation,
-        verbose_latexmk=verbose_latexmk,
-        debug=False,
         target_whitelist=target_whitelist,
     )
