@@ -1,25 +1,16 @@
-from argparse import ArgumentParser
 from logging import getLogger
 from shutil import copy as shutil_copy
 
-from deckz.cli import register_command
+from deckz.cli import command, deck_path_option
 from deckz.paths import Paths
 
 
-def _parser_definer(parser: ArgumentParser) -> None:
-    parser.add_argument(
-        "--deck-path",
-        dest="paths",
-        type=Paths,
-        default=".",
-        help="Path of the deck, defaults to `%(default)s`.",
-    )
-
-
-@register_command(parser_definer=_parser_definer)
-def init(paths: Paths) -> None:
+@command
+@deck_path_option
+def init(deck_path: str) -> None:
     """Create an initial targets.yml."""
     logger = getLogger(__name__)
+    paths = Paths(deck_path)
     if paths.targets.exists():
         logger.info(f"Nothing to do: {paths.targets} already exists")
 

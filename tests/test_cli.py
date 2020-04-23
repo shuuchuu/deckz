@@ -25,10 +25,15 @@ def working_dir(tmp_path: Path, monkeypatch: Any) -> Path:
 def test_run(
     working_dir: Path, monkeypatch: Any, args: List[str], n_pages: int
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["deckz", "run"] + args)
-    from deckz.__main__ import main
+    from deckz.cli import cli
 
-    main()
+    monkeypatch.setattr(sys, "argv", ["deckz", "run"] + args)
+
+    try:
+        cli()
+    except SystemExit as e:
+        if e.code != 0:
+            raise e
 
     with open(working_dir / "pdf" / "abc-p1-presentation.pdf", "rb") as fh:
         pages = list(extract_pages(fh))

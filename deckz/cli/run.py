@@ -1,51 +1,33 @@
-from argparse import ArgumentParser
 from typing import List
 
-from deckz.cli import register_command
+from deckz.cli import command, deck_path_option, option, target_whitelist_argument
 from deckz.paths import Paths
 from deckz.runner import run as runner_run
 
 
-def _parser_definer(parser: ArgumentParser) -> None:
-    parser.add_argument(
-        "target_whitelist",
-        metavar="targets",
-        nargs="*",
-        help="Targets to restrict to. No argument = consider everything.",
-    )
-    parser.add_argument(
-        "--no-handout",
-        dest="handout",
-        action="store_false",
-        help="Don't compile the handout.",
-    )
-    parser.add_argument(
-        "--no-presentation",
-        dest="presentation",
-        action="store_false",
-        help="Don't compile the presentation.",
-    )
-    parser.add_argument(
-        "--verbose-latexmk", action="store_true", help="Make latexmk verbose."
-    )
-    parser.add_argument(
-        "--deck-path",
-        dest="paths",
-        type=Paths,
-        default=".",
-        help="Path of the deck, defaults to `%(default)s`.",
-    )
-
-
-@register_command(parser_definer=_parser_definer)
+@command
+@target_whitelist_argument
+@deck_path_option
+@option(
+    "--handout/--no-handout", default=True, help="Compile the handout.",
+)
+@option(
+    "--presentation/--no-presentation", default=True, help="Compile the presentation.",
+)
+@option(
+    "--verbose-latexmk/--no-verbose-latexmk",
+    default=False,
+    help="Make latexmk verbose.",
+)
 def run(
-    paths: Paths,
+    deck_path: str,
     target_whitelist: List[str],
     handout: bool,
     presentation: bool,
     verbose_latexmk: bool,
 ) -> None:
     """Compile main targets."""
+    paths = Paths(deck_path)
     runner_run(
         paths=paths,
         handout=handout,
