@@ -1,11 +1,11 @@
 from collections import OrderedDict
 from logging import getLogger
 from pathlib import Path
-from sys import exit
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple
 
 from yaml import safe_load as yaml_safe_load
 
+from deckz.exceptions import DeckzException
 from deckz.paths import Paths
 
 
@@ -161,34 +161,34 @@ class Targets(Iterable[Target]):
         path = paths.targets_debug if debug else paths.targets
         if not path.exists():
             if fail_on_missing:
-                _logger.critical(f"Could not find {path}.")
-                exit(1)
+                raise DeckzException(f"Could not find {path}.")
             else:
                 self.targets = []
         with path.open("r", encoding="utf8") as fh:
             targets = [
                 Target(data=target, paths=paths) for target in yaml_safe_load(fh)
             ]
-        error = False
-        for target in targets:
-            if target.dependencies.missing and fail_on_missing:
-                error = True
-                _logger.critical(
-                    "Could not find the following dependencies for target %s: %s.",
-                    target.name,
-                    ", ".join(str(p) for p in target.dependencies.missing),
-                )
-        if error:
-            exit(1)
+        missing_dependencies = {
+            target.name: target.dependencies.missing
+            for target in targets
+            if target.dependencies.missing
+        }
+        if missing_dependencies:
+            raise DeckzException(
+                "Could not find the following dependencies:\n%s"
+                % "\n".join(
+                    "  - %s:\n%s" % (k, "\n".join(f"    - {p}" for p in v))
+                    for k, v in missing_dependencies.items()
+                ),
+            )
         target_names = set(target.name for target in targets)
         whiteset = set(whitelist)
         unmatched = whiteset - target_names
         if unmatched:
-            _logger.critical(
-                "Could not find the following targets:\n%s",
-                "\n".join("  - %s" % name for name in unmatched),
+            raise DeckzException(
+                "Could not find the following targets:\n%s"
+                % "\n".join("  - %s" % name for name in unmatched)
             )
-            exit(1)
         self.targets = [
             target for target in targets if not whiteset or target.name in whiteset
         ]

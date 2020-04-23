@@ -9,6 +9,7 @@ from watchdog.events import FileSystemEvent
 from watchdog.observers import Observer
 
 from deckz.cli import register_command
+from deckz.exceptions import DeckzException
 from deckz.paths import Paths
 from deckz.runner import run
 
@@ -109,14 +110,17 @@ def watch(
             try:
                 self._compiling = True
                 logger.info("Detected changes, starting a new build")
-                run(
-                    paths=self._paths,
-                    handout=self._handout,
-                    presentation=self._presentation,
-                    verbose_latexmk=self._verbose_latexmk,
-                    debug=self._debug,
-                    target_whitelist=self._target_whitelist,
-                )
+                try:
+                    run(
+                        paths=self._paths,
+                        handout=self._handout,
+                        presentation=self._presentation,
+                        verbose_latexmk=self._verbose_latexmk,
+                        debug=self._debug,
+                        target_whitelist=self._target_whitelist,
+                    )
+                except Exception as e:
+                    logger.critical("Build failed. Error: %s", str(e))
             finally:
                 self._compiling = False
 
@@ -141,8 +145,7 @@ def watch(
     except KeyboardInterrupt:
         observer.stop()
         observer.join()
-        logger.info("Quitting")
-        exit(0)
-    observer.join()
-    logger.info("Stopped watching current and shared directories")
-    exit(1)
+        logger.info("Stopped watching")
+    else:
+        observer.join()
+        raise DeckzException("Stopped watching abnormally")
