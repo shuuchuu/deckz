@@ -1,11 +1,13 @@
 from enum import Enum
 from filecmp import cmp
+from itertools import product as itertools_product
 from logging import getLogger
+from multiprocessing import Pool
 from os import unlink
 from os.path import join as path_join
 from pathlib import Path
 from shutil import copyfile, move
-from subprocess import CalledProcessError, run
+from subprocess import CompletedProcess, run
 from tempfile import NamedTemporaryFile
 from typing import Any, Dict
 
@@ -29,30 +31,40 @@ class Builder:
         self.paths = paths
         self._logger = getLogger(__name__)
 
-    def build_all(
-        self, targets: Targets, presentation: bool, handout: bool, verbose_latexmk: bool
-    ) -> None:
-        for i, target in enumerate(targets, start=1):
-            if handout:
-                self._logger.info(f"Building handout for target {i}/{len(targets)}")
-                self.build(
-                    target=target,
-                    compile_type=CompileType.Handout,
-                    verbose_latexmk=verbose_latexmk,
+    def build_all(self, targets: Targets, presentation: bool, handout: bool) -> None:
+        compile_types = []
+        if presentation:
+            compile_types.append(CompileType.Presentation)
+        if handout:
+            compile_types.append(CompileType.Handout)
+        self._logger.info(f"Building {len(targets) * len(compile_types)} outputs")
+        to_compile = sorted(
+            itertools_product(targets, compile_types),
+            key=lambda x: (x[0].name, x[1].value),
+        )
+        with Pool() as pool:
+            completed_processes = pool.starmap(self._build, to_compile)
+        for completed_process, (target, compile_type) in zip(
+            completed_processes, to_compile
+        ):
+            if completed_process.returncode != 0:
+                self._logger.warning(
+                    "Compilation %s/%s errored", target.name, compile_type.value
                 )
-            if presentation:
-                self._logger.info(
-                    f"Building presentation for target {i}/{len(targets)}"
+                self._logger.warning(
+                    "Captured %s/%s stderr\n%s",
+                    target.name,
+                    compile_type.value,
+                    completed_process.stderr,
                 )
-                self.build(
-                    target=target,
-                    compile_type=CompileType.Presentation,
-                    verbose_latexmk=verbose_latexmk,
+                self._logger.warning(
+                    "Captured %s/%s stdout\n%s",
+                    target.name,
+                    compile_type.value,
+                    completed_process.stdout,
                 )
 
-    def build(
-        self, target: Target, compile_type: CompileType, verbose_latexmk: bool,
-    ) -> None:
+    def _build(self, target: Target, compile_type: CompileType) -> CompletedProcess:
         target_build_dir = self._setup_build_dir(target, compile_type)
         filename = (
             f"{self.config['deck_acronym']}-{target.name}-{compile_type.value}".lower()
@@ -63,16 +75,14 @@ class Builder:
         self._write_main_latex(target, compile_type, latex_path)
         self._link_dependencies(target, target_build_dir)
 
-        return_ok = self._compile(
+        completed_process = self._compile(
             latex_path=latex_path.relative_to(target_build_dir),
             target_build_dir=target_build_dir,
-            verbose_latexmk=verbose_latexmk,
         )
-        if not return_ok:
-            raise DeckzException(f"latexmk errored for {build_pdf_path}.")
-        else:
+        if completed_process.returncode == 0:
             self.paths.pdf_dir.mkdir(parents=True, exist_ok=True)
             copyfile(build_pdf_path, output_pdf_path)
+        return completed_process
 
     def _setup_build_dir(self, target: Target, compile_type: CompileType) -> Path:
         target_build_dir = self.paths.build_dir / target.name / compile_type.value
@@ -141,24 +151,16 @@ class Builder:
             link_dir.mkdir(parents=True, exist_ok=True)
             self._setup_link(link_dir / dependency.name, dependency)
 
-    def _compile(
-        self, latex_path: Path, target_build_dir: Path, verbose_latexmk: bool
-    ) -> bool:
-        try:
-            command = [
-                "latexmk",
-                "-pdflatex=xelatex -shell-escape -interaction=nonstopmode %O %S",
-                "-dvi-",
-                "-ps-",
-                "-pdf",
-            ]
-            if not verbose_latexmk:
-                command.append("-silent")
-            command.append(str(latex_path))
-            run(command, cwd=target_build_dir, check=True)
-            return True
-        except CalledProcessError:
-            return False
+    def _compile(self, latex_path: Path, target_build_dir: Path) -> CompletedProcess:
+        command = [
+            "latexmk",
+            "-pdflatex=xelatex -shell-escape -interaction=nonstopmode %O %S",
+            "-dvi-",
+            "-ps-",
+            "-pdf",
+        ]
+        command.append(str(latex_path))
+        return run(command, cwd=target_build_dir, capture_output=True, encoding="utf8")
 
     def _setup_link(self, source: Path, target: Path) -> None:
         if not target.exists():

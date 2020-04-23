@@ -1,8 +1,8 @@
 from logging import getLogger
 from pathlib import Path
-from threading import Lock
+from threading import Thread
 from time import time
-from typing import List
+from typing import List, Optional
 
 from watchdog.events import FileSystemEvent
 from watchdog.observers import Observer
@@ -25,21 +25,11 @@ from deckz.runner import run
 @option(
     "--presentation/--no-presentation", default=True, help="Compile the presentation.",
 )
-@option(
-    "--verbose-latexmk/--no-verbose-latexmk",
-    default=False,
-    help="Make latexmk verbose.",
-)
-@option(
-    "--debug/--no-debug", default=True, help="Use debug targets.",
-)
 def watch(
     minimum_delay: int,
     deck_path: str,
     handout: bool,
     presentation: bool,
-    verbose_latexmk: bool,
-    debug: bool,
     target_whitelist: List[str],
 ) -> None:
     """Compile on change."""
@@ -51,8 +41,6 @@ def watch(
             paths: Paths,
             handout: bool,
             presentation: bool,
-            verbose_latexmk: bool,
-            debug: bool,
             target_whitelist: List[str],
         ):
             self._minimum_delay = minimum_delay
@@ -60,28 +48,10 @@ def watch(
             self._paths = paths
             self._handout = handout
             self._presentation = presentation
-            self._verbose_latexmk = verbose_latexmk
-            self._debug = debug
             self._target_whitelist = target_whitelist
-            self._lock = Lock()
-            self._compiling = False
+            self._worker: Optional[Thread] = None
 
-        def dispatch(self, event: FileSystemEvent) -> None:
-            try:
-                Path(event.src_path).relative_to(paths.build_dir)
-            except ValueError:
-                pass
-            else:
-                return
-            with self._lock:
-                current_time = time()
-                if self._last_compile + self._minimum_delay > current_time:
-                    return
-                elif self._compiling:
-                    logger.info("Still on last build, not starting a new build")
-                    return
-                else:
-                    self._last_compile = current_time
+        def work(self) -> None:
             try:
                 self._compiling = True
                 logger.info("Detected changes, starting a new build")
@@ -90,14 +60,28 @@ def watch(
                         paths=self._paths,
                         handout=self._handout,
                         presentation=self._presentation,
-                        verbose_latexmk=self._verbose_latexmk,
-                        debug=self._debug,
                         target_whitelist=self._target_whitelist,
                     )
+                    logger.info("Build finished")
                 except Exception as e:
                     logger.critical("Build failed. Error: %s", str(e))
             finally:
                 self._compiling = False
+
+        def dispatch(self, event: FileSystemEvent) -> None:
+            for d in [paths.build_dir, paths.pdf_dir]:
+                if d in Path(event.src_path).parents:
+                    return
+            current_time = time()
+            if self._last_compile + self._minimum_delay > current_time:
+                return
+            elif self._worker is not None and self._worker.is_alive():
+                logger.info("Still on last build, not starting a new build")
+                return
+            else:
+                self._last_compile = current_time
+                self._worker = Thread(target=self.work)
+                self._worker.start()
 
     logger = getLogger(__name__)
     logger.info(f"Watching current and shared directories")
@@ -108,8 +92,6 @@ def watch(
         paths=paths,
         handout=handout,
         presentation=presentation,
-        verbose_latexmk=verbose_latexmk,
-        debug=debug,
         target_whitelist=target_whitelist,
     )
     paths_to_watch = [

@@ -155,16 +155,15 @@ class Target:
 
 class Targets(Iterable[Target]):
     def __init__(
-        self, paths: Paths, debug: bool, fail_on_missing: bool, whitelist: List[str]
+        self, paths: Paths, fail_on_missing: bool, whitelist: List[str]
     ) -> None:
         self._paths = paths
-        path = paths.targets_debug if debug else paths.targets
-        if not path.exists():
+        if not paths.targets.exists():
             if fail_on_missing:
-                raise DeckzException(f"Could not find {path}.")
+                raise DeckzException(f"Could not find {paths.targets}.")
             else:
                 self.targets = []
-        with path.open("r", encoding="utf8") as fh:
+        with paths.targets.open("r", encoding="utf8") as fh:
             targets = [
                 Target(data=target, paths=paths) for target in yaml_safe_load(fh)
             ]

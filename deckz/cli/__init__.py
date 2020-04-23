@@ -34,7 +34,7 @@ def _autocomplete_target_whitelist(
 ) -> List[Tuple[str, str]]:
     try:
         paths = Paths(".")
-        targets = Targets(paths, False, False, [])
+        targets = Targets(paths=paths, fail_on_missing=False, whitelist=[])
         return [(t.name, t.title) for t in targets if incomplete in t.name]
     except Exception:
         return []

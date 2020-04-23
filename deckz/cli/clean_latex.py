@@ -2,7 +2,7 @@ from logging import getLogger
 
 from deckz.cli import command, deck_path_option, option
 from deckz.paths import Paths
-from deckz.targets import Dependencies, Targets
+from deckz.targets import Targets
 
 
 @command
@@ -17,14 +17,9 @@ def clean_latex(deck_path: str, dry_run: bool) -> None:
     logger = getLogger(__name__)
     logger.info(f"Cleaning unused LaTeX files")
     paths = Paths(deck_path)
-    dependencies_dict = Dependencies.merge_dicts(
-        Targets(
-            paths=paths, debug=False, fail_on_missing=False, whitelist=[]
-        ).get_dependencies(),
-        Targets(
-            paths=paths, debug=True, fail_on_missing=False, whitelist=[]
-        ).get_dependencies(),
-    )
+    dependencies_dict = Targets(
+        paths=paths, fail_on_missing=False, whitelist=[]
+    ).get_dependencies()
     for target_name, dependencies in dependencies_dict.items():
         logger.info(f"Processing target {target_name}")
         if dependencies.unused:
