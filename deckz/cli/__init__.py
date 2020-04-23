@@ -1,42 +1,70 @@
-from argparse import ArgumentParser
+from functools import partial, wraps
 from importlib import import_module, invalidate_caches as importlib_invalidate_caches
-from logging import getLogger
+from logging import INFO
 from pkgutil import walk_packages
-from typing import Any, Callable, List, NamedTuple, Optional
+from typing import Any, Callable, List, Tuple
+
+from click import (
+    argument,
+    ClickException,
+    group,
+    option as click_option,
+    Path as ClickPath,
+)
+from coloredlogs import install as coloredlogs_install
+
+from deckz.exceptions import DeckzException
+from deckz.paths import Paths
+from deckz.targets import Targets
 
 
-_logger = getLogger(__name__)
+option = partial(click_option, show_default=True)
 
 
-class Command(NamedTuple):
-    name: str
-    description: str
-    handler: Callable[..., Any]
-    parser_definer: Callable[[ArgumentParser], None]
+deck_path_option = option(
+    "--deck-path",
+    type=ClickPath(exists=True, readable=True, file_okay=False),
+    default=".",
+    help="Path of the deck.",
+)
 
 
-commands: List[Command] = []
+def _autocomplete_target_whitelist(
+    ctx: Any, args: List[str], incomplete: str
+) -> List[Tuple[str, str]]:
+    try:
+        paths = Paths(".")
+        targets = Targets(paths, False, False, [])
+        return [(t.name, t.title) for t in targets if incomplete in t.name]
+    except Exception:
+        return []
 
 
-def register_command(
-    parser_definer: Callable[[ArgumentParser], None] = lambda _: None,
-    name: Optional[str] = None,
-    description: Optional[str] = None,
-) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    def wrapper(handler: Callable[..., Any]) -> Callable[..., Any]:
-        commands.append(
-            Command(
-                name=handler.__name__.replace("_", "-") if name is None else name,
-                description=handler.__doc__.strip().splitlines()[0]
-                if description is None
-                else description,
-                parser_definer=parser_definer,
-                handler=handler,
-            )
-        )
-        return handler
+target_whitelist_argument = argument(
+    "target_whitelist",
+    metavar="targets",
+    nargs=-1,
+    autocompletion=_autocomplete_target_whitelist,  # type: ignore
+)
 
-    return wrapper
+
+@group()
+def cli() -> None:
+    coloredlogs_install(
+        level=INFO, fmt="%(asctime)s %(name)s %(message)s", datefmt="%H:%M:%S",
+    )
+
+
+def command(f: Callable[..., Any]) -> Callable[..., Any]:
+    @wraps(f)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            result = f(*args, **kwargs)
+        except DeckzException as e:
+            raise ClickException(str(e)) from e
+        return result
+
+    return cli.command()(wrapper)
 
 
 def _import_module_and_submodules(package_name: str) -> None:

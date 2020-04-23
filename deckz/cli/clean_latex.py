@@ -1,29 +1,22 @@
-from argparse import ArgumentParser
 from logging import getLogger
 
-from deckz.cli import register_command
+from deckz.cli import command, deck_path_option, option
 from deckz.paths import Paths
 from deckz.targets import Dependencies, Targets
 
 
-def _parser_definer(parser: ArgumentParser) -> None:
-    parser.add_argument(
-        "--dry-run", action="store_true", help="Print what would be removed.",
-    )
-    parser.add_argument(
-        "--deck-path",
-        dest="paths",
-        type=Paths,
-        default=".",
-        help="Path of the deck, defaults to `%(default)s`.",
-    )
-
-
-@register_command(parser_definer=_parser_definer)
-def clean_latex(paths: Paths, dry_run: bool) -> None:
+@command
+@deck_path_option
+@option(
+    "--dry-run/--do-it",
+    default=True,
+    help="Print what would be removed instead of removing it.",
+)
+def clean_latex(deck_path: str, dry_run: bool) -> None:
     """Clean LaTeX files that are not used in `targets*.yml`."""
     logger = getLogger(__name__)
     logger.info(f"Cleaning unused LaTeX files")
+    paths = Paths(deck_path)
     dependencies_dict = Dependencies.merge_dicts(
         Targets(
             paths=paths, debug=False, fail_on_missing=False, whitelist=[]
