@@ -136,8 +136,13 @@ def watch(
         debug=debug,
         target_whitelist=target_whitelist,
     )
-    observer.schedule(event_handler, str(paths.shared_dir), recursive=True)
-    observer.schedule(event_handler, str(paths.working_dir), recursive=True)
+    paths_to_watch = [
+        (p, False) for p in paths.shared_dir.glob("**/*") if p.resolve().is_dir()
+    ]
+    paths_to_watch.append((paths.jinja2_dir, True))
+    paths_to_watch.append((paths.working_dir, True))
+    for path, recursive in paths_to_watch:
+        observer.schedule(event_handler, str(path.resolve()), recursive=recursive)
     observer.start()
     try:
         while observer.isAlive():
