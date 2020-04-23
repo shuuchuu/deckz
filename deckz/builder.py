@@ -6,12 +6,12 @@ from os.path import join as path_join
 from pathlib import Path
 from shutil import copyfile, move
 from subprocess import CalledProcessError, run
-from sys import exit
 from tempfile import NamedTemporaryFile
 from typing import Any, Dict
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
+from deckz.exceptions import DeckzException
 from deckz.paths import Paths
 from deckz.targets import Target, Targets
 
@@ -69,8 +69,7 @@ class Builder:
             verbose_latexmk=verbose_latexmk,
         )
         if not return_ok:
-            self._logger.critical(f"latexmk errored for {build_pdf_path}.")
-            exit(1)
+            raise DeckzException(f"latexmk errored for {build_pdf_path}.")
         else:
             self.paths.pdf_dir.mkdir(parents=True, exist_ok=True)
             copyfile(build_pdf_path, output_pdf_path)
@@ -104,11 +103,10 @@ class Builder:
         try:
             filename = self.paths.get_jinja2_template_path("v1").name
             template = env.get_template(filename)
-        except TemplateNotFound:
-            self._logger.critical(
+        except TemplateNotFound as e:
+            raise DeckzException(
                 f"Could not find '{filename}' in {self.paths.jinja2_dir}"
-            )
-            exit(1)
+            ) from e
         try:
             with NamedTemporaryFile("w", encoding="utf8", delete=False) as fh:
                 fh.write(
@@ -164,26 +162,23 @@ class Builder:
 
     def _setup_link(self, source: Path, target: Path) -> None:
         if not target.exists():
-            self._logger.critical(
+            raise DeckzException(
                 f"{target} could not be found. Please make sure it exists before "
                 "proceeding."
             )
-            exit(1)
         target = target.resolve()
         if source.is_symlink():
             if source.resolve().samefile(target):
                 return
-            self._logger.critical(
+            raise DeckzException(
                 f"{source} already exists in the build directory and does not point to "
                 f"{target}. Please clean the build directory."
             )
-            exit(1)
         elif source.exists():
-            self._logger.critical(
+            raise DeckzException(
                 f"{source} already exists in the build directory. Please clean the "
                 "build directory."
             )
-            exit(1)
         source.parent.mkdir(parents=True, exist_ok=True)
         source.symlink_to(target)
 

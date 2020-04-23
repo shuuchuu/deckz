@@ -7,6 +7,7 @@ from git import Repo
 from git.exc import InvalidGitRepositoryError
 
 from deckz import app_name
+from deckz.exceptions import DeckzException
 
 
 _logger = getLogger(__name__)
@@ -37,24 +38,22 @@ class Paths:
         self.user_config_dir.mkdir(parents=True, exist_ok=True)
 
         if not self.working_dir.relative_to(self.git_dir).match("*/*"):
-            _logger.critical(
+            raise DeckzException(
                 f"Not deep enough from root {self.git_dir}. "
                 "Please follow the directory hierarchy root > company > deck and "
                 "invoke this tool from the deck directory."
             )
-            exit(1)
 
     @property
     def git_dir(self) -> Optional[Path]:
         if not hasattr(self, "_git_dir"):
             try:
                 repository = Repo(str(self.working_dir), search_parent_directories=True)
-            except InvalidGitRepositoryError:
-                _logger.critical(
+            except InvalidGitRepositoryError as e:
+                raise DeckzException(
                     "Could not find the path of the current git working directory. "
                     "Are you in one?"
-                )
-                exit(1)
+                ) from e
             self._git_dir = Path(repository.git.rev_parse("--show-toplevel")).resolve()
         return self._git_dir
 
