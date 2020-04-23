@@ -48,7 +48,7 @@ target_whitelist_argument = argument(
 )
 
 
-@group()
+@group(chain=True)
 def cli() -> None:
     coloredlogs_install(
         level=INFO, fmt="%(asctime)s %(name)s %(message)s", datefmt="%H:%M:%S",
