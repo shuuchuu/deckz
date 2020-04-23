@@ -21,7 +21,7 @@ def working_dir(tmp_path: Path, monkeypatch: Any) -> Path:
     return working_dir
 
 
-@mark.parametrize("args,n_pages", [(["p1", "--verbose-latexmk"], 5), (["p1"], 5)])
+@mark.parametrize("args,n_pages", [(["--verbose-latexmk", "p1"], 5), (["p1"], 5)])
 def test_run(
     working_dir: Path, monkeypatch: Any, args: List[str], n_pages: int
 ) -> None:
