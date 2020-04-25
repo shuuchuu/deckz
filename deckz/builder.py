@@ -204,18 +204,19 @@ class Builder:
         return self.__env
 
     def _link_dependencies(self, target: Target, target_build_dir: Path) -> None:
-        for dependency in target.dependencies.shared:
-            link_dir = (
-                target_build_dir / dependency.relative_to(self._paths.shared_latex_dir)
-            ).parent
-            link_dir.mkdir(parents=True, exist_ok=True)
-            self._setup_link(link_dir / dependency.name, dependency)
-
-        for dependency in target.dependencies.local:
-            link_dir = (
-                target_build_dir
-                / dependency.relative_to(self._paths.working_dir / target.name)
-            ).parent
+        for dependency in target.dependencies.used:
+            try:
+                link_dir = (
+                    target_build_dir
+                    / dependency.relative_to(self._paths.shared_latex_dir).parent
+                )
+            except ValueError:
+                link_dir = (
+                    target_build_dir
+                    / dependency.relative_to(
+                        self._paths.working_dir / target.name
+                    ).parent
+                )
             link_dir.mkdir(parents=True, exist_ok=True)
             self._setup_link(link_dir / dependency.name, dependency)
 

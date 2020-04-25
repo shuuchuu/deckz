@@ -27,16 +27,14 @@ class Section:
 
 class Dependencies:
     def __init__(self) -> None:
-        self.local: Set[Path] = set()
-        self.shared: Set[Path] = set()
-        self.missing: Set[Path] = set()
+        self.used: Set[Path] = set()
+        self.missing: Set[str] = set()
         self.unused: Set[Path] = set()
 
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}("
-            f"local={repr(self.local)},"
-            f"shared={repr(self.shared)},"
+            f"used={repr(self.used)},"
             f"missing={repr(self.missing)},"
             f"unused={repr(self.unused)})"
         )
@@ -45,10 +43,9 @@ class Dependencies:
     def merge(*dependencies_list: "Dependencies") -> "Dependencies":
         dependencies = Dependencies()
         for ds in dependencies_list:
-            dependencies.local |= ds.local
-            dependencies.shared |= ds.shared
+            dependencies.used |= ds.used
             dependencies.missing |= ds.missing
-            dependencies.unused |= ds.unused - dependencies.local
+            dependencies.unused |= ds.unused - dependencies.used
         return dependencies
 
     def merge_dicts(
@@ -65,11 +62,12 @@ class Dependencies:
 
 class Target:
     def __init__(self, data: Dict[str, Any], paths: Paths):
+        self._paths = paths
         self.name = data["name"]
         local_latex_dir = paths.working_dir / self.name
         self.title = data["title"]
         self.dependencies = Dependencies()
-        self.dependencies.unused |= set(local_latex_dir.glob("**/*.tex"))
+        self.dependencies.unused.update(local_latex_dir.glob("**/*.tex"))
         self.sections = []
         for section_config in data["sections"]:
             if not isinstance(section_config, dict):
@@ -83,24 +81,22 @@ class Target:
                 section, dependencies = self._parse_section_dir(
                     local_dir, local_latex_dir, section_config
                 )
-                self.dependencies.local |= dependencies
             elif local_file.exists() and local_file.resolve().is_file():
                 section, dependencies = self._parse_section_file(
                     local_file, local_latex_dir, section_config
                 )
-                self.dependencies.local |= dependencies
             elif shared_dir.exists() and shared_dir.resolve().is_dir():
                 section, dependencies = self._parse_section_dir(
                     shared_dir, paths.shared_latex_dir, section_config
                 )
-                self.dependencies.shared |= dependencies
             elif shared_file.exists() and shared_file.resolve().is_file():
                 section, dependencies = self._parse_section_file(
                     shared_file, paths.shared_latex_dir, section_config
                 )
-                self.dependencies.shared |= dependencies
             else:
-                self.dependencies.missing.add(section_path)
+                dependencies = Dependencies()
+                dependencies.missing.add(section_path)
+            self.dependencies = Dependencies.merge(self.dependencies, dependencies)
             self.sections.append(section)
 
     def __repr__(self) -> str:
@@ -114,27 +110,35 @@ class Target:
 
     def _parse_section_dir(
         self, section_dir: Path, latex_dir: Path, config: Dict[str, Any]
-    ) -> Tuple[Section, Set[Path]]:
+    ) -> Tuple[Section, Dependencies]:
         with open(section_dir / "section.yml", encoding="utf8") as fh:
             default_config = yaml_safe_load(fh)
         title = config["title"] if "title" in config else default_config["title"]
         section = Section(title)
-        dependencies = set()
+        dependencies = Dependencies()
         for include in default_config["includes"]:
             if not isinstance(include, dict):
                 include = dict(path=include)
             if "excludes" in config and include["path"] in config["excludes"]:
                 continue
             title, path = include.get("title"), include["path"]
-            section.inputs.append(
-                (f"{section_dir.relative_to(latex_dir)}/{path}", title)
-            )
-            dependencies.add((section_dir / path).with_suffix(".tex").resolve())
+            local_path = (section_dir / path).with_suffix(".tex")
+            shared_path = (self._paths.shared_latex_dir / path).with_suffix(".tex")
+            if local_path.exists():
+                section.inputs.append(
+                    (f"{section_dir.relative_to(latex_dir)}/{path}", title)
+                )
+                dependencies.used.add(local_path.resolve())
+            elif shared_path.exists():
+                section.inputs.append((path, title))
+                dependencies.used.add(shared_path.resolve())
+            else:
+                dependencies.missing.add(path)
         return section, dependencies
 
     def _parse_section_file(
         self, section_file: Path, latex_dir: Path, config: Dict[str, Any]
-    ) -> Tuple[Section, Set[Path]]:
+    ) -> Tuple[Section, Dependencies]:
         config_file = section_file.with_suffix(".yml")
         if "title" in config:
             title = config["title"]
@@ -144,12 +148,12 @@ class Target:
             title = default_config["title"]
         else:
             title = None
-        dependencies = set()
         section = Section(title)
         section.inputs.append(
             (f"{section_file.relative_to(latex_dir).with_suffix('')}", None)
         )
-        dependencies.add(section_file.resolve())
+        dependencies = Dependencies()
+        dependencies.used.add(section_file.resolve())
         return section, dependencies
 
 
