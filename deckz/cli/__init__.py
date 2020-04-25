@@ -29,6 +29,54 @@ deck_path_option = option(
 )
 
 
+def presentation_option(
+    default: bool = True,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    return option(
+        "--presentation/--no-presentation",
+        "build_presentation",
+        default=default,
+        help="Compile the presentation version.",
+    )
+
+
+def handout_option(
+    default: bool = True,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    return option(
+        "--handout/--no-handout",
+        "build_handout",
+        default=default,
+        help="Compile the handout version.",
+    )
+
+
+def print_option(
+    default: bool = True,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    return option(
+        "--print/--no-print",
+        "build_print",
+        default=default,
+        help="Compile the printable version.",
+    )
+
+
+def compile_type_options(
+    default_presentation: bool = True,
+    default_handout: bool = True,
+    default_print: bool = True,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    def inner(f: Callable[..., Any]) -> Callable[..., Any]:
+        return print_option(default=default_print)(
+            presentation_option(default=default_presentation)(
+                handout_option(default=default_handout)(f)
+            )
+        )
+
+    return inner
+
+
 def _autocomplete_target_whitelist(
     ctx: Any, args: List[str], incomplete: str
 ) -> List[Tuple[str, str]]:
