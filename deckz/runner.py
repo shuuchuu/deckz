@@ -7,9 +7,19 @@ from deckz.targets import Targets
 
 
 def run(
-    paths: Paths, handout: bool, presentation: bool, target_whitelist: List[str],
+    paths: Paths,
+    build_handout: bool,
+    build_presentation: bool,
+    build_print: bool,
+    target_whitelist: List[str],
 ) -> None:
     config = get_config(paths)
     targets = Targets(paths=paths, fail_on_missing=True, whitelist=target_whitelist)
-    builder = Builder(config, paths)
-    builder.build_all(targets, handout=handout, presentation=presentation)
+    Builder(
+        config,
+        paths,
+        targets,
+        build_handout=build_handout,
+        build_presentation=build_presentation,
+        build_print=build_print,
+    )

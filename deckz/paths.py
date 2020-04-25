@@ -26,6 +26,8 @@ class Paths:
         self.template_latex = self.templates_dir / "subsection.tex"
         self.template_targets = self.templates_dir / "targets.yml"
         self.jinja2_dir = self.git_dir / "jinja2"
+        self.jinja2_main_template = self.jinja2_dir / "main.tex.jinja2"
+        self.jinja2_print_template = self.jinja2_dir / "print.tex.jinja2"
         self.user_config_dir = Path(user_config_dir(app_name))
         self.global_config = self.git_dir / "global-config.yml"
         self.user_config = self.user_config_dir / "user-config.yml"
@@ -55,6 +57,3 @@ class Paths:
                 ) from e
             self._git_dir = Path(repository.git.rev_parse("--show-toplevel")).resolve()
         return self._git_dir
-
-    def get_jinja2_template_path(self, version: str) -> Path:
-        return self.jinja2_dir / f"{version}.tex.jinja2"

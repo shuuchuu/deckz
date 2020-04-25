@@ -7,7 +7,13 @@ from typing import List, Optional
 from watchdog.events import FileSystemEvent
 from watchdog.observers import Observer
 
-from deckz.cli import command, deck_path_option, option, target_whitelist_argument
+from deckz.cli import (
+    command,
+    compile_type_options,
+    deck_path_option,
+    option,
+    target_whitelist_argument,
+)
 from deckz.exceptions import DeckzException
 from deckz.paths import Paths
 from deckz.runner import run
@@ -16,20 +22,18 @@ from deckz.runner import run
 @command
 @target_whitelist_argument
 @deck_path_option
+@compile_type_options(
+    default_handout=False, default_presentation=True, default_print=False
+)
 @option(
     "--minimum-delay", default=5, type=int, help="Minimum delay before recompiling.",
-)
-@option(
-    "--handout/--no-handout", default=False, help="Compile the handout.",
-)
-@option(
-    "--presentation/--no-presentation", default=True, help="Compile the presentation.",
 )
 def watch(
     minimum_delay: int,
     deck_path: str,
-    handout: bool,
-    presentation: bool,
+    build_handout: bool,
+    build_presentation: bool,
+    build_print: bool,
     target_whitelist: List[str],
 ) -> None:
     """Compile on change."""
@@ -39,15 +43,17 @@ def watch(
             self,
             minimum_delay: int,
             paths: Paths,
-            handout: bool,
-            presentation: bool,
+            build_handout: bool,
+            build_presentation: bool,
+            build_print: bool,
             target_whitelist: List[str],
         ):
             self._minimum_delay = minimum_delay
             self._last_compile = 0.0
             self._paths = paths
-            self._handout = handout
-            self._presentation = presentation
+            self._build_handout = build_handout
+            self._build_presentation = build_presentation
+            self._build_print = build_print
             self._target_whitelist = target_whitelist
             self._worker: Optional[Thread] = None
 
@@ -58,8 +64,9 @@ def watch(
                 try:
                     run(
                         paths=self._paths,
-                        handout=self._handout,
-                        presentation=self._presentation,
+                        build_handout=self._build_handout,
+                        build_presentation=self._build_presentation,
+                        build_print=self._build_print,
                         target_whitelist=self._target_whitelist,
                     )
                     logger.info("Build finished")
@@ -90,8 +97,9 @@ def watch(
     event_handler = LatexCompilerEventHandler(
         minimum_delay,
         paths=paths,
-        handout=handout,
-        presentation=presentation,
+        build_handout=build_handout,
+        build_print=build_print,
+        build_presentation=build_presentation,
         target_whitelist=target_whitelist,
     )
     paths_to_watch = [
