@@ -1,9 +1,11 @@
 from logging import getLogger
+from subprocess import CalledProcessError, run
 from typing import Any, Dict
 
 from yaml import safe_dump, safe_load
 
 from deckz.cli import command
+from deckz.exceptions import DeckzException
 from deckz.paths import Paths
 from deckz.targets import SECTION_YML_VERSION
 
@@ -31,7 +33,22 @@ def migrate_sections() -> None:
             config = _v1_v2(config)
 
         with section_yml.open(encoding="utf8", mode="w") as fh:
-            safe_dump(config, fh)
+            safe_dump(config, fh, allow_unicode=True)
+
+    logger.info("Running prettier on section.yml files")
+    try:
+        run(
+            ["prettier", "--write", "**/section.yml"], check=True, capture_output=True,
+        )
+    except CalledProcessError as e:
+        raise DeckzException(
+            "Prettier errored or was not found.\n"
+            "Captured stdout\n"
+            "---\n"
+            "%s\n"
+            "Captured stderr\n"
+            "---\n%s" % (e.stdout, e.stderr)
+        ) from e
 
 
 def _v1_v2(v1: Dict[str, Any]) -> Dict[str, Any]:
