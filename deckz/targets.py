@@ -12,6 +12,9 @@ from deckz.paths import Paths
 _logger = getLogger(__name__)
 
 
+SECTION_YML_VERSION = 2
+
+
 class Section:
     def __init__(self, title: Optional[str]):
         self.title = title
@@ -109,31 +112,60 @@ class Target:
         )
 
     def _parse_section_dir(
-        self, section_dir: Path, latex_dir: Path, config: Dict[str, Any]
+        self, section_dir: Path, latex_dir: Path, custom_config: Dict[str, Any]
     ) -> Tuple[Section, Dependencies]:
-        with open(section_dir / "section.yml", encoding="utf8") as fh:
-            default_config = yaml_safe_load(fh)
-        title = config["title"] if "title" in config else default_config["title"]
+        section_config_path = section_dir / "section.yml"
+        with open(section_config_path, encoding="utf8") as fh:
+            section_config = yaml_safe_load(fh)
+        title = (
+            custom_config["title"]
+            if "title" in custom_config
+            else section_config["title"]
+        )
+        if "flavor" not in custom_config:
+            raise DeckzException(
+                f"Mandatory flavor not specified in {section_dir.name} configuration "
+                "of targets.yml."
+            )
+        flavor_name = custom_config["flavor"]
+        if "flavors" not in section_config:
+            raise DeckzException(
+                f"Mandatory dictionary `flavors` not found in {section_config_path}."
+            )
+        flavors = section_config["flavors"]
+        if flavor_name not in flavors:
+            flavors_string = ", ".join("'%s'" % f for f in flavors)
+            raise DeckzException(
+                f"'{flavor_name}' not amongst available flavors: {flavors_string} "
+                f"of {section_config_path}."
+            )
+        flavor = flavors[flavor_name]
         section = Section(title)
         dependencies = Dependencies()
-        for include in default_config["includes"]:
-            if not isinstance(include, dict):
-                include = dict(path=include)
-            if "excludes" in config and include["path"] in config["excludes"]:
+        default_titles = section_config.get("default_titles")
+        for item in flavor:
+            if isinstance(item, str):
+                filename = item
+                if default_titles is not None:
+                    title = default_titles.get(filename)
+                else:
+                    title = None
+            else:
+                filename, title = next(iter(item.items()))
+            if "excludes" in custom_config and filename in custom_config["excludes"]:
                 continue
-            title, path = include.get("title"), include["path"]
-            local_path = (section_dir / path).with_suffix(".tex")
-            shared_path = (self._paths.shared_latex_dir / path).with_suffix(".tex")
+            local_path = (section_dir / filename).with_suffix(".tex")
+            shared_path = (self._paths.shared_latex_dir / filename).with_suffix(".tex")
             if local_path.exists():
                 section.inputs.append(
-                    (f"{section_dir.relative_to(latex_dir)}/{path}", title)
+                    (f"{section_dir.relative_to(latex_dir)}/{filename}", title)
                 )
                 dependencies.used.add(local_path.resolve())
             elif shared_path.exists():
-                section.inputs.append((path, title))
+                section.inputs.append((filename, title))
                 dependencies.used.add(shared_path.resolve())
             else:
-                dependencies.missing.add(path)
+                dependencies.missing.add(filename)
         return section, dependencies
 
     def _parse_section_file(

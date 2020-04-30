@@ -14,7 +14,7 @@ _logger = getLogger(__name__)
 
 
 class Paths:
-    def __init__(self, working_dir: str) -> None:
+    def __init__(self, working_dir: str, check_depth: bool = True) -> None:
         self.working_dir = Path(working_dir).resolve()
         self.build_dir = self.working_dir / "build"
         self.pdf_dir = self.working_dir / "pdf"
@@ -38,7 +38,7 @@ class Paths:
 
         self.user_config_dir.mkdir(parents=True, exist_ok=True)
 
-        if not self.working_dir.relative_to(self.git_dir).match("*/*"):
+        if check_depth and not self.working_dir.relative_to(self.git_dir).match("*/*"):
             raise DeckzException(
                 f"Not deep enough from root {self.git_dir}. "
                 "Please follow the directory hierarchy root > company > deck and "
