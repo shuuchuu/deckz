@@ -1,4 +1,13 @@
 title: First section
-includes:
-  - path: about
-    title: About
+default_titles:
+  intro: Introduction
+  advanced: Advanced
+  conclusion: Conclusion
+flavors:
+  standard:
+    - intro
+    - advanced
+    - conclusion
+  light:
+    - intro
+    - conclusion

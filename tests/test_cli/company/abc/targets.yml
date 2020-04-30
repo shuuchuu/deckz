@@ -1,7 +1,10 @@
 - name: p1
   title: Part 1
   sections:
-    - first-section
+    - path: first-section
+      flavor: standard
+    - path: first-section
+      flavor: light
 
 - name: p2
   title: Part 2
