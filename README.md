@@ -4,7 +4,6 @@
 [![CD Status](https://img.shields.io/github/workflow/status/m09/deckz/CD?label=CD&style=for-the-badge)](https://github.com/m09/deckz/actions?query=workflow%3ACD)
 [![Test Coverage](https://img.shields.io/codecov/c/github/m09/deckz?style=for-the-badge)](https://codecov.io/gh/m09/deckz)
 [![PyPI Project](https://img.shields.io/pypi/v/deckz?style=for-the-badge)](https://pypi.org/project/deckz/)
-[![Docker Hub Image](https://img.shields.io/docker/v/hugomougard/deckz?label=DOCKER&style=for-the-badge)](https://hub.docker.com/r/hugomougard/deckz)
 
 Tool to handle a large number of beamer decks, used by several persons, with shared slides amongst the decks. It is currently not meant to be usable directly by people finding about the package on GitHub. Please open an issue if you want more details or want to discuss this solution.
 
