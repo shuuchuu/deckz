@@ -91,7 +91,7 @@ def watch(
                 self._worker.start()
 
     logger = getLogger(__name__)
-    logger.info(f"Watching current and shared directories")
+    logger.info("Watching current and shared directories")
     paths = Paths(deck_path)
     observer = Observer()
     event_handler = LatexCompilerEventHandler(
