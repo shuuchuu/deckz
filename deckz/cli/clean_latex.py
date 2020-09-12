@@ -15,7 +15,7 @@ from deckz.targets import Targets
 def clean_latex(deck_path: str, dry_run: bool) -> None:
     """Clean LaTeX files that are not used in `targets*.yml`."""
     logger = getLogger(__name__)
-    logger.info(f"Cleaning unused LaTeX files")
+    logger.info("Cleaning unused LaTeX files")
     paths = Paths(deck_path)
     dependencies_dict = Targets(
         paths=paths, fail_on_missing=False, whitelist=[]

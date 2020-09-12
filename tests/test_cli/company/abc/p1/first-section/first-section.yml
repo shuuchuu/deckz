@@ -11,3 +11,4 @@ flavors:
   light:
     - intro
     - conclusion
+version: 3
