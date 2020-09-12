@@ -12,7 +12,7 @@ from deckz.paths import Paths
 _logger = getLogger(__name__)
 
 
-SECTION_YML_VERSION = 2
+SECTION_YML_VERSION = 3
 
 
 class Section:
@@ -114,7 +114,7 @@ class Target:
     def _parse_section_dir(
         self, section_dir: Path, latex_dir: Path, custom_config: Dict[str, Any]
     ) -> Tuple[Section, Dependencies]:
-        section_config_path = section_dir / "section.yml"
+        section_config_path = section_dir / f"{section_dir.name}.yml"
         with open(section_config_path, encoding="utf8") as fh:
             section_config = yaml_safe_load(fh)
         title = (
