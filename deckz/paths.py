@@ -16,6 +16,14 @@ _logger = getLogger(__name__)
 class Paths:
     def __init__(self, working_dir: str, check_depth: bool = True) -> None:
         self.working_dir = Path(working_dir).resolve()
+
+        if check_depth and not self.working_dir.relative_to(self.git_dir).match("*/*"):
+            raise DeckzException(
+                f"Not deep enough from root {self.git_dir}. "
+                "Please follow the directory hierarchy root > company > deck and "
+                "invoke this tool from the deck directory."
+            )
+
         self.build_dir = self.working_dir / "build"
         self.pdf_dir = self.working_dir / "pdf"
         self.shared_dir = self.git_dir / "shared"
@@ -31,19 +39,16 @@ class Paths:
         self.user_config_dir = Path(user_config_dir(app_name))
         self.global_config = self.git_dir / "global-config.yml"
         self.user_config = self.user_config_dir / "user-config.yml"
-        self.company_config = self.working_dir.parent / "company-config.yml"
+        self.company_config = (
+            self.git_dir
+            / self.working_dir.relative_to(self.git_dir).parts[0]
+            / "company-config.yml"
+        )
         self.deck_config = self.working_dir / "deck-config.yml"
         self.session_config = self.working_dir / "session-config.yml"
         self.targets = self.working_dir / "targets.yml"
 
         self.user_config_dir.mkdir(parents=True, exist_ok=True)
-
-        if check_depth and not self.working_dir.relative_to(self.git_dir).match("*/*"):
-            raise DeckzException(
-                f"Not deep enough from root {self.git_dir}. "
-                "Please follow the directory hierarchy root > company > deck and "
-                "invoke this tool from the deck directory."
-            )
 
     @property
     def git_dir(self) -> Optional[Path]:
