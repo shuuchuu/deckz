@@ -14,10 +14,10 @@ _logger = getLogger(__name__)
 
 
 class Paths:
-    def __init__(self, working_dir: str, check_depth: bool = True) -> None:
+    def __init__(self, working_dir: str) -> None:
         self.working_dir = Path(working_dir).resolve()
 
-        if check_depth and not self.working_dir.relative_to(self.git_dir).match("*/*"):
+        if not self.working_dir.relative_to(self.git_dir).match("*/*"):
             raise DeckzException(
                 f"Not deep enough from root {self.git_dir}. "
                 "Please follow the directory hierarchy root > company > deck and "
@@ -55,14 +55,18 @@ class Paths:
         self.user_config_dir.mkdir(parents=True, exist_ok=True)
 
     @property
-    def git_dir(self) -> Optional[Path]:
+    def git_dir(self) -> Path:
         if not hasattr(self, "_git_dir"):
-            try:
-                repository = Repo(str(self.working_dir), search_parent_directories=True)
-            except InvalidGitRepositoryError as e:
-                raise DeckzException(
-                    "Could not find the path of the current git working directory. "
-                    "Are you in one?"
-                ) from e
-            self._git_dir = Path(repository.git.rev_parse("--show-toplevel")).resolve()
+            self._git_dir = get_git_dir(self.working_dir)
         return self._git_dir
+
+
+def get_git_dir(path: Path) -> Optional[Path]:
+    try:
+        repository = Repo(str(path), search_parent_directories=True)
+    except InvalidGitRepositoryError as e:
+        raise DeckzException(
+            "Could not find the path of the current git working directory. "
+            "Are you in one?"
+        ) from e
+    return Path(repository.git.rev_parse("--show-toplevel")).resolve()
