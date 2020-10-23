@@ -8,7 +8,7 @@ from yaml import safe_dump, safe_load
 
 from deckz.cli import command
 from deckz.exceptions import DeckzException
-from deckz.paths import Paths
+from deckz.paths import get_git_dir
 from deckz.targets import SECTION_YML_VERSION
 
 
@@ -58,7 +58,7 @@ def migrate_sections() -> None:
 
 
 def get_config_paths() -> FrozenSet[Path]:
-    git_dir = Paths(".", check_depth=False).git_dir
+    git_dir = get_git_dir(Path("."))
     v1_ymls = git_dir.glob("**/section.yml")
     all_ymls = git_dir.glob("**/*.yml")
     vx_ymls = []
