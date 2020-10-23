@@ -1,7 +1,7 @@
 from logging import getLogger
 from pathlib import Path
 from pickle import dump as pickle_dump, load as pickle_load
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -19,12 +19,13 @@ class Uploader:
         self._logger = getLogger(__name__)
         self._paths = paths
         self._service = self._build_service()
-        folder_id = self._check_folders()
-        self._create_backup(folder_id)
-        links = self._upload(folder_id)
-        print("Uploaded documents:")
-        for pdf, link in links.items():
-            print(f"  {pdf.name}: {link}")
+        folder_id, folder_link = self._check_folders()
+        backup_id = self._create_backup(folder_id)
+        self._upload(folder_id)
+        if backup_id:
+            self._logger.info("Deleting backup of old files")
+            self._service.files().delete(fileId=backup_id).execute()
+        print(f"Online folder: {folder_link}")
 
     def _build_service(self) -> Any:
         if self._paths.gdrive_credentials.is_file():
@@ -47,41 +48,55 @@ class Uploader:
 
         return build("drive", "v3", credentials=creds, cache_discovery=False)
 
-    def _check_folders(self) -> str:
+    def _check_folders(self) -> Tuple[str, str]:
         self._logger.info("Checking/creating folder hierarchy")
         folders = [app_name]
         folders.extend(self._paths.working_dir.relative_to(self._paths.git_dir).parts)
         parent = "root"
         for folder in folders:
-            folder_id = self._get(folder=True, parents=[parent], name=folder)
-            if folder_id is None:
-                folder_id = self._create_folder(parent, folder)
+            folder_info = self._get(folder=True, parents=[parent], name=folder)
+            if folder_info is None:
+                folder_id, folder_link = self._create_folder(parent, folder)
                 self._logger.debug(f"“{folder}” folder was created")
             else:
+                folder_id, folder_link = (
+                    folder_info.get("id"),
+                    folder_info.get("webViewLink"),
+                )
                 self._logger.debug(f"“{folder}” folder was present")
             parent = folder_id
-        return parent
+        self._logger.debug(f"Setting permissions for {folder}")
+        self._service.permissions().create(
+            fileId=folder_id, body={"type": "anyone", "role": "reader"}
+        ).execute()
+        return folder_id, folder_link
 
-    def _create_backup(self, folder_id: str) -> None:
+    def _create_backup(self, folder_id: str) -> Optional[str]:
         file_ids = self._list(folder=False, parents=[folder_id], name=None)
+        backup_id = None
         if file_ids:
             self._logger.info("Creating backup of current files")
-            old_backup_id = self._get(folder=True, parents=[folder_id], name="backup")
-            if old_backup_id is not None:
+            old_backup_info = self._get(folder=True, parents=[folder_id], name="backup")
+            if old_backup_info is not None:
+                old_backup_id = old_backup_info.get("id")
                 self._service.files().update(
                     fileId=old_backup_id, body=dict(name="backup-old")
                 ).execute()
-            backup_id = self._create_folder(parent=folder_id, name="backup")
+            backup_id, _ = self._create_folder(parent=folder_id, name="backup")
             for file_id in file_ids:
                 self._service.files().update(
                     fileId=file_id, addParents=backup_id, removeParents=folder_id
                 ).execute()
-            if old_backup_id is not None:
+            if old_backup_info is not None:
+                old_backup_id = old_backup_info.get("id")
                 self._service.files().delete(fileId=old_backup_id).execute()
+        return backup_id
 
     def _upload(self, folder_id: str) -> Dict[Path, str]:
-        self._logger.info("Uploading pdf/*-print.pdf")
-        pdfs = list((self._paths.working_dir / "pdf").glob("*-print.pdf"))
+        self._logger.info("Uploading pdfs")
+        pdfs = sorted(
+            (self._paths.working_dir / "pdf").glob("*.pdf"), key=lambda p: p.name
+        )
         links: Dict[Path, str] = {}
         for pdf in pdfs:
             pdf_size = pdf.stat().st_size
@@ -107,22 +122,20 @@ class Uploader:
                             int((status.progress() - previous_progress) * pdf_size)
                         )
                         previous_progress = status.progress()
-            self._logger.debug(
-                f"Setting permissions for {pdf.relative_to(self._paths.working_dir)}"
-            )
-            upload_id, upload_link = response.get("id"), response.get("webViewLink")
-            self._service.permissions().create(
-                fileId=upload_id, body={"type": "anyone", "role": "reader"}
-            ).execute()
-            links[pdf] = upload_link
+                progress_bar.update(progress_bar.total - progress_bar.n)
+            links[pdf] = response.get("webViewLink")
         return links
 
-    def _create_folder(self, parent: str, name: str) -> str:
+    def _create_folder(self, parent: str, name: str) -> Tuple[str, str]:
         file_metadata = dict(
             name=name, mimeType="application/vnd.google-apps.folder", parents=[parent]
         )
-        file = self._service.files().create(body=file_metadata, fields="id").execute()
-        return file.get("id")
+        file = (
+            self._service.files()
+            .create(body=file_metadata, fields="id,webViewLink")
+            .execute()
+        )
+        return file.get("id"), file.get("webViewLink")
 
     def _list(
         self, folder: Optional[bool], parents: List[str], name: Optional[str],
@@ -131,11 +144,11 @@ class Uploader:
 
     def _get(
         self, folder: Optional[bool], parents: List[str], name: Optional[str]
-    ) -> Optional[str]:
+    ) -> Optional[Any]:
         results = self._query(folder, parents, name)
         if len(results) > 1:
             raise DeckzException("Found several files while trying to retrieve one.")
-        return results[0].get("id") if results else None
+        return results[0] if results else None
 
     def _query(
         self, folder: Optional[bool], parents: List[str], name: Optional[str]
@@ -159,7 +172,7 @@ class Uploader:
                 .list(
                     q=query,
                     spaces="drive",
-                    fields="nextPageToken, files(id)",
+                    fields="nextPageToken, files(id,webViewLink)",
                     pageToken=page_token,
                 )
                 .execute()
