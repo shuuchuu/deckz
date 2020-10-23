@@ -1,3 +1,4 @@
+from contextlib import ExitStack
 from enum import Enum
 from filecmp import cmp
 from logging import getLogger
@@ -11,6 +12,7 @@ from tempfile import NamedTemporaryFile
 from typing import Any, Dict, Optional
 
 from jinja2 import Environment, FileSystemLoader
+from PyPDF2 import PdfFileMerger
 
 from deckz.exceptions import DeckzException
 from deckz.paths import Paths
@@ -49,13 +51,15 @@ class Builder:
             if self._presentation:
                 to_compile.append((target, CompileType.Presentation, True))
             if self._handout:
-                to_compile.append((target, CompileType.Handout, True))
+                to_compile.append((target, CompileType.Handout, False))
             if self._print:
                 to_compile.append((target, CompileType.PrintHandout, False))
         to_compile.sort(key=lambda x: (x[0].name, x[1].value))
-        n_outputs = (int(self._handout) + int(self._presentation)) * len(
-            self._targets
-        ) + int(self._print)
+        n_outputs = (
+            int(self._handout)
+            + int(self._presentation) * len(self._targets)
+            + int(self._print)
+        )
         self._logger.info(
             f"Building {len(to_compile)} PDFs used in {n_outputs} outputs"
         )
@@ -69,6 +73,14 @@ class Builder:
             )
             == 0
         )
+        handout_ok = (
+            sum(
+                c.returncode
+                for c, (_, t, _) in zip(completed_processes, to_compile)
+                if t is CompileType.Handout
+            )
+            == 0
+        )
         if self._print:
             if print_handout_ok:
                 self._logger.info(
@@ -78,6 +90,16 @@ class Builder:
             else:
                 self._logger.warning(
                     "Preparatory compilations failed. Skipping print output"
+                )
+        if self._handout:
+            if handout_ok:
+                self._logger.info(
+                    f"Formatting {len(self._targets)} PDFs into a handout"
+                )
+                self._merge_pdfs(CompileType.Handout, True)
+            else:
+                self._logger.warning(
+                    "Preparatory compilations failed. Skipping handout output"
                 )
         for completed_process, (target, compile_type, _) in zip(
             completed_processes, to_compile
@@ -101,6 +123,30 @@ class Builder:
             name += f"-{target.name}"
         name += f"-{compile_type.value}"
         return name.lower()
+
+    def _merge_pdfs(self, compile_type: CompileType, copy_result: bool = True) -> None:
+        build_dir = self._setup_build_dir(None, compile_type)
+        filename = self._get_filename(None, compile_type)
+        build_pdf_path = build_dir / f"{filename}.pdf"
+        output_pdf_path = self._paths.pdf_dir / f"{filename}.pdf"
+        input_pdf_paths = [
+            (
+                self._paths.build_dir
+                / target.name
+                / CompileType.Handout.value
+                / self._get_filename(target, CompileType.Handout)
+            ).with_suffix(".pdf")
+            for target in self._targets
+        ]
+        with ExitStack() as stack, build_pdf_path.open("wb") as fh:
+            merger = PdfFileMerger()
+            input_files = [stack.enter_context(p.open("rb")) for p in input_pdf_paths]
+            for input_file in input_files:
+                merger.append(input_file)
+            merger.write(fh)
+        if copy_result:
+            self._paths.pdf_dir.mkdir(parents=True, exist_ok=True)
+            copyfile(build_pdf_path, output_pdf_path)
 
     def _build(
         self,
