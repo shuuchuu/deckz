@@ -42,6 +42,8 @@ class Paths:
         self.jinja2_print_template = self.jinja2_dir / "print.tex"
         self.user_config_dir = Path(user_config_dir(app_name))
         self.global_config = self.git_dir / "global-config.yml"
+        self.gdrive_secrets = self.user_config_dir / "gdrive-secrets.json"
+        self.gdrive_credentials = self.user_config_dir / "gdrive-credentials.pickle"
         self.user_config = self.user_config_dir / "user-config.yml"
         self.company_config = (
             self.git_dir
