@@ -20,6 +20,7 @@ watchdog = "^0.10.2"
 google-api-python-client = "^1.12.5"
 google-auth-oauthlib = "^0.4.1"
 tqdm = "^4.50.2"
+pypdf2 = "^1.26.0"
 
 [tool.poetry.dev-dependencies]
 black = "^19.10b0"

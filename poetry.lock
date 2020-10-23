@@ -610,6 +610,14 @@ version = "2.4.7"
 
 [[package]]
 category = "main"
+description = "PDF toolkit"
+name = "pypdf2"
+optional = false
+python-versions = "*"
+version = "1.26.0"
+
+[[package]]
+category = "main"
 description = "A python implmementation of GNU readline."
 marker = "sys_platform == \"win32\""
 name = "pyreadline"
@@ -859,7 +867,7 @@ docs = ["sphinx", "jaraco.packaging (>=3.2)", "rst.linker (>=1.9)"]
 testing = ["pytest (>=3.5,<3.7.3 || >3.7.3)", "pytest-checkdocs (>=1.2.3)", "pytest-flake8", "pytest-cov", "jaraco.test (>=3.2.0)", "jaraco.itertools", "func-timeout", "pytest-black (>=0.3.7)", "pytest-mypy"]
 
 [metadata]
-content-hash = "c96ea5c5151f0d3831cce3b26b6b2f44b95abce02d98a4036dd3e7bc8676ca27"
+content-hash = "5d576588dd2d4dadd5929d449b1557bc630dae4bd2f96923af603a2d716fd111"
 lock-version = "1.0"
 python-versions = "^3.6"
 
@@ -1234,6 +1242,9 @@ pylint = [
 pyparsing = [
     {file = "pyparsing-2.4.7-py2.py3-none-any.whl", hash = "sha256:ef9d7589ef3c200abe66653d3f1ab1033c3c419ae9b9bdb1240a85b024efc88b"},
     {file = "pyparsing-2.4.7.tar.gz", hash = "sha256:c203ec8783bf771a155b207279b9bccb8dea02d8f0c9e5f8ead507bc3246ecc1"},
+]
+pypdf2 = [
+    {file = "PyPDF2-1.26.0.tar.gz", hash = "sha256:e28f902f2f0a1603ea95ebe21dff311ef09be3d0f0ef29a3e44a932729564385"},
 ]
 pyreadline = [
     {file = "pyreadline-2.1.win-amd64.exe", hash = "sha256:9ce5fa65b8992dfa373bddc5b6e0864ead8f291c94fbfec05fbd5c836162e67b"},
