@@ -11,7 +11,33 @@ Tool to handle a large number of beamer decks, used by several persons, with sha
 
 With `pip`:
 
-    pip install deckz
+```shell
+pip install deckz
+```
+
+### Shell completion installation
+
+Depending on your shell:
+
+- For Bash:
+
+    ```shell
+    _DECKZ_COMPLETE=source_bash deckz > deckz-complete.sh
+    ```
+
+- For Zsh:
+
+    ```shell
+    _DECKZ_COMPLETE=source_zsh deckz > deckz-complete.sh
+    ```
+
+- For Fish:
+
+    ```shell
+    _DECKZ_COMPLETE=source_fish deckz > deckz-complete.sh
+    ```
+
+And then source/activate the resulting file in your shell config.
 
 ## Directory Structure
 
@@ -19,16 +45,24 @@ With `pip`:
 
 - your directory should be a git repository
 - it should contain a `shared` folder for everything that will be shared by all decks during compilation (images, code snippets, etc)
-- it should contain jinja2 LaTeX templates in the `jinja2` directory, with a specific name (`$VERSION.tex.jinja2`) containing a version for reference in configuration, for example: `v1.tex.jinja2`
+- it should contain jinja2 LaTeX templates in the `templates/jinja2` directory, with a specific name (listed below)
+- it should contain YAML templates in the `templates/yml` directory, with specific names (listed below)
 - your deck folders should be contained in an organization/company folder. This is meant to avoid repeating the company details all over the place
 - several configuration should be present to customize the decks efficiently (more on that later)
 
-```
+```text
 root (git repository)
 ├── global-config.yml
-├── jinja2
-│   ├── v1.tex.jinja2
-│   └── v2.tex.jinja2
+├── templates
+│   ├── jinja2
+│   │   ├── main.tex
+│   │   └── print.tex
+│   └── yml
+│       ├── company-config.yml
+│       ├── deck-config.yml
+│       ├── global-config.yml
+│       ├── targets.yml
+│       └── user-config.yml
 ├── shared
 │   ├── img
 │   │   ├── image1.png
@@ -44,15 +78,14 @@ root (git repository)
 │   └── deck1
 │       ├── session-config.yml
 │       ├── deck-config.yml
-│       ├── targets.yml
-│       └── module3.tex
+│       └── targets.yml
 └── company2
     ├── company-config.yml
     └── deck2
-        ├── session-config.yml
+        ├── target1
+        │   └── custom-module.tex
         ├── deck-config.yml
-        ├── targets.yml
-        └── module4.tex
+        └── targets.yml
 ```
 
 ## Configuration
@@ -81,7 +114,7 @@ The global configuration contains the default values that don't fit at a more sp
 
 Example:
 
-```
+```yml
 presentation_size: 10pt
 ```
 
@@ -91,7 +124,7 @@ The user configuration contains the values that change when the speaker changes.
 
 Example:
 
-```
+```yml
 trainer_activity: Data Scientist
 trainer_email: john@doe.me
 trainer_name: John Doe
@@ -105,7 +138,7 @@ The company configuration contains everything required to brand the presentation
 
 Example:
 
-```
+```yml
 company_logo: logo_company
 company_logo_height: 1cm
 company_name: Company
@@ -118,22 +151,22 @@ The deck configuration contains the title and acronym of the talk.
 
 Example:
 
-```
+```yml
 deck_acronym: COV19
 deck_title: Machine Learning and COVID-19
 ```
 
 #### Session configuration
 
-The session configuration contains everything that will change from one session of a specific talk to another one.
+The session configuration is optional and contains everything that will change from one session of a specific talk to another one.
 
 Example:
 
-```
+```yml
 session_end: 30/04/2020
 session_start: 27/04/2020
 ```
 
 ## Usage
 
-See the `-h` flag of the `deckz` command line tool.
+See the `--help` flag of the `deckz` command line tool.
