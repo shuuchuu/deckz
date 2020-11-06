@@ -51,12 +51,12 @@ class Builder:
             if self._presentation:
                 to_compile.append((target, CompileType.Presentation, True))
             if self._handout:
-                to_compile.append((target, CompileType.Handout, False))
+                to_compile.append((target, CompileType.Handout, True))
             if self._print:
                 to_compile.append((target, CompileType.PrintHandout, False))
         to_compile.sort(key=lambda x: (x[0].name, x[1].value))
         n_outputs = (
-            int(self._handout)
+            int(self._handout) * (len(self._targets) + 1)
             + int(self._presentation) * len(self._targets)
             + int(self._print)
         )
