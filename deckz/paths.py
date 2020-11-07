@@ -1,31 +1,19 @@
 from logging import getLogger
 from pathlib import Path
-from typing import Optional
 
 from appdirs import user_config_dir
-from git import Repo
-from git.exc import InvalidGitRepositoryError
 
 from deckz import app_name
 from deckz.exceptions import DeckzException
+from deckz.utils import get_git_dir
 
 
 _logger = getLogger(__name__)
 
 
-class Paths:
-    def __init__(self, working_dir: str) -> None:
-        self.working_dir = Path(working_dir).resolve()
-
-        if not self.working_dir.relative_to(self.git_dir).match("*/*"):
-            raise DeckzException(
-                f"Not deep enough from root {self.git_dir}. "
-                "Please follow the directory hierarchy root > company > deck and "
-                "invoke this tool from the deck directory."
-            )
-
-        self.build_dir = self.working_dir / "build"
-        self.pdf_dir = self.working_dir / "pdf"
+class GlobalPaths:
+    def __init__(self, current_dir: str) -> None:
+        self.current_dir = Path(current_dir).resolve()
         self.shared_dir = self.git_dir / "shared"
         self.shared_img_dir = self.shared_dir / "img"
         self.shared_code_dir = self.shared_dir / "code"
@@ -45,30 +33,34 @@ class Paths:
         self.gdrive_secrets = self.user_config_dir / "gdrive-secrets.json"
         self.gdrive_credentials = self.user_config_dir / "gdrive-credentials.pickle"
         self.user_config = self.user_config_dir / "user-config.yml"
-        self.company_config = (
-            self.git_dir
-            / self.working_dir.relative_to(self.git_dir).parts[0]
-            / "company-config.yml"
-        )
-        self.deck_config = self.working_dir / "deck-config.yml"
-        self.session_config = self.working_dir / "session-config.yml"
-        self.targets = self.working_dir / "targets.yml"
-
-        self.user_config_dir.mkdir(parents=True, exist_ok=True)
 
     @property
     def git_dir(self) -> Path:
         if not hasattr(self, "_git_dir"):
-            self._git_dir = get_git_dir(self.working_dir)
+            self._git_dir = get_git_dir(self.current_dir)
         return self._git_dir
 
 
-def get_git_dir(path: Path) -> Optional[Path]:
-    try:
-        repository = Repo(str(path), search_parent_directories=True)
-    except InvalidGitRepositoryError as e:
-        raise DeckzException(
-            "Could not find the path of the current git working directory. "
-            "Are you in one?"
-        ) from e
-    return Path(repository.git.rev_parse("--show-toplevel")).resolve()
+class Paths(GlobalPaths):
+    def __init__(self, current_dir: str) -> None:
+        super().__init__(current_dir)
+
+        if not self.current_dir.relative_to(self.git_dir).match("*/*"):
+            raise DeckzException(
+                f"Not deep enough from root {self.git_dir}. "
+                "Please follow the directory hierarchy root > company > deck and "
+                "invoke this tool from the deck directory."
+            )
+
+        self.build_dir = self.current_dir / "build"
+        self.pdf_dir = self.current_dir / "pdf"
+        self.company_config = (
+            self.git_dir
+            / self.current_dir.relative_to(self.git_dir).parts[0]
+            / "company-config.yml"
+        )
+        self.deck_config = self.current_dir / "deck-config.yml"
+        self.session_config = self.current_dir / "session-config.yml"
+        self.targets = self.current_dir / "targets.yml"
+
+        self.user_config_dir.mkdir(parents=True, exist_ok=True)

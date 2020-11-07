@@ -260,7 +260,7 @@ class Builder:
                 link_dir = (
                     target_build_dir
                     / dependency.relative_to(
-                        self._paths.working_dir / target.name
+                        self._paths.current_dir / target.name
                     ).parent
                 )
             link_dir.mkdir(parents=True, exist_ok=True)

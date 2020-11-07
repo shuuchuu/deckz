@@ -16,4 +16,4 @@ def init(deck_path: str) -> None:
 
     else:
         logger.info(f"Copying {paths.template_targets} to current directory")
-        shutil_copy(str(paths.template_targets), str(paths.working_dir))
+        shutil_copy(str(paths.template_targets), str(paths.current_dir))
