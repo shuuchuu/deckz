@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "deckz"
-version = "7.1.0"
+version = "7.2.0"
 description = "Tool to handle multiple beamer decks."
 authors = ["m09 <142691+m09@users.noreply.github.com>"]
 license = "Apache-2.0"
@@ -21,6 +21,8 @@ google-api-python-client = "^1.12.5"
 google-auth-oauthlib = "^0.4.1"
 tqdm = "^4.50.2"
 pypdf2 = "^1.26.0"
+colorama = "^0.4.4"
+dulwich = "^0.20.11"
 
 [tool.poetry.dev-dependencies]
 black = "^19.10b0"

@@ -67,7 +67,7 @@ class Target:
     def __init__(self, data: Dict[str, Any], paths: Paths):
         self._paths = paths
         self.name = data["name"]
-        local_latex_dir = paths.working_dir / self.name
+        local_latex_dir = paths.current_dir / self.name
         self.title = data["title"]
         self.dependencies = Dependencies()
         self.dependencies.unused.update(local_latex_dir.glob("**/*.tex"))
@@ -236,3 +236,6 @@ class Targets(Iterable[Target]):
 
     def __len__(self) -> int:
         return len(self.targets)
+
+    def __repr__(self) -> str:
+        return f"Targets(targets={repr(self.targets)}"

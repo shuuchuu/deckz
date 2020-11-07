@@ -106,7 +106,7 @@ def watch(
         (p, False) for p in paths.shared_dir.glob("**/*") if p.resolve().is_dir()
     ]
     paths_to_watch.append((paths.jinja2_dir, True))
-    paths_to_watch.append((paths.working_dir, True))
+    paths_to_watch.append((paths.current_dir, True))
     for path, recursive in paths_to_watch:
         observer.schedule(event_handler, str(path.resolve()), recursive=recursive)
     observer.start()

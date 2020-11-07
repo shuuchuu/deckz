@@ -51,7 +51,7 @@ class Uploader:
     def _check_folders(self) -> Tuple[str, str]:
         self._logger.info("Checking/creating folder hierarchy")
         folders = [app_name]
-        folders.extend(self._paths.working_dir.relative_to(self._paths.git_dir).parts)
+        folders.extend(self._paths.current_dir.relative_to(self._paths.git_dir).parts)
         parent = "root"
         for folder in folders:
             folder_info = self._get(folder=True, parents=[parent], name=folder)
@@ -94,9 +94,7 @@ class Uploader:
 
     def _upload(self, folder_id: str) -> Dict[Path, str]:
         self._logger.info("Uploading pdfs")
-        pdfs = sorted(
-            (self._paths.working_dir / "pdf").glob("*.pdf"), key=lambda p: p.name
-        )
+        pdfs = sorted((self._paths.pdf_dir).glob("*.pdf"), key=lambda p: p.name)
         links: Dict[Path, str] = {}
         for pdf in pdfs:
             pdf_size = pdf.stat().st_size

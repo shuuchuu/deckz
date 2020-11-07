@@ -1,15 +1,13 @@
-from itertools import chain
 from logging import getLogger
 from pathlib import Path
 from subprocess import CalledProcessError, run
-from typing import FrozenSet
 
 from yaml import safe_dump, safe_load
 
 from deckz.cli import command
 from deckz.exceptions import DeckzException
-from deckz.paths import get_git_dir
 from deckz.targets import SECTION_YML_VERSION
+from deckz.utils import get_section_config_paths
 
 
 @command
@@ -19,9 +17,7 @@ def migrate_sections() -> None:
 
     new_config_paths = []
 
-    print(get_config_paths())
-
-    for config_path in get_config_paths():
+    for config_path in get_section_config_paths():
         with config_path.open(encoding="utf8") as fh:
             config = safe_load(fh)
         version = config.get("version", 1)
@@ -55,21 +51,6 @@ def migrate_sections() -> None:
             "Captured stderr\n"
             "---\n%s" % (e.stdout, e.stderr)
         ) from e
-
-
-def get_config_paths() -> FrozenSet[Path]:
-    git_dir = get_git_dir(Path("."))
-    v1_ymls = git_dir.glob("**/section.yml")
-    all_ymls = git_dir.glob("**/*.yml")
-    vx_ymls = []
-    for yml in all_ymls:
-        with yml.open(encoding="utf8") as fh:
-            content = safe_load(fh)
-            if not isinstance(content, dict):
-                continue
-            if {"title", "version", "flavors"}.issubset(content):
-                vx_ymls.append(yml)
-    return frozenset(chain(v1_ymls, vx_ymls))
 
 
 def _v1_v2(config_path: Path) -> Path:
