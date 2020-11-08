@@ -67,38 +67,25 @@ class Target:
     def __init__(self, data: Dict[str, Any], paths: Paths):
         self._paths = paths
         self.name = data["name"]
-        local_latex_dir = paths.current_dir / self.name
+        self.local_latex_dir = paths.current_dir / self.name
         self.title = data["title"]
         self.dependencies = Dependencies()
-        self.dependencies.unused.update(local_latex_dir.glob("**/*.tex"))
+        self.dependencies.unused.update(self.local_latex_dir.glob("**/*.tex"))
         self.sections = []
         for section_config in data["sections"]:
             if not isinstance(section_config, dict):
                 section_config = dict(path=section_config)
             section_path = section_config["path"]
-            local_dir = local_latex_dir / section_path
-            local_file = local_latex_dir / f"{section_path}.tex"
-            shared_dir = paths.shared_latex_dir / section_path
-            shared_file = paths.shared_latex_dir / f"{section_path}.tex"
-            if local_dir.exists() and local_dir.resolve().is_dir():
-                section, dependencies = self._parse_section_dir(
-                    local_dir, local_latex_dir, section_config
-                )
-            elif local_file.exists() and local_file.resolve().is_file():
-                section, dependencies = self._parse_section_file(
-                    local_file, local_latex_dir, section_config
-                )
-            elif shared_dir.exists() and shared_dir.resolve().is_dir():
-                section, dependencies = self._parse_section_dir(
-                    shared_dir, paths.shared_latex_dir, section_config
-                )
-            elif shared_file.exists() and shared_file.resolve().is_file():
-                section, dependencies = self._parse_section_file(
-                    shared_file, paths.shared_latex_dir, section_config
-                )
+            result = self._parse_section_dir(section_path, section_config)
+            if result is not None:
+                section, dependencies = result
             else:
-                dependencies = Dependencies()
-                dependencies.missing.add(section_path)
+                result = self._parse_section_file(section_path, section_config)
+                if result is not None:
+                    section, dependencies = result
+                else:
+                    dependencies = Dependencies()
+                    dependencies.missing.add(section_path)
             self.dependencies = Dependencies.merge(self.dependencies, dependencies)
             self.sections.append(section)
 
@@ -112,10 +99,23 @@ class Target:
         )
 
     def _parse_section_dir(
-        self, section_dir: Path, latex_dir: Path, custom_config: Dict[str, Any]
-    ) -> Tuple[Section, Dependencies]:
-        section_config_path = section_dir / f"{section_dir.name}.yml"
-        with open(section_config_path, encoding="utf8") as fh:
+        self, section_path: str, custom_config: Dict[str, Any]
+    ) -> Optional[Tuple[Section, Dependencies]]:
+        local_section_dir = self.local_latex_dir / section_path
+        local_section_config_path = (local_section_dir / section_path).with_suffix(
+            ".yml"
+        )
+        shared_section_dir = self._paths.shared_latex_dir / section_path
+        shared_section_config_path = (shared_section_dir / section_path).with_suffix(
+            ".yml"
+        )
+        if local_section_config_path.exists():
+            section_config_path = local_section_config_path
+        elif shared_section_config_path.exists():
+            section_config_path = shared_section_config_path
+        else:
+            return None
+        with section_config_path.open(encoding="utf8") as fh:
             section_config = yaml_safe_load(fh)
         title = (
             custom_config["title"]
@@ -124,7 +124,7 @@ class Target:
         )
         if "flavor" not in custom_config:
             raise DeckzException(
-                f"Mandatory flavor not specified in {section_dir.name} configuration "
+                f"Mandatory flavor not specified in {section_path} configuration "
                 "of targets.yml."
             )
         flavor_name = custom_config["flavor"]
@@ -154,23 +154,41 @@ class Target:
                 filename, title = next(iter(item.items()))
             if "excludes" in custom_config and filename in custom_config["excludes"]:
                 continue
-            local_path = (section_dir / filename).with_suffix(".tex")
-            shared_path = (self._paths.shared_latex_dir / filename).with_suffix(".tex")
-            if local_path.exists():
-                section.inputs.append(
-                    (f"{section_dir.relative_to(latex_dir)}/{filename}", title)
+            if filename.startswith("/"):
+                local_path = (self.local_latex_dir / filename[1:]).with_suffix(".tex")
+                shared_path = (self._paths.shared_latex_dir / filename[1:]).with_suffix(
+                    ".tex"
                 )
+            else:
+                local_path = (local_section_dir / filename).with_suffix(".tex")
+                shared_path = (shared_section_dir / filename).with_suffix(".tex")
+            local_relative_path = local_path.relative_to(self.local_latex_dir)
+            shared_relative_path = shared_path.relative_to(self._paths.shared_latex_dir)
+            if local_path.exists():
+                section.inputs.append((str(local_relative_path.with_suffix("")), title))
                 dependencies.used.add(local_path.resolve())
             elif shared_path.exists():
-                section.inputs.append((filename, title))
+                section.inputs.append(
+                    (str(shared_relative_path.with_suffix("")), title)
+                )
                 dependencies.used.add(shared_path.resolve())
             else:
                 dependencies.missing.add(filename)
         return section, dependencies
 
     def _parse_section_file(
-        self, section_file: Path, latex_dir: Path, config: Dict[str, Any]
-    ) -> Tuple[Section, Dependencies]:
+        self, section_path: str, config: Dict[str, Any]
+    ) -> Optional[Tuple[Section, Dependencies]]:
+        local_section_file = (self.local_latex_dir / section_path).with_suffix(".tex")
+        shared_section_file = (self._paths.shared_latex_dir / section_path).with_suffix(
+            ".tex"
+        )
+        if local_section_file.exists():
+            section_file = local_section_file
+        elif shared_section_file.exists():
+            section_file = shared_section_file
+        else:
+            return None
         config_file = section_file.with_suffix(".yml")
         if "title" in config:
             title = config["title"]
@@ -181,9 +199,7 @@ class Target:
         else:
             title = None
         section = Section(title)
-        section.inputs.append(
-            (f"{section_file.relative_to(latex_dir).with_suffix('')}", None)
-        )
+        section.inputs.append((section_path, None))
         dependencies = Dependencies()
         dependencies.used.add(section_file.resolve())
         return section, dependencies
