@@ -72,10 +72,13 @@ class Target:
         self.dependencies = Dependencies()
         self.dependencies.unused.update(self.local_latex_dir.glob("**/*.tex"))
         self.sections = []
+        self.section_dependencies = {}
+        self.section_flavors = {}
         for section_config in data["sections"]:
             if not isinstance(section_config, dict):
                 section_config = dict(path=section_config)
             section_path = section_config["path"]
+            self.section_flavors[section_path] = section_config.get("flavor")
             result = self._parse_section_dir(section_path, section_config)
             if result is not None:
                 section, dependencies = result
@@ -88,6 +91,7 @@ class Target:
                     dependencies.missing.add(section_path)
             self.dependencies = Dependencies.merge(self.dependencies, dependencies)
             self.sections.append(section)
+            self.section_dependencies[section_path] = dependencies
 
     def __repr__(self) -> str:
         return (
@@ -125,7 +129,7 @@ class Target:
         if "flavor" not in custom_config:
             raise DeckzException(
                 f"Mandatory flavor not specified in {section_path} configuration "
-                "of targets.yml."
+                f"of {self._paths.targets}."
             )
         flavor_name = custom_config["flavor"]
         if "flavors" not in section_config:
