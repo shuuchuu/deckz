@@ -6,11 +6,13 @@ from click import Path as ClickPath, secho
 from git import Repo
 from git.exc import InvalidGitRepositoryError
 from tqdm import tqdm
+from yaml import safe_load as yaml_safe_load
 
 from deckz.cli import command, option
 from deckz.exceptions import DeckzException
 from deckz.paths import GlobalPaths, Paths
 from deckz.targets import Targets
+from deckz.utils import get_section_config_paths
 
 
 @command
@@ -26,7 +28,10 @@ from deckz.targets import Targets
     help="Find which decks depend on that shared section specific flavor. "
     "Requires a --section specified.",
 )
-def deps(path: str, section: Optional[str], flavor: Optional[str]) -> None:
+@option("--unused", is_flag=True, help="Find unused flavors.")
+def deps(
+    path: str, section: Optional[str], flavor: Optional[str], unused: bool
+) -> None:
     """Give information about shared modules usage."""
     paths = GlobalPaths(path)
     targets_paths = list(paths.git_dir.glob("**/targets.yml"))
@@ -41,7 +46,7 @@ def deps(path: str, section: Optional[str], flavor: Optional[str]) -> None:
         targets = Targets(paths, fail_on_missing=False, whitelist=[])
         for target in targets:
             for section_path, dependencies in target.section_dependencies.items():
-                section_flavor = target.section_flavors[section_path]
+                section_flavors = target.section_flavors[section_path]
                 shared = False
                 for dependency_path in dependencies.used:
                     if (
@@ -51,9 +56,10 @@ def deps(path: str, section: Optional[str], flavor: Optional[str]) -> None:
                         shared = True
                         break
                 if shared:
-                    by_sections[section_path][section_flavor].add(
-                        (targets_name, target.name)
-                    )
+                    for section_flavor in section_flavors:
+                        by_sections[section_path][section_flavor].add(
+                            (targets_name, target.name)
+                        )
             shared_dependencies = set()
             for dependency_path in target.dependencies.used:
                 try:
@@ -64,7 +70,6 @@ def deps(path: str, section: Optional[str], flavor: Optional[str]) -> None:
                 except ValueError:
                     pass
             all_targets_dependencies[targets_name][target.name] = shared_dependencies
-
     try:
         repository = Repo(str(path), search_parent_directories=True)
         index = repository.index
@@ -98,21 +103,34 @@ def deps(path: str, section: Optional[str], flavor: Optional[str]) -> None:
                 secho(f" {' '.join(touched_targets)}", fg="blue")
     else:
         if flavor is None:
-            flavor_dependencies = by_sections[section]
+            flavors_dependencies = by_sections[section]
             secho(section, fg="green")
             for deck_path, target_name in sorted(
-                set.union(*flavor_dependencies.values())
+                set.union(*flavors_dependencies.values())
             ):
                 secho(f" {deck_path}", fg="blue", nl=False)
                 secho(f" {target_name}", fg="red", nl=True)
-            touched_targets = []
         else:
-            flavor_dependencies = by_sections[section]
+            flavors_dependencies = by_sections[section]
             secho(f"{section} {flavor}", fg="green")
-            for deck_path, target_name in sorted(flavor_dependencies[flavor]):
+            for deck_path, target_name in sorted(flavors_dependencies[flavor]):
                 secho(f" {deck_path}", fg="blue", nl=False)
                 secho(f" {target_name}", fg="red", nl=True)
-            touched_targets = []
+    if unused:
+        section_paths = get_section_config_paths()
+        flavors = defaultdict(set)
+        for section_path in section_paths:
+            with section_path.open(encoding="utf8") as fh:
+                section_config = yaml_safe_load(fh)
+            flavors[section_path.parent.name].update(section_config["flavors"])
+        secho("Unused flavors", fg="red")
+        for section, section_flavors in sorted(flavors.items()):
+            unused_flavors = [
+                flavor for flavor in section_flavors if not by_sections[section][flavor]
+            ]
+            if unused_flavors:
+                secho(section, fg="blue", nl=False)
+                secho(f" {' '.join(sorted(unused_flavors))}", fg="green")
 
 
 def _relative_to_shared_latex(paths: GlobalPaths, file_path: str) -> Optional[str]:

@@ -1,4 +1,4 @@
-from collections import OrderedDict
+from collections import defaultdict, OrderedDict
 from logging import getLogger
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple
@@ -73,12 +73,12 @@ class Target:
         self.dependencies.unused.update(self.local_latex_dir.glob("**/*.tex"))
         self.sections = []
         self.section_dependencies = {}
-        self.section_flavors = {}
+        self.section_flavors = defaultdict(set)
         for section_config in data["sections"]:
             if not isinstance(section_config, dict):
                 section_config = dict(path=section_config)
             section_path = section_config["path"]
-            self.section_flavors[section_path] = section_config.get("flavor")
+            self.section_flavors[section_path].add(section_config.get("flavor"))
             result = self._parse_section_dir(section_path, section_config)
             found_section = False
             if result is not None:
