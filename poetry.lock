@@ -137,7 +137,7 @@ description = "Python Git Library"
 name = "dulwich"
 optional = false
 python-versions = ">=3.5"
-version = "0.20.11"
+version = "0.20.14"
 
 [package.dependencies]
 certifi = "*"
@@ -172,11 +172,14 @@ description = "A plugin for flake8 finding likely bugs and design problems in yo
 name = "flake8-bugbear"
 optional = false
 python-versions = ">=3.6"
-version = "20.1.4"
+version = "20.11.1"
 
 [package.dependencies]
 attrs = ">=19.2.0"
 flake8 = ">=3.0.0"
+
+[package.extras]
+dev = ["coverage", "black", "hypothesis", "hypothesmith"]
 
 [[package]]
 category = "dev"
@@ -252,7 +255,7 @@ description = "Google API Client Library for Python"
 name = "google-api-python-client"
 optional = false
 python-versions = ">=2.7,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*"
-version = "1.12.5"
+version = "1.12.8"
 
 [package.dependencies]
 google-api-core = ">=1.21.0,<2dev"
@@ -339,7 +342,7 @@ description = "Human friendly output for text interfaces using Python"
 name = "humanfriendly"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
-version = "8.2"
+version = "9.0"
 
 [package.dependencies]
 pyreadline = "*"
@@ -358,15 +361,15 @@ description = "Read metadata from Python packages"
 marker = "python_version < \"3.8\""
 name = "importlib-metadata"
 optional = false
-python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,>=2.7"
-version = "2.0.0"
+python-versions = ">=3.6"
+version = "3.1.1"
 
 [package.dependencies]
 zipp = ">=0.5"
 
 [package.extras]
-docs = ["sphinx", "rst.linker"]
-testing = ["packaging", "pep517", "importlib-resources (>=1.3)"]
+docs = ["sphinx", "jaraco.packaging (>=3.2)", "rst.linker (>=1.9)"]
+testing = ["pytest (>=3.5,<3.7.3 || >3.7.3)", "pytest-checkdocs (>=1.2.3)", "pytest-flake8", "pytest-cov", "jaraco.test (>=3.2.0)", "packaging", "pep517", "pyfakefs", "flufl.flake8", "pytest-black (>=0.3.7)", "pytest-mypy", "importlib-resources (>=1.3)"]
 
 [[package]]
 category = "dev"
@@ -470,11 +473,10 @@ description = "Core utilities for Python packages"
 name = "packaging"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
-version = "20.4"
+version = "20.7"
 
 [package.dependencies]
 pyparsing = ">=2.0.2"
-six = "*"
 
 [[package]]
 category = "dev"
@@ -796,8 +798,8 @@ category = "main"
 description = "Fast, Extensible Progress Meter"
 name = "tqdm"
 optional = false
-python-versions = ">=2.6, !=3.0.*, !=3.1.*"
-version = "4.52.0"
+python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,>=2.7"
+version = "4.54.0"
 
 [package.extras]
 dev = ["py-make (>=0.1.0)", "twine", "argopt", "pydoc-markdown", "wheel"]
@@ -845,7 +847,7 @@ description = "Filesystem events monitoring"
 name = "watchdog"
 optional = false
 python-versions = "*"
-version = "0.10.3"
+version = "0.10.4"
 
 [package.dependencies]
 pathtools = ">=0.1.1"
@@ -968,31 +970,31 @@ coverage = [
     {file = "coverage-5.3.tar.gz", hash = "sha256:280baa8ec489c4f542f8940f9c4c2181f0306a8ee1a54eceba071a449fb870a0"},
 ]
 dulwich = [
-    {file = "dulwich-0.20.11-cp36-cp36m-macosx_10_14_x86_64.whl", hash = "sha256:2782e3ed318caba65d59730d46e1fe0d0ebc9b049bde2d52b7182ae83d03bbde"},
-    {file = "dulwich-0.20.11-cp36-cp36m-manylinux1_x86_64.whl", hash = "sha256:20114e4fc2b88ff69ade44a3953a0d5b0e4d048c6cd4dee5d001b88d60c1fb6c"},
-    {file = "dulwich-0.20.11-cp36-cp36m-manylinux2010_x86_64.whl", hash = "sha256:5e393df00096a37fb463a73faf036352102fd606326b27d02b3f48e043c2769f"},
-    {file = "dulwich-0.20.11-cp36-cp36m-win_amd64.whl", hash = "sha256:2a648162fe119a8bd8da1118890dc5e42e87f697789fbcff1be9ec5b1f86b2ca"},
-    {file = "dulwich-0.20.11-cp37-cp37m-macosx_10_14_x86_64.whl", hash = "sha256:7566ca21743d989d8b6802898c3d0f0c937ac455c92a8bd1c5f27ff58e681243"},
-    {file = "dulwich-0.20.11-cp37-cp37m-manylinux1_x86_64.whl", hash = "sha256:06fd66cc910dc2e9651bb9fd2ac98563b2c4296feec6e969aafe6ae7946168ee"},
-    {file = "dulwich-0.20.11-cp37-cp37m-manylinux2010_x86_64.whl", hash = "sha256:116df6a6e55633f513e2552d0b68a3c4fb3c6047191847ed853f4b872d6674fc"},
-    {file = "dulwich-0.20.11-cp37-cp37m-win_amd64.whl", hash = "sha256:bb805972771da3b193de0a9b8d86a74af109b7be3742fbe24c22ee0da5fdac56"},
-    {file = "dulwich-0.20.11-cp38-cp38-macosx_10_14_x86_64.whl", hash = "sha256:84879aed49b162df4dc4732e819839413b9fe456e5bddd7584d05f0332173786"},
-    {file = "dulwich-0.20.11-cp38-cp38-manylinux1_x86_64.whl", hash = "sha256:e5741b15df8b3f6e58a17de81ccf9453a2746639b8e4e2b2859a0ed59500995e"},
-    {file = "dulwich-0.20.11-cp38-cp38-manylinux2010_x86_64.whl", hash = "sha256:5394978ec6c5b58cf62b18586b70ee948b982cbd57500df7b93e6f961bf8265a"},
-    {file = "dulwich-0.20.11-cp38-cp38-win_amd64.whl", hash = "sha256:0bd68e5464a9f7bdd76b8e683740bdde349bedf1015bf891e702db6fab0f7a38"},
-    {file = "dulwich-0.20.11-cp39-cp39-macosx_10_14_x86_64.whl", hash = "sha256:4d2845eac377bfc9a35aab2eb215c5c4f91c1571f3eaf53d1fe3766dd37ef9af"},
-    {file = "dulwich-0.20.11-cp39-cp39-manylinux1_x86_64.whl", hash = "sha256:4c2cf88b4c785123b7d7cac944fa1825cb37ad47b5266f3eeffb986f04ef11df"},
-    {file = "dulwich-0.20.11-cp39-cp39-manylinux2010_x86_64.whl", hash = "sha256:25c6b0291b9cd032e8ab279e70c052b15c8d7b43efde29b28301da5b40f6b318"},
-    {file = "dulwich-0.20.11-cp39-cp39-win_amd64.whl", hash = "sha256:31be67863f04de66dce9329494b82f2add0ba0476306a67c90705c8e63dca032"},
-    {file = "dulwich-0.20.11.tar.gz", hash = "sha256:0b142794fb72647673173b80ed8b75e1f56b42a0972c5b3c752d88766a659d53"},
+    {file = "dulwich-0.20.14-cp36-cp36m-macosx_10_14_x86_64.whl", hash = "sha256:837d32443c5a765b3b241ea99310c61f2ee9f44ee4d3c12c64a64851abba7434"},
+    {file = "dulwich-0.20.14-cp36-cp36m-manylinux1_x86_64.whl", hash = "sha256:0e1f4d182bd6845f5d579f12e0ab6733e58aff138762054aaf39ec7bef8e1a50"},
+    {file = "dulwich-0.20.14-cp36-cp36m-manylinux2010_x86_64.whl", hash = "sha256:c5ebffce484459a2b3a83ec4c2426efb6f701887c0c99d237d4603685f703990"},
+    {file = "dulwich-0.20.14-cp36-cp36m-win_amd64.whl", hash = "sha256:297655bff6421dcb9d4705f9f42ebec8f7793c592f500b797e59dcd63ad96fcd"},
+    {file = "dulwich-0.20.14-cp37-cp37m-macosx_10_14_x86_64.whl", hash = "sha256:36a9d7998f25f047f7699450ae7cec11b0a89134deb9f879a92c8f9b3a36c238"},
+    {file = "dulwich-0.20.14-cp37-cp37m-manylinux1_x86_64.whl", hash = "sha256:fd3bf4c103ff760b4af8e69cf1fe335c333b4684cc6ce35fbc47da96407f329a"},
+    {file = "dulwich-0.20.14-cp37-cp37m-manylinux2010_x86_64.whl", hash = "sha256:4a5b83b7718d8338ff66dc0c1d9fe9295de47cd6b504820df19eba91ddb6d92a"},
+    {file = "dulwich-0.20.14-cp37-cp37m-win_amd64.whl", hash = "sha256:57c8600171f6fd0e9f540ab0931256a1a1909a7b8bcb581fb972850fd1351f76"},
+    {file = "dulwich-0.20.14-cp38-cp38-macosx_10_14_x86_64.whl", hash = "sha256:3126e3ae23eee2347dc2167b519832f584d667d06a43b418292029dcdd37d19b"},
+    {file = "dulwich-0.20.14-cp38-cp38-manylinux1_x86_64.whl", hash = "sha256:782c3a79139e865065512ea01514f1c2c19f661757a7caa93334dda4f0a18b56"},
+    {file = "dulwich-0.20.14-cp38-cp38-manylinux2010_x86_64.whl", hash = "sha256:021d5c6862d389e9b8c5e5671c236dd4e34cc670ec45965f88c2b7a1b6856716"},
+    {file = "dulwich-0.20.14-cp38-cp38-win_amd64.whl", hash = "sha256:5b682c65d2ac96a41c421a62d7eb8e0631477a5f282be4418bebd335b748f4df"},
+    {file = "dulwich-0.20.14-cp39-cp39-macosx_10_14_x86_64.whl", hash = "sha256:418803330aaa4b81d527e395da666dd019f0a6693a686ae5bd81fa80dc5c0546"},
+    {file = "dulwich-0.20.14-cp39-cp39-manylinux1_x86_64.whl", hash = "sha256:84c4ce2e88f2c815a23a2f817f682564651d1f48a79519e08ce948822862d8b5"},
+    {file = "dulwich-0.20.14-cp39-cp39-manylinux2010_x86_64.whl", hash = "sha256:ba7024f34710a2ac76e97063cb3bcf49ca6268f7839be2f80e529263dfccaf1b"},
+    {file = "dulwich-0.20.14-cp39-cp39-win_amd64.whl", hash = "sha256:1d6329a410d93d5174184a8196190a02bf149c34f975ea0bc94fd940c173438b"},
+    {file = "dulwich-0.20.14.tar.gz", hash = "sha256:21d6ee82708f7c67ce3fdcaf1f1407e524f7f4f7411a410a972faa2176baec0d"},
 ]
 flake8 = [
     {file = "flake8-3.8.4-py2.py3-none-any.whl", hash = "sha256:749dbbd6bfd0cf1318af27bf97a14e28e5ff548ef8e5b1566ccfb25a11e7c839"},
     {file = "flake8-3.8.4.tar.gz", hash = "sha256:aadae8761ec651813c24be05c6f7b4680857ef6afaae4651a4eccaef97ce6c3b"},
 ]
 flake8-bugbear = [
-    {file = "flake8-bugbear-20.1.4.tar.gz", hash = "sha256:bd02e4b009fb153fe6072c31c52aeab5b133d508095befb2ffcf3b41c4823162"},
-    {file = "flake8_bugbear-20.1.4-py36.py37.py38-none-any.whl", hash = "sha256:a3ddc03ec28ba2296fc6f89444d1c946a6b76460f859795b35b77d4920a51b63"},
+    {file = "flake8-bugbear-20.11.1.tar.gz", hash = "sha256:528020129fea2dea33a466b9d64ab650aa3e5f9ffc788b70ea4bc6cf18283538"},
+    {file = "flake8_bugbear-20.11.1-py36.py37.py38-none-any.whl", hash = "sha256:f35b8135ece7a014bc0aee5b5d485334ac30a6da48494998cc1fabf7ec70d703"},
 ]
 flake8-docstrings = [
     {file = "flake8-docstrings-1.5.0.tar.gz", hash = "sha256:3d5a31c7ec6b7367ea6506a87ec293b94a0a46c0bce2bb4975b7f1d09b6f3717"},
@@ -1015,8 +1017,8 @@ google-api-core = [
     {file = "google_api_core-1.23.0-py2.py3-none-any.whl", hash = "sha256:94d8c707d358d8d9e8b0045c42be20efb58433d308bd92cf748511c7825569c8"},
 ]
 google-api-python-client = [
-    {file = "google-api-python-client-1.12.5.tar.gz", hash = "sha256:1892cd490d164e5ec2f2168dc3b4fa0af68f36ca15a88b91bca1826b3d4f2829"},
-    {file = "google_api_python_client-1.12.5-py2.py3-none-any.whl", hash = "sha256:203d5453660867136aae61922c5d849163fb9be478985fad84e09dee6f605c06"},
+    {file = "google-api-python-client-1.12.8.tar.gz", hash = "sha256:f3b9684442eec2cfe9f9bb48e796ef919456b82142c7528c5fd527e5224f08bb"},
+    {file = "google_api_python_client-1.12.8-py2.py3-none-any.whl", hash = "sha256:3c4c4ca46b5c21196bec7ee93453443e477d82cbfa79234d1ce0645f81170eaf"},
 ]
 google-auth = [
     {file = "google-auth-1.23.0.tar.gz", hash = "sha256:5176db85f1e7e837a646cd9cede72c3c404ccf2e3373d9ee14b2db88febad440"},
@@ -1039,16 +1041,16 @@ httplib2 = [
     {file = "httplib2-0.18.1.tar.gz", hash = "sha256:8af66c1c52c7ffe1aa5dc4bcd7c769885254b0756e6e69f953c7f0ab49a70ba3"},
 ]
 humanfriendly = [
-    {file = "humanfriendly-8.2-py2.py3-none-any.whl", hash = "sha256:e78960b31198511f45fd455534ae7645a6207d33e512d2e842c766d15d9c8080"},
-    {file = "humanfriendly-8.2.tar.gz", hash = "sha256:bf52ec91244819c780341a3438d5d7b09f431d3f113a475147ac9b7b167a3d12"},
+    {file = "humanfriendly-9.0-py2.py3-none-any.whl", hash = "sha256:3c9ab8d28e88e6cc998e41963357736dafd555ee5bb666b50e42f6ce28dd3e3d"},
+    {file = "humanfriendly-9.0.tar.gz", hash = "sha256:175ffa628aa76da2c17369a5da5856084562cc66dfe7f82ae93ca3ef175277a6"},
 ]
 idna = [
     {file = "idna-2.10-py2.py3-none-any.whl", hash = "sha256:b97d804b1e9b523befed77c48dacec60e6dcb0b5391d57af6a65a312a90648c0"},
     {file = "idna-2.10.tar.gz", hash = "sha256:b307872f855b18632ce0c21c5e45be78c0ea7ae4c15c828c20788b26921eb3f6"},
 ]
 importlib-metadata = [
-    {file = "importlib_metadata-2.0.0-py2.py3-none-any.whl", hash = "sha256:cefa1a2f919b866c5beb7c9f7b0ebb4061f30a8a9bf16d609b000e2dfaceb9c3"},
-    {file = "importlib_metadata-2.0.0.tar.gz", hash = "sha256:77a540690e24b0305878c37ffd421785a6f7e53c8b5720d211b211de8d0e95da"},
+    {file = "importlib_metadata-3.1.1-py3-none-any.whl", hash = "sha256:6112e21359ef8f344e7178aa5b72dc6e62b38b0d008e6d3cb212c5b84df72013"},
+    {file = "importlib_metadata-3.1.1.tar.gz", hash = "sha256:b0c2d3b226157ae4517d9625decf63591461c66b3a808c2666d538946519d170"},
 ]
 isort = [
     {file = "isort-5.6.4-py3-none-any.whl", hash = "sha256:dcab1d98b469a12a1a624ead220584391648790275560e1a43e54c5dceae65e7"},
@@ -1149,8 +1151,8 @@ oauthlib = [
     {file = "oauthlib-3.1.0.tar.gz", hash = "sha256:bee41cc35fcca6e988463cacc3bcb8a96224f470ca547e697b604cc697b2f889"},
 ]
 packaging = [
-    {file = "packaging-20.4-py2.py3-none-any.whl", hash = "sha256:998416ba6962ae7fbd6596850b80e17859a5753ba17c32284f67bfff33784181"},
-    {file = "packaging-20.4.tar.gz", hash = "sha256:4357f74f47b9c12db93624a82154e9b120fa8293699949152b22065d556079f8"},
+    {file = "packaging-20.7-py2.py3-none-any.whl", hash = "sha256:eb41423378682dadb7166144a4926e443093863024de508ca5c9737d6bc08376"},
+    {file = "packaging-20.7.tar.gz", hash = "sha256:05af3bb85d320377db281cf254ab050e1a7ebcbf5410685a9a407e18a1f81236"},
 ]
 pathspec = [
     {file = "pathspec-0.8.1-py2.py3-none-any.whl", hash = "sha256:aa0cb481c4041bf52ffa7b0d8fa6cd3e88a2ca4879c533c9153882ee2556790d"},
@@ -1388,8 +1390,8 @@ toml = [
     {file = "toml-0.10.2.tar.gz", hash = "sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f"},
 ]
 tqdm = [
-    {file = "tqdm-4.52.0-py2.py3-none-any.whl", hash = "sha256:80d9d5165d678dbd027dd102dfb99f71bf05f333b61fb761dbba13b4ab719ead"},
-    {file = "tqdm-4.52.0.tar.gz", hash = "sha256:18d6a615aedd09ec8456d9524489dab330af4bd5c2a14a76eb3f9a0e14471afe"},
+    {file = "tqdm-4.54.0-py2.py3-none-any.whl", hash = "sha256:9e7b8ab0ecbdbf0595adadd5f0ebbb9e69010e0bd48bbb0c15e550bf2a5292df"},
+    {file = "tqdm-4.54.0.tar.gz", hash = "sha256:5c0d04e06ccc0da1bd3fa5ae4550effcce42fcad947b4a6cafa77bdc9b09ff22"},
 ]
 typed-ast = [
     {file = "typed_ast-1.4.1-cp35-cp35m-manylinux1_i686.whl", hash = "sha256:73d785a950fc82dd2a25897d525d003f6378d1cb23ab305578394694202a58c3"},
@@ -1428,7 +1430,7 @@ urllib3 = [
     {file = "urllib3-1.26.2.tar.gz", hash = "sha256:19188f96923873c92ccb987120ec4acaa12f0461fa9ce5d3d0772bc965a39e08"},
 ]
 watchdog = [
-    {file = "watchdog-0.10.3.tar.gz", hash = "sha256:4214e1379d128b0588021880ccaf40317ee156d4603ac388b9adcf29165e0c04"},
+    {file = "watchdog-0.10.4.tar.gz", hash = "sha256:e38bffc89b15bafe2a131f0e1c74924cf07dcec020c2e0a26cccd208831fcd43"},
 ]
 wcwidth = [
     {file = "wcwidth-0.2.5-py2.py3-none-any.whl", hash = "sha256:beb4802a9cebb9144e99086eff703a642a13d6a0052920003a230f3294bbe784"},
