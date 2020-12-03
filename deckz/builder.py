@@ -7,15 +7,16 @@ from os import unlink
 from os.path import join as path_join
 from pathlib import Path
 from shutil import copyfile, move
-from subprocess import CompletedProcess, run
-from tempfile import NamedTemporaryFile
-from typing import Any, Dict, Optional
+from subprocess import run
+from tempfile import NamedTemporaryFile, TemporaryDirectory
+from typing import Any, Dict, List, Optional, Tuple
 
 from jinja2 import Environment, FileSystemLoader
 from PyPDF2 import PdfFileMerger
 
 from deckz.exceptions import DeckzException
 from deckz.paths import Paths
+from deckz.settings import Settings
 from deckz.targets import Target, Targets
 
 
@@ -26,24 +27,64 @@ class CompileType(Enum):
     PrintHandout = "print-handout"
 
 
+class CompileResult:
+    def __init__(
+        self, ok: bool, stdout: Optional[str] = None, stderr: Optional[str] = None
+    ):
+        self.ok = ok
+        self.stdout = stdout or ""
+        self.stderr = stderr or ""
+
+
 class Builder:
     def __init__(
         self,
-        config: Dict[str, Any],
+        latex_config: Dict[str, Any],
+        settings: Settings,
         paths: Paths,
         targets: Targets,
         build_presentation: bool,
         build_handout: bool,
         build_print: bool,
     ):
-        self._config = config
+        self._latex_config = latex_config
+        self._settings = settings
         self._paths = paths
         self._targets = targets
         self._presentation = build_presentation
         self._handout = build_handout
         self._print = build_print
         self._logger = getLogger(__name__)
+        self._compile_standalones()
         self._build_all()
+
+    def _compile_standalones(self) -> None:
+        to_compile: List[Tuple[Path, Path]] = []
+        compile_results = []
+        self._logger.info("Processing standalones")
+        for standalone_dir in self._settings.compile_standalones:
+            root = self._paths.settings.parent / standalone_dir
+            to_compile.extend((root, latex) for latex in root.glob("**/*.tex"))
+        with Pool() as pool:
+            compile_results = pool.starmap(self._compile_standalone, to_compile)
+        for (_, latex_file), compile_result in zip(to_compile, compile_results):
+            if not compile_result.ok:
+                self._logger.warning("Standalone compilation of %s errored", latex_file)
+                self._logger.warning("Captured stderr\n%s", compile_result.stderr)
+
+    def _compile_standalone(self, root: Path, latex_file: Path) -> CompileResult:
+        pdf = (root / "pdf" / latex_file.relative_to(root)).with_suffix(".pdf")
+        if pdf.exists() and pdf.stat().st_mtime > latex_file.stat().st_mtime:
+            return CompileResult(True)
+        with TemporaryDirectory() as build_dir:
+            build_path = Path(build_dir)
+            latex_build_file = build_path / latex_file.relative_to(root)
+            self._setup_link(latex_build_file, latex_file)
+            compile_result = self._compile(latex_build_file)
+            if compile_result.ok:
+                pdf.parent.mkdir(parents=True, exist_ok=True)
+                copyfile(latex_build_file.with_suffix(".pdf"), pdf)
+        return compile_result
 
     def _build_all(self) -> None:
         to_compile = []
@@ -64,29 +105,23 @@ class Builder:
             f"Building {len(to_compile)} PDFs used in {n_outputs} outputs"
         )
         with Pool() as pool:
-            completed_processes = pool.starmap(self._build, to_compile)
-        print_handout_ok = (
-            sum(
-                c.returncode
-                for c, (_, t, _) in zip(completed_processes, to_compile)
-                if t is CompileType.PrintHandout
-            )
-            == 0
+            compile_results = pool.starmap(self._build, to_compile)
+        print_handout_ok = all(
+            c.ok
+            for c, (_, t, _) in zip(compile_results, to_compile)
+            if t is CompileType.PrintHandout
         )
-        handout_ok = (
-            sum(
-                c.returncode
-                for c, (_, t, _) in zip(completed_processes, to_compile)
-                if t is CompileType.Handout
-            )
-            == 0
+        handout_ok = all(
+            c.ok
+            for c, (_, t, _) in zip(compile_results, to_compile)
+            if t is CompileType.Handout
         )
         if self._print:
             if print_handout_ok:
                 self._logger.info(
                     f"Formatting {len(self._targets)} PDFs into a printable output"
                 )
-                completed_processes.append(self._build(None, CompileType.Print, True))
+                compile_results.append(self._build(None, CompileType.Print, True))
             else:
                 self._logger.warning(
                     "Preparatory compilations failed. Skipping print output"
@@ -101,24 +136,24 @@ class Builder:
                 self._logger.warning(
                     "Preparatory compilations failed. Skipping handout output"
                 )
-        for completed_process, (target, compile_type, _) in zip(
-            completed_processes, to_compile
+        for compile_result, (target, compile_type, _) in zip(
+            compile_results, to_compile
         ):
             if target is not None:
                 compilation = f"{target.name}/{compile_type.value}"
             else:
                 compilation = compile_type.value
-            if completed_process.returncode != 0:
+            if not compile_result.ok:
                 self._logger.warning("Compilation %s errored", compilation)
                 self._logger.warning(
-                    "Captured %s stderr\n%s", compilation, completed_process.stderr
+                    "Captured %s stderr\n%s", compilation, compile_result.stderr
                 )
                 self._logger.warning(
-                    "Captured %s stdout\n%s", compilation, completed_process.stdout
+                    "Captured %s stdout\n%s", compilation, compile_result.stdout
                 )
 
     def _get_filename(self, target: Optional[Target], compile_type: CompileType) -> str:
-        name = self._config["deck_acronym"]
+        name = self._latex_config["deck_acronym"]
         if target is not None:
             name += f"-{target.name}"
         name += f"-{compile_type.value}"
@@ -153,7 +188,7 @@ class Builder:
         target: Optional[Target],
         compile_type: CompileType,
         copy_result: bool = True,
-    ) -> CompletedProcess:
+    ) -> CompileResult:
         build_dir = self._setup_build_dir(target, compile_type)
         filename = self._get_filename(target, compile_type)
         latex_path = build_dir / f"{filename}.tex"
@@ -165,13 +200,11 @@ class Builder:
             self._write_main_latex(target, compile_type, latex_path)
             self._link_dependencies(target, build_dir)
 
-        completed_process = self._compile(
-            latex_path=latex_path.relative_to(build_dir), build_dir=build_dir,
-        )
-        if copy_result and completed_process.returncode == 0:
+        compile_result = self._compile(latex_path)
+        if copy_result and compile_result.ok:
             self._paths.pdf_dir.mkdir(parents=True, exist_ok=True)
             copyfile(build_pdf_path, output_pdf_path)
-        return completed_process
+        return compile_result
 
     def _setup_build_dir(
         self, target: Optional[Target], compile_type: CompileType
@@ -191,7 +224,7 @@ class Builder:
         self._write_latex(
             template_path=self._paths.jinja2_main_template,
             output_path=output_path,
-            config=self._config,
+            config=self._latex_config,
             target=target,
             handout=compile_type in [CompileType.Handout, CompileType.PrintHandout],
             print=compile_type is CompileType.PrintHandout,
@@ -266,16 +299,17 @@ class Builder:
             link_dir.mkdir(parents=True, exist_ok=True)
             self._setup_link(link_dir / dependency.name, dependency)
 
-    def _compile(self, latex_path: Path, build_dir: Path) -> CompletedProcess:
-        command = [
-            "latexmk",
-            "-pdflatex=xelatex -shell-escape -interaction=nonstopmode %O %S",
-            "-dvi-",
-            "-ps-",
-            "-pdf",
-        ]
-        command.append(str(latex_path))
-        return run(command, cwd=build_dir, capture_output=True, encoding="utf8")
+    def _compile(self, latex_path: Path) -> CompileResult:
+        command = self._settings.build_command[:]
+        command.append(latex_path.name)
+        completed_process = run(
+            command, cwd=latex_path.parent, capture_output=True, encoding="utf8"
+        )
+        return CompileResult(
+            completed_process.returncode == 0,
+            completed_process.stdout,
+            completed_process.stderr,
+        )
 
     def _setup_link(self, source: Path, target: Path) -> None:
         if not target.exists():

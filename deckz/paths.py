@@ -14,6 +14,7 @@ _logger = getLogger(__name__)
 class GlobalPaths:
     def __init__(self, current_dir: str) -> None:
         self.current_dir = Path(current_dir).resolve()
+        self.settings = self.git_dir / "settings.yml"
         self.shared_dir = self.git_dir / "shared"
         self.shared_img_dir = self.shared_dir / "img"
         self.shared_code_dir = self.shared_dir / "code"

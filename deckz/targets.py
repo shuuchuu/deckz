@@ -80,17 +80,21 @@ class Target:
             section_path = section_config["path"]
             self.section_flavors[section_path] = section_config.get("flavor")
             result = self._parse_section_dir(section_path, section_config)
+            found_section = False
             if result is not None:
+                found_section = True
                 section, dependencies = result
             else:
                 result = self._parse_section_file(section_path, section_config)
                 if result is not None:
+                    found_section = True
                     section, dependencies = result
                 else:
                     dependencies = Dependencies()
                     dependencies.missing.add(section_path)
             self.dependencies = Dependencies.merge(self.dependencies, dependencies)
-            self.sections.append(section)
+            if found_section:
+                self.sections.append(section)
             self.section_dependencies[section_path] = dependencies
 
     def __repr__(self) -> str:
@@ -128,18 +132,20 @@ class Target:
         )
         if "flavor" not in custom_config:
             raise DeckzException(
-                f"Mandatory flavor not specified in {section_path} configuration "
-                f"of {self._paths.targets}."
+                f"Incorrect targets {self._paths.targets}. "
+                f"Mandatory flavor not specified in {section_path} configuration."
             )
         flavor_name = custom_config["flavor"]
         if "flavors" not in section_config:
             raise DeckzException(
+                f"Incorrect targets {self._paths.targets}. "
                 f"Mandatory dictionary `flavors` not found in {section_config_path}."
             )
         flavors = section_config["flavors"]
         if flavor_name not in flavors:
             flavors_string = ", ".join("'%s'" % f for f in flavors)
             raise DeckzException(
+                f"Incorrect targets {self._paths.targets}. "
                 f"'{flavor_name}' not amongst available flavors: {flavors_string} "
                 f"of {section_config_path}."
             )
@@ -230,6 +236,7 @@ class Targets(Iterable[Target]):
         }
         if missing_dependencies:
             raise DeckzException(
+                f"Incorrect targets {self._paths.targets}. "
                 "Could not find the following dependencies:\n%s"
                 % "\n".join(
                     "  - %s:\n%s" % (k, "\n".join(f"    - {p}" for p in v))
@@ -241,6 +248,7 @@ class Targets(Iterable[Target]):
         unmatched = whiteset - target_names
         if unmatched:
             raise DeckzException(
+                f"Incorrect targets {self._paths.targets}. "
                 "Could not find the following targets:\n%s"
                 % "\n".join("  - %s" % name for name in unmatched)
             )
