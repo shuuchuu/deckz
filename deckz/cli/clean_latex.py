@@ -1,18 +1,12 @@
 from logging import getLogger
 
-from deckz.cli import command, deck_path_option, option
+from deckz.cli import app
 from deckz.paths import Paths
 from deckz.targets import Targets
 
 
-@command
-@deck_path_option
-@option(
-    "--dry-run/--do-it",
-    default=True,
-    help="Print what would be removed instead of removing it.",
-)
-def clean_latex(deck_path: str, dry_run: bool) -> None:
+@app.command()
+def clean_latex(deck_path: str = ".", dry_run: bool = True) -> None:
     """Clean LaTeX files that are not used in `targets*.yml`."""
     logger = getLogger(__name__)
     logger.info("Cleaning unused LaTeX files")

@@ -4,13 +4,13 @@ from subprocess import CalledProcessError, run
 
 from yaml import safe_dump, safe_load
 
-from deckz.cli import command
+from deckz.cli import app
 from deckz.exceptions import DeckzException
 from deckz.targets import SECTION_YML_VERSION
 from deckz.utils import get_section_config_paths
 
 
-@command
+@app.command()
 def migrate_sections() -> None:
     """Find all `section.yml` files and upgrade to newest format."""
     logger = getLogger(__name__)

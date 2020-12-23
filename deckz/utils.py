@@ -9,8 +9,8 @@ from yaml import safe_load
 from deckz.exceptions import DeckzException
 
 
-def get_section_config_paths() -> FrozenSet[Path]:
-    git_dir = get_git_dir(Path("."))
+def get_section_config_paths(path: Path = Path(".")) -> FrozenSet[Path]:
+    git_dir = get_git_dir(path)
     v1_ymls = git_dir.glob("**/section.yml")
     all_ymls = git_dir.glob("**/*.yml")
     vx_ymls = []

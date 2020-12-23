@@ -7,7 +7,15 @@ from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
-from tqdm import tqdm
+from rich.progress import (
+    BarColumn,
+    DownloadColumn,
+    Progress,
+    TaskID,
+    TextColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
+)
 
 from deckz import app_name
 from deckz.exceptions import DeckzException
@@ -26,6 +34,24 @@ class Uploader:
             self._logger.info("Deleting backup of old files")
             self._service.files().delete(fileId=backup_id).execute()
         print(f"Online folder: {folder_link}")
+
+    @staticmethod
+    def _build_progress() -> Progress:
+        return Progress(
+            TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
+            BarColumn(bar_width=None),
+            "[progress.percentage]{task.percentage:>3.1f}%",
+            "•",
+            DownloadColumn(),
+            "•",
+            TransferSpeedColumn(),
+            "•",
+            TimeRemainingColumn(),
+        )
+
+    @staticmethod
+    def _build_task(progress: Progress, filename: str, size: int) -> TaskID:
+        return progress.add_task("upload", filename=filename, total=size)
 
     def _build_service(self) -> Any:
         if self._paths.gdrive_credentials.is_file():
@@ -96,32 +122,35 @@ class Uploader:
         self._logger.info("Uploading pdfs")
         pdfs = sorted((self._paths.pdf_dir).glob("*.pdf"), key=lambda p: p.name)
         links: Dict[Path, str] = {}
-        for pdf in pdfs:
-            pdf_size = pdf.stat().st_size
-            file_metadata = dict(name=pdf.name, parents=[folder_id])
-            media = MediaFileUpload(
-                str(pdf),
-                chunksize=256 * 1024,
-                mimetype="application/pdf",
-                resumable=True,
-            )
-            request = self._service.files().create(
-                body=file_metadata, media_body=media, fields="id,webViewLink"
-            )
-            response = None
-            with tqdm(
-                desc=pdf.name, total=pdf_size, unit="o", unit_scale=True
-            ) as progress_bar:
+        progress = self._build_progress()
+        with progress:
+            for pdf in pdfs:
+                pdf_size = pdf.stat().st_size
+                file_metadata = dict(name=pdf.name, parents=[folder_id])
+                media = MediaFileUpload(
+                    str(pdf),
+                    chunksize=256 * 1024,
+                    mimetype="application/pdf",
+                    resumable=True,
+                )
+                request = self._service.files().create(
+                    body=file_metadata, media_body=media, fields="id,webViewLink"
+                )
+                response = None
+                task = self._build_task(progress, pdf.name, pdf_size)
                 previous_progress = 0
                 while response is None:
                     status, response = request.next_chunk()
                     if status and previous_progress != status.progress():
-                        progress_bar.update(
-                            int((status.progress() - previous_progress) * pdf_size)
+                        progress.update(
+                            task,
+                            advance=int(
+                                (status.progress() - previous_progress) * pdf_size
+                            ),
                         )
                         previous_progress = status.progress()
-                progress_bar.update(progress_bar.total - progress_bar.n)
-            links[pdf] = response.get("webViewLink")
+                progress.update(task, completed=pdf_size)
+                links[pdf] = response.get("webViewLink")
         return links
 
     def _create_folder(self, parent: str, name: str) -> Tuple[str, str]:
