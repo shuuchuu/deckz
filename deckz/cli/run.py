@@ -1,34 +1,26 @@
-from typing import List
+from typing import List, Optional
 
-from deckz.cli import (
-    command,
-    compile_type_options,
-    deck_path_option,
-    target_whitelist_argument,
-)
+from typer import Argument
+
+from deckz.cli import app
 from deckz.paths import Paths
 from deckz.runner import run as runner_run
 
 
-@command
-@target_whitelist_argument
-@deck_path_option
-@compile_type_options(
-    default_handout=True, default_presentation=True, default_print=True
-)
+@app.command()
 def run(
-    deck_path: str,
-    target_whitelist: List[str],
-    build_handout: bool,
-    build_presentation: bool,
-    build_print: bool,
+    targets: Optional[List[str]] = Argument(None),
+    handout: bool = True,
+    presentation: bool = True,
+    print: bool = True,
+    deck_path: str = ".",
 ) -> None:
     """Compile main targets."""
     paths = Paths(deck_path)
     runner_run(
         paths=paths,
-        build_handout=build_handout,
-        build_presentation=build_presentation,
-        build_print=build_print,
-        target_whitelist=target_whitelist,
+        build_handout=handout,
+        build_presentation=presentation,
+        build_print=print,
+        target_whitelist=targets,
     )

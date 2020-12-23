@@ -25,12 +25,12 @@ def working_dir(tmp_path: Path, monkeypatch: Any) -> Path:
 def test_run(
     working_dir: Path, monkeypatch: Any, args: List[str], n_pages: int
 ) -> None:
-    from deckz.cli import cli
+    from deckz.cli import main
 
     monkeypatch.setattr(sys, "argv", ["deckz", "run"] + args)
 
     try:
-        cli()
+        main()
     except SystemExit as e:
         if e.code != 0:
             raise e

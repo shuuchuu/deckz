@@ -1,13 +1,12 @@
 from logging import getLogger
 from shutil import rmtree
 
-from deckz.cli import command, deck_path_option
+from deckz.cli import app
 from deckz.paths import Paths
 
 
-@command
-@deck_path_option
-def clean(deck_path: str) -> None:
+@app.command()
+def clean(deck_path: str = ".") -> None:
     """Wipe the build directory."""
     logger = getLogger(__name__)
     paths = Paths(deck_path)

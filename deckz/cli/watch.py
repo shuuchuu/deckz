@@ -4,37 +4,24 @@ from threading import Thread
 from time import time
 from typing import List, Optional
 
+from typer import Argument
 from watchdog.events import FileSystemEvent
 from watchdog.observers import Observer
 
-from deckz.cli import (
-    command,
-    compile_type_options,
-    deck_path_option,
-    option,
-    target_whitelist_argument,
-)
+from deckz.cli import app
 from deckz.exceptions import DeckzException
 from deckz.paths import Paths
 from deckz.runner import run
 
 
-@command
-@target_whitelist_argument
-@deck_path_option
-@compile_type_options(
-    default_handout=False, default_presentation=True, default_print=False
-)
-@option(
-    "--minimum-delay", default=5, type=int, help="Minimum delay before recompiling.",
-)
+@app.command()
 def watch(
-    minimum_delay: int,
-    deck_path: str,
-    build_handout: bool,
-    build_presentation: bool,
-    build_print: bool,
-    target_whitelist: List[str],
+    targets: Optional[List[str]] = Argument(None),
+    handout: bool = False,
+    presentation: bool = True,
+    print: bool = False,
+    minimum_delay: int = 5,
+    deck_path: str = ".",
 ) -> None:
     """Compile on change."""
 
@@ -97,10 +84,10 @@ def watch(
     event_handler = LatexCompilerEventHandler(
         minimum_delay,
         paths=paths,
-        build_handout=build_handout,
-        build_print=build_print,
-        build_presentation=build_presentation,
-        target_whitelist=target_whitelist,
+        build_handout=handout,
+        build_print=print,
+        build_presentation=presentation,
+        target_whitelist=targets,
     )
     paths_to_watch = [
         (p, False) for p in paths.shared_dir.glob("**/*") if p.resolve().is_dir()
