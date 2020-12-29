@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from deckz.builder import Builder
 from deckz.config import get_config
@@ -12,10 +12,10 @@ def run(
     build_handout: bool,
     build_presentation: bool,
     build_print: bool,
-    target_whitelist: List[str],
+    target_whitelist: Optional[List[str]] = None,
 ) -> None:
     config = get_config(paths)
-    targets = Targets(paths=paths, fail_on_missing=True, whitelist=target_whitelist)
+    targets = Targets.from_file(paths=paths, whitelist=target_whitelist)
     settings = Settings(paths)
     Builder(
         config,

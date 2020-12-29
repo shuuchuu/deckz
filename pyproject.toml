@@ -6,7 +6,7 @@ homepage = "https://github.com/m09/deckz"
 license = "Apache-2.0"
 name = "deckz"
 readme = "README.md"
-version = "9.3.0"
+version = "9.4.0"
 
 [tool.poetry.dependencies]
 GitPython = "^3.1.0"
@@ -21,6 +21,7 @@ python = "^3.6"
 rich = "^9.5.1"
 typer = {version = "^0.3.2", extras = ["all"]}
 watchdog = "^0.10.2"
+attrs = "^20.3.0"
 
 [tool.poetry.dev-dependencies]
 black = "^19.10b0"
