@@ -8,3 +8,4 @@ application-package-names=deckz
 per-file-ignores=
     **/tests/*:D
     **/test*.py:D
+max-complexity=9

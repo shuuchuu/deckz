@@ -1,3 +1,4 @@
+from collections import defaultdict
 from contextlib import ExitStack
 from enum import Enum
 from filecmp import cmp
@@ -11,6 +12,7 @@ from subprocess import run
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Any, Dict, List, Optional, Tuple
 
+from attr import attrib, attrs
 from jinja2 import Environment, FileSystemLoader
 from PyPDF2 import PdfFileMerger
 
@@ -27,13 +29,18 @@ class CompileType(Enum):
     PrintHandout = "print-handout"
 
 
+@attrs(auto_attribs=True, frozen=True)
 class CompileResult:
-    def __init__(
-        self, ok: bool, stdout: Optional[str] = None, stderr: Optional[str] = None
-    ):
-        self.ok = ok
-        self.stdout = stdout or ""
-        self.stderr = stderr or ""
+    ok: bool
+    stdout: Optional[str] = attrib(default="")
+    stderr: Optional[str] = attrib(default="")
+
+
+@attrs(auto_attribs=True, frozen=True)
+class CompileItem:
+    target: Target
+    compile_type: CompileType
+    copy_result: bool
 
 
 class Builder:
@@ -86,48 +93,51 @@ class Builder:
                 copyfile(latex_build_file.with_suffix(".pdf"), pdf)
         return compile_result
 
-    def _build_all(self) -> None:
+    def _list_items(self) -> List[CompileItem]:
         to_compile = []
         for target in self._targets:
             if self._presentation:
-                to_compile.append((target, CompileType.Presentation, True))
+                to_compile.append(CompileItem(target, CompileType.Presentation, True))
             if self._handout:
-                to_compile.append((target, CompileType.Handout, True))
+                to_compile.append(CompileItem(target, CompileType.Handout, True))
             if self._print:
-                to_compile.append((target, CompileType.PrintHandout, False))
-        to_compile.sort(key=lambda x: (x[0].name, x[1].value))
+                to_compile.append(CompileItem(target, CompileType.PrintHandout, False))
+        to_compile.sort(key=lambda item: (item.target.name, item.compile_type.value))
+        return to_compile
+
+    def _aggregate_compilation_results_by_type(
+        self, compile_results: List[CompileResult], items: List[CompileItem]
+    ) -> Dict[CompileType, bool]:
+        result: Dict[CompileType, bool] = defaultdict(lambda: True)
+        for compile_result, item in zip(compile_results, items):
+            result[item.compile_type] &= compile_result.ok
+        return result
+
+    def _build_all(self) -> None:
+        items = self._list_items()
         n_outputs = (
             int(self._handout) * (len(self._targets) + 1)
             + int(self._presentation) * len(self._targets)
             + int(self._print)
         )
-        self._logger.info(
-            f"Building {len(to_compile)} PDFs used in {n_outputs} outputs"
-        )
+        self._logger.info(f"Building {len(items)} PDFs used in {n_outputs} outputs")
         with Pool() as pool:
-            compile_results = pool.starmap(self._build, to_compile)
-        print_handout_ok = all(
-            c.ok
-            for c, (_, t, _) in zip(compile_results, to_compile)
-            if t is CompileType.PrintHandout
-        )
-        handout_ok = all(
-            c.ok
-            for c, (_, t, _) in zip(compile_results, to_compile)
-            if t is CompileType.Handout
-        )
+            compile_results = pool.map(self._build, items)
+        ok_by_type = self._aggregate_compilation_results_by_type(compile_results, items)
         if self._print:
-            if print_handout_ok:
+            if ok_by_type[CompileType.PrintHandout]:
                 self._logger.info(
                     f"Formatting {len(self._targets)} PDFs into a printable output"
                 )
-                compile_results.append(self._build(None, CompileType.Print, True))
+                compile_results.append(
+                    self._build(CompileItem(None, CompileType.Print, True))
+                )
             else:
                 self._logger.warning(
                     "Preparatory compilations failed. Skipping print output"
                 )
         if self._handout:
-            if handout_ok:
+            if ok_by_type[CompileType.Handout]:
                 self._logger.info(
                     f"Formatting {len(self._targets)} PDFs into a handout"
                 )
@@ -136,13 +146,11 @@ class Builder:
                 self._logger.warning(
                     "Preparatory compilations failed. Skipping handout output"
                 )
-        for compile_result, (target, compile_type, _) in zip(
-            compile_results, to_compile
-        ):
-            if target is not None:
-                compilation = f"{target.name}/{compile_type.value}"
+        for compile_result, item in zip(compile_results, items):
+            if item.target is not None:
+                compilation = f"{item.target.name}/{item.compile_type.value}"
             else:
-                compilation = compile_type.value
+                compilation = item.compile_type.value
             if not compile_result.ok:
                 self._logger.warning("Compilation %s errored", compilation)
                 self._logger.warning(
@@ -183,25 +191,20 @@ class Builder:
             self._paths.pdf_dir.mkdir(parents=True, exist_ok=True)
             copyfile(build_pdf_path, output_pdf_path)
 
-    def _build(
-        self,
-        target: Optional[Target],
-        compile_type: CompileType,
-        copy_result: bool = True,
-    ) -> CompileResult:
-        build_dir = self._setup_build_dir(target, compile_type)
-        filename = self._get_filename(target, compile_type)
+    def _build(self, item: CompileItem) -> CompileResult:
+        build_dir = self._setup_build_dir(item.target, item.compile_type)
+        filename = self._get_filename(item.target, item.compile_type)
         latex_path = build_dir / f"{filename}.tex"
         build_pdf_path = latex_path.with_suffix(".pdf")
         output_pdf_path = self._paths.pdf_dir / f"{filename}.pdf"
-        if compile_type is CompileType.Print:
+        if item.compile_type is CompileType.Print:
             self._write_print_latex(self._targets, latex_path)
         else:
-            self._write_main_latex(target, compile_type, latex_path)
-            self._link_dependencies(target, build_dir)
+            self._write_main_latex(item.target, item.compile_type, latex_path)
+            self._link_dependencies(item.target, build_dir)
 
         compile_result = self._compile(latex_path)
-        if copy_result and compile_result.ok:
+        if item.copy_result and compile_result.ok:
             self._paths.pdf_dir.mkdir(parents=True, exist_ok=True)
             copyfile(build_pdf_path, output_pdf_path)
         return compile_result

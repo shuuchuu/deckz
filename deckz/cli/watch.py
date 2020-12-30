@@ -14,6 +14,67 @@ from deckz.paths import Paths
 from deckz.runner import run
 
 
+_logger = getLogger(__name__)
+
+
+class _LatexCompilerEventHandler:
+    def __init__(
+        self,
+        minimum_delay: int,
+        paths: Paths,
+        build_handout: bool,
+        build_presentation: bool,
+        build_print: bool,
+        target_whitelist: List[str],
+    ):
+        self._minimum_delay = minimum_delay
+        self._last_compile = 0.0
+        self._paths = paths
+        self._build_handout = build_handout
+        self._build_presentation = build_presentation
+        self._build_print = build_print
+        self._target_whitelist = target_whitelist
+        self._worker: Optional[Thread] = None
+        self._first_build = True
+
+    def work(self) -> None:
+        try:
+            self._compiling = True
+            if self._first_build:
+                self._first_build = False
+                _logger.info("Initial build")
+            else:
+                _logger.info("Detected changes, starting a new build")
+            try:
+                run(
+                    paths=self._paths,
+                    build_handout=self._build_handout,
+                    build_presentation=self._build_presentation,
+                    build_print=self._build_print,
+                    target_whitelist=self._target_whitelist,
+                )
+                _logger.info("Build finished")
+            except Exception as e:
+                _logger.critical("Build failed. Error: %s", str(e))
+        finally:
+            self._compiling = False
+
+    def dispatch(self, event: FileSystemEvent) -> None:
+        for d in [self._paths.build_dir, self._paths.pdf_dir]:
+            if d in Path(event.src_path).parents:
+                return
+        current_time = time()
+        if self._last_compile + self._minimum_delay > current_time:
+            return
+        elif self._worker is not None and self._worker.is_alive():
+            _logger.info("Still on last build, not starting a new build")
+            return
+        else:
+            self._last_compile = current_time
+            self._worker = Thread(target=self.work)
+            self._worker.start()
+
+
 @app.command()
 def watch(
     targets: Optional[List[str]] = Argument(None),
@@ -24,64 +85,10 @@ def watch(
     deck_path: str = ".",
 ) -> None:
     """Compile on change."""
-
-    class LatexCompilerEventHandler:
-        def __init__(
-            self,
-            minimum_delay: int,
-            paths: Paths,
-            build_handout: bool,
-            build_presentation: bool,
-            build_print: bool,
-            target_whitelist: List[str],
-        ):
-            self._minimum_delay = minimum_delay
-            self._last_compile = 0.0
-            self._paths = paths
-            self._build_handout = build_handout
-            self._build_presentation = build_presentation
-            self._build_print = build_print
-            self._target_whitelist = target_whitelist
-            self._worker: Optional[Thread] = None
-
-        def work(self) -> None:
-            try:
-                self._compiling = True
-                logger.info("Detected changes, starting a new build")
-                try:
-                    run(
-                        paths=self._paths,
-                        build_handout=self._build_handout,
-                        build_presentation=self._build_presentation,
-                        build_print=self._build_print,
-                        target_whitelist=self._target_whitelist,
-                    )
-                    logger.info("Build finished")
-                except Exception as e:
-                    logger.critical("Build failed. Error: %s", str(e))
-            finally:
-                self._compiling = False
-
-        def dispatch(self, event: FileSystemEvent) -> None:
-            for d in [paths.build_dir, paths.pdf_dir]:
-                if d in Path(event.src_path).parents:
-                    return
-            current_time = time()
-            if self._last_compile + self._minimum_delay > current_time:
-                return
-            elif self._worker is not None and self._worker.is_alive():
-                logger.info("Still on last build, not starting a new build")
-                return
-            else:
-                self._last_compile = current_time
-                self._worker = Thread(target=self.work)
-                self._worker.start()
-
-    logger = getLogger(__name__)
-    logger.info("Watching current and shared directories")
+    _logger.info("Watching current and shared directories")
     paths = Paths(deck_path)
     observer = Observer()
-    event_handler = LatexCompilerEventHandler(
+    event_handler = _LatexCompilerEventHandler(
         minimum_delay,
         paths=paths,
         build_handout=handout,
@@ -96,6 +103,7 @@ def watch(
     paths_to_watch.append((paths.current_dir, True))
     for path, recursive in paths_to_watch:
         observer.schedule(event_handler, str(path.resolve()), recursive=recursive)
+    event_handler.work()
     observer.start()
     try:
         while observer.isAlive():
@@ -103,7 +111,7 @@ def watch(
     except KeyboardInterrupt:
         observer.stop()
         observer.join()
-        logger.info("Stopped watching")
+        _logger.info("Stopped watching")
     else:
         observer.join()
         raise DeckzException("Stopped watching abnormally")

@@ -1,8 +1,21 @@
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple
+from typing import (
+    Any,
+    DefaultDict,
+    Dict,
+    FrozenSet,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
 
+from attr import attrib, Attribute, attrs, Factory
 from yaml import safe_load as yaml_safe_load
 
 from deckz.exceptions import DeckzException
@@ -15,32 +28,23 @@ _logger = getLogger(__name__)
 SECTION_YML_VERSION = 3
 
 
+@attrs(auto_attribs=True)
+class SectionInput:
+    path: str = attrib(converter=str)
+    title: Optional[str]
+
+
+@attrs(auto_attribs=True)
 class Section:
-    def __init__(self, title: Optional[str]):
-        self.title = title
-        self.inputs: List[Tuple[str, Optional[str]]] = []
-
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}("
-            f"title={repr(self.title)},"
-            f"inputs={repr(self.inputs)})"
-        )
+    title: str
+    inputs: List[SectionInput] = Factory(list)
 
 
+@attrs(auto_attribs=True)
 class Dependencies:
-    def __init__(self) -> None:
-        self.used: Set[Path] = set()
-        self.missing: Set[str] = set()
-        self.unused: Set[Path] = set()
-
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}("
-            f"used={repr(self.used)},"
-            f"missing={repr(self.missing)},"
-            f"unused={repr(self.unused)})"
-        )
+    used: Set[Path] = Factory(set)
+    missing: Set[str] = Factory(set)
+    unused: Set[Path] = Factory(set)
 
     @staticmethod
     def merge(*dependencies_list: "Dependencies") -> "Dependencies":
@@ -63,53 +67,60 @@ class Dependencies:
         return merged_dict
 
 
+@attrs(auto_attribs=True)
 class Target:
-    def __init__(self, data: Dict[str, Any], paths: Paths):
-        self._paths = paths
-        self.name = data["name"]
-        self.local_latex_dir = paths.current_dir / self.name
-        self.title = data["title"]
-        self.dependencies = Dependencies()
-        self.dependencies.unused.update(self.local_latex_dir.glob("**/*.tex"))
-        self.sections = []
-        self.section_dependencies = {}
-        self.section_flavors = defaultdict(set)
-        for section_config in data["sections"]:
+    name: str
+    title: Optional[str]
+    dependencies: Dependencies
+    sections: List[Section]
+    section_dependencies: Dict[str, Dependencies]
+    section_flavors: DefaultDict[str, Set[str]]
+
+
+@attrs(auto_attribs=True)
+class TargetBuilder:
+    _data: Dict[str, Any]
+    _paths: Paths
+    _local_latex_dir: Path = attrib(init=False)
+
+    def __attrs_post_init__(self) -> None:
+        self._local_latex_dir = self._paths.current_dir / self._data["name"]
+
+    def build(self) -> Target:
+        all_dependencies = Dependencies()
+        all_dependencies.unused.update(self._local_latex_dir.glob("**/*.tex"))
+        sections = []
+        section_dependencies = {}
+        section_flavors = defaultdict(set)
+        for section_config in self._data["sections"]:
             if not isinstance(section_config, dict):
                 section_config = dict(path=section_config)
             section_path = section_config["path"]
-            self.section_flavors[section_path].add(section_config.get("flavor"))
+            section_flavors[section_path].add(section_config.get("flavor"))
             result = self._parse_section_dir(section_path, section_config)
-            found_section = False
-            if result is not None:
-                found_section = True
-                section, dependencies = result
-            else:
+            if result is None:
                 result = self._parse_section_file(section_path, section_config)
-                if result is not None:
-                    found_section = True
-                    section, dependencies = result
-                else:
-                    dependencies = Dependencies()
-                    dependencies.missing.add(section_path)
-            self.dependencies = Dependencies.merge(self.dependencies, dependencies)
-            if found_section:
-                self.sections.append(section)
-            self.section_dependencies[section_path] = dependencies
-
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}("
-            f"name={repr(self.name)},"
-            f"title={repr(self.title)},"
-            f"dependencies={repr(self.dependencies)},"
-            f"sections={repr(self.sections)})"
+            if result is not None:
+                section, dependencies = result
+                sections.append(section)
+            else:
+                dependencies = Dependencies()
+                dependencies.missing.add(section_path)
+            all_dependencies = Dependencies.merge(all_dependencies, dependencies)
+            section_dependencies[section_path] = dependencies
+        return Target(
+            name=self._data["name"],
+            title=self._data["title"],
+            dependencies=all_dependencies,
+            sections=sections,
+            section_dependencies=section_dependencies,
+            section_flavors=section_flavors,
         )
 
     def _parse_section_dir(
-        self, section_path: str, custom_config: Dict[str, Any]
+        self, section_path: str, custom_config: Dict[str, Any],
     ) -> Optional[Tuple[Section, Dependencies]]:
-        local_section_dir = self.local_latex_dir / section_path
+        local_section_dir = self._local_latex_dir / section_path
         local_section_config_path = (local_section_dir / section_path).with_suffix(
             ".yml"
         )
@@ -123,8 +134,7 @@ class Target:
             section_config_path = shared_section_config_path
         else:
             return None
-        with section_config_path.open(encoding="utf8") as fh:
-            section_config = yaml_safe_load(fh)
+        section_config = yaml_safe_load(section_config_path.read_text(encoding="utf8"))
         title = (
             custom_config["title"]
             if "title" in custom_config
@@ -149,47 +159,70 @@ class Target:
                 f"'{flavor_name}' not amongst available flavors: {flavors_string} "
                 f"of {section_config_path}."
             )
+
         flavor = flavors[flavor_name]
         section = Section(title)
         dependencies = Dependencies()
         default_titles = section_config.get("default_titles")
         for item in flavor:
-            if isinstance(item, str):
-                filename = item
-                if default_titles is not None:
-                    title = default_titles.get(filename)
-                else:
-                    title = None
-            else:
-                filename, title = next(iter(item.items()))
-            if "excludes" in custom_config and filename in custom_config["excludes"]:
-                continue
-            if filename.startswith("/"):
-                local_path = (self.local_latex_dir / filename[1:]).with_suffix(".tex")
-                shared_path = (self._paths.shared_latex_dir / filename[1:]).with_suffix(
-                    ".tex"
-                )
-            else:
-                local_path = (local_section_dir / filename).with_suffix(".tex")
-                shared_path = (shared_section_dir / filename).with_suffix(".tex")
-            local_relative_path = local_path.relative_to(self.local_latex_dir)
-            shared_relative_path = shared_path.relative_to(self._paths.shared_latex_dir)
-            if local_path.exists():
-                section.inputs.append((str(local_relative_path.with_suffix("")), title))
-                dependencies.used.add(local_path.resolve())
-            elif shared_path.exists():
-                section.inputs.append(
-                    (str(shared_relative_path.with_suffix("")), title)
-                )
-                dependencies.used.add(shared_path.resolve())
-            else:
-                dependencies.missing.add(filename)
+            self._process_item(
+                item,
+                section,
+                dependencies,
+                default_titles,
+                custom_config,
+                local_section_dir,
+                shared_section_dir,
+            )
         return section, dependencies
+
+    def _process_item(
+        self,
+        item: Union[str, Dict[str, str]],
+        section: Section,
+        dependencies: Dependencies,
+        default_titles: Optional[Dict[str, str]],
+        section_config: Dict[str, Any],
+        local_section_dir: Path,
+        shared_section_dir: Path,
+    ) -> None:
+        if isinstance(item, str):
+            filename = item
+            if default_titles is not None:
+                title = default_titles.get(filename)
+            else:
+                title = None
+        else:
+            filename, title = next(iter(item.items()))
+        if "excludes" in section_config and filename in section_config["excludes"]:
+            return
+        if filename.startswith("/"):
+            local_path = (self._local_latex_dir / filename[1:]).with_suffix(".tex")
+            shared_path = (self._paths.shared_latex_dir / filename[1:]).with_suffix(
+                ".tex"
+            )
+        else:
+            local_path = (local_section_dir / filename).with_suffix(".tex")
+            shared_path = (shared_section_dir / filename).with_suffix(".tex")
+        local_relative_path = local_path.relative_to(self._local_latex_dir)
+        shared_relative_path = shared_path.relative_to(self._paths.shared_latex_dir)
+        if local_path.exists():
+            section.inputs.append(
+                SectionInput(local_relative_path.with_suffix(""), title)
+            )
+            dependencies.used.add(local_path.resolve())
+        elif shared_path.exists():
+            section.inputs.append(
+                SectionInput(shared_relative_path.with_suffix(""), title)
+            )
+            dependencies.used.add(shared_path.resolve())
+        else:
+            dependencies.missing.add(filename)
 
     def _parse_section_file(
         self, section_path: str, config: Dict[str, Any]
     ) -> Optional[Tuple[Section, Dependencies]]:
-        local_section_file = (self.local_latex_dir / section_path).with_suffix(".tex")
+        local_section_file = (self._local_latex_dir / section_path).with_suffix(".tex")
         shared_section_file = (self._paths.shared_latex_dir / section_path).with_suffix(
             ".tex"
         )
@@ -203,35 +236,40 @@ class Target:
         if "title" in config:
             title = config["title"]
         elif config_file.exists():
-            with config_file.open(encoding="utf8") as fh:
-                default_config = yaml_safe_load(fh)
-            title = default_config["title"]
+            title = yaml_safe_load(config_file.read_text(encoding="utf8"))["title"]
         else:
             title = None
         section = Section(title)
-        section.inputs.append((section_path, None))
+        section.inputs.append(SectionInput(path=section_path, title=None))
         dependencies = Dependencies()
         dependencies.used.add(section_file.resolve())
         return section, dependencies
 
 
+@attrs(auto_attribs=True)
 class Targets(Iterable[Target]):
-    def __init__(
-        self, paths: Paths, fail_on_missing: bool, whitelist: List[str]
-    ) -> None:
-        self._paths = paths
+    _targets: List[Target] = attrib()
+    _paths: Paths
+
+    @classmethod
+    def from_file(
+        cls, paths: Paths, whitelist: Optional[List[str]] = None
+    ) -> "Targets":
         if not paths.targets.exists():
-            if fail_on_missing:
-                raise DeckzException(f"Could not find {paths.targets}.")
-            else:
-                self.targets = []
-        with paths.targets.open("r", encoding="utf8") as fh:
-            targets = [
-                Target(data=target, paths=paths) for target in yaml_safe_load(fh)
-            ]
+            raise DeckzException(f"Could not find {paths.targets}.")
+        content = yaml_safe_load(paths.targets.read_text(encoding="utf8"))
+        targets = [
+            TargetBuilder(data=target, paths=paths).build() for target in content
+        ]
+        if whitelist is not None:
+            cls._filter_targets(targets, frozenset(whitelist), paths)
+        return Targets(targets, paths)
+
+    @_targets.validator
+    def _check_targets(self, attribute: Attribute, value: List[Target]) -> None:
         missing_dependencies = {
             target.name: target.dependencies.missing
-            for target in targets
+            for target in value
             if target.dependencies.missing
         }
         if missing_dependencies:
@@ -243,27 +281,22 @@ class Targets(Iterable[Target]):
                     for k, v in missing_dependencies.items()
                 ),
             )
-        target_names = set(target.name for target in targets)
-        whiteset = set(whitelist)
-        unmatched = whiteset - target_names
+
+    @staticmethod
+    def _filter_targets(
+        targets: Iterable[Target], whiteset: FrozenSet[str], paths: Paths
+    ) -> List[Target]:
+        unmatched = whiteset - frozenset(target.name for target in targets)
         if unmatched:
             raise DeckzException(
-                f"Incorrect targets {self._paths.targets}. "
+                f"Incorrect targets {paths.targets}. "
                 "Could not find the following targets:\n%s"
                 % "\n".join("  - %s" % name for name in unmatched)
             )
-        self.targets = [
-            target for target in targets if not whiteset or target.name in whiteset
-        ]
-
-    def get_dependencies(self) -> Dict[str, Dependencies]:
-        return OrderedDict((t.name, t.dependencies) for t in self.targets)
+        return [target for target in targets if target.name in whiteset]
 
     def __iter__(self) -> Iterator[Target]:
-        return iter(self.targets)
+        return iter(self._targets)
 
     def __len__(self) -> int:
-        return len(self.targets)
-
-    def __repr__(self) -> str:
-        return f"Targets(targets={repr(self.targets)}"
+        return len(self._targets)
