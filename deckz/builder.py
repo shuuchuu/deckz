@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from attr import attrib, attrs
 from jinja2 import Environment, FileSystemLoader
 from PyPDF2 import PdfFileMerger
+from yaml import safe_load
 
 from deckz.exceptions import DeckzException
 from deckz.paths import Paths
@@ -201,7 +202,8 @@ class Builder:
             self._write_print_latex(self._targets, latex_path)
         else:
             self._write_main_latex(item.target, item.compile_type, latex_path)
-            self._copy_dependencies(item.target, build_dir)
+            copied = self._copy_dependencies(item.target, build_dir)
+            self._render_dependencies(copied, build_dir)
 
         compile_result = self._compile(latex_path)
         if item.copy_result and compile_result.ok:
@@ -276,7 +278,7 @@ class Builder:
                 loader=FileSystemLoader(searchpath=self._paths.jinja2_dir),
                 block_start_string=r"\BLOCK{",
                 block_end_string="}",
-                variable_start_string=r"\VAR{",
+                variable_start_string=r"\V{",
                 variable_end_string="}",
                 comment_start_string=r"\#{",
                 comment_end_string="}",
@@ -289,7 +291,29 @@ class Builder:
             self.__env.filters["path_join"] = lambda paths: path_join(*paths)
         return self.__env
 
-    def _copy_dependencies(self, target: Target, target_build_dir: Path) -> None:
+    @property
+    def _section_env(self) -> Environment:
+        if not hasattr(self, "__env"):
+            self.__section_env = Environment(
+                loader=FileSystemLoader(searchpath=self._paths.build_dir),
+                block_start_string=r"\BLOCK{",
+                block_end_string="}",
+                variable_start_string=r"\V{",
+                variable_end_string="}",
+                comment_start_string=r"\#{",
+                comment_end_string="}",
+                line_statement_prefix="%%",
+                line_comment_prefix="%#",
+                trim_blocks=True,
+                autoescape=False,
+            )
+            self.__section_env.filters["camelcase"] = self._to_camel_case
+            self.__section_env.filters["path_join"] = lambda paths: path_join(*paths)
+            self.__section_env.filters["image"] = self._img
+        return self.__section_env
+
+    def _copy_dependencies(self, target: Target, target_build_dir: Path) -> List[Path]:
+        copied = []
         for dependency in target.dependencies.used:
             try:
                 link_dir = (
@@ -304,7 +328,25 @@ class Builder:
                     ).parent
                 )
             link_dir.mkdir(parents=True, exist_ok=True)
-            self._copy_file(dependency, link_dir / dependency.name)
+            destination = (link_dir / dependency.name).with_suffix(".tex.j2")
+            if (
+                not destination.exists()
+                or destination.stat().st_mtime < dependency.stat().st_mtime
+            ):
+                self._copy_file(dependency, destination)
+                copied.append(destination)
+        return copied
+
+    def _render_dependencies(
+        self, to_render: List[Path], target_build_dir: Path
+    ) -> None:
+        for item in to_render:
+            template = self._section_env.get_template(
+                str(item.relative_to(self._paths.build_dir))
+            )
+            with item.with_suffix("").open("w", encoding="utf8") as fh:
+                fh.write(template.render())
+                fh.write("\n")
 
     def _compile(self, latex_path: Path) -> CompileResult:
         command = self._settings.build_command[:]
@@ -349,3 +391,27 @@ class Builder:
 
     def _to_camel_case(self, string: str) -> str:
         return "".join(substring.capitalize() or "_" for substring in string.split("_"))
+
+    def _img(self, args: List[Any]) -> str:
+        if not isinstance(args, list):
+            path = args
+            modifier = ""
+            scale = ""
+        else:
+            if len(args) >= 1:
+                path = args[0]
+                modifier = ""
+                scale = ""
+            if len(args) >= 2:
+                modifier = args[1]
+                scale = "{1}"
+            if len(args) >= 3:
+                scale = "{%.2f}" % args[2]
+        metadata_path = (self._paths.shared_img_dir / path).with_suffix(".yml")
+        info = ""
+        if metadata_path.exists():
+            metadata = safe_load(metadata_path.read_text(encoding="utf8"))
+            info = (
+                f"[{metadata['title']}, {metadata['author']}, {metadata['license']}.]"
+            )
+        return r"\img%s%s{%s}%s" % (modifier, info, path, scale)
