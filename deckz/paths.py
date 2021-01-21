@@ -19,6 +19,7 @@ class GlobalPaths:
         self.shared_img_dir = self.shared_dir / "img"
         self.shared_code_dir = self.shared_dir / "code"
         self.shared_latex_dir = self.shared_dir / "latex"
+        self.shared_tikz_dir = self.shared_dir / "tikz"
         self.templates_dir = self.git_dir / "templates"
         self.yml_templates_dir = self.templates_dir / "yml"
         self.template_targets = self.yml_templates_dir / "targets.yml"

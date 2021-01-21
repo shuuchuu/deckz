@@ -86,7 +86,7 @@ class Builder:
         with TemporaryDirectory() as build_dir:
             build_path = Path(build_dir)
             latex_build_file = build_path / latex_file.relative_to(root)
-            self._setup_link(latex_build_file, latex_file)
+            self._copy_file(latex_file, latex_build_file)
             compile_result = self._compile(latex_build_file)
             if compile_result.ok:
                 pdf.parent.mkdir(parents=True, exist_ok=True)
@@ -201,7 +201,7 @@ class Builder:
             self._write_print_latex(self._targets, latex_path)
         else:
             self._write_main_latex(item.target, item.compile_type, latex_path)
-            self._link_dependencies(item.target, build_dir)
+            self._copy_dependencies(item.target, build_dir)
 
         compile_result = self._compile(latex_path)
         if item.copy_result and compile_result.ok:
@@ -217,7 +217,11 @@ class Builder:
             target_build_dir /= target.name
         target_build_dir /= compile_type.value
         target_build_dir.mkdir(parents=True, exist_ok=True)
-        for item in self._paths.shared_dir.iterdir():
+        for item in [
+            self._paths.shared_img_dir,
+            self._paths.shared_tikz_dir,
+            self._paths.shared_code_dir,
+        ]:
             self._setup_link(target_build_dir / item.name, item)
         return target_build_dir
 
@@ -285,12 +289,12 @@ class Builder:
             self.__env.filters["path_join"] = lambda paths: path_join(*paths)
         return self.__env
 
-    def _link_dependencies(self, target: Target, target_build_dir: Path) -> None:
+    def _copy_dependencies(self, target: Target, target_build_dir: Path) -> None:
         for dependency in target.dependencies.used:
             try:
                 link_dir = (
                     target_build_dir
-                    / dependency.relative_to(self._paths.shared_latex_dir).parent
+                    / dependency.relative_to(self._paths.shared_dir).parent
                 )
             except ValueError:
                 link_dir = (
@@ -300,7 +304,7 @@ class Builder:
                     ).parent
                 )
             link_dir.mkdir(parents=True, exist_ok=True)
-            self._setup_link(link_dir / dependency.name, dependency)
+            self._copy_file(dependency, link_dir / dependency.name)
 
     def _compile(self, latex_path: Path) -> CompileResult:
         command = self._settings.build_command[:]
@@ -335,6 +339,13 @@ class Builder:
             )
         source.parent.mkdir(parents=True, exist_ok=True)
         source.symlink_to(target)
+
+    def _copy_file(self, original: Path, copy: Path) -> None:
+        if copy.exists() and copy.stat().st_mtime > original.stat().st_mtime:
+            return
+        else:
+            copy.parent.mkdir(parents=True, exist_ok=True)
+            copyfile(original, copy)
 
     def _to_camel_case(self, string: str) -> str:
         return "".join(substring.capitalize() or "_" for substring in string.split("_"))
