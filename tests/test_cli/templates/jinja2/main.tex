@@ -1,5 +1,5 @@
 %% for k, v in config.items()
-\newcommand{\\VAR{k | camelcase}}{\VAR{v}}
+\newcommand{\\V{k | camelcase}}{\V{v}}
 %% endfor
 
 
@@ -57,7 +57,7 @@
 \date{}
 
 \title{\DeckTitle}
-\subtitle{\VAR{target.title}}
+\subtitle{\V{target.title}}
 
 \begin{document}
 
@@ -68,12 +68,12 @@
 \end{frame}
 
 %% for section in target.sections:
-\section{\VAR{section.title}}
+\section{\V{section.title}}
 %% for section_input in section.inputs:
 %% if section_input.title != None:
-\subsection{\VAR{subsection}}
+\subsection{\V{subsection}}
 %% endif
-\input{\VAR{section_input.path}}
+\input{\V{section_input.path}}
 %% endfor
 %% endfor
 

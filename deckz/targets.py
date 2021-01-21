@@ -84,7 +84,8 @@ class TargetBuilder:
     _local_latex_dir: Path = attrib(init=False)
 
     def __attrs_post_init__(self) -> None:
-        self._local_latex_dir = self._paths.current_dir / self._data["name"]
+        self._local_dir = self._paths.current_dir / self._data["name"]
+        self._local_latex_dir = self._local_dir / "latex"
 
     def build(self) -> Target:
         all_dependencies = Dependencies()
@@ -204,8 +205,8 @@ class TargetBuilder:
         else:
             local_path = (local_section_dir / filename).with_suffix(".tex")
             shared_path = (shared_section_dir / filename).with_suffix(".tex")
-        local_relative_path = local_path.relative_to(self._local_latex_dir)
-        shared_relative_path = shared_path.relative_to(self._paths.shared_latex_dir)
+        local_relative_path = local_path.relative_to(self._local_dir)
+        shared_relative_path = shared_path.relative_to(self._paths.shared_dir)
         if local_path.exists():
             section.inputs.append(
                 SectionInput(local_relative_path.with_suffix(""), title)
@@ -228,8 +229,10 @@ class TargetBuilder:
         )
         if local_section_file.exists():
             section_file = local_section_file
+            relative_path = section_file.relative_to(self._local_dir)
         elif shared_section_file.exists():
             section_file = shared_section_file
+            relative_path = section_file.relative_to(self._paths.shared_dir)
         else:
             return None
         config_file = section_file.with_suffix(".yml")
@@ -240,7 +243,7 @@ class TargetBuilder:
         else:
             title = None
         section = Section(title)
-        section.inputs.append(SectionInput(path=section_path, title=None))
+        section.inputs.append(SectionInput(path=relative_path, title=None))
         dependencies = Dependencies()
         dependencies.used.add(section_file.resolve())
         return section, dependencies
