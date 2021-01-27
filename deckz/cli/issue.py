@@ -2,7 +2,7 @@ from logging import getLogger
 from typing import Optional
 
 from requests import post
-from typer import Argument, launch
+from typer import Argument
 from yaml import safe_load as yaml_safe_load
 
 from deckz.cli import app
@@ -33,5 +33,8 @@ def issue(title: str, body: Optional[str] = Argument(None), path: str = ".") -> 
     )
     response.raise_for_status()
     json_response = response.json()
-    logger.info(f"Created issue at {json_response['html_url']}")
-    launch(json_response["html_url"])
+    logger.info(
+        "Successfully created the issue "
+        f"[link={json_response['html_url']}]on GitHub[/link]",
+        extra=dict(markup=True),
+    )
