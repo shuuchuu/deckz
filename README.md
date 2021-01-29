@@ -1,8 +1,8 @@
 # `deckz`
 
-[![CI Status](https://img.shields.io/github/workflow/status/m09/deckz/CI?label=CI&style=for-the-badge)](https://github.com/m09/deckz/actions?query=workflow%3ACI)
-[![CD Status](https://img.shields.io/github/workflow/status/m09/deckz/CD?label=CD&style=for-the-badge)](https://github.com/m09/deckz/actions?query=workflow%3ACD)
-[![Test Coverage](https://img.shields.io/codecov/c/github/m09/deckz?style=for-the-badge)](https://codecov.io/gh/m09/deckz)
+[![CI Status](https://img.shields.io/github/workflow/status/nzmognzmp/deckz/CI?label=CI&style=for-the-badge)](https://github.com/nzmognzmp/deckz/actions?query=workflow%3ACI)
+[![CD Status](https://img.shields.io/github/workflow/status/nzmognzmp/deckz/CD?label=CD&style=for-the-badge)](https://github.com/nzmognzmp/deckz/actions?query=workflow%3ACD)
+[![Test Coverage](https://img.shields.io/codecov/c/github/nzmognzmp/deckz?style=for-the-badge)](https://codecov.io/gh/nzmognzmp/deckz)
 [![PyPI Project](https://img.shields.io/pypi/v/deckz?style=for-the-badge)](https://pypi.org/project/deckz/)
 
 Tool to handle a large number of beamer decks, used by several persons, with shared slides amongst the decks. It is currently not meant to be usable directly by people finding about the package on GitHub. Please open an issue if you want more details or want to discuss this solution.
@@ -17,27 +17,7 @@ pip install deckz
 
 ### Shell completion installation
 
-Depending on your shell:
-
-- For Bash:
-
-    ```shell
-    _DECKZ_COMPLETE=source_bash deckz > deckz-complete.sh
-    ```
-
-- For Zsh:
-
-    ```shell
-    _DECKZ_COMPLETE=source_zsh deckz > deckz-complete.sh
-    ```
-
-- For Fish:
-
-    ```shell
-    _DECKZ_COMPLETE=source_fish deckz > deckz-complete.sh
-    ```
-
-And then source/activate the resulting file in your shell config.
+See the `--show-completion` or `--install-completion` options of the `deckz` CLI.
 
 ## Directory Structure
 
