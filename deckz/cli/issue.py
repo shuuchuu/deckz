@@ -1,4 +1,5 @@
 from logging import getLogger
+from pathlib import Path
 from typing import Optional
 
 from requests import post
@@ -11,8 +12,10 @@ from deckz.paths import GlobalPaths
 
 
 @app.command()
-def issue(title: str, body: Optional[str] = Argument(None), path: str = ".") -> None:
-    paths = GlobalPaths(path)
+def issue(
+    title: str, body: Optional[str] = Argument(None), path: Path = Path(".")
+) -> None:
+    paths = GlobalPaths.from_defaults(path)
     logger = getLogger(__name__)
     config = yaml_safe_load(paths.github_issues.read_text(encoding="utf8"))
     if not set(["owner", "repo", "api_key"]).issubset(config):

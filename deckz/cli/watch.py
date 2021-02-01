@@ -82,11 +82,11 @@ def watch(
     presentation: bool = True,
     print: bool = False,
     minimum_delay: int = 5,
-    deck_path: str = ".",
+    deck_path: Path = Path("."),
 ) -> None:
     """Compile on change."""
     _logger.info("Watching current and shared directories")
-    paths = Paths(deck_path)
+    paths = Paths.from_defaults(deck_path)
     observer = Observer()
     event_handler = _LatexCompilerEventHandler(
         minimum_delay,

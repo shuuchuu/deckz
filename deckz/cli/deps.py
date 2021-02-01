@@ -24,10 +24,10 @@ def deps(
     git: bool = True,
     section: Optional[str] = None,
     flavor: Optional[str] = None,
-    path: str = ".",
+    path: Path = Path("."),
 ) -> None:
     """Give information about shared modules usage."""
-    paths = GlobalPaths(path)
+    paths = GlobalPaths.from_defaults(path)
     with Progress() as progress:
         targets_progress = progress.add_task("Retrieving targets files", start=False)
         sections_progress = progress.add_task("Retrieving section files", start=False)
@@ -79,7 +79,7 @@ def _process_targets(
     all_targets_dependencies: Dict[str, Dict[str, Set[str]]],
     by_sections: Mapping[str, Mapping[str, Set[Tuple[str, str]]]],
 ) -> None:
-    paths = Paths(str(targets_path.parent))
+    paths = Paths.from_defaults(targets_path.parent)
     targets_name = str(paths.current_dir.relative_to(paths.git_dir))
     targets = Targets.from_file(paths)
     for target in targets:
