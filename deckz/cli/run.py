@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import List, Optional
 
 from typer import Argument
@@ -13,10 +14,10 @@ def run(
     handout: bool = True,
     presentation: bool = True,
     print: bool = True,
-    deck_path: str = ".",
+    deck_path: Path = Path("."),
 ) -> None:
     """Compile main targets."""
-    paths = Paths(deck_path)
+    paths = Paths.from_defaults(deck_path)
     runner_run(
         paths=paths,
         build_handout=handout,
