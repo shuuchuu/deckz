@@ -43,6 +43,7 @@ class GlobalPaths:
     user_config_dir: Path = attrib(converter=_path_converter)
     global_config: Path = attrib(converter=_path_converter)
     github_issues: Path = attrib(converter=_path_converter)
+    mails: Path = attrib(converter=_path_converter)
     gdrive_secrets: Path = attrib(converter=_path_converter)
     gdrive_credentials: Path = attrib(converter=_path_converter)
     user_config: Path = attrib(converter=_path_converter)
@@ -81,6 +82,7 @@ class GlobalPaths:
             jinja2_print_template=jinja2_dir / "print.tex",
             global_config=git_dir / "global-config.yml",
             github_issues=user_config_dir / "github-issues.yml",
+            mails=user_config_dir / "mails.yml",
             gdrive_secrets=user_config_dir / "gdrive-secrets.json",
             gdrive_credentials=user_config_dir / "gdrive-credentials.pickle",
             user_config=user_config_dir / "user-config.yml",

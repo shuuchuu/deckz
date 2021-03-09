@@ -22,6 +22,7 @@ rich = "^9.5.1"
 typer = {version = "^0.3.2", extras = ["all"]}
 watchdog = "^0.10.2"
 attrs = "^20.3.0"
+sendgrid = "^6.6.0"
 
 [tool.poetry.dev-dependencies]
 black = "^19.10b0"
