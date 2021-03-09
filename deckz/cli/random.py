@@ -32,7 +32,7 @@ def random(
     )
     sendgrid_email = Mail(
         from_email=mail,
-        to_emails=",".join(to),
+        to_emails=to,
         subject=f"deckz random from {inclusive_start} to {inclusive_end}: {result}",
         plain_text_content="Hope you got lucky :)",
     )
