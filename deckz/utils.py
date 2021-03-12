@@ -1,5 +1,6 @@
 from itertools import chain
 from pathlib import Path
+from shutil import copyfile
 from typing import FrozenSet, Optional
 
 from git import Repo
@@ -33,3 +34,11 @@ def get_git_dir(path: Path) -> Optional[Path]:
             "Are you in one?"
         ) from e
     return Path(repository.git.rev_parse("--show-toplevel")).resolve()
+
+
+def copy_file_if_newer(original: Path, copy: Path) -> None:
+    if copy.exists() and copy.stat().st_mtime > original.stat().st_mtime:
+        return
+    else:
+        copy.parent.mkdir(parents=True, exist_ok=True)
+        copyfile(original, copy)

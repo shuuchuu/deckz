@@ -5,7 +5,7 @@ from typer import Argument
 
 from deckz.cli import app
 from deckz.paths import Paths
-from deckz.runner import run as runner_run
+from deckz.running import run as running_run
 
 
 @app.command()
@@ -18,7 +18,7 @@ def run(
 ) -> None:
     """Compile main targets."""
     paths = Paths.from_defaults(deck_path)
-    runner_run(
+    running_run(
         paths=paths,
         build_handout=handout,
         build_presentation=presentation,

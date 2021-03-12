@@ -18,6 +18,7 @@ def random(
     inclusive_start: Optional[int] = 1,
     current_dir: Path = Path("."),
 ) -> None:
+    """Roll the dice and email the result."""
     logger = getLogger(__name__)
     paths = GlobalPaths.from_defaults(current_dir)
     config = yaml_safe_load(paths.mails.read_text(encoding="utf8"))

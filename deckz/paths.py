@@ -30,9 +30,9 @@ class GlobalPaths:
     shared_code_dir: Path = attrib(converter=_path_converter)
     shared_latex_dir: Path = attrib(converter=_path_converter)
     shared_tikz_dir: Path = attrib(converter=_path_converter)
+    shared_tikz_pdf_dir: Path = attrib(converter=_path_converter)
     templates_dir: Path = attrib(converter=_path_converter)
     yml_templates_dir: Path = attrib(converter=_path_converter)
-    template_targets: Path = attrib(converter=_path_converter)
     template_global_config: Path = attrib(converter=_path_converter)
     template_user_config: Path = attrib(converter=_path_converter)
     template_company_config: Path = attrib(converter=_path_converter)
@@ -60,6 +60,7 @@ class GlobalPaths:
         yml_templates_dir = templates_dir / "yml"
         jinja2_dir = templates_dir / "jinja2"
         user_config_dir = Path(appdirs_user_config_dir(app_name))
+        shared_tikz_dir = shared_dir / "tikz"
         return dict(
             current_dir=current_dir,
             git_dir=git_dir,
@@ -68,12 +69,12 @@ class GlobalPaths:
             yml_templates_dir=yml_templates_dir,
             jinja2_dir=jinja2_dir,
             user_config_dir=user_config_dir,
+            shared_tikz_dir=shared_tikz_dir,
             settings=git_dir / "settings.yml",
             shared_img_dir=shared_dir / "img",
             shared_code_dir=shared_dir / "code",
             shared_latex_dir=shared_dir / "latex",
-            shared_tikz_dir=shared_dir / "tikz",
-            template_targets=yml_templates_dir / "targets.yml",
+            shared_tikz_pdf_dir=shared_tikz_dir / "pdf",
             template_global_config=yml_templates_dir / "global-config.yml",
             template_user_config=yml_templates_dir / "user-config.yml",
             template_company_config=yml_templates_dir / "company-config.yml",
@@ -129,16 +130,3 @@ class Paths(GlobalPaths):
             targets=defaults["current_dir"] / "targets.yml",
         )
         return {**defaults, **additional_defaults}
-
-    @classmethod
-    def from_tempdir(
-        cls: Type[_PathsType], current_dir: Path, tempdir: Path
-    ) -> _PathsType:
-        defaults = super()._defaults(current_dir)
-        defaults["build_dir"] = tempdir / ".build"
-        defaults["pdf_dir"] = tempdir / "pdf"
-        defaults["company_config"] = defaults["template_company_config"]
-        defaults["deck_config"] = defaults["template_deck_config"]
-        defaults["session_config"] = tempdir / "session-config.yml"
-        defaults["targets"] = tempdir / "targets.yml"
-        return cls(**defaults)

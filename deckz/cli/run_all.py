@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from deckz.cli import app
-from deckz.runner import run_all as runner_run_all
+from deckz.running import run_all as running_run_all
 
 
 @app.command()
@@ -12,7 +12,7 @@ def run_all(
     directory: Path = Path("."),
 ) -> None:
     """Compile all shared slides."""
-    runner_run_all(
+    running_run_all(
         directory=directory,
         build_handout=handout,
         build_presentation=presentation,
