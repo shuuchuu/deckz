@@ -15,6 +15,7 @@ from deckz.paths import GlobalPaths
 def issue(
     title: str, body: Optional[str] = Argument(None), path: Path = Path(".")
 ) -> None:
+    """Create an issue on GitHub."""
     paths = GlobalPaths.from_defaults(path)
     logger = getLogger(__name__)
     config = yaml_safe_load(paths.github_issues.read_text(encoding="utf8"))
