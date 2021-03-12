@@ -117,7 +117,7 @@ class Paths(GlobalPaths):
                 "invoke this tool from the deck directory."
             )
         additional_defaults = dict(
-            build_dir=defaults["current_dir"] / "build",
+            build_dir=defaults["current_dir"] / ".build",
             pdf_dir=defaults["current_dir"] / "pdf",
             company_config=(
                 defaults["git_dir"]
@@ -135,7 +135,7 @@ class Paths(GlobalPaths):
         cls: Type[_PathsType], current_dir: Path, tempdir: Path
     ) -> _PathsType:
         defaults = super()._defaults(current_dir)
-        defaults["build_dir"] = tempdir / "build"
+        defaults["build_dir"] = tempdir / ".build"
         defaults["pdf_dir"] = tempdir / "pdf"
         defaults["company_config"] = defaults["template_company_config"]
         defaults["deck_config"] = defaults["template_deck_config"]

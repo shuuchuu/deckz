@@ -1,24 +1,20 @@
 from collections import defaultdict
 from contextlib import ExitStack, redirect_stdout
 from enum import Enum
-from filecmp import cmp
 from logging import getLogger
 from multiprocessing import Pool
-from os import unlink
-from os.path import join as path_join
 from pathlib import Path
-from shutil import copyfile, move
+from shutil import copyfile
 from subprocess import run
-from tempfile import NamedTemporaryFile, TemporaryDirectory
+from tempfile import TemporaryDirectory
 from typing import Any, Dict, List, Optional, Tuple
 
 from attr import attrib, attrs
-from jinja2 import Environment, FileSystemLoader
 from PyPDF2 import PdfFileMerger
-from yaml import safe_load
 
 from deckz.exceptions import DeckzException
 from deckz.paths import Paths
+from deckz.rendering import Renderer
 from deckz.settings import Settings
 from deckz.targets import Target, Targets
 
@@ -64,6 +60,7 @@ class Builder:
         self._print = build_print
         self._logger = getLogger(__name__)
         self._compile_standalones()
+        self._renderer = Renderer(paths)
         self._build_all()
 
     def _compile_standalones(self) -> None:
@@ -249,7 +246,7 @@ class Builder:
     def _write_main_latex(
         self, target: Target, compile_type: CompileType, output_path: Path
     ) -> None:
-        self._write_latex(
+        self._renderer.render(
             template_path=self._paths.jinja2_main_template,
             output_path=output_path,
             config=self._latex_config,
@@ -259,7 +256,7 @@ class Builder:
         )
 
     def _write_print_latex(self, targets: Targets, output_path: Path) -> None:
-        self._write_latex(
+        self._renderer.render(
             template_path=self._paths.jinja2_print_template,
             output_path=output_path,
             pdf_paths=[
@@ -273,63 +270,6 @@ class Builder:
             ],
             format="1x2",
         )
-
-    def _write_latex(
-        self, *, template_path: Path, output_path: Path, **template_kwargs: Any
-    ) -> None:
-        template = self._env.get_template(str(template_path.name))
-        try:
-            with NamedTemporaryFile("w", encoding="utf8", delete=False) as fh:
-                fh.write(template.render(**template_kwargs))
-                fh.write("\n")
-            if not output_path.exists() or not cmp(fh.name, str(output_path)):
-                move(fh.name, output_path)
-        finally:
-            try:
-                unlink(fh.name)
-            except FileNotFoundError:
-                pass
-
-    @property
-    def _env(self) -> Environment:
-        if not hasattr(self, "__env"):
-            self.__env = Environment(
-                loader=FileSystemLoader(searchpath=self._paths.jinja2_dir),
-                block_start_string=r"\BLOCK{",
-                block_end_string="}",
-                variable_start_string=r"\V{",
-                variable_end_string="}",
-                comment_start_string=r"\#{",
-                comment_end_string="}",
-                line_statement_prefix="%%",
-                line_comment_prefix="%#",
-                trim_blocks=True,
-                autoescape=False,
-            )
-            self.__env.filters["camelcase"] = self._to_camel_case
-            self.__env.filters["path_join"] = lambda paths: path_join(*paths)
-        return self.__env
-
-    @property
-    def _section_env(self) -> Environment:
-        if not hasattr(self, "__env"):
-            self.__section_env = Environment(
-                loader=FileSystemLoader(searchpath=self._paths.build_dir),
-                block_start_string=r"\BLOCK{",
-                block_end_string="}",
-                variable_start_string=r"\V{",
-                variable_end_string="}",
-                comment_start_string=r"\#{",
-                comment_end_string="}",
-                line_statement_prefix="%%",
-                line_comment_prefix="%#",
-                trim_blocks=True,
-                autoescape=False,
-            )
-            self.__section_env.filters["camelcase"] = self._to_camel_case
-            self.__section_env.filters["path_join"] = lambda paths: path_join(*paths)
-            self.__section_env.filters["image"] = self._img
-        return self.__section_env
 
     def _copy_dependencies(self, target: Target, target_build_dir: Path) -> List[Path]:
         copied = []
@@ -360,12 +300,7 @@ class Builder:
         self, to_render: List[Path], target_build_dir: Path
     ) -> None:
         for item in to_render:
-            template = self._section_env.get_template(
-                str(item.relative_to(self._paths.build_dir))
-            )
-            with item.with_suffix("").open("w", encoding="utf8") as fh:
-                fh.write(template.render())
-                fh.write("\n")
+            self._renderer.render(template_path=item, output_path=item.with_suffix(""))
 
     def _compile(self, latex_path: Path) -> CompileResult:
         command = self._settings.build_command[:]
@@ -407,30 +342,3 @@ class Builder:
         else:
             copy.parent.mkdir(parents=True, exist_ok=True)
             copyfile(original, copy)
-
-    def _to_camel_case(self, string: str) -> str:
-        return "".join(substring.capitalize() or "_" for substring in string.split("_"))
-
-    def _img(self, args: List[Any]) -> str:
-        if not isinstance(args, list):
-            path = args
-            modifier = ""
-            scale = ""
-        else:
-            if len(args) >= 1:
-                path = args[0]
-                modifier = ""
-                scale = ""
-            if len(args) >= 2:
-                modifier = args[1]
-                scale = "{1}"
-            if len(args) >= 3:
-                scale = "{%.2f}" % args[2]
-        metadata_path = (self._paths.shared_img_dir / path).with_suffix(".yml")
-        info = ""
-        if metadata_path.exists():
-            metadata = safe_load(metadata_path.read_text(encoding="utf8"))
-            info = (
-                f"[{metadata['title']}, {metadata['author']}, {metadata['license']}.]"
-            )
-        return r"\img%s%s{%s}%s" % (modifier, info, path, scale)
