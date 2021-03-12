@@ -1,22 +1,23 @@
 from collections import defaultdict
-from contextlib import ExitStack, redirect_stdout
+from contextlib import ExitStack
 from enum import Enum
 from logging import getLogger
 from multiprocessing import Pool
 from pathlib import Path
 from shutil import copyfile
-from subprocess import run
-from tempfile import TemporaryDirectory
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
-from attr import attrib, attrs
+from attr import attrs
 from PyPDF2 import PdfFileMerger
 
+from deckz.compiling import Compiler, CompileResult
 from deckz.exceptions import DeckzException
 from deckz.paths import Paths
 from deckz.rendering import Renderer
 from deckz.settings import Settings
+from deckz.standalones import StandalonesBuilder
 from deckz.targets import Target, Targets
+from deckz.utils import copy_file_if_newer
 
 
 class CompileType(Enum):
@@ -24,13 +25,6 @@ class CompileType(Enum):
     Presentation = "presentation"
     Print = "print"
     PrintHandout = "print-handout"
-
-
-@attrs(auto_attribs=True, frozen=True)
-class CompileResult:
-    ok: bool
-    stdout: Optional[str] = attrib(default="")
-    stderr: Optional[str] = attrib(default="")
 
 
 @attrs(auto_attribs=True, frozen=True)
@@ -59,56 +53,9 @@ class Builder:
         self._handout = build_handout
         self._print = build_print
         self._logger = getLogger(__name__)
-        self._compile_standalones()
         self._renderer = Renderer(paths)
-        self._build_all()
-
-    def _compile_standalones(self) -> None:
-        to_compile: List[Tuple[Path, Path]] = []
-        compile_results = []
-        self._logger.info("Processing standalones")
-        for standalone_dir in self._settings.compile_standalones:
-            root = self._paths.settings.parent / standalone_dir
-            to_compile.extend((root, latex) for latex in root.glob("**/*.py"))
-            to_compile.extend((root, latex) for latex in root.glob("**/*.tex"))
-        with Pool() as pool:
-            compile_results = pool.starmap(self._compile_standalone, to_compile)
-        for (_, latex_file), compile_result in zip(to_compile, compile_results):
-            if not compile_result.ok:
-                self._logger.warning("Standalone compilation of %s errored", latex_file)
-                self._logger.warning("Captured stderr\n%s", compile_result.stderr)
-
-    def _generate_latex(self, python_file: Path, output_file: Path) -> None:
-        compiled = compile(
-            source=python_file.read_text(encoding="utf8"),
-            filename=python_file.name,
-            mode="exec",
-        )
-        output_file.parent.mkdir(parents=True, exist_ok=True)
-        with output_file.open("w", encoding="utf8") as fh:
-            with redirect_stdout(fh):
-                exec(compiled)
-
-    def _compile_standalone(self, root: Path, input_file: Path) -> CompileResult:
-        pdf = (root / "pdf" / input_file.relative_to(root)).with_suffix(".pdf")
-        if pdf.exists() and pdf.stat().st_mtime > input_file.stat().st_mtime:
-            return CompileResult(True)
-        with TemporaryDirectory() as build_dir:
-            build_path = Path(build_dir)
-            build_file = (build_path / input_file.relative_to(root)).with_suffix(".tex")
-            if input_file.suffix == ".py":
-                self._generate_latex(input_file, build_file)
-            elif input_file.suffix == ".tex":
-                self._copy_file(input_file, build_file)
-            else:
-                raise ValueError(
-                    f"Unsupported standalone file extension {input_file.suffix}"
-                )
-            compile_result = self._compile(build_file)
-            if compile_result.ok:
-                pdf.parent.mkdir(parents=True, exist_ok=True)
-                copyfile(build_file.with_suffix(".pdf"), pdf)
-        return compile_result
+        self._compiler = Compiler(settings)
+        self._standalones_builder = StandalonesBuilder(self._settings, self._paths)
 
     def _list_items(self) -> List[CompileItem]:
         to_compile = []
@@ -130,7 +77,8 @@ class Builder:
             result[item.compile_type] &= compile_result.ok
         return result
 
-    def _build_all(self) -> None:
+    def build(self) -> None:
+        self._standalones_builder.build()
         items = self._list_items()
         n_outputs = (
             int(self._handout) * (len(self._targets) + 1)
@@ -221,7 +169,7 @@ class Builder:
             copied = self._copy_dependencies(item.target, build_dir)
             self._render_dependencies(copied, build_dir)
 
-        compile_result = self._compile(latex_path)
+        compile_result = self._compiler.compile(latex_path)
         if item.copy_result and compile_result.ok:
             self._paths.pdf_dir.mkdir(parents=True, exist_ok=True)
             copyfile(build_pdf_path, output_pdf_path)
@@ -292,7 +240,7 @@ class Builder:
                 not destination.exists()
                 or destination.stat().st_mtime < dependency.stat().st_mtime
             ):
-                self._copy_file(dependency, destination)
+                copy_file_if_newer(dependency, destination)
                 copied.append(destination)
         return copied
 
@@ -301,18 +249,6 @@ class Builder:
     ) -> None:
         for item in to_render:
             self._renderer.render(template_path=item, output_path=item.with_suffix(""))
-
-    def _compile(self, latex_path: Path) -> CompileResult:
-        command = self._settings.build_command[:]
-        command.append(latex_path.name)
-        completed_process = run(
-            command, cwd=latex_path.parent, capture_output=True, encoding="utf8"
-        )
-        return CompileResult(
-            completed_process.returncode == 0,
-            completed_process.stdout,
-            completed_process.stderr,
-        )
 
     def _setup_link(self, source: Path, target: Path) -> None:
         if not target.exists():
@@ -335,10 +271,3 @@ class Builder:
             )
         source.parent.mkdir(parents=True, exist_ok=True)
         source.symlink_to(target)
-
-    def _copy_file(self, original: Path, copy: Path) -> None:
-        if copy.exists() and copy.stat().st_mtime > original.stat().st_mtime:
-            return
-        else:
-            copy.parent.mkdir(parents=True, exist_ok=True)
-            copyfile(original, copy)
