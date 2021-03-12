@@ -2,12 +2,12 @@ from logging import getLogger
 from pathlib import Path
 from typing import Optional
 
-from requests import post
 from typer import Argument
 from yaml import safe_load as yaml_safe_load
 
 from deckz.cli import app
 from deckz.exceptions import DeckzException
+from deckz.github_querying import GitHubAPI
 from deckz.paths import GlobalPaths
 
 
@@ -24,20 +24,10 @@ def issue(
             "user config."
         )
     api_key, owner, repo = config["api_key"], config["owner"], config["repo"]
-    data = dict(title=title)
-    if body is not None:
-        data["body"] = body
-    response = post(
-        f"https://api.github.com/repos/{owner}/{repo}/issues",
-        json=data,
-        headers=dict(
-            Accept="application/vnd.github.v3+json", Authorization=f"token {api_key}",
-        ),
-    )
-    response.raise_for_status()
-    json_response = response.json()
+    project_number = config.get("project_number")
+    api = GitHubAPI(api_key)
+    url = api.create_issue(owner, repo, title, body, project_number)
     logger.info(
-        "Successfully created the issue "
-        f"[link={json_response['html_url']}]on GitHub[/link]",
+        f"Successfully created the issue [link={url}]on GitHub[/link]",
         extra=dict(markup=True),
     )
