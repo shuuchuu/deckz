@@ -6,7 +6,9 @@ from shutil import copyfile
 from tempfile import TemporaryDirectory
 from typing import List
 
-from deckz.compiling import Compiler, CompileResult
+from ray import get as ray_get
+
+from deckz.compiling import compile as compiling_compile, CompileResult
 from deckz.paths import GlobalPaths
 from deckz.settings import Settings
 from deckz.utils import copy_file_if_newer
@@ -15,13 +17,13 @@ from deckz.utils import copy_file_if_newer
 class StandalonesBuilder:
     def __init__(self, settings: Settings, paths: GlobalPaths):
         self._paths = paths
+        self._settings = settings
         self._logger = getLogger(__name__)
-        self._compiler = Compiler(settings)
 
     def build(self) -> None:
+        self._logger.info("Processing standalones")
         to_compile: List[Path] = []
         compile_results = []
-        self._logger.info("Processing standalones")
         to_compile.extend(self._paths.shared_tikz_dir.glob("**/*.py"))
         to_compile.extend(self._paths.shared_tikz_dir.glob("**/*.tex"))
         with Pool() as pool:
@@ -62,7 +64,9 @@ class StandalonesBuilder:
                 raise ValueError(
                     f"Unsupported standalone file extension {input_file.suffix}"
                 )
-            compile_result = self._compiler.compile(build_file)
+            compile_result = ray_get(
+                compiling_compile.remote(build_file, self._settings)
+            )
             if compile_result.ok:
                 pdf.parent.mkdir(parents=True, exist_ok=True)
                 copyfile(build_file.with_suffix(".pdf"), pdf)
