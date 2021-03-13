@@ -15,7 +15,6 @@ from deckz.exceptions import DeckzException
 from deckz.paths import Paths
 from deckz.rendering import Renderer
 from deckz.settings import Settings
-from deckz.standalones import StandalonesBuilder
 from deckz.targets import Target, Targets
 from deckz.utils import copy_file_if_newer
 
@@ -55,7 +54,6 @@ class Builder:
         self._logger = getLogger(__name__)
         self._renderer = Renderer(paths)
         self._compiler = Compiler(settings)
-        self._standalones_builder = StandalonesBuilder(self._settings, self._paths)
 
     def _list_items(self) -> List[CompileItem]:
         to_compile = []
@@ -78,7 +76,6 @@ class Builder:
         return result
 
     def build(self) -> None:
-        self._standalones_builder.build()
         items = self._list_items()
         n_outputs = (
             int(self._handout) * (len(self._targets) + 1)

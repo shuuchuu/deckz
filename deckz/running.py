@@ -17,11 +17,14 @@ def run(
     build_presentation: bool,
     build_print: bool,
     target_whitelist: Optional[List[str]] = None,
+    skip_standalones: bool = False,
 ) -> None:
     config = get_config(paths)
     targets = Targets.from_file(paths=paths, whitelist=target_whitelist)
     settings = Settings(paths)
-    builder = Builder(
+    if not skip_standalones:
+        StandalonesBuilder(settings, paths).build()
+    Builder(
         config,
         settings,
         paths,
@@ -29,14 +32,15 @@ def run(
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
-    )
-    builder.build()
+    ).build()
 
 
 def run_all(
     directory: Path, build_handout: bool, build_presentation: bool, build_print: bool,
 ) -> None:
     paths = GlobalPaths.from_defaults(directory)
+    settings = Settings(paths)
+    StandalonesBuilder(settings, paths).build()
     for targets in track(list(paths.git_dir.glob("**/targets.yml"))):
         targets_paths = Paths.from_defaults(targets.parent)
         run(
@@ -44,6 +48,7 @@ def run_all(
             build_handout=build_handout,
             build_presentation=build_presentation,
             build_print=build_print,
+            skip_standalones=True,
         )
 
 
