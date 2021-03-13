@@ -1,23 +1,22 @@
 from collections import defaultdict
 from contextlib import ExitStack
 from enum import Enum
-from logging import getLogger
-from multiprocessing import Pool
+from logging import getLogger, WARN
 from pathlib import Path
 from shutil import copyfile
 from typing import Any, Dict, List, Optional
 
 from attr import attrs
 from PyPDF2 import PdfFileMerger
+from ray import get as ray_get, remote
 
-from deckz.compiling import Compiler, CompileResult
+from deckz.compiling import compile as compiling_compile, CompileResult
 from deckz.exceptions import DeckzException
 from deckz.paths import Paths
 from deckz.rendering import Renderer
 from deckz.settings import Settings
-from deckz.standalones import StandalonesBuilder
 from deckz.targets import Target, Targets
-from deckz.utils import copy_file_if_newer
+from deckz.utils import copy_file_if_newer, setup_logging
 
 
 class CompileType(Enum):
@@ -25,6 +24,13 @@ class CompileType(Enum):
     Presentation = "presentation"
     Print = "print"
     PrintHandout = "print-handout"
+
+
+@attrs(auto_attribs=True, frozen=True)
+class CompilePaths:
+    latex: Path
+    build_pdf: Path
+    output_pdf: Path
 
 
 @attrs(auto_attribs=True, frozen=True)
@@ -54,8 +60,6 @@ class Builder:
         self._print = build_print
         self._logger = getLogger(__name__)
         self._renderer = Renderer(paths)
-        self._compiler = Compiler(settings)
-        self._standalones_builder = StandalonesBuilder(self._settings, self._paths)
 
     def _list_items(self) -> List[CompileItem]:
         to_compile = []
@@ -77,8 +81,11 @@ class Builder:
             result[item.compile_type] &= compile_result.ok
         return result
 
-    def build(self) -> None:
-        self._standalones_builder.build()
+    @staticmethod
+    def setup_logging(level: int = WARN) -> None:
+        setup_logging(level)
+
+    def build(self) -> bool:
         items = self._list_items()
         n_outputs = (
             int(self._handout) * (len(self._targets) + 1)
@@ -86,17 +93,28 @@ class Builder:
             + int(self._print)
         )
         self._logger.info(f"Building {len(items)} PDFs used in {n_outputs} outputs")
-        with Pool() as pool:
-            compile_results = pool.map(self._build, items)
-        ok_by_type = self._aggregate_compilation_results_by_type(compile_results, items)
+        items_paths = [self._prepare(item) for item in items]
+        results = ray_get(
+            [
+                compiling_compile.remote(item_paths.latex, self._settings)
+                for item_paths in items_paths
+            ]
+        )
+        for item, paths, result in zip(items, items_paths, results):
+            self._finalize(item, paths, result)
+        ok_by_type = self._aggregate_compilation_results_by_type(results, items)
         if self._print:
             if ok_by_type[CompileType.PrintHandout]:
                 self._logger.info(
                     f"Formatting {len(self._targets)} PDFs into a printable output"
                 )
-                compile_results.append(
-                    self._build(CompileItem(None, CompileType.Print, True))
+                item = CompileItem(None, CompileType.Print, True)
+                items.append(item)
+                paths = self._prepare(item)
+                results.append(
+                    ray_get(compiling_compile.remote(paths.latex, self._settings))
                 )
+                self._finalize(item, paths, result)
             else:
                 self._logger.warning(
                     "Preparatory compilations failed. Skipping print output"
@@ -111,19 +129,20 @@ class Builder:
                 self._logger.warning(
                     "Preparatory compilations failed. Skipping handout output"
                 )
-        for compile_result, item in zip(compile_results, items):
+        for item, result in zip(items, results):
             if item.target is not None:
                 compilation = f"{item.target.name}/{item.compile_type.value}"
             else:
                 compilation = item.compile_type.value
-            if not compile_result.ok:
+            if not result.ok:
                 self._logger.warning("Compilation %s errored", compilation)
                 self._logger.warning(
-                    "Captured %s stderr\n%s", compilation, compile_result.stderr
+                    "Captured %s stderr\n%s", compilation, result.stderr
                 )
                 self._logger.warning(
-                    "Captured %s stdout\n%s", compilation, compile_result.stdout
+                    "Captured %s stdout\n%s", compilation, result.stdout
                 )
+        return all(result.ok for result in results)
 
     def _get_filename(self, target: Optional[Target], compile_type: CompileType) -> str:
         name = self._latex_config["deck_acronym"]
@@ -156,7 +175,7 @@ class Builder:
             self._paths.pdf_dir.mkdir(parents=True, exist_ok=True)
             copyfile(build_pdf_path, output_pdf_path)
 
-    def _build(self, item: CompileItem) -> CompileResult:
+    def _prepare(self, item: CompileItem) -> CompilePaths:
         build_dir = self._setup_build_dir(item.target, item.compile_type)
         filename = self._get_filename(item.target, item.compile_type)
         latex_path = build_dir / f"{filename}.tex"
@@ -168,12 +187,19 @@ class Builder:
             self._write_main_latex(item.target, item.compile_type, latex_path)
             copied = self._copy_dependencies(item.target, build_dir)
             self._render_dependencies(copied, build_dir)
+        return CompilePaths(
+            latex=latex_path, build_pdf=build_pdf_path, output_pdf=output_pdf_path
+        )
 
-        compile_result = self._compiler.compile(latex_path)
-        if item.copy_result and compile_result.ok:
+    def _finalize(
+        self,
+        compile_item: CompileItem,
+        compile_paths: CompilePaths,
+        compile_result: CompileResult,
+    ) -> None:
+        if compile_item.copy_result and compile_result.ok:
             self._paths.pdf_dir.mkdir(parents=True, exist_ok=True)
-            copyfile(build_pdf_path, output_pdf_path)
-        return compile_result
+            copyfile(compile_paths.build_pdf, compile_paths.output_pdf)
 
     def _setup_build_dir(
         self, target: Optional[Target], compile_type: CompileType
@@ -271,3 +297,6 @@ class Builder:
             )
         source.parent.mkdir(parents=True, exist_ok=True)
         source.symlink_to(target)
+
+
+RemoteBuilder = remote(Builder)
