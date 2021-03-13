@@ -17,4 +17,3 @@ class Settings:
                 f"Could not find “build_command” key in {global_paths.settings}."
             )
         self.build_command = settings["build_command"]
-        self.compile_standalones = settings.get("compile_standalones", [])
