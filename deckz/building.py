@@ -10,7 +10,7 @@ from attr import attrs
 from PyPDF2 import PdfFileMerger
 from ray import get as ray_get, remote
 
-from deckz.compiling import compile as compiling_compile, CompileResult
+from deckz.compiling import compile as compiling_compile, CompilePaths, CompileResult
 from deckz.exceptions import DeckzException
 from deckz.paths import Paths
 from deckz.rendering import Renderer
@@ -24,13 +24,6 @@ class CompileType(Enum):
     Presentation = "presentation"
     Print = "print"
     PrintHandout = "print-handout"
-
-
-@attrs(auto_attribs=True, frozen=True)
-class CompilePaths:
-    latex: Path
-    build_pdf: Path
-    output_pdf: Path
 
 
 @attrs(auto_attribs=True, frozen=True)
