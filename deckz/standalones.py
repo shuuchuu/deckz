@@ -1,14 +1,13 @@
 from contextlib import redirect_stdout
+from itertools import chain
 from logging import getLogger
-from multiprocessing import Pool
 from pathlib import Path
 from shutil import copyfile
 from tempfile import TemporaryDirectory
-from typing import List
 
 from ray import get as ray_get
 
-from deckz.compiling import compile as compiling_compile, CompileResult
+from deckz.compiling import compile as compiling_compile, CompilePaths
 from deckz.paths import GlobalPaths
 from deckz.settings import Settings
 from deckz.utils import copy_file_if_newer
@@ -22,16 +21,45 @@ class StandalonesBuilder:
 
     def build(self) -> None:
         self._logger.info("Processing standalones")
-        to_compile: List[Path] = []
-        compile_results = []
-        to_compile.extend(self._paths.shared_tikz_dir.glob("**/*.py"))
-        to_compile.extend(self._paths.shared_tikz_dir.glob("**/*.tex"))
-        with Pool() as pool:
-            compile_results = pool.map(self._compile_standalone, to_compile)
-        for latex_file, compile_result in zip(to_compile, compile_results):
-            if not compile_result.ok:
-                self._logger.warning("Standalone compilation of %s errored", latex_file)
-                self._logger.warning("Captured stderr\n%s", compile_result.stderr)
+        with TemporaryDirectory() as build_dir:
+            build_path = Path(build_dir)
+
+            items = [
+                (input_path, paths)
+                for input_path in chain(
+                    self._paths.shared_tikz_dir.glob("**/*.py"),
+                    self._paths.shared_tikz_dir.glob("**/*.tex"),
+                )
+                if self._needs_compile(
+                    input_path,
+                    paths := self._compute_compile_paths(input_path, build_path),
+                )
+            ]
+
+            for item in items:
+                self._prepare(*item, build_path)
+
+            results = ray_get(
+                [
+                    compiling_compile.remote(paths.latex, self._settings)
+                    for _, paths in items
+                ]
+            )
+            self._paths.shared_tikz_pdf_dir.mkdir(parents=True, exist_ok=True)
+            for (_, paths), result in zip(items, results):
+                if result.ok:
+                    copyfile(paths.build_pdf, paths.output_pdf)
+
+        for (input_path, _), result in zip(items, results):
+            if not result.ok:
+                self._logger.warning("Standalone compilation of %s errored", input_path)
+                self._logger.warning("Captured stderr\n%s", result.stderr)
+
+    def _needs_compile(self, input_file: Path, compile_paths: CompilePaths) -> bool:
+        return (
+            not compile_paths.output_pdf.exists()
+            or compile_paths.output_pdf.stat().st_mtime < input_file.stat().st_mtime
+        )
 
     def _generate_latex(self, python_file: Path, output_file: Path) -> None:
         compiled = compile(
@@ -44,30 +72,25 @@ class StandalonesBuilder:
             with redirect_stdout(fh):
                 exec(compiled)
 
-    def _compile_standalone(self, input_file: Path) -> CompileResult:
-        pdf = (
+    def _compute_compile_paths(self, input_file: Path, build_dir: Path) -> CompilePaths:
+        latex = (
+            build_dir / input_file.relative_to(self._paths.shared_tikz_dir)
+        ).with_suffix(".tex")
+        build_pdf = latex.with_suffix(".pdf")
+        output_pdf = (
             self._paths.shared_tikz_pdf_dir
             / input_file.relative_to(self._paths.shared_tikz_dir)
         ).with_suffix(".pdf")
-        if pdf.exists() and pdf.stat().st_mtime > input_file.stat().st_mtime:
-            return CompileResult(True)
-        with TemporaryDirectory() as build_dir:
-            build_path = Path(build_dir)
-            build_file = (
-                build_path / input_file.relative_to(self._paths.shared_tikz_dir)
-            ).with_suffix(".tex")
-            if input_file.suffix == ".py":
-                self._generate_latex(input_file, build_file)
-            elif input_file.suffix == ".tex":
-                copy_file_if_newer(input_file, build_file)
-            else:
-                raise ValueError(
-                    f"Unsupported standalone file extension {input_file.suffix}"
-                )
-            compile_result = ray_get(
-                compiling_compile.remote(build_file, self._settings)
+        return CompilePaths(latex=latex, build_pdf=build_pdf, output_pdf=output_pdf)
+
+    def _prepare(
+        self, input_file: Path, compile_paths: CompilePaths, build_dir: Path
+    ) -> None:
+        if input_file.suffix == ".py":
+            self._generate_latex(input_file, compile_paths.latex)
+        elif input_file.suffix == ".tex":
+            copy_file_if_newer(input_file, compile_paths.latex)
+        else:
+            raise ValueError(
+                f"Unsupported standalone file extension {input_file.suffix}"
             )
-            if compile_result.ok:
-                pdf.parent.mkdir(parents=True, exist_ok=True)
-                copyfile(build_file.with_suffix(".pdf"), pdf)
-        return compile_result
