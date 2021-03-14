@@ -45,9 +45,9 @@ class StandalonesBuilder:
                     for _, paths in items
                 ]
             )
-            self._paths.shared_tikz_pdf_dir.mkdir(parents=True, exist_ok=True)
             for (_, paths), result in zip(items, results):
                 if result.ok:
+                    paths.output_pdf.parent.mkdir(parents=True, exist_ok=True)
                     copyfile(paths.build_pdf, paths.output_pdf)
 
         for (input_path, _), result in zip(items, results):

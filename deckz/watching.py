@@ -36,8 +36,8 @@ class _BaseEventHandler:
             try:
                 self.run()
                 _logger.info("Build finished")
-            except Exception as e:
-                _logger.critical("Build failed. Error: %s", str(e))
+            except Exception:
+                _logger.exception("Build failed.")
         finally:
             self._compiling = False
 
