@@ -41,6 +41,12 @@ class Section:
 
 
 @attrs(auto_attribs=True)
+class Part:
+    title: Optional[str]
+    sections: List[Section] = Factory(list)
+
+
+@attrs(auto_attribs=True)
 class Dependencies:
     used: Set[Path] = Factory(set)
     missing: Set[str] = Factory(set)
@@ -70,11 +76,23 @@ class Dependencies:
 @attrs(auto_attribs=True)
 class Target:
     name: str
-    title: Optional[str]
     dependencies: Dependencies
-    sections: List[Section]
+    parts: List[Part]
     section_dependencies: Dict[str, Dependencies]
     section_flavors: DefaultDict[str, Set[str]]
+
+    @classmethod
+    def from_targets(cls, targets: Iterable["Target"], name: str) -> "Target":
+        dependencies = Dependencies.merge(*(t.dependencies for t in targets))
+        parts = [p for t in targets for p in t.parts]
+        section_dependencies = Dependencies.merge_dicts(
+            *(t.section_dependencies for t in targets)
+        )
+        section_flavors = defaultdict(set)
+        for target in targets:
+            for key, value in target.section_flavors.items():
+                section_flavors[key].update(value)
+        return Target(name, dependencies, parts, section_dependencies, section_flavors)
 
 
 @attrs(auto_attribs=True)
@@ -84,7 +102,7 @@ class TargetBuilder:
     _local_latex_dir: Path = attrib(init=False)
 
     def __attrs_post_init__(self) -> None:
-        self._local_dir = self._paths.current_dir / self._data["name"]
+        self._local_dir = self._paths.current_dir
         self._local_latex_dir = self._local_dir / "latex"
 
     def build(self) -> Target:
@@ -111,9 +129,8 @@ class TargetBuilder:
             section_dependencies[section_path] = dependencies
         return Target(
             name=self._data["name"],
-            title=self._data["title"],
             dependencies=all_dependencies,
-            sections=sections,
+            parts=[Part(title=self._data["title"], sections=sections)],
             section_dependencies=section_dependencies,
             section_flavors=section_flavors,
         )
@@ -261,6 +278,12 @@ class Targets(Iterable[Target]):
         if not paths.targets.exists():
             raise DeckzException(f"Could not find {paths.targets}.")
         content = yaml_safe_load(paths.targets.read_text(encoding="utf8"))
+        for target_data in content:
+            if target_data["name"] == "all":
+                raise DeckzException(
+                    f"Incorrect targets {paths.targets}: "
+                    '"all" is a reserved target name.'
+                )
         targets = [
             TargetBuilder(data=target, paths=paths).build() for target in content
         ]

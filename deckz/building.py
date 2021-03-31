@@ -1,5 +1,3 @@
-from collections import defaultdict
-from contextlib import ExitStack
 from enum import Enum
 from logging import getLogger, WARN
 from pathlib import Path
@@ -7,7 +5,6 @@ from shutil import copyfile
 from typing import Any, Dict, List, Optional
 
 from attr import attrs
-from PyPDF2 import PdfFileMerger
 from ray import get as ray_get, remote
 
 from deckz.compiling import compile as compiling_compile, CompilePaths, CompileResult
@@ -22,7 +19,6 @@ from deckz.utils import copy_file_if_newer, setup_logging
 class CompileType(Enum):
     Handout = "handout"
     Presentation = "presentation"
-    Print = "print"
     PrintHandout = "print-handout"
 
 
@@ -30,7 +26,7 @@ class CompileType(Enum):
 class CompileItem:
     target: Target
     compile_type: CompileType
-    copy_result: bool
+    toc: bool
 
 
 class Builder:
@@ -56,23 +52,18 @@ class Builder:
 
     def _list_items(self) -> List[CompileItem]:
         to_compile = []
+        all_target = Target.from_targets(self._targets, "all")
+        if self._handout:
+            to_compile.append(CompileItem(all_target, CompileType.Handout, True))
+        if self._print:
+            to_compile.append(CompileItem(all_target, CompileType.PrintHandout, True))
         for target in self._targets:
             if self._presentation:
-                to_compile.append(CompileItem(target, CompileType.Presentation, True))
+                to_compile.append(CompileItem(target, CompileType.Presentation, False))
             if self._handout:
-                to_compile.append(CompileItem(target, CompileType.Handout, True))
-            if self._print:
-                to_compile.append(CompileItem(target, CompileType.PrintHandout, False))
+                to_compile.append(CompileItem(target, CompileType.Handout, False))
         to_compile.sort(key=lambda item: (item.target.name, item.compile_type.value))
         return to_compile
-
-    def _aggregate_compilation_results_by_type(
-        self, compile_results: List[CompileResult], items: List[CompileItem]
-    ) -> Dict[CompileType, bool]:
-        result: Dict[CompileType, bool] = defaultdict(lambda: True)
-        for compile_result, item in zip(compile_results, items):
-            result[item.compile_type] &= compile_result.ok
-        return result
 
     @staticmethod
     def setup_logging(level: int = WARN) -> None:
@@ -95,33 +86,6 @@ class Builder:
         )
         for item, paths, result in zip(items, items_paths, results):
             self._finalize(item, paths, result)
-        ok_by_type = self._aggregate_compilation_results_by_type(results, items)
-        if self._print:
-            if ok_by_type[CompileType.PrintHandout]:
-                self._logger.info(
-                    f"Formatting {len(self._targets)} PDFs into a printable output"
-                )
-                item = CompileItem(None, CompileType.Print, True)
-                items.append(item)
-                paths = self._prepare(item)
-                results.append(
-                    ray_get(compiling_compile.remote(paths.latex, self._settings))
-                )
-                self._finalize(item, paths, result)
-            else:
-                self._logger.warning(
-                    "Preparatory compilations failed. Skipping print output"
-                )
-        if self._handout:
-            if ok_by_type[CompileType.Handout]:
-                self._logger.info(
-                    f"Formatting {len(self._targets)} PDFs into a handout"
-                )
-                self._merge_pdfs(CompileType.Handout, True)
-            else:
-                self._logger.warning(
-                    "Preparatory compilations failed. Skipping handout output"
-                )
         for item, result in zip(items, results):
             if item.target is not None:
                 compilation = f"{item.target.name}/{item.compile_type.value}"
@@ -144,42 +108,15 @@ class Builder:
         name += f"-{compile_type.value}"
         return name.lower()
 
-    def _merge_pdfs(self, compile_type: CompileType, copy_result: bool = True) -> None:
-        build_dir = self._setup_build_dir(None, compile_type)
-        filename = self._get_filename(None, compile_type)
-        build_pdf_path = build_dir / f"{filename}.pdf"
-        output_pdf_path = self._paths.pdf_dir / f"{filename}.pdf"
-        input_pdf_paths = [
-            (
-                self._paths.build_dir
-                / target.name
-                / CompileType.Handout.value
-                / self._get_filename(target, CompileType.Handout)
-            ).with_suffix(".pdf")
-            for target in self._targets
-        ]
-        with ExitStack() as stack, build_pdf_path.open("wb") as fh:
-            merger = PdfFileMerger()
-            input_files = [stack.enter_context(p.open("rb")) for p in input_pdf_paths]
-            for input_file in input_files:
-                merger.append(input_file)
-            merger.write(fh)
-        if copy_result:
-            self._paths.pdf_dir.mkdir(parents=True, exist_ok=True)
-            copyfile(build_pdf_path, output_pdf_path)
-
     def _prepare(self, item: CompileItem) -> CompilePaths:
         build_dir = self._setup_build_dir(item.target, item.compile_type)
         filename = self._get_filename(item.target, item.compile_type)
         latex_path = build_dir / f"{filename}.tex"
         build_pdf_path = latex_path.with_suffix(".pdf")
         output_pdf_path = self._paths.pdf_dir / f"{filename}.pdf"
-        if item.compile_type is CompileType.Print:
-            self._write_print_latex(self._targets, latex_path)
-        else:
-            self._write_main_latex(item.target, item.compile_type, latex_path)
-            copied = self._copy_dependencies(item.target, build_dir)
-            self._render_dependencies(copied, build_dir)
+        self._render_latex(item, latex_path)
+        copied = self._copy_dependencies(item.target, build_dir)
+        self._render_dependencies(copied, build_dir)
         return CompilePaths(
             latex=latex_path, build_pdf=build_pdf_path, output_pdf=output_pdf_path
         )
@@ -190,9 +127,8 @@ class Builder:
         compile_paths: CompilePaths,
         compile_result: CompileResult,
     ) -> None:
-        if compile_item.copy_result and compile_result.ok:
-            self._paths.pdf_dir.mkdir(parents=True, exist_ok=True)
-            copyfile(compile_paths.build_pdf, compile_paths.output_pdf)
+        self._paths.pdf_dir.mkdir(parents=True, exist_ok=True)
+        copyfile(compile_paths.build_pdf, compile_paths.output_pdf)
 
     def _setup_build_dir(
         self, target: Optional[Target], compile_type: CompileType
@@ -210,32 +146,16 @@ class Builder:
             self._setup_link(target_build_dir / item.name, item)
         return target_build_dir
 
-    def _write_main_latex(
-        self, target: Target, compile_type: CompileType, output_path: Path
-    ) -> None:
+    def _render_latex(self, item: CompileItem, output_path: Path) -> None:
         self._renderer.render(
             template_path=self._paths.jinja2_main_template,
             output_path=output_path,
             config=self._latex_config,
-            target=target,
-            handout=compile_type in [CompileType.Handout, CompileType.PrintHandout],
-            print=compile_type is CompileType.PrintHandout,
-        )
-
-    def _write_print_latex(self, targets: Targets, output_path: Path) -> None:
-        self._renderer.render(
-            template_path=self._paths.jinja2_print_template,
-            output_path=output_path,
-            pdf_paths=[
-                "../%s/%s/%s"
-                % (
-                    target.name,
-                    CompileType.PrintHandout.value,
-                    self._get_filename(target, CompileType.PrintHandout),
-                )
-                for target in targets
-            ],
-            format="1x2",
+            target=item.target,
+            handout=item.compile_type
+            in [CompileType.Handout, CompileType.PrintHandout],
+            toc=item.toc,
+            print=item.compile_type is CompileType.PrintHandout,
         )
 
     def _copy_dependencies(self, target: Target, target_build_dir: Path) -> List[Path]:
@@ -249,9 +169,7 @@ class Builder:
             except ValueError:
                 link_dir = (
                     target_build_dir
-                    / dependency.relative_to(
-                        self._paths.current_dir / target.name
-                    ).parent
+                    / dependency.relative_to(self._paths.current_dir).parent
                 )
             link_dir.mkdir(parents=True, exist_ok=True)
             destination = (link_dir / dependency.name).with_suffix(".tex.j2")

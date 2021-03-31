@@ -67,13 +67,15 @@
 \tableofcontents[subsectionstyle=hide]
 \end{frame}
 
-%% for section in target.sections:
+%% for part in target.parts:
+%% for section in part.sections:
 \section{\V{section.title}}
 %% for section_input in section.inputs:
 %% if section_input.title != None:
 \subsection{\V{subsection}}
 %% endif
 \input{\V{section_input.path}}
+%% endfor
 %% endfor
 %% endfor
 
