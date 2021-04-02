@@ -136,16 +136,17 @@ class TargetBuilder:
         )
 
     def _parse_section_dir(
-        self, section_path: str, custom_config: Dict[str, Any],
+        self, section_path_str: str, custom_config: Dict[str, Any],
     ) -> Optional[Tuple[Section, Dependencies]]:
+        section_path = Path(section_path_str)
         local_section_dir = self._local_latex_dir / section_path
         local_section_config_path = (local_section_dir / section_path).with_suffix(
             ".yml"
         )
         shared_section_dir = self._paths.shared_latex_dir / section_path
-        shared_section_config_path = (shared_section_dir / section_path).with_suffix(
-            ".yml"
-        )
+        shared_section_config_path = (
+            shared_section_dir / section_path.parts[-1]
+        ).with_suffix(".yml")
         if local_section_config_path.exists():
             section_config_path = local_section_config_path
         elif shared_section_config_path.exists():
