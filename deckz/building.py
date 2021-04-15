@@ -1,11 +1,12 @@
+from concurrent.futures import ProcessPoolExecutor
 from enum import Enum
-from logging import getLogger, WARN
+from functools import partial
+from logging import getLogger
 from pathlib import Path
 from shutil import copyfile
 from typing import Any, Dict, List, Optional
 
 from attr import attrs
-from ray import get as ray_get, remote
 
 from deckz.compiling import compile as compiling_compile, CompilePaths, CompileResult
 from deckz.exceptions import DeckzException
@@ -13,7 +14,7 @@ from deckz.paths import Paths
 from deckz.rendering import Renderer
 from deckz.settings import Settings
 from deckz.targets import Target, Targets
-from deckz.utils import copy_file_if_newer, setup_logging
+from deckz.utils import copy_file_if_newer
 
 
 class CompileType(Enum):
@@ -65,10 +66,6 @@ class Builder:
         to_compile.sort(key=lambda item: (item.target.name, item.compile_type.value))
         return to_compile
 
-    @staticmethod
-    def setup_logging(level: int = WARN) -> None:
-        setup_logging(level)
-
     def build(self) -> bool:
         items = self._list_items()
         n_outputs = (
@@ -78,12 +75,11 @@ class Builder:
         )
         self._logger.info(f"Building {len(items)} PDFs used in {n_outputs} outputs")
         items_paths = [self._prepare(item) for item in items]
-        results = ray_get(
-            [
-                compiling_compile.remote(item_paths.latex, self._settings)
-                for item_paths in items_paths
-            ]
-        )
+        with ProcessPoolExecutor() as executor:
+            results = executor.map(
+                partial(compiling_compile, settings=self._settings),
+                (item_path.latex for item_path in items_paths),
+            )
         for item, paths, result in zip(items, items_paths, results):
             self._finalize(item, paths, result)
         for item, result in zip(items, results):
@@ -208,6 +204,3 @@ class Builder:
             )
         source.parent.mkdir(parents=True, exist_ok=True)
         source.symlink_to(target)
-
-
-RemoteBuilder = remote(Builder)

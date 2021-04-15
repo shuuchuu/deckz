@@ -1,11 +1,11 @@
+from concurrent.futures import ProcessPoolExecutor
 from contextlib import redirect_stdout
+from functools import partial
 from itertools import chain
 from logging import getLogger
 from pathlib import Path
 from shutil import copyfile
 from tempfile import TemporaryDirectory
-
-from ray import get as ray_get
 
 from deckz.compiling import compile as compiling_compile, CompilePaths
 from deckz.paths import GlobalPaths
@@ -39,12 +39,12 @@ class StandalonesBuilder:
             for item in items:
                 self._prepare(*item, build_path)
 
-            results = ray_get(
-                [
-                    compiling_compile.remote(paths.latex, self._settings)
-                    for _, paths in items
-                ]
-            )
+            with ProcessPoolExecutor() as executor:
+                results = executor.map(
+                    partial(compiling_compile, settings=self._settings),
+                    (item_path.latex for _, item_path in items),
+                )
+
             for (_, paths), result in zip(items, results):
                 if result.ok:
                     paths.output_pdf.parent.mkdir(parents=True, exist_ok=True)
