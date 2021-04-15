@@ -5,10 +5,10 @@ from deckz.running import run_all as running_run_all
 
 
 @app.command()
-def run_all(
-    handout: bool = True,
+def check_all(
+    handout: bool = False,
     presentation: bool = True,
-    print: bool = True,
+    print: bool = False,
     directory: Path = Path("."),
 ) -> None:
     """Compile all shared slides."""

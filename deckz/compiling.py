@@ -3,7 +3,6 @@ from subprocess import run
 from typing import Optional
 
 from attr import attrib, attrs
-from ray import remote
 
 from deckz.settings import Settings
 
@@ -22,7 +21,6 @@ class CompileResult:
     stderr: Optional[str] = attrib(default="")
 
 
-@remote
 def compile(latex_path: Path, settings: Settings) -> CompileResult:
     completed_process = run(
         settings.build_command + [latex_path.name],

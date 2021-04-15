@@ -1,9 +1,9 @@
 from importlib import import_module, invalidate_caches as importlib_invalidate_caches
+from logging import basicConfig, INFO
 from pkgutil import walk_packages
 
+from rich.logging import RichHandler
 from typer import Typer
-
-from deckz.utils import setup_logging
 
 
 app = Typer(
@@ -14,7 +14,12 @@ app = Typer(
 
 
 def main() -> None:
-    setup_logging()
+    basicConfig(
+        level=INFO,
+        format="%(message)s",
+        datefmt="%H:%M:%S",
+        handlers=[RichHandler(rich_tracebacks=True)],
+    )
     _import_module_and_submodules(__name__)
     app()
 

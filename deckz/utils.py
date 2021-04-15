@@ -1,10 +1,8 @@
 from itertools import chain
-from logging import INFO
 from pathlib import Path
 from shutil import copyfile
 from typing import FrozenSet, Optional
 
-from coloredlogs import install
 from git import Repo
 from git.exc import InvalidGitRepositoryError
 from yaml import safe_load
@@ -44,7 +42,3 @@ def copy_file_if_newer(original: Path, copy: Path) -> None:
     else:
         copy.parent.mkdir(parents=True, exist_ok=True)
         copyfile(original, copy)
-
-
-def setup_logging(level: int = INFO) -> None:
-    install(level=level, fmt="%(asctime)s %(name)s %(message)s", datefmt="%H:%M:%S")
