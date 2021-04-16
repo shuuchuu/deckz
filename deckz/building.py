@@ -1,14 +1,13 @@
-from concurrent.futures import ProcessPoolExecutor
 from enum import Enum
-from functools import partial
 from logging import getLogger
+from multiprocessing import cpu_count, Pool
 from pathlib import Path
 from shutil import copyfile
 from typing import Any, Dict, List, Optional
 
 from attr import attrs
 
-from deckz.compiling import compile as compiling_compile, CompilePaths, CompileResult
+from deckz.compiling import compile as compiling_compile, CompileResult
 from deckz.exceptions import DeckzException
 from deckz.paths import Paths
 from deckz.rendering import Renderer
@@ -74,14 +73,8 @@ class Builder:
             + int(self._print)
         )
         self._logger.info(f"Building {len(items)} PDFs used in {n_outputs} outputs")
-        items_paths = [self._prepare(item) for item in items]
-        with ProcessPoolExecutor() as executor:
-            results = executor.map(
-                partial(compiling_compile, settings=self._settings),
-                (item_path.latex for item_path in items_paths),
-            )
-        for item, paths, result in zip(items, items_paths, results):
-            self._finalize(item, paths, result)
+        with Pool(min(cpu_count(), len(items))) as pool:
+            results = pool.map(self._build_item, items)
         for item, result in zip(items, results):
             if item.target is not None:
                 compilation = f"{item.target.name}/{item.compile_type.value}"
@@ -104,7 +97,7 @@ class Builder:
         name += f"-{compile_type.value}"
         return name.lower()
 
-    def _prepare(self, item: CompileItem) -> CompilePaths:
+    def _build_item(self, item: CompileItem) -> CompileResult:
         build_dir = self._setup_build_dir(item.target, item.compile_type)
         filename = self._get_filename(item.target, item.compile_type)
         latex_path = build_dir / f"{filename}.tex"
@@ -113,18 +106,11 @@ class Builder:
         self._render_latex(item, latex_path)
         copied = self._copy_dependencies(item.target, build_dir)
         self._render_dependencies(copied, build_dir)
-        return CompilePaths(
-            latex=latex_path, build_pdf=build_pdf_path, output_pdf=output_pdf_path
-        )
-
-    def _finalize(
-        self,
-        compile_item: CompileItem,
-        compile_paths: CompilePaths,
-        compile_result: CompileResult,
-    ) -> None:
-        self._paths.pdf_dir.mkdir(parents=True, exist_ok=True)
-        copyfile(compile_paths.build_pdf, compile_paths.output_pdf)
+        result = compiling_compile(latex_path, self._settings)
+        if result.ok:
+            self._paths.pdf_dir.mkdir(parents=True, exist_ok=True)
+            copyfile(build_pdf_path, output_pdf_path)
+        return result
 
     def _setup_build_dir(
         self, target: Optional[Target], compile_type: CompileType
