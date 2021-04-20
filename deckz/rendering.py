@@ -5,12 +5,28 @@ from os.path import join as path_join
 from pathlib import Path
 from shutil import move
 from tempfile import NamedTemporaryFile
-from typing import Any, List
+from typing import Any, Callable, List, Tuple
 
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import BaseLoader, Environment, TemplateNotFound
 from yaml import safe_load
 
 from deckz.paths import Paths
+
+
+class AbsoluteLoader(BaseLoader):
+    def get_source(
+        self, environment: Environment, template: str
+    ) -> Tuple[str, str, Callable[[], bool]]:
+        template_path = Path(template)
+        if not template_path.exists():
+            raise TemplateNotFound(template)
+        mtime = template_path.stat().st_mtime
+        source = template_path.read_text(encoding="utf8")
+        return (
+            source,
+            str(template_path),
+            lambda: mtime == template_path.stat().st_mtime,
+        )
 
 
 class Renderer:
@@ -20,11 +36,7 @@ class Renderer:
     def render(
         self, *, template_path: Path, output_path: Path, **template_kwargs: Any
     ) -> None:
-        if template_path.is_absolute():
-            template_path_string = str(template_path.relative_to(self._paths.git_dir))
-        else:
-            template_path_string = str(template_path)
-        template = self._env.get_template(template_path_string)
+        template = self._env.get_template(str(template_path))
         try:
             with NamedTemporaryFile("w", encoding="utf8", delete=False) as fh:
                 fh.write(template.render(**template_kwargs))
@@ -40,7 +52,7 @@ class Renderer:
     @cached_property
     def _env(self) -> Environment:
         env = Environment(
-            loader=FileSystemLoader(searchpath=self._paths.git_dir),
+            loader=AbsoluteLoader(),
             block_start_string=r"\BLOCK{",
             block_end_string="}",
             variable_start_string=r"\V{",
