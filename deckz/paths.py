@@ -1,6 +1,6 @@
 from logging import getLogger
 from pathlib import Path
-from typing import Dict, Type, TypeVar, Union
+from typing import Container, Dict, Type, TypeVar, Union
 
 from appdirs import user_config_dir as appdirs_user_config_dir
 from attr import attrib, attrs
@@ -51,8 +51,8 @@ class GlobalPaths:
     def __attrs_post_init__(self) -> None:
         self.user_config_dir.mkdir(parents=True, exist_ok=True)
 
-    @staticmethod
-    def _defaults(current_dir: Path) -> Dict[str, Path]:
+    @classmethod
+    def _defaults_global_paths(cls, current_dir: Path) -> Dict[str, Path]:
         current_dir = current_dir.resolve()
         git_dir = get_git_dir(current_dir)
         shared_dir = git_dir / "shared"
@@ -91,9 +91,12 @@ class GlobalPaths:
 
     @classmethod
     def from_defaults(
-        cls: Type[_GlobalPathsType], current_dir: Path
+        cls: Type[_GlobalPathsType],
+        current_dir: Path,
+        check_depth: bool = True,
+        **kwargs: Path,
     ) -> _GlobalPathsType:
-        return cls(**cls._defaults(current_dir))
+        return cls(**{**cls._defaults_global_paths(current_dir), **kwargs})
 
 
 _PathsType = TypeVar("_PathsType", bound="Paths")
@@ -109,24 +112,49 @@ class Paths(GlobalPaths):
     targets: Path = attrib(converter=_path_converter)
 
     @classmethod
-    def _defaults(cls, current_dir: Path) -> Dict[str, Path]:
-        defaults = super()._defaults(current_dir)
-        if not defaults["current_dir"].relative_to(defaults["git_dir"]).match("*/*"):
+    def _defaults_paths(
+        cls, current_dir: Path, check_depth: bool, skip: Container[str]
+    ) -> Dict[str, Path]:
+        defaults = super()._defaults_global_paths(current_dir)
+        if check_depth and not defaults["current_dir"].relative_to(
+            defaults["git_dir"]
+        ).match("*/*"):
             raise DeckzException(
                 f"Not deep enough from root {defaults['git_dir']}. "
                 "Please follow the directory hierarchy root > company > deck and "
                 "invoke this tool from the deck directory."
             )
-        additional_defaults = dict(
-            build_dir=defaults["current_dir"] / ".build",
-            pdf_dir=defaults["current_dir"] / "pdf",
-            company_config=(
+        additional_defaults_items = dict(
+            build_dir=lambda: defaults["current_dir"] / ".build",
+            pdf_dir=lambda: defaults["current_dir"] / "pdf",
+            company_config=lambda: (
                 defaults["git_dir"]
                 / defaults["current_dir"].relative_to(defaults["git_dir"]).parts[0]
                 / "company-config.yml"
             ),
-            deck_config=defaults["current_dir"] / "deck-config.yml",
-            session_config=defaults["current_dir"] / "session-config.yml",
-            targets=defaults["current_dir"] / "targets.yml",
+            deck_config=lambda: defaults["current_dir"] / "deck-config.yml",
+            session_config=lambda: defaults["current_dir"] / "session-config.yml",
+            targets=lambda: defaults["current_dir"] / "targets.yml",
         )
+        additional_defaults = {
+            key: value_function()
+            for key, value_function in additional_defaults_items.items()
+            if key not in skip
+        }
         return {**defaults, **additional_defaults}
+
+    @classmethod
+    def from_defaults(
+        cls: Type[_PathsType],
+        current_dir: Path,
+        check_depth: bool = True,
+        **kwargs: Path,
+    ) -> _PathsType:
+        return cls(
+            **{
+                **cls._defaults_paths(
+                    current_dir, check_depth=check_depth, skip=kwargs,
+                ),
+                **kwargs,
+            }
+        )

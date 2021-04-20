@@ -9,7 +9,7 @@ from watchdog.observers import Observer
 
 from deckz.exceptions import DeckzException
 from deckz.paths import GlobalPaths, Paths
-from deckz.running import run, run_standalones
+from deckz.running import run, run_file, run_standalones
 
 
 _logger = getLogger(__name__)
@@ -81,6 +81,33 @@ class _RunnerEventHandler(_BaseEventHandler):
         )
 
 
+class _FileRunnerEventHandler(_BaseEventHandler):
+    def __init__(
+        self,
+        minimum_delay: int,
+        latex: str,
+        paths: Paths,
+        build_handout: bool,
+        build_presentation: bool,
+        build_print: bool,
+    ):
+        super().__init__(minimum_delay)
+        self._latex = latex
+        self._paths = paths
+        self._build_handout = build_handout
+        self._build_presentation = build_presentation
+        self._build_print = build_print
+
+    def run(self) -> None:
+        run_file(
+            latex=self._latex,
+            paths=self._paths,
+            build_handout=self._build_handout,
+            build_presentation=self._build_presentation,
+            build_print=self._build_print,
+        )
+
+
 class _StandalonesRunnerEventHandler(_BaseEventHandler):
     def __init__(self, minimum_delay: int, current_dir: Path):
         super().__init__(minimum_delay)
@@ -130,7 +157,7 @@ def watch(
     build_print: bool,
     target_whitelist: Optional[List[str]],
 ) -> None:
-    _logger.info("Watching the shared, current, user and templates directories")
+    _logger.info("Watching the shared, current and user directories")
     _watch(
         _RunnerEventHandler(
             minimum_delay,
@@ -140,14 +167,30 @@ def watch(
             build_print=build_print,
             target_whitelist=target_whitelist,
         ),
-        watch=frozenset(
-            [
-                paths.shared_dir,
-                paths.current_dir,
-                paths.templates_dir,
-                paths.user_config_dir,
-            ]
+        watch=frozenset([paths.shared_dir, paths.current_dir, paths.user_config_dir]),
+        avoid=frozenset([paths.shared_tikz_pdf_dir, paths.pdf_dir, paths.build_dir]),
+    )
+
+
+def watch_file(
+    minimum_delay: int,
+    latex: str,
+    paths: Paths,
+    build_handout: bool,
+    build_presentation: bool,
+    build_print: bool,
+) -> None:
+    _logger.info("Watching the shared and user directories")
+    _watch(
+        _FileRunnerEventHandler(
+            minimum_delay,
+            latex,
+            paths,
+            build_handout=build_handout,
+            build_presentation=build_presentation,
+            build_print=build_print,
         ),
+        watch=frozenset([paths.shared_dir, paths.user_config_dir]),
         avoid=frozenset([paths.shared_tikz_pdf_dir, paths.pdf_dir, paths.build_dir]),
     )
 

@@ -279,15 +279,22 @@ class Targets(Iterable[Target]):
         if not paths.targets.exists():
             raise DeckzException(f"Could not find {paths.targets}.")
         content = yaml_safe_load(paths.targets.read_text(encoding="utf8"))
-        for target_data in content:
+        return cls.from_data(data=content, paths=paths, whitelist=whitelist)
+
+    @classmethod
+    def from_data(
+        cls,
+        data: List[Dict[str, Any]],
+        paths: Paths,
+        whitelist: Optional[List[str]] = None,
+    ) -> "Targets":
+        for target_data in data:
             if target_data["name"] == "all":
                 raise DeckzException(
                     f"Incorrect targets {paths.targets}: "
                     '"all" is a reserved target name.'
                 )
-        targets = [
-            TargetBuilder(data=target, paths=paths).build() for target in content
-        ]
+        targets = [TargetBuilder(data=target, paths=paths).build() for target in data]
         if whitelist is not None:
             cls._filter_targets(targets, frozenset(whitelist), paths)
         return Targets(targets, paths)
