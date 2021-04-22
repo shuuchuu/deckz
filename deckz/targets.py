@@ -80,16 +80,17 @@ class Target:
     name: str
     dependencies: Dependencies
     parts: List[Part]
-    section_dependencies: Dict[str, Dependencies]
+    section_dependencies: DefaultDict[str, Dependencies]
     section_flavors: DefaultDict[str, Set[str]]
 
     @classmethod
     def from_targets(cls, targets: Iterable["Target"], name: str) -> "Target":
         dependencies = Dependencies.merge(*(t.dependencies for t in targets))
         parts = [p for t in targets for p in t.parts]
-        section_dependencies = Dependencies.merge_dicts(
-            *(t.section_dependencies for t in targets)
-        )
+        section_dependencies: DefaultDict[str, Dependencies] = defaultdict(Dependencies)
+        for t in targets:
+            for k, v in t.section_dependencies.items():
+                section_dependencies[k].update(v)
         section_flavors = defaultdict(set)
         for target in targets:
             for key, value in target.section_flavors.items():
@@ -111,14 +112,16 @@ class TargetBuilder:
         all_dependencies = Dependencies()
         all_dependencies.unused.update(self._local_latex_dir.glob("**/*.tex"))
         all_items = []
-        section_dependencies = {}
+        section_dependencies: DefaultDict[str, Dependencies] = defaultdict(Dependencies)
         section_flavors = defaultdict(set)
         for section_config in self._data["sections"]:
             if not isinstance(section_config, dict):
                 section_config = dict(path=section_config)
             section_path = section_config["path"]
             section_flavors[section_path].add(section_config.get("flavor"))
-            result = self._parse_section_dir(section_path, section_config, 0)
+            result = self._parse_section_dir(
+                section_path, section_config, 0, section_flavors, section_dependencies
+            )
             if result is None:
                 result = self._parse_section_file(section_path, section_config, 0)
             if result is not None:
@@ -128,7 +131,7 @@ class TargetBuilder:
                 dependencies = Dependencies()
                 dependencies.missing.add(section_path)
             all_dependencies.update(dependencies)
-            section_dependencies[section_path] = dependencies
+            section_dependencies[section_path].update(dependencies)
         return Target(
             name=self._data["name"],
             dependencies=all_dependencies,
@@ -138,7 +141,12 @@ class TargetBuilder:
         )
 
     def _parse_section_dir(
-        self, section_path_str: str, custom_config: Dict[str, Any], title_level: int
+        self,
+        section_path_str: str,
+        custom_config: Dict[str, Any],
+        title_level: int,
+        section_flavors: DefaultDict[str, Set[str]],
+        section_dependencies: DefaultDict[str, Dependencies],
     ) -> Optional[Tuple[List[ContentOrTitle], Dependencies]]:
         section_path = Path(section_path_str)
         local_section_dir = self._local_latex_dir / section_path
@@ -196,6 +204,8 @@ class TargetBuilder:
                 shared_section_dir=shared_section_dir,
                 section_path_str=section_path_str,
                 title_level=title_level + 1,
+                section_flavors=section_flavors,
+                section_dependencies=section_dependencies,
             )
         return items, dependencies
 
@@ -210,6 +220,8 @@ class TargetBuilder:
         shared_section_dir: Path,
         section_path_str: str,
         title_level: int,
+        section_flavors: DefaultDict[str, Set[str]],
+        section_dependencies: DefaultDict[str, Dependencies],
     ) -> None:
         if isinstance(item, str):
             filename = item
@@ -227,9 +239,16 @@ class TargetBuilder:
                 ".tex"
             )
         elif filename.startswith("$"):
+            nested_section_path = f"{section_path_str}/{filename[1:]}"
             nested_items, nested_dependencies = self._parse_section_dir(
-                f"{section_path_str}/{filename[1:]}", dict(flavor=title), title_level,
+                nested_section_path,
+                dict(flavor=title),
+                title_level,
+                section_flavors,
+                section_dependencies,
             )
+            section_flavors[nested_section_path].add(title)
+            section_dependencies[nested_section_path].update(nested_dependencies)
             items.extend(nested_items)
             dependencies.update(nested_dependencies)
             return
