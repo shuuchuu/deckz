@@ -239,18 +239,16 @@ class TargetBuilder:
                 ".tex"
             )
         elif filename.startswith("$"):
-            nested_section_path = f"{section_path_str}/{filename[1:]}"
-            nested_items, nested_dependencies = self._parse_section_dir(
-                nested_section_path,
-                dict(flavor=title),
-                title_level,
-                section_flavors,
-                section_dependencies,
+            self._process_nested_section(
+                section_path_str=section_path_str,
+                nested_section_path_str=filename,
+                flavor=title,
+                title_level=title_level,
+                section_flavors=section_flavors,
+                section_dependencies=section_dependencies,
+                items=items,
+                dependencies=dependencies,
             )
-            section_flavors[nested_section_path].add(title)
-            section_dependencies[nested_section_path].update(nested_dependencies)
-            items.extend(nested_items)
-            dependencies.update(nested_dependencies)
             return
         else:
             local_path = (local_section_dir / filename).with_suffix(".tex")
@@ -267,6 +265,33 @@ class TargetBuilder:
             dependencies.used.add(shared_path.resolve())
         else:
             dependencies.missing.add(filename)
+
+    def _process_nested_section(
+        self,
+        section_path_str: str,
+        nested_section_path_str: str,
+        flavor: str,
+        title_level: int,
+        section_flavors: DefaultDict[str, Set[str]],
+        section_dependencies: DefaultDict[str, Dependencies],
+        items: List[ContentOrTitle],
+        dependencies: Dependencies,
+    ) -> None:
+        if nested_section_path_str.startswith("$/"):
+            nested_section_path = nested_section_path_str[2:]
+        else:
+            nested_section_path = f"{section_path_str}/{nested_section_path_str[1:]}"
+        nested_items, nested_dependencies = self._parse_section_dir(
+            nested_section_path,
+            dict(flavor=flavor),
+            title_level,
+            section_flavors,
+            section_dependencies,
+        )
+        section_flavors[nested_section_path].add(flavor)
+        section_dependencies[nested_section_path].update(nested_dependencies)
+        items.extend(nested_items)
+        dependencies.update(nested_dependencies)
 
     def _parse_section_file(
         self, section_path: str, config: Dict[str, Any], title_level: int
