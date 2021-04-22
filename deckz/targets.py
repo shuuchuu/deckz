@@ -25,25 +25,20 @@ from deckz.paths import Paths
 _logger = getLogger(__name__)
 
 
-SECTION_YML_VERSION = 3
-
-
 @attrs(auto_attribs=True)
-class SectionInput:
-    path: str = attrib(converter=str)
-    title: Optional[str]
-
-
-@attrs(auto_attribs=True)
-class Section:
+class Title:
     title: str
-    inputs: List[SectionInput] = Factory(list)
+    level: int
+
+
+Content = str
+ContentOrTitle = Union[Content, Title]
 
 
 @attrs(auto_attribs=True)
 class Part:
     title: Optional[str]
-    sections: List[Section] = Factory(list)
+    sections: List[ContentOrTitle] = Factory(list)
 
 
 @attrs(auto_attribs=True)
@@ -52,6 +47,12 @@ class Dependencies:
     missing: Set[str] = Factory(set)
     unused: Set[Path] = Factory(set)
 
+    def update(self, other: "Dependencies") -> None:
+        self.used |= other.used
+        self.missing |= other.missing
+        self.unused |= other.unused - self.used
+        self.unused -= other.used
+
     @staticmethod
     def merge(*dependencies_list: "Dependencies") -> "Dependencies":
         dependencies = Dependencies()
@@ -59,6 +60,7 @@ class Dependencies:
             dependencies.used |= ds.used
             dependencies.missing |= ds.missing
             dependencies.unused |= ds.unused - dependencies.used
+            dependencies.unused -= ds.used
         return dependencies
 
     def merge_dicts(
@@ -78,16 +80,17 @@ class Target:
     name: str
     dependencies: Dependencies
     parts: List[Part]
-    section_dependencies: Dict[str, Dependencies]
+    section_dependencies: DefaultDict[str, Dependencies]
     section_flavors: DefaultDict[str, Set[str]]
 
     @classmethod
     def from_targets(cls, targets: Iterable["Target"], name: str) -> "Target":
         dependencies = Dependencies.merge(*(t.dependencies for t in targets))
         parts = [p for t in targets for p in t.parts]
-        section_dependencies = Dependencies.merge_dicts(
-            *(t.section_dependencies for t in targets)
-        )
+        section_dependencies: DefaultDict[str, Dependencies] = defaultdict(Dependencies)
+        for t in targets:
+            for k, v in t.section_dependencies.items():
+                section_dependencies[k].update(v)
         section_flavors = defaultdict(set)
         for target in targets:
             for key, value in target.section_flavors.items():
@@ -108,36 +111,43 @@ class TargetBuilder:
     def build(self) -> Target:
         all_dependencies = Dependencies()
         all_dependencies.unused.update(self._local_latex_dir.glob("**/*.tex"))
-        sections = []
-        section_dependencies = {}
+        all_items = []
+        section_dependencies: DefaultDict[str, Dependencies] = defaultdict(Dependencies)
         section_flavors = defaultdict(set)
         for section_config in self._data["sections"]:
             if not isinstance(section_config, dict):
                 section_config = dict(path=section_config)
             section_path = section_config["path"]
             section_flavors[section_path].add(section_config.get("flavor"))
-            result = self._parse_section_dir(section_path, section_config)
+            result = self._parse_section_dir(
+                section_path, section_config, 0, section_flavors, section_dependencies
+            )
             if result is None:
-                result = self._parse_section_file(section_path, section_config)
+                result = self._parse_section_file(section_path, section_config, 0)
             if result is not None:
-                section, dependencies = result
-                sections.append(section)
+                items, dependencies = result
+                all_items.extend(items)
             else:
                 dependencies = Dependencies()
                 dependencies.missing.add(section_path)
-            all_dependencies = Dependencies.merge(all_dependencies, dependencies)
-            section_dependencies[section_path] = dependencies
+            all_dependencies.update(dependencies)
+            section_dependencies[section_path].update(dependencies)
         return Target(
             name=self._data["name"],
             dependencies=all_dependencies,
-            parts=[Part(title=self._data["title"], sections=sections)],
+            parts=[Part(title=self._data["title"], sections=all_items)],
             section_dependencies=section_dependencies,
             section_flavors=section_flavors,
         )
 
     def _parse_section_dir(
-        self, section_path_str: str, custom_config: Dict[str, Any],
-    ) -> Optional[Tuple[Section, Dependencies]]:
+        self,
+        section_path_str: str,
+        custom_config: Dict[str, Any],
+        title_level: int,
+        section_flavors: DefaultDict[str, Set[str]],
+        section_dependencies: DefaultDict[str, Dependencies],
+    ) -> Optional[Tuple[List[ContentOrTitle], Dependencies]]:
         section_path = Path(section_path_str)
         local_section_dir = self._local_latex_dir / section_path
         local_section_config_path = (local_section_dir / section_path).with_suffix(
@@ -147,6 +157,7 @@ class TargetBuilder:
         shared_section_config_path = (
             shared_section_dir / section_path.parts[-1]
         ).with_suffix(".yml")
+        dependencies = Dependencies()
         if local_section_config_path.exists():
             section_config_path = local_section_config_path
         elif shared_section_config_path.exists():
@@ -180,30 +191,37 @@ class TargetBuilder:
             )
 
         flavor = flavors[flavor_name]
-        section = Section(title)
-        dependencies = Dependencies()
+        items: List[ContentOrTitle] = [Title(title=title, level=title_level)]
         default_titles = section_config.get("default_titles")
         for item in flavor:
             self._process_item(
-                item,
-                section,
-                dependencies,
-                default_titles,
-                custom_config,
-                local_section_dir,
-                shared_section_dir,
+                item=item,
+                items=items,
+                dependencies=dependencies,
+                default_titles=default_titles,
+                section_config=custom_config,
+                local_section_dir=local_section_dir,
+                shared_section_dir=shared_section_dir,
+                section_path_str=section_path_str,
+                title_level=title_level + 1,
+                section_flavors=section_flavors,
+                section_dependencies=section_dependencies,
             )
-        return section, dependencies
+        return items, dependencies
 
     def _process_item(
         self,
         item: Union[str, Dict[str, str]],
-        section: Section,
+        items: List[ContentOrTitle],
         dependencies: Dependencies,
         default_titles: Optional[Dict[str, str]],
         section_config: Dict[str, Any],
         local_section_dir: Path,
         shared_section_dir: Path,
+        section_path_str: str,
+        title_level: int,
+        section_flavors: DefaultDict[str, Set[str]],
+        section_dependencies: DefaultDict[str, Dependencies],
     ) -> None:
         if isinstance(item, str):
             filename = item
@@ -220,27 +238,39 @@ class TargetBuilder:
             shared_path = (self._paths.shared_latex_dir / filename[1:]).with_suffix(
                 ".tex"
             )
+        elif filename.startswith("$"):
+            nested_section_path = f"{section_path_str}/{filename[1:]}"
+            nested_items, nested_dependencies = self._parse_section_dir(
+                nested_section_path,
+                dict(flavor=title),
+                title_level,
+                section_flavors,
+                section_dependencies,
+            )
+            section_flavors[nested_section_path].add(title)
+            section_dependencies[nested_section_path].update(nested_dependencies)
+            items.extend(nested_items)
+            dependencies.update(nested_dependencies)
+            return
         else:
             local_path = (local_section_dir / filename).with_suffix(".tex")
             shared_path = (shared_section_dir / filename).with_suffix(".tex")
+        if title is not None:
+            items.append(Title(title=title, level=title_level))
         local_relative_path = local_path.relative_to(self._local_dir)
         shared_relative_path = shared_path.relative_to(self._paths.shared_dir)
         if local_path.exists():
-            section.inputs.append(
-                SectionInput(local_relative_path.with_suffix(""), title)
-            )
+            items.append(str(local_relative_path.with_suffix("")))
             dependencies.used.add(local_path.resolve())
         elif shared_path.exists():
-            section.inputs.append(
-                SectionInput(shared_relative_path.with_suffix(""), title)
-            )
+            items.append(str(shared_relative_path.with_suffix("")))
             dependencies.used.add(shared_path.resolve())
         else:
             dependencies.missing.add(filename)
 
     def _parse_section_file(
-        self, section_path: str, config: Dict[str, Any]
-    ) -> Optional[Tuple[Section, Dependencies]]:
+        self, section_path: str, config: Dict[str, Any], title_level: int
+    ) -> Optional[Tuple[List[ContentOrTitle], Dependencies]]:
         local_section_file = (self._local_latex_dir / section_path).with_suffix(".tex")
         shared_section_file = (self._paths.shared_latex_dir / section_path).with_suffix(
             ".tex"
@@ -254,17 +284,19 @@ class TargetBuilder:
         else:
             return None
         config_file = section_file.with_suffix(".yml")
+        items: List[ContentOrTitle] = []
         if "title" in config:
             title = config["title"]
         elif config_file.exists():
             title = yaml_safe_load(config_file.read_text(encoding="utf8"))["title"]
         else:
             title = None
-        section = Section(title)
-        section.inputs.append(SectionInput(path=relative_path, title=None))
+        if title is not None:
+            items.append(Title(title=title, level=title_level))
+        items.append(str(relative_path))
         dependencies = Dependencies()
         dependencies.used.add(section_file.resolve())
-        return section, dependencies
+        return items, dependencies
 
 
 @attrs(auto_attribs=True)

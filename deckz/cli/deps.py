@@ -15,7 +15,6 @@ from deckz.cli import app
 from deckz.exceptions import DeckzException
 from deckz.paths import GlobalPaths, Paths
 from deckz.targets import Targets
-from deckz.utils import get_section_config_paths
 
 
 @app.command()
@@ -37,8 +36,16 @@ def deps(
             targets_progress, total=len(targets_paths), completed=len(targets_paths)
         )
         progress.start_task(targets_progress)
+        ymls = paths.shared_latex_dir.glob("**/*.yml")
+        section_paths = []
+        for yml in ymls:
+            with yml.open(encoding="utf8") as fh:
+                content = yaml_safe_load(fh)
+                if not isinstance(content, dict):
+                    continue
+                if {"title", "flavors"}.issubset(content):
+                    section_paths.append(yml)
 
-        section_paths = get_section_config_paths(paths.shared_latex_dir)
         progress.update(
             sections_progress, total=len(section_paths), completed=len(section_paths)
         )
@@ -56,7 +63,7 @@ def deps(
     if git:
         _print_changed_report(touched, all_targets_dependencies)
     if unused:
-        _print_unused_report(section_paths, by_sections)
+        _print_unused_report(section_paths, by_sections, paths)
     if section is not None:
         _print_section_report(section, flavor, by_sections)
 
@@ -148,6 +155,7 @@ def _print_changed_report(
 def _print_unused_report(
     section_paths: Iterable[Path],
     by_sections: Mapping[str, Mapping[str, Set[Tuple[str, str]]]],
+    global_paths: GlobalPaths,
 ) -> None:
     console = Console()
     console.print()
@@ -159,7 +167,10 @@ def _print_unused_report(
     for section_path in section_paths:
         with section_path.open(encoding="utf8") as fh:
             section_config = yaml_safe_load(fh)
-        flavors[section_path.parent.name].update(section_config["flavors"])
+        section_name = "/".join(
+            section_path.relative_to(global_paths.shared_latex_dir).parts[:-1]
+        )
+        flavors[section_name].update(section_config["flavors"])
     for section_name, section_flavors in sorted(flavors.items()):
         unused_flavors = [
             flavor
