@@ -5,8 +5,8 @@ from typing import Any, Tuple
 from unittest.mock import patch
 
 import appdirs
-from git import Repo
 from pdfminer.high_level import extract_pages, extract_text
+from pygit2 import init_repository
 from pytest import fixture
 
 from deckz.cli import main
@@ -17,7 +17,7 @@ def working_dir(tmp_path: Path, monkeypatch: Any) -> Path:
     data_dir = Path(__file__).parent / __name__
     tmp_dir = tmp_path / "data"
     copytree(data_dir, tmp_dir)
-    Repo.init(str(tmp_dir))
+    init_repository(str(tmp_dir))
     working_dir = tmp_dir / "company" / "abc"
     monkeypatch.chdir(working_dir)
     monkeypatch.setattr(appdirs, "user_config_dir", lambda _: str(tmp_dir))

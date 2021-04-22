@@ -165,7 +165,10 @@ class Uploader:
         return file.get("id"), file.get("webViewLink")
 
     def _list(
-        self, folder: Optional[bool], parents: List[str], name: Optional[str],
+        self,
+        folder: Optional[bool],
+        parents: List[str],
+        name: Optional[str],
     ) -> List[str]:
         return [item.get("id") for item in self._query(folder, parents, name)]
 

@@ -63,7 +63,10 @@ def run_file(
 
 
 def run_all(
-    directory: Path, build_handout: bool, build_presentation: bool, build_print: bool,
+    directory: Path,
+    build_handout: bool,
+    build_presentation: bool,
+    build_print: bool,
 ) -> None:
 
     paths = GlobalPaths.from_defaults(directory)

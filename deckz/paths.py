@@ -153,7 +153,9 @@ class Paths(GlobalPaths):
         return cls(
             **{
                 **cls._defaults_paths(
-                    current_dir, check_depth=check_depth, skip=kwargs,
+                    current_dir,
+                    check_depth=check_depth,
+                    skip=kwargs,
                 ),
                 **kwargs,
             }
