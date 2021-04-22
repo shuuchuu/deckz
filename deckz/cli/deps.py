@@ -1,10 +1,7 @@
 from collections import defaultdict
-from itertools import chain
 from pathlib import Path
 from typing import DefaultDict, Dict, FrozenSet, Iterable, Mapping, Optional, Set, Tuple
 
-from git import Repo
-from git.exc import InvalidGitRepositoryError
 from rich.console import Console
 from rich.padding import Padding
 from rich.progress import Progress, track
@@ -12,7 +9,6 @@ from rich.table import Table
 from yaml import safe_load as yaml_safe_load
 
 from deckz.cli import app
-from deckz.exceptions import DeckzException
 from deckz.paths import GlobalPaths, Paths
 from deckz.targets import Targets
 
@@ -58,10 +54,6 @@ def deps(
     for targets_path in track(targets_paths, description="Processing targets files"):
         _process_targets(targets_path, all_targets_dependencies, by_sections)
 
-    touched = _get_touched_files(paths)
-
-    if git:
-        _print_changed_report(touched, all_targets_dependencies)
     if unused:
         _print_unused_report(section_paths, by_sections, paths)
     if section is not None:
@@ -106,31 +98,6 @@ def _process_targets(
             target.dependencies.used, paths
         )
         all_targets_dependencies[targets_name][target.name] = shared_dependencies
-
-
-def _get_touched_files(paths: GlobalPaths) -> FrozenSet[str]:
-    try:
-        repository = Repo(str(paths.git_dir))
-        index = repository.index
-        staged_diffs = index.diff("HEAD")
-        unstaged_diffs = index.diff(None)
-        untracked_files = repository.untracked_files
-        touched = set()
-        for diff in chain(staged_diffs, unstaged_diffs):
-            for p in [diff.a_path, diff.b_path]:
-                relative_to_shared_latex = _relative_to_shared_latex(paths, p)
-                if relative_to_shared_latex is not None:
-                    touched.add(relative_to_shared_latex)
-        for untracked_file in untracked_files:
-            relative_to_shared_latex = _relative_to_shared_latex(paths, untracked_file)
-            if relative_to_shared_latex is not None:
-                touched.add(relative_to_shared_latex)
-        return frozenset(touched)
-    except InvalidGitRepositoryError as e:
-        raise DeckzException(
-            "Could not find the path of the current git working directory. "
-            "Are you in one?"
-        ) from e
 
 
 def _print_changed_report(

@@ -11,30 +11,16 @@ jobs:
   style:
     name: Check style conventions and test the package
     runs-on: ubuntu-latest
+    container: nzmognzmp/deckz-ci-worker
     steps:
       - name: Clone repository
         uses: actions/checkout@v2
-      - name: Set up Python 3.8
-        uses: actions/setup-python@v1
-        with:
-          python-version: 3.8
-      - name: Set up Poetry
-        run: curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python
       - name: Install the package
-        run: |
-          python -m venv env
-          source env/bin/activate
-          $HOME/.poetry/bin/poetry install
+        run: /root/.poetry/bin/poetry install
       - name: Test the package style conventions
-        run: |
-          source env/bin/activate
-          make check
-      - name: Install LaTeX
-        run: sudo apt install texlive texlive-xetex latexmk
+        run: /root/.poetry/bin/poetry run make check
       - name: Run the tests
-        run: |
-          source env/bin/activate
-          pytest --cov=./ --cov-report=xml
+        run: /root/.poetry/bin/poetry run pytest --cov=./ --cov-report=xml
       - name: Upload coverage report to Codecov
         uses: codecov/codecov-action@v1
         with:

@@ -35,7 +35,11 @@ def _import_module_and_submodules(package_name: str) -> None:
     path_string = "" if not path else path[0]
 
     for module_finder, name, _ in walk_packages(path):
-        if path_string and module_finder.path != path_string:
+        if (
+            path_string
+            and hasattr(module_finder, "path")
+            and module_finder.path != path_string  # type: ignore
+        ):
             continue
         subpackage = f"{package_name}.{name}"
         _import_module_and_submodules(subpackage)
