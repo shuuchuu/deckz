@@ -10,7 +10,7 @@ def img_deps(
     image: str,
     path: Path = Path("."),
 ) -> None:
-    """Give information about shared modules usage."""
+    """Find which latex files use an image."""
     paths = GlobalPaths.from_defaults(path)
     pattern = re_compile(fr'(\\V{{\[?"{image}".*\]? \| image}})')
     shared_latex_dir = paths.shared_latex_dir

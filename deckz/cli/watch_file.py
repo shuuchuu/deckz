@@ -20,7 +20,7 @@ def watch_file(
     minimum_delay: int = 5,
     workdir: Path = Path("."),
 ) -> None:
-    """Compile on change."""
+    """Compile a specific file on change."""
     _logger.info(f"Watching {latex}")
     global_paths = GlobalPaths.from_defaults(workdir)
     with TemporaryDirectory(prefix=f"{app_name}-") as build_dir, TemporaryDirectory(
