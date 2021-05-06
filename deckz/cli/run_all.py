@@ -11,7 +11,7 @@ def run_all(
     print: bool = True,
     directory: Path = Path("."),
 ) -> None:
-    """Compile all shared slides."""
+    """Compile all shared slides (all formats by default)."""
     running_run_all(
         directory=directory,
         build_handout=handout,
