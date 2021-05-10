@@ -12,6 +12,8 @@ class CompilePaths:
     latex: Path
     build_pdf: Path
     output_pdf: Path
+    build_log: Path
+    output_log: Path
 
 
 @attrs(auto_attribs=True, frozen=True)

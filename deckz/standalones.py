@@ -1,13 +1,14 @@
-from concurrent.futures import ProcessPoolExecutor
 from contextlib import redirect_stdout
 from functools import partial
 from itertools import chain
 from logging import getLogger
+from multiprocessing import Pool
 from pathlib import Path
 from shutil import copyfile
 from tempfile import TemporaryDirectory
 
 from deckz.compiling import compile as compiling_compile, CompilePaths
+from deckz.exceptions import DeckzException
 from deckz.paths import GlobalPaths
 from deckz.settings import Settings
 from deckz.utils import copy_file_if_newer
@@ -39,8 +40,8 @@ class StandalonesBuilder:
             for item in items:
                 self._prepare(*item, build_path)
 
-            with ProcessPoolExecutor() as executor:
-                results = executor.map(
+            with Pool() as pool:
+                results = pool.map(
                     partial(compiling_compile, settings=self._settings),
                     (item_path.latex for _, item_path in items),
                 )
@@ -49,11 +50,31 @@ class StandalonesBuilder:
                 if result.ok:
                     paths.output_pdf.parent.mkdir(parents=True, exist_ok=True)
                     copyfile(paths.build_pdf, paths.output_pdf)
+                    paths.output_log.unlink(missing_ok=True)
+                elif paths.build_log.exists():
+                    paths.output_pdf.parent.mkdir(parents=True, exist_ok=True)
+                    copyfile(paths.build_log, paths.output_log)
 
-        for (input_path, _), result in zip(items, results):
+        failed = []
+        for (input_path, paths), result in zip(items, results):
             if not result.ok:
+                failed.append((input_path, paths.output_log))
                 self._logger.warning("Standalone compilation of %s errored", input_path)
                 self._logger.warning("Captured stderr\n%s", result.stderr)
+        if failed:
+            formatted_fails = "\n".join(
+                "- %s (%s)"
+                % (
+                    f.relative_to(self._paths.shared_dir),
+                    "no log" if not l.exists() else "[link=file://%s]log[/link]" % l,
+                )
+                for f, l in failed
+            )
+            raise DeckzException(
+                f"Standalone compilation errored for {len(failed)} files:\n"
+                f"{formatted_fails}\n"
+                "Please also check the errors above."
+            )
 
     def _needs_compile(self, input_file: Path, compile_paths: CompilePaths) -> bool:
         return (
@@ -81,7 +102,15 @@ class StandalonesBuilder:
             self._paths.shared_tikz_pdf_dir
             / input_file.relative_to(self._paths.shared_tikz_dir)
         ).with_suffix(".pdf")
-        return CompilePaths(latex=latex, build_pdf=build_pdf, output_pdf=output_pdf)
+        build_log = latex.with_suffix(".log")
+        output_log = output_pdf.with_suffix(".log")
+        return CompilePaths(
+            latex=latex,
+            build_pdf=build_pdf,
+            output_pdf=output_pdf,
+            build_log=build_log,
+            output_log=output_log,
+        )
 
     def _prepare(
         self, input_file: Path, compile_paths: CompilePaths, build_dir: Path
