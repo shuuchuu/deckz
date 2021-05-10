@@ -6,7 +6,7 @@ homepage = "https://github.com/m09/deckz"
 license = "Apache-2.0"
 name = "deckz"
 readme = "README.md"
-version = "13.3.0"
+version = "13.4.0"
 
 [tool.poetry.dependencies]
 Jinja2 = "^2.11.3"

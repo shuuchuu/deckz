@@ -24,7 +24,6 @@ class StandalonesBuilder:
         self._logger.info("Processing standalones")
         with TemporaryDirectory() as build_dir:
             build_path = Path(build_dir)
-
             items = [
                 (input_path, paths)
                 for input_path in chain(
@@ -38,7 +37,7 @@ class StandalonesBuilder:
             ]
 
             for item in items:
-                self._prepare(*item, build_path)
+                self._prepare(*item)
 
             with Pool() as pool:
                 results = pool.map(
@@ -112,9 +111,13 @@ class StandalonesBuilder:
             output_log=output_log,
         )
 
-    def _prepare(
-        self, input_file: Path, compile_paths: CompilePaths, build_dir: Path
-    ) -> None:
+    def _prepare(self, input_file: Path, compile_paths: CompilePaths) -> None:
+        build_dir = compile_paths.latex.parent
+        build_dir.mkdir(parents=True, exist_ok=True)
+        build_img_dir = build_dir / self._paths.shared_img_dir.name
+        if not build_img_dir.exists():
+            build_img_dir.symlink_to(self._paths.shared_img_dir)
+
         if input_file.suffix == ".py":
             self._generate_latex(input_file, compile_paths.latex)
         elif input_file.suffix == ".tex":
