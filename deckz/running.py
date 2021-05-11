@@ -24,7 +24,7 @@ def run(
 ) -> None:
     config = get_config(paths)
     targets = Targets.from_file(paths=paths, whitelist=target_whitelist)
-    settings = Settings(paths)
+    settings = Settings.from_global_paths(paths)
     StandalonesBuilder(settings, paths).build()
     Builder(
         config,
@@ -49,7 +49,7 @@ def run_file(
         [dict(name="section", title="section", sections=[dict(path=latex)])],
         paths=paths,
     )
-    settings = Settings(paths)
+    settings = Settings.from_global_paths(paths)
     StandalonesBuilder(settings, paths).build()
     Builder(
         config,
@@ -70,7 +70,7 @@ def run_all(
 ) -> None:
 
     paths = GlobalPaths.from_defaults(directory)
-    settings = Settings(paths)
+    settings = Settings.from_global_paths(paths)
     StandalonesBuilder(settings, paths).build()
     targets_paths = list(paths.git_dir.glob("**/targets.yml"))
     with Progress(
@@ -100,6 +100,6 @@ def run_all(
 
 def run_standalones(directory: Path) -> None:
     paths = GlobalPaths.from_defaults(directory)
-    settings = Settings(paths)
+    settings = Settings.from_global_paths(paths)
     standalones_builder = StandalonesBuilder(settings, paths)
     standalones_builder.build()

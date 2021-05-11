@@ -1,24 +1,20 @@
-from collections import ChainMap, OrderedDict
-from logging import getLogger
+from collections import ChainMap
 from pathlib import Path
 from shutil import copy as shutil_copy
 from typing import Any, Dict, Optional
 
-from yaml import safe_load as yaml_safe_load
+from yaml import safe_load
 
 from deckz.exceptions import DeckzException
 from deckz.paths import Paths
 
 
-_logger = getLogger(__name__)
-
-
 def get_config(paths: Paths) -> Dict[str, Any]:
-    return OrderedDict(
-        (k, v)
+    return {
+        k: v
         for k, v in sorted(
             ChainMap(
-                *[
+                *(
                     _get_or_create_config(config_path, template_path)
                     for config_path, template_path in [
                         (paths.session_config, None),
@@ -27,10 +23,10 @@ def get_config(paths: Paths) -> Dict[str, Any]:
                         (paths.user_config, paths.template_user_config),
                         (paths.global_config, paths.template_global_config),
                     ]
-                ],
+                ),
             ).items()
         )
-    )
+    }
 
 
 def _get_or_create_config(
@@ -52,5 +48,4 @@ def _get_or_create_config(
         else:
             return {}
 
-    with open(config_path, "r", encoding="utf8") as fh:
-        return yaml_safe_load(fh)
+    return safe_load(config_path.read_text(encoding="utf8"))
