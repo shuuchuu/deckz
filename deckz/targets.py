@@ -239,6 +239,7 @@ class TargetBuilder:
                 ".tex"
             )
         elif filename.startswith("$"):
+            assert title is not None
             self._process_nested_section(
                 section_path_str=section_path_str,
                 nested_section_path_str=filename,
@@ -281,13 +282,15 @@ class TargetBuilder:
             nested_section_path = nested_section_path_str[2:]
         else:
             nested_section_path = f"{section_path_str}/{nested_section_path_str[1:]}"
-        nested_items, nested_dependencies = self._parse_section_dir(
+        parsed_nested_dir = self._parse_section_dir(
             nested_section_path,
             dict(flavor=flavor),
             title_level,
             section_flavors,
             section_dependencies,
         )
+        assert parsed_nested_dir is not None
+        nested_items, nested_dependencies = parsed_nested_dir
         section_flavors[nested_section_path].add(flavor)
         section_dependencies[nested_section_path].update(nested_dependencies)
         items.extend(nested_items)
