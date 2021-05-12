@@ -74,24 +74,18 @@ class Renderer:
 
     def _img(self, args: List[Any]) -> str:
         if not isinstance(args, list):
-            path = args
-            modifier = ""
-            scale = ""
-        else:
-            if len(args) >= 1:
-                path = args[0]
-                modifier = ""
-                scale = ""
-            if len(args) >= 2:
-                modifier = args[1]
-                scale = "{1}"
-            if len(args) >= 3:
-                scale = "{%.2f}" % args[2]
+            args = [args]
+        path = args[0]
+        modifier = args[1] if len(args) > 1 else ""
+        scale = "{%.2f}" % args[2] if len(args) > 2 else "{1}"
+        lang = args[3] if len(args) > 3 else "fr"
         metadata_path = (self._paths.shared_img_dir / path).with_suffix(".yml")
         info = ""
         if metadata_path.exists():
             metadata = safe_load(metadata_path.read_text(encoding="utf8"))
             info = (
-                f"[{metadata['title']}, {metadata['author']}, {metadata['license']}.]"
+                f"[{metadata['title' if lang == 'fr' else 'title_en']}, "
+                f"{metadata['author']}, "
+                f"{metadata['license']}.]"
             )
-        return r"\img%s%s{%s}%s" % (modifier, info, path, scale)
+        return f"\\img{modifier}{info}{{{path}}}{scale}"
