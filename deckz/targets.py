@@ -16,7 +16,8 @@ from typing import (
 )
 
 from attr import attrib, Attribute, attrs, Factory
-from yaml import safe_load as yaml_safe_load
+from pydantic import BaseModel, ValidationError
+from yaml import safe_load as safe_load
 
 from deckz.exceptions import DeckzException
 from deckz.paths import Paths
@@ -29,6 +30,19 @@ _logger = getLogger(__name__)
 class Title:
     title: str
     level: int
+
+
+class DirSectionConfig(BaseModel):
+    default_titles: Optional[Dict[str, str]]
+    flavors: Dict[str, List[Union[str, Dict[str, Optional[str]]]]]
+    title: str
+
+    @classmethod
+    def from_yaml_file(cls, path: Path) -> "DirSectionConfig":
+        try:
+            return cls.parse_obj(safe_load(path.read_text(encoding="utf8")))
+        except (IOError, ValidationError) as e:
+            raise DeckzException(f"Could not load {path} section config") from e
 
 
 Content = str
@@ -164,11 +178,9 @@ class TargetBuilder:
             section_config_path = shared_section_config_path
         else:
             return None
-        section_config = yaml_safe_load(section_config_path.read_text(encoding="utf8"))
+        section_config = DirSectionConfig.from_yaml_file(section_config_path)
         title = (
-            custom_config["title"]
-            if "title" in custom_config
-            else section_config["title"]
+            custom_config["title"] if "title" in custom_config else section_config.title
         )
         if "flavor" not in custom_config:
             raise DeckzException(
@@ -176,29 +188,22 @@ class TargetBuilder:
                 f"Mandatory flavor not specified in {section_path} configuration."
             )
         flavor_name = custom_config["flavor"]
-        if "flavors" not in section_config:
-            raise DeckzException(
-                f"Incorrect targets {self._paths.targets}. "
-                f"Mandatory dictionary `flavors` not found in {section_config_path}."
-            )
-        flavors = section_config["flavors"]
-        if flavor_name not in flavors:
-            flavors_string = ", ".join("'%s'" % f for f in flavors)
+        if flavor_name not in section_config.flavors:
+            flavors_string = ", ".join("'%s'" % f for f in section_config.flavors)
             raise DeckzException(
                 f"Incorrect targets {self._paths.targets}. "
                 f"'{flavor_name}' not amongst available flavors: {flavors_string} "
                 f"of {section_config_path}."
             )
 
-        flavor = flavors[flavor_name]
+        flavor = section_config.flavors[flavor_name]
         items: List[ContentOrTitle] = [Title(title=title, level=title_level)]
-        default_titles = section_config.get("default_titles")
         for item in flavor:
             self._process_item(
                 item=item,
                 items=items,
                 dependencies=dependencies,
-                default_titles=default_titles,
+                default_titles=section_config.default_titles,
                 section_config=custom_config,
                 local_section_dir=local_section_dir,
                 shared_section_dir=shared_section_dir,
@@ -211,7 +216,7 @@ class TargetBuilder:
 
     def _process_item(
         self,
-        item: Union[str, Dict[str, str]],
+        item: Union[str, Dict[str, Optional[str]]],
         items: List[ContentOrTitle],
         dependencies: Dependencies,
         default_titles: Optional[Dict[str, str]],
@@ -239,6 +244,7 @@ class TargetBuilder:
                 ".tex"
             )
         elif filename.startswith("$"):
+            assert title is not None
             self._process_nested_section(
                 section_path_str=section_path_str,
                 nested_section_path_str=filename,
@@ -281,13 +287,15 @@ class TargetBuilder:
             nested_section_path = nested_section_path_str[2:]
         else:
             nested_section_path = f"{section_path_str}/{nested_section_path_str[1:]}"
-        nested_items, nested_dependencies = self._parse_section_dir(
+        parsed_nested_dir = self._parse_section_dir(
             nested_section_path,
             dict(flavor=flavor),
             title_level,
             section_flavors,
             section_dependencies,
         )
+        assert parsed_nested_dir is not None
+        nested_items, nested_dependencies = parsed_nested_dir
         section_flavors[nested_section_path].add(flavor)
         section_dependencies[nested_section_path].update(nested_dependencies)
         items.extend(nested_items)
@@ -313,7 +321,7 @@ class TargetBuilder:
         if "title" in config:
             title = config["title"]
         elif config_file.exists():
-            title = yaml_safe_load(config_file.read_text(encoding="utf8"))["title"]
+            title = safe_load(config_file.read_text(encoding="utf8"))["title"]
         else:
             title = None
         if title is not None:
@@ -335,7 +343,7 @@ class Targets(Iterable[Target]):
     ) -> "Targets":
         if not paths.targets.exists():
             raise DeckzException(f"Could not find {paths.targets}.")
-        content = yaml_safe_load(paths.targets.read_text(encoding="utf8"))
+        content = safe_load(paths.targets.read_text(encoding="utf8"))
         return cls.from_data(data=content, paths=paths, whitelist=whitelist)
 
     @classmethod

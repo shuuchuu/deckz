@@ -62,7 +62,7 @@ class _RunnerEventHandler(_BaseEventHandler):
         build_handout: bool,
         build_presentation: bool,
         build_print: bool,
-        target_whitelist: List[str],
+        target_whitelist: Optional[List[str]],
     ):
         super().__init__(minimum_delay)
         self._paths = paths

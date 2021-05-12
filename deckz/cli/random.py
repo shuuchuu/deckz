@@ -1,7 +1,7 @@
 from logging import getLogger
 from pathlib import Path
 from random import randint
-from typing import List, Optional
+from typing import List
 
 from pydantic import BaseModel
 from sendgrid import SendGridAPIClient
@@ -15,7 +15,7 @@ from deckz.paths import GlobalPaths
 @app.command()
 def random(
     inclusive_end: int,
-    inclusive_start: Optional[int] = 1,
+    inclusive_start: int = 1,
     current_dir: Path = Path("."),
 ) -> None:
     """Roll the dice and email the result."""
