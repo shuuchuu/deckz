@@ -79,13 +79,23 @@ class Renderer:
         modifier = args[1] if len(args) > 1 else ""
         scale = "{%.2f}" % args[2] if len(args) > 2 else "{1}"
         lang = args[3] if len(args) > 3 else "fr"
+
         metadata_path = (self._paths.shared_img_dir / path).with_suffix(".yml")
-        info = ""
         if metadata_path.exists():
             metadata = safe_load(metadata_path.read_text(encoding="utf8"))
-            info = (
-                f"[{metadata['title' if lang == 'fr' else 'title_en']}, "
-                f"{metadata['author']}, "
-                f"{metadata['license']}.]"
-            )
+
+            def get_en_or_fr(key: str) -> str:
+                if lang != "fr":
+                    key_en = f"{key}_en"
+                    return metadata[key_en] if key_en in metadata else metadata[key]
+                else:
+                    return metadata[key]
+
+            title = get_en_or_fr("title")
+            author = get_en_or_fr("author")
+            license = get_en_or_fr("license")
+            info = f"[{title}, {author}, {license}.]"
+        else:
+            info = ""
+
         return f"\\img{modifier}{info}{{{path}}}{scale}"
