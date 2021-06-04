@@ -60,7 +60,6 @@ class GlobalPaths:
         yml_templates_dir = templates_dir / "yml"
         jinja2_dir = templates_dir / "jinja2"
         user_config_dir = Path(appdirs_user_config_dir(app_name))
-        shared_tikz_dir = shared_dir / "tikz"
         return dict(
             current_dir=current_dir,
             git_dir=git_dir,
@@ -69,12 +68,12 @@ class GlobalPaths:
             yml_templates_dir=yml_templates_dir,
             jinja2_dir=jinja2_dir,
             user_config_dir=user_config_dir,
-            shared_tikz_dir=shared_tikz_dir,
+            shared_tikz_dir=shared_dir / "tikz-src",
+            shared_tikz_pdf_dir=shared_dir / "tikz",
             settings=git_dir / "settings.yml",
             shared_img_dir=shared_dir / "img",
             shared_code_dir=shared_dir / "code",
             shared_latex_dir=shared_dir / "latex",
-            shared_tikz_pdf_dir=shared_tikz_dir / "pdf",
             template_global_config=yml_templates_dir / "global-config.yml",
             template_user_config=yml_templates_dir / "user-config.yml",
             template_company_config=yml_templates_dir / "company-config.yml",
