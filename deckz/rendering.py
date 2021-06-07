@@ -80,7 +80,7 @@ class Renderer:
         scale = "{%.2f}" % args[2] if len(args) > 2 else "{1}"
         lang = args[3] if len(args) > 3 else "fr"
 
-        metadata_path = (self._paths.shared_img_dir / path).with_suffix(".yml")
+        metadata_path = (self._paths.shared_dir / path).with_suffix(".yml")
         if metadata_path.exists():
             metadata = safe_load(metadata_path.read_text(encoding="utf8"))
 
