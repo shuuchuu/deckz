@@ -18,6 +18,7 @@ RUN apt update \
   && apt-get autoremove --purge -y \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* \
-  && curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python
+  && curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/install-poetry.py | python - \
+  && ln -s /root/.local/bin/poetry /usr/bin
 
 ENTRYPOINT ["/bin/bash"]
