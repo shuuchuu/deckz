@@ -15,13 +15,12 @@ from typing import (
     Union,
 )
 
-from attr import attrib, Attribute, attrs, Factory
+from attr import Attribute, Factory, attrib, attrs
 from pydantic import BaseModel, ValidationError
 from yaml import safe_load as safe_load
 
 from deckz.exceptions import DeckzException
 from deckz.paths import Paths
-
 
 _logger = getLogger(__name__)
 

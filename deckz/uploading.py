@@ -1,6 +1,7 @@
 from logging import getLogger
 from pathlib import Path
-from pickle import dump as pickle_dump, load as pickle_load
+from pickle import dump as pickle_dump
+from pickle import load as pickle_load
 from typing import Any, Dict, List, Optional, Tuple
 
 from google.auth.transport.requests import Request

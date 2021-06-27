@@ -9,7 +9,6 @@ from deckz import app_name
 from deckz.exceptions import DeckzException
 from deckz.utils import get_git_dir
 
-
 _logger = getLogger(__name__)
 
 

@@ -7,7 +7,8 @@ from pathlib import Path
 from shutil import copyfile
 from tempfile import TemporaryDirectory
 
-from deckz.compiling import compile as compiling_compile, CompilePaths
+from deckz.compiling import CompilePaths
+from deckz.compiling import compile as compiling_compile
 from deckz.exceptions import DeckzException
 from deckz.paths import GlobalPaths
 from deckz.settings import Settings

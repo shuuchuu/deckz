@@ -29,7 +29,7 @@ black = "^21.5b1"
 flake8 = "^3.9.2"
 flake8-bugbear = "^21.4.3"
 flake8-docstrings = "^1.6.0"
-flake8-import-order = "^0.18.1"
+isort = "^5.9.1"
 mypy = "^0.812"
 "pdfminer.six" = "^20201018"
 pylint = "^2.8.2"
@@ -38,6 +38,9 @@ pytest-cov = "^2.11.1"
 
 [tool.poetry.scripts]
 deckz = 'deckz.cli:main'
+
+[tool.isort]
+profile = "black"
 
 [build-system]
 build-backend = "poetry.masonry.api"

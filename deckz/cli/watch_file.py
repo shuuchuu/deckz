@@ -7,7 +7,6 @@ from deckz.cli import app
 from deckz.paths import GlobalPaths, Paths
 from deckz.watching import watch_file as watching_watch_file
 
-
 _logger = getLogger(__name__)
 
 

@@ -11,7 +11,6 @@ from deckz.exceptions import DeckzException
 from deckz.paths import GlobalPaths, Paths
 from deckz.running import run, run_file, run_standalones
 
-
 _logger = getLogger(__name__)
 
 

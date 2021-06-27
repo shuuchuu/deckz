@@ -5,7 +5,6 @@ from deckz.cli import app
 from deckz.paths import Paths
 from deckz.uploading import Uploader
 
-
 _logger = getLogger(__name__)
 
 
