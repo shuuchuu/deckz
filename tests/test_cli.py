@@ -1,6 +1,6 @@
+import sys  # noqa: F401
 from pathlib import Path
 from shutil import copytree
-import sys  # noqa: F401
 from typing import Any, Tuple
 from unittest.mock import patch
 

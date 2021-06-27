@@ -8,7 +8,6 @@ from deckz.cli import app
 from deckz.paths import Paths
 from deckz.watching import watch as watching_watch
 
-
 _logger = getLogger(__name__)
 
 

@@ -1,10 +1,10 @@
-from importlib import import_module, invalidate_caches as importlib_invalidate_caches
-from logging import basicConfig, INFO
+from importlib import import_module
+from importlib import invalidate_caches as importlib_invalidate_caches
+from logging import INFO, basicConfig
 from pkgutil import walk_packages
 
 from rich.logging import RichHandler
 from typer import Typer
-
 
 app = Typer(
     help="Tool to handle a large number of beamer decks, "

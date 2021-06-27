@@ -11,7 +11,6 @@ from deckz.settings import Settings
 from deckz.standalones import StandalonesBuilder
 from deckz.targets import Targets
 
-
 _logger = getLogger(__name__)
 
 

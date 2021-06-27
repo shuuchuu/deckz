@@ -1,13 +1,14 @@
 from enum import Enum
 from logging import getLogger
-from multiprocessing import cpu_count, Pool
+from multiprocessing import Pool, cpu_count
 from pathlib import Path
 from shutil import copyfile
 from typing import Any, Dict, List, Optional
 
 from attr import attrs
 
-from deckz.compiling import compile as compiling_compile, CompileResult
+from deckz.compiling import CompileResult
+from deckz.compiling import compile as compiling_compile
 from deckz.exceptions import DeckzException
 from deckz.paths import Paths
 from deckz.rendering import Renderer

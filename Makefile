@@ -1,5 +1,6 @@
 check:
 	black --check deckz
+	isort --check-only deckz
 	mypy deckz
 	flake8 --count deckz
 	pylint deckz
