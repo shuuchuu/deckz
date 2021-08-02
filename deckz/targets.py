@@ -1,6 +1,6 @@
 from collections import defaultdict
 from logging import getLogger
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import (
     Any,
     DefaultDict,
@@ -263,10 +263,10 @@ class TargetBuilder:
         local_relative_path = local_path.relative_to(self._local_dir)
         shared_relative_path = shared_path.relative_to(self._paths.shared_dir)
         if local_path.exists():
-            items.append(str(local_relative_path.with_suffix("")))
+            items.append(str(PurePosixPath(local_relative_path.with_suffix(""))))
             dependencies.used.add(local_path.resolve())
         elif shared_path.exists():
-            items.append(str(shared_relative_path.with_suffix("")))
+            items.append(str(PurePosixPath(shared_relative_path.with_suffix(""))))
             dependencies.used.add(shared_path.resolve())
         else:
             dependencies.missing.add(filename)
@@ -325,7 +325,7 @@ class TargetBuilder:
             title = None
         if title is not None:
             items.append(Title(title=title, level=title_level))
-        items.append(str(relative_path))
+        items.append(str(PurePosixPath(relative_path)))
         dependencies = Dependencies()
         dependencies.used.add(section_file.resolve())
         return items, dependencies
