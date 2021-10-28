@@ -4,6 +4,9 @@ from random import choice
 from typing import Dict
 
 from pydantic import BaseModel, EmailStr
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.prompt import Prompt
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 from yaml import safe_load
@@ -20,14 +23,38 @@ def random(
     """Roll the dice and email the result."""
     logger = getLogger(__name__)
     config = MailsConfig.from_global_paths(GlobalPaths.from_defaults(current_dir))
+    console = Console()
     names = list(config.to)
-    name = choice(names)
-    logger.info(f"I've drawn {name} randomly from {', '.join(names)}")
+    names_list_str = "\n".join(
+        f"{i}. {name} <{config.to[name]}>" for i, name in enumerate(names, start=1)
+    )
+    console.print(Markdown(f"Here are the possible participants:\n\n{names_list_str}"))
+    print()
+    ok = False
+    while not ok:
+        answer = Prompt().ask(
+            "Please enter a comma separated list of numbers to select participants "
+            f"(default: {', '.join(map(str, range(1, len(names) + 1)))})"
+        )
+        numbers_str = answer.split(",")
+        try:
+            numbers = [int(number_str.strip()) for number_str in numbers_str]
+            if not all(0 < n <= len(names) for n in numbers):
+                raise ValueError(
+                    "All numbers should be between 1 and the number of participants"
+                )
+            ok = True
+        except Exception:
+            console.print("Could not parse your selection, please try again.")
+    selected_names = [names[i - 1] for i in numbers]
+    name = choice(selected_names)
+    draw_info = f"{name} was drawn randomly from {', '.join(selected_names)}"
+    logger.info(draw_info)
     sendgrid_email = Mail(
         from_email=config.mail,
         to_emails=list(config.to.values()),
         subject=f"[deckz random] {reason}: {name} got picked",
-        plain_text_content="See subject :)",
+        plain_text_content=draw_info,
     )
     client = SendGridAPIClient(config.api_key)
     client.send(sendgrid_email)
