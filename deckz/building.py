@@ -49,7 +49,7 @@ class Builder:
         self._handout = build_handout
         self._print = build_print
         self._logger = getLogger(__name__)
-        self._renderer = Renderer(paths)
+        self._renderer = Renderer(paths, settings)
 
     def _list_items(self) -> List[CompileItem]:
         to_compile = []
