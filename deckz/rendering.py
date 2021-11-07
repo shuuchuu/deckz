@@ -11,6 +11,7 @@ from jinja2 import BaseLoader, Environment, TemplateNotFound
 from yaml import safe_load
 
 from deckz.paths import Paths
+from deckz.settings import Settings
 
 
 class AbsoluteLoader(BaseLoader):
@@ -30,8 +31,9 @@ class AbsoluteLoader(BaseLoader):
 
 
 class Renderer:
-    def __init__(self, paths: Paths):
+    def __init__(self, paths: Paths, settings: Settings):
         self._paths = paths
+        self._settings = settings
 
     def render(
         self, *, template_path: Path, output_path: Path, **template_kwargs: Any
@@ -91,9 +93,15 @@ class Renderer:
                 else:
                     return metadata[key]
 
-            title = get_en_or_fr("title")
-            author = get_en_or_fr("author")
-            license = get_en_or_fr("license")
+            title = self._settings.default_img_values.title.get_default(
+                get_en_or_fr("title"), lang
+            )
+            author = self._settings.default_img_values.author.get_default(
+                get_en_or_fr("author"), lang
+            )
+            license = self._settings.default_img_values.license.get_default(
+                get_en_or_fr("license"), lang
+            )
             info = f"[{title}, {author}, {license}.]"
         else:
             info = ""
