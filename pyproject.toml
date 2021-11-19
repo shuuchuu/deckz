@@ -2,7 +2,7 @@
 authors = ["m09 <142691+m09@users.noreply.github.com>"]
 classifiers = ["Topic :: Software Development :: Build Tools"]
 description = "Tool to handle multiple beamer decks."
-homepage = "https://github.com/nzmognzmp/deckz"
+homepage = "https://github.com/mlambda/deckz"
 license = "Apache-2.0"
 name = "deckz"
 readme = "README.md"
