@@ -137,8 +137,7 @@ def _watch(
     event_handler()
     observer.start()
     try:
-        while observer.isAlive():
-            observer.join(1)
+        observer.join()
     except KeyboardInterrupt:
         observer.stop()
         observer.join()
