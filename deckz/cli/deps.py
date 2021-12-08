@@ -6,6 +6,7 @@ from rich.console import Console
 from rich.padding import Padding
 from rich.progress import Progress, track
 from rich.table import Table
+from typer import Argument, Option
 from yaml import safe_load as yaml_safe_load
 
 from deckz.cli import app
@@ -15,14 +16,15 @@ from deckz.targets import Targets
 
 @app.command()
 def deps(
-    unused: bool = True,
-    git: bool = True,
-    section: Optional[str] = None,
-    flavor: Optional[str] = None,
-    path: Path = Path("."),
+    section: Optional[str] = Argument(None, help="Section to study"),
+    flavor: Optional[str] = Argument(None, help="Flavor to study"),
+    unused: bool = Option(True, help="Display the unused flavors"),
+    workdir: Path = Option(
+        Path("."), help="Path to move into before running the command"
+    ),
 ) -> None:
-    """Give information about shared modules usage."""
-    paths = GlobalPaths.from_defaults(path)
+    """Display information about shared sections and flavors usage."""
+    paths = GlobalPaths.from_defaults(workdir)
     with Progress() as progress:
         targets_progress = progress.add_task("Retrieving targets files", start=False)
         sections_progress = progress.add_task("Retrieving section files", start=False)
