@@ -2,7 +2,7 @@ from logging import getLogger
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from typer import Argument, Option
+from typer import Argument, Option, launch
 
 from deckz import app_name
 from deckz.cli import app
@@ -33,6 +33,7 @@ def watch_file(
             f"Output directory located at [link=file://{pdf_dir}]{pdf_dir}[/link]",
             extra=dict(markup=True),
         )
+        launch(str(pdf_dir))
         watching_watch_file(
             minimum_delay=minimum_delay,
             latex=latex,
