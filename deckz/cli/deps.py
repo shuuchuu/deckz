@@ -16,7 +16,6 @@ from deckz.targets import Targets
 @app.command()
 def deps(
     unused: bool = True,
-    git: bool = True,
     section: Optional[str] = None,
     flavor: Optional[str] = None,
     path: Path = Path("."),
