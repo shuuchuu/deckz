@@ -2,6 +2,8 @@ from logging import getLogger
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from typer import Argument, Option
+
 from deckz import app_name
 from deckz.cli import app
 from deckz.paths import GlobalPaths, Paths
@@ -12,12 +14,14 @@ _logger = getLogger(__name__)
 
 @app.command()
 def watch_file(
-    latex: str,
-    handout: bool = False,
-    presentation: bool = True,
-    print: bool = False,
-    minimum_delay: int = 5,
-    workdir: Path = Path("."),
+    latex: str = Argument(..., help="File to watch, relative to share/latex"),
+    handout: bool = Option(False, help="Produce PDFs without animations"),
+    presentation: bool = Option(True, help="Produce PDFs with animations"),
+    print: bool = Option(False, help="Produce a printable PDF"),
+    minimum_delay: int = Option(5, help="Minimum number of seconds before recompiling"),
+    workdir: Path = Option(
+        Path("."), help="Path to move into before running the command"
+    ),
 ) -> None:
     """Compile a specific file on change."""
     _logger.info(f"Watching {latex}")
