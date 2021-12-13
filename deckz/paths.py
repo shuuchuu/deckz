@@ -30,6 +30,8 @@ class GlobalPaths:
     shared_latex_dir: Path = attrib(converter=_path_converter)
     shared_tikz_dir: Path = attrib(converter=_path_converter)
     shared_tikz_pdf_dir: Path = attrib(converter=_path_converter)
+    shared_plt_dir: Path = attrib(converter=_path_converter)
+    shared_plt_pdf_dir: Path = attrib(converter=_path_converter)
     templates_dir: Path = attrib(converter=_path_converter)
     yml_templates_dir: Path = attrib(converter=_path_converter)
     template_global_config: Path = attrib(converter=_path_converter)
@@ -67,6 +69,8 @@ class GlobalPaths:
             yml_templates_dir=yml_templates_dir,
             jinja2_dir=jinja2_dir,
             user_config_dir=user_config_dir,
+            shared_plt_dir=shared_dir / "plt-src",
+            shared_plt_pdf_dir=shared_dir / "plt",
             shared_tikz_dir=shared_dir / "tikz-src",
             shared_tikz_pdf_dir=shared_dir / "tikz",
             settings=git_dir / "settings.yml",

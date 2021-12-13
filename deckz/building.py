@@ -124,6 +124,7 @@ class Builder:
         for item in [
             self._paths.shared_img_dir,
             self._paths.shared_tikz_pdf_dir,
+            self._paths.shared_plt_pdf_dir,
             self._paths.shared_code_dir,
         ]:
             self._setup_link(target_build_dir / item.name, item)

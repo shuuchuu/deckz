@@ -6,7 +6,7 @@ homepage = "https://github.com/mlambda/deckz"
 license = "Apache-2.0"
 name = "deckz"
 readme = "README.md"
-version = "16.1.0"
+version = "16.2.0"
 
 [tool.poetry.dependencies]
 Jinja2 = "^2.11.3"
@@ -23,6 +23,7 @@ rich = "^10.1.0"
 sendgrid = "^6.7.0"
 typer = {version = "^0.3.2", extras = ["all"]}
 watchdog = "^2.1.1"
+matplotlib = "^3.5.1"
 
 [tool.poetry.dev-dependencies]
 black = "^21.5b1"
