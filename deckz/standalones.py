@@ -1,23 +1,26 @@
+import sys
 from contextlib import redirect_stdout
 from functools import partial
-from importlib import invalidate_caches, reload
-from importlib.util import module_from_spec, spec_from_file_location
 from itertools import chain
 from logging import getLogger
 from multiprocessing import Pool
 from pathlib import Path
-from shutil import copyfile, rmtree
+from shutil import copyfile
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from typing import Callable, List, Optional, Tuple
 
-import deckz.plot_utils  # noqa: F401
-from deckz.compiling import CompilePaths
-from deckz.compiling import compile as compiling_compile
-from deckz.exceptions import DeckzException
-from deckz.paths import GlobalPaths
-from deckz.plot_utils import _create_tailored_save_function
-from deckz.settings import Settings
-from deckz.utils import copy_file_if_newer
+import matplotlib
+
+matplotlib.use("PDF")
+
+import matplotlib.pyplot as plt  # noqa: E402
+
+from deckz.compiling import CompilePaths  # noqa: E402
+from deckz.compiling import compile as compiling_compile  # noqa: E402
+from deckz.exceptions import DeckzException  # noqa: E402
+from deckz.paths import GlobalPaths  # noqa: E402
+from deckz.settings import Settings  # noqa: E402
+from deckz.utils import copy_file_if_newer, import_module_and_submodules  # noqa: E402
 
 
 class StandalonesBuilder:
@@ -30,6 +33,29 @@ class StandalonesBuilder:
         self.tikz_builder.build()
 
 
+_plt_registry: List[Tuple[Path, Path, Callable[[], None]]] = []
+
+
+def _clear_register() -> None:
+    _plt_registry.clear()
+
+
+def register_plot(
+    name: Optional[str] = None,
+) -> Callable[[Callable[[], None]], Callable[[], None]]:
+    def worker(f: Callable[[], None]) -> Callable[[], None]:
+        _, *submodules, _ = f.__module__.split(".")
+        name = f.__name__.replace("_", "-")
+        output_path = (
+            Path("/".join(s.replace("_", "-") for s in submodules)) / name
+        ).with_suffix(".pdf")
+        python_path = Path(sys.modules[f.__module__].__file__)
+        _plt_registry.append((output_path, python_path, f))
+        return f
+
+    return worker
+
+
 class PltBuilder:
     def __init__(self, settings: Settings, paths: GlobalPaths):
         self._settings = settings
@@ -37,30 +63,37 @@ class PltBuilder:
         self._logger = getLogger(__name__)
 
     def build(self) -> None:
-        self._clean_plt_dir()
-        to_process = self._paths.shared_plt_dir.rglob("*.py")
-        for python_file in to_process:
-            with patch(
-                "deckz.plot_utils.save",
-                new=_create_tailored_save_function(self._paths, python_file),
-            ):
-                spec = spec_from_file_location("mod", python_file)
-                mod = module_from_spec(spec)
-                try:
-                    reload(mod)
-                except Exception:
-                    spec.loader.exec_module(mod)  # type: ignore
+        sys.dont_write_bytecode = True
+        _clear_register()
+        try:
+            import_module_and_submodules("plots")
+        except ModuleNotFoundError:
+            self._logger.warning("Could not fing plots module, will not produce plots.")
+        full_items = [
+            (self._paths.shared_plt_pdf_dir / o, p, f) for o, p, f in _plt_registry
+        ]
+        to_build = [(o, p, f) for o, p, f in full_items if self._needs_compile(p, o)]
 
-    def _clean_plt_dir(self) -> None:
-        files_to_clean = chain(
-            self._paths.shared_plt_dir.rglob("*.pyc"),
-            self._paths.shared_plt_dir.rglob("*.pyo"),
+        if not to_build:
+            return
+
+        self._logger.info(f"Processing {len(to_build)} plot(s) that need recompiling")
+
+        for output_path, python_path, function in to_build:
+            self._build_pdf(python_path, output_path, function)
+
+    def _build_pdf(
+        self, python_path: Path, output_path: Path, function: Callable[[], None]
+    ) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        function()
+        plt.savefig(output_path, bbox_inches="tight")
+
+    def _needs_compile(self, python_path: Path, output_path: Path) -> bool:
+        return (
+            not output_path.exists()
+            or output_path.stat().st_mtime_ns < python_path.stat().st_mtime_ns
         )
-        for f in files_to_clean:
-            f.unlink()
-        for d in self._paths.shared_plt_dir.rglob("__pycache__"):
-            rmtree(d)
-        invalidate_caches()
 
 
 class TikzBuilder:
@@ -75,8 +108,8 @@ class TikzBuilder:
             items = [
                 (input_path, paths)
                 for input_path in chain(
-                    self._paths.shared_tikz_dir.glob("**/*.py"),
-                    self._paths.shared_tikz_dir.glob("**/*.tex"),
+                    self._paths.tikz_dir.glob("**/*.py"),
+                    self._paths.tikz_dir.glob("**/*.tex"),
                 )
                 if self._needs_compile(
                     input_path,
@@ -87,7 +120,7 @@ class TikzBuilder:
             if not items:
                 return
 
-            self._logger.info(f"Processing {len(items)} tikz that need recompiling")
+            self._logger.info(f"Processing {len(items)} tikz(s) that need recompiling")
 
             for item in items:
                 self._prepare(*item)
@@ -146,13 +179,13 @@ class TikzBuilder:
                 exec(compiled)
 
     def _compute_compile_paths(self, input_file: Path, build_dir: Path) -> CompilePaths:
-        latex = (
-            build_dir / input_file.relative_to(self._paths.shared_tikz_dir)
-        ).with_suffix(".tex")
+        latex = (build_dir / input_file.relative_to(self._paths.tikz_dir)).with_suffix(
+            ".tex"
+        )
         build_pdf = latex.with_suffix(".pdf")
         output_pdf = (
             self._paths.shared_tikz_pdf_dir
-            / input_file.relative_to(self._paths.shared_tikz_dir)
+            / input_file.relative_to(self._paths.tikz_dir)
         ).with_suffix(".pdf")
         build_log = latex.with_suffix(".log")
         output_log = output_pdf.with_suffix(".log")
