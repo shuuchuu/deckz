@@ -199,6 +199,6 @@ def watch_standalones(
     _logger.info("Watching the shared tikz directory")
     _watch(
         _StandalonesRunnerEventHandler(minimum_delay, current_dir),
-        watch=frozenset([paths.shared_tikz_dir]),
-        avoid=frozenset([paths.shared_tikz_pdf_dir]),
+        watch=frozenset([paths.shared_tikz_dir, paths.shared_plt_dir]),
+        avoid=frozenset([paths.shared_tikz_pdf_dir, paths.shared_plt_pdf_dir]),
     )
