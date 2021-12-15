@@ -9,18 +9,14 @@ from shutil import copyfile
 from tempfile import TemporaryDirectory
 from typing import Callable, List, Optional, Tuple
 
-import matplotlib
+import matplotlib.pyplot as plt
 
-matplotlib.use("PDF")
-
-import matplotlib.pyplot as plt  # noqa: E402
-
-from deckz.compiling import CompilePaths  # noqa: E402
-from deckz.compiling import compile as compiling_compile  # noqa: E402
-from deckz.exceptions import DeckzException  # noqa: E402
-from deckz.paths import GlobalPaths  # noqa: E402
-from deckz.settings import Settings  # noqa: E402
-from deckz.utils import copy_file_if_newer, import_module_and_submodules  # noqa: E402
+from deckz.compiling import CompilePaths
+from deckz.compiling import compile as compiling_compile
+from deckz.exceptions import DeckzException
+from deckz.paths import GlobalPaths
+from deckz.settings import Settings
+from deckz.utils import copy_file_if_newer, import_module_and_submodules
 
 
 class StandalonesBuilder:
@@ -88,6 +84,7 @@ class PltBuilder:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         function()
         plt.savefig(output_path, bbox_inches="tight")
+        plt.close()
 
     def _needs_compile(self, python_path: Path, output_path: Path) -> bool:
         return (
