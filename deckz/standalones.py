@@ -9,8 +9,6 @@ from shutil import copyfile
 from tempfile import TemporaryDirectory
 from typing import Callable, List, Optional, Tuple
 
-import matplotlib.pyplot as plt
-
 from deckz.compiling import CompilePaths
 from deckz.compiling import compile as compiling_compile
 from deckz.exceptions import DeckzException
@@ -59,6 +57,10 @@ class PltBuilder:
         self._logger = getLogger(__name__)
 
     def build(self) -> None:
+        import matplotlib
+
+        matplotlib.use("PDF")
+
         sys.dont_write_bytecode = True
         _clear_register()
         try:
@@ -81,8 +83,11 @@ class PltBuilder:
     def _build_pdf(
         self, python_path: Path, output_path: Path, function: Callable[[], None]
     ) -> None:
+        import matplotlib.pyplot as plt
+
         output_path.parent.mkdir(parents=True, exist_ok=True)
         function()
+
         plt.savefig(output_path, bbox_inches="tight")
         plt.close()
 
