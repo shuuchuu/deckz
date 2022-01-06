@@ -76,6 +76,7 @@ class Dependencies:
             dependencies.unused -= ds.used
         return dependencies
 
+    @staticmethod
     def merge_dicts(
         *dependencies_dicts: Dict[str, "Dependencies"]
     ) -> Dict[str, "Dependencies"]:

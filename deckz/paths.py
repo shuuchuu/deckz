@@ -1,3 +1,4 @@
+from itertools import chain
 from logging import getLogger
 from pathlib import Path
 from typing import Container, Dict, Iterator, Type, TypeVar, Union
@@ -103,6 +104,20 @@ class GlobalPaths:
     ) -> _GlobalPathsType:
         return cls(**{**cls._defaults_global_paths(current_dir), **kwargs})
 
+    def decks_paths(self) -> Iterator["Paths"]:
+        for targets_path in self.current_dir.rglob("targets.yml"):
+            yield Paths.from_defaults(targets_path.parent)
+
+    def latex_dirs(self) -> Iterator[Path]:
+        return chain(
+            [self.shared_latex_dir],
+            (paths.local_latex_dir for paths in self.decks_paths()),
+        )
+
+    def section_files(self) -> Iterator[Path]:
+        for latex_dir in self.latex_dirs():
+            yield from latex_dir.rglob("*.yml")
+
 
 _PathsType = TypeVar("_PathsType", bound="Paths")
 
@@ -167,8 +182,3 @@ class Paths(GlobalPaths):
                 **kwargs,
             }
         )
-
-
-def decks_paths(workdir: Path) -> Iterator[Paths]:
-    for targets_path in workdir.rglob("targets.yml"):
-        yield Paths.from_defaults(targets_path.parent)
