@@ -1,6 +1,7 @@
+from itertools import chain
 from logging import getLogger
 from pathlib import Path
-from typing import Container, Dict, Type, TypeVar, Union
+from typing import Container, Dict, Iterator, Type, TypeVar, Union
 
 from appdirs import user_config_dir as appdirs_user_config_dir
 from attr import attrib, attrs
@@ -103,6 +104,20 @@ class GlobalPaths:
     ) -> _GlobalPathsType:
         return cls(**{**cls._defaults_global_paths(current_dir), **kwargs})
 
+    def decks_paths(self) -> Iterator["Paths"]:
+        for targets_path in self.current_dir.rglob("targets.yml"):
+            yield Paths.from_defaults(targets_path.parent)
+
+    def latex_dirs(self) -> Iterator[Path]:
+        return chain(
+            [self.shared_latex_dir],
+            (paths.local_latex_dir for paths in self.decks_paths()),
+        )
+
+    def section_files(self) -> Iterator[Path]:
+        for latex_dir in self.latex_dirs():
+            yield from latex_dir.rglob("*.yml")
+
 
 _PathsType = TypeVar("_PathsType", bound="Paths")
 
@@ -111,6 +126,7 @@ _PathsType = TypeVar("_PathsType", bound="Paths")
 class Paths(GlobalPaths):
     build_dir: Path = attrib(converter=_path_converter)
     pdf_dir: Path = attrib(converter=_path_converter)
+    local_latex_dir: Path = attrib(converter=_path_converter)
     company_config: Path = attrib(converter=_path_converter)
     deck_config: Path = attrib(converter=_path_converter)
     session_config: Path = attrib(converter=_path_converter)
@@ -132,6 +148,7 @@ class Paths(GlobalPaths):
         additional_defaults_items = dict(
             build_dir=lambda: defaults["current_dir"] / ".build",
             pdf_dir=lambda: defaults["current_dir"] / "pdf",
+            local_latex_dir=lambda: defaults["current_dir"] / "latex",
             company_config=lambda: (
                 defaults["git_dir"]
                 / defaults["current_dir"].relative_to(defaults["git_dir"]).parts[0]
