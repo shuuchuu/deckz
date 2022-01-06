@@ -115,15 +115,10 @@ class Target:
 class TargetBuilder:
     _data: Dict[str, Any]
     _paths: Paths
-    _local_latex_dir: Path = attrib(init=False)
-
-    def __attrs_post_init__(self) -> None:
-        self._local_dir = self._paths.current_dir
-        self._local_latex_dir = self._local_dir / "latex"
 
     def build(self) -> Target:
         all_dependencies = Dependencies()
-        all_dependencies.unused.update(self._local_latex_dir.glob("**/*.tex"))
+        all_dependencies.unused.update(self._paths.local_latex_dir.glob("**/*.tex"))
         all_items = []
         section_dependencies: DefaultDict[str, Dependencies] = defaultdict(Dependencies)
         section_flavors = defaultdict(set)
@@ -162,7 +157,7 @@ class TargetBuilder:
         section_dependencies: DefaultDict[str, Dependencies],
     ) -> Optional[Tuple[List[ContentOrTitle], Dependencies]]:
         section_path = Path(section_path_str)
-        local_section_dir = self._local_latex_dir / section_path
+        local_section_dir = self._paths.local_latex_dir / section_path
         local_section_config_path = (local_section_dir / section_path).with_suffix(
             ".yml"
         )
@@ -238,7 +233,9 @@ class TargetBuilder:
         if "excludes" in section_config and filename in section_config["excludes"]:
             return
         if filename.startswith("/"):
-            local_path = (self._local_latex_dir / filename[1:]).with_suffix(".tex")
+            local_path = (self._paths.local_latex_dir / filename[1:]).with_suffix(
+                ".tex"
+            )
             shared_path = (self._paths.shared_latex_dir / filename[1:]).with_suffix(
                 ".tex"
             )
@@ -260,7 +257,7 @@ class TargetBuilder:
             shared_path = (shared_section_dir / filename).with_suffix(".tex")
         if title is not None:
             items.append(Title(title=title, level=title_level))
-        local_relative_path = local_path.relative_to(self._local_dir)
+        local_relative_path = local_path.relative_to(self._paths.current_dir)
         shared_relative_path = shared_path.relative_to(self._paths.shared_dir)
         if local_path.exists():
             items.append(str(PurePosixPath(local_relative_path.with_suffix(""))))
@@ -303,13 +300,15 @@ class TargetBuilder:
     def _parse_section_file(
         self, section_path: str, config: Dict[str, Any], title_level: int
     ) -> Optional[Tuple[List[ContentOrTitle], Dependencies]]:
-        local_section_file = (self._local_latex_dir / section_path).with_suffix(".tex")
+        local_section_file = (self._paths.local_latex_dir / section_path).with_suffix(
+            ".tex"
+        )
         shared_section_file = (self._paths.shared_latex_dir / section_path).with_suffix(
             ".tex"
         )
         if local_section_file.exists():
             section_file = local_section_file
-            relative_path = section_file.relative_to(self._local_dir)
+            relative_path = section_file.relative_to(self._paths.current_dir)
         elif shared_section_file.exists():
             section_file = shared_section_file
             relative_path = section_file.relative_to(self._paths.shared_dir)

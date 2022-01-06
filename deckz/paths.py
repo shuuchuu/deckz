@@ -1,6 +1,6 @@
 from logging import getLogger
 from pathlib import Path
-from typing import Container, Dict, Type, TypeVar, Union
+from typing import Container, Dict, Iterator, Type, TypeVar, Union
 
 from appdirs import user_config_dir as appdirs_user_config_dir
 from attr import attrib, attrs
@@ -111,6 +111,7 @@ _PathsType = TypeVar("_PathsType", bound="Paths")
 class Paths(GlobalPaths):
     build_dir: Path = attrib(converter=_path_converter)
     pdf_dir: Path = attrib(converter=_path_converter)
+    local_latex_dir: Path = attrib(converter=_path_converter)
     company_config: Path = attrib(converter=_path_converter)
     deck_config: Path = attrib(converter=_path_converter)
     session_config: Path = attrib(converter=_path_converter)
@@ -132,6 +133,7 @@ class Paths(GlobalPaths):
         additional_defaults_items = dict(
             build_dir=lambda: defaults["current_dir"] / ".build",
             pdf_dir=lambda: defaults["current_dir"] / "pdf",
+            local_latex_dir=lambda: defaults["current_dir"] / "latex",
             company_config=lambda: (
                 defaults["git_dir"]
                 / defaults["current_dir"].relative_to(defaults["git_dir"]).parts[0]
@@ -165,3 +167,8 @@ class Paths(GlobalPaths):
                 **kwargs,
             }
         )
+
+
+def decks_paths(workdir: Path) -> Iterator[Paths]:
+    for targets_path in workdir.rglob("targets.yml"):
+        yield Paths.from_defaults(targets_path.parent)
