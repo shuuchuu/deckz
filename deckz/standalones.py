@@ -202,9 +202,11 @@ class TikzBuilder:
     def _prepare(self, input_file: Path, compile_paths: CompilePaths) -> None:
         build_dir = compile_paths.latex.parent
         build_dir.mkdir(parents=True, exist_ok=True)
-        build_img_dir = build_dir / self._paths.shared_img_dir.name
-        if not build_img_dir.exists():
-            build_img_dir.symlink_to(self._paths.shared_img_dir)
+        dirs_to_link = [d for d in self._paths.shared_dir.iterdir() if d.is_dir()]
+        for d in dirs_to_link:
+            build_d = build_dir / d.name
+            if not build_d.exists():
+                build_d.symlink_to(d)
 
         if input_file.suffix == ".py":
             self._generate_latex(input_file, compile_paths.latex)
