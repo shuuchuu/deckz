@@ -19,7 +19,7 @@ from deckz.paths import GlobalPaths
 @app.command()
 def random(
     reason: str = Argument(..., help='Reason for the deckz random ("Pay the bill")'),
-    dry_run: str = Option(False, help="Roll the dice without sending emails"),
+    dry_run: bool = Option(False, help="Roll the dice without sending emails"),
     workdir: Path = Option(
         Path("."), help="Path to move into before running the command"
     ),
