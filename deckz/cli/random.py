@@ -19,6 +19,7 @@ from deckz.paths import GlobalPaths
 @app.command()
 def random(
     reason: str = Argument(..., help='Reason for the deckz random ("Pay the bill")'),
+    dry_run: str = Option(False, help="Roll the dice without sending emails"),
     workdir: Path = Option(
         Path("."), help="Path to move into before running the command"
     ),
@@ -55,14 +56,15 @@ def random(
     name = choice(selected_names)
     draw_info = f"{name} was drawn randomly from {', '.join(selected_names)}"
     logger.info(draw_info)
-    sendgrid_email = Mail(
-        from_email=config.mail,
-        to_emails=list(config.to.values()),
-        subject=f"[deckz random] {reason}: {name} got picked",
-        plain_text_content=draw_info,
-    )
-    client = SendGridAPIClient(config.api_key)
-    client.send(sendgrid_email)
+    if not dry_run:
+        sendgrid_email = Mail(
+            from_email=config.mail,
+            to_emails=list(config.to.values()),
+            subject=f"[deckz random] {reason}: {name} got picked",
+            plain_text_content=draw_info,
+        )
+        client = SendGridAPIClient(config.api_key)
+        client.send(sendgrid_email)
 
 
 class MailsConfig(BaseModel):
