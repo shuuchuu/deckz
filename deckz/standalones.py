@@ -43,7 +43,11 @@ def register_plot(
         output_path = (
             Path("/".join(s.replace("_", "-") for s in submodules)) / name
         ).with_suffix(".pdf")
-        python_path = Path(sys.modules[f.__module__].__file__)
+        python_path_str = sys.modules[f.__module__].__file__
+        # I don't get why this is needed for mypy. It seems from the definition of
+        # ModuleType that __file__ is always a str and never None
+        assert python_path_str is not None
+        python_path = Path(python_path_str)
         _plt_registry.append((output_path, python_path, f))
         return f
 
