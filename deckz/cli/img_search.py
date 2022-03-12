@@ -20,7 +20,7 @@ def img_search(
     """Find which latex files use a given image."""
     global_paths = GlobalPaths.from_defaults(workdir)
     console = Console(highlight=False)
-    pattern = re_compile(fr'(\\V{{\[?"{image}".*\]? \| image}})')
+    pattern = re_compile(rf'(\\V{{\[?"{image}".*\]? \| image}})')
     current_dir = global_paths.current_dir
     for latex_dir in global_paths.latex_dirs():
         for f in latex_dir.rglob("*.tex"):
