@@ -1,4 +1,4 @@
-FROM python:3.9.4-slim-buster
+FROM python:3.10-slim-bullseye
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -12,13 +12,14 @@ RUN apt update \
   texlive \
   texlive-lang-english \
   texlive-lang-french \
+  texlive-latex-extra \
   texlive-science \
   texlive-xetex \
   && apt-get remove -y .*-doc .*-man >/dev/null \
   && apt-get autoremove --purge -y \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* \
-  && curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/install-poetry.py | python - \
+  && curl -sSL https://install.python-poetry.org | python - \
   && ln -s /root/.local/bin/poetry /usr/bin
 
 ENTRYPOINT ["/bin/bash"]

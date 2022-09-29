@@ -70,7 +70,7 @@ class PltBuilder:
         try:
             import_module_and_submodules("plots")
         except ModuleNotFoundError:
-            self._logger.warning("Could not fing plots module, will not produce plots.")
+            self._logger.warning("Could not find plots module, will not produce plots.")
         full_items = [
             (self._paths.shared_plt_pdf_dir / o, p, f) for o, p, f in _plt_registry
         ]
