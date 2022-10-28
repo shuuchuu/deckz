@@ -61,6 +61,38 @@ def run_file(
     ).build()
 
 
+def run_section(
+    section: str,
+    flavor: str,
+    paths: Paths,
+    build_handout: bool,
+    build_presentation: bool,
+    build_print: bool,
+) -> None:
+    config = get_config(paths)
+    targets = Targets.from_data(
+        [
+            dict(
+                name="section",
+                title="section",
+                sections=[dict(path=section, flavor=flavor)],
+            )
+        ],
+        paths=paths,
+    )
+    settings = Settings.from_global_paths(paths)
+    StandalonesBuilder(settings, paths).build()
+    Builder(
+        config,
+        settings,
+        paths,
+        targets,
+        build_handout=build_handout,
+        build_presentation=build_presentation,
+        build_print=build_print,
+    ).build()
+
+
 def run_all(
     directory: Path,
     build_handout: bool,
