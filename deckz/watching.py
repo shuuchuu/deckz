@@ -9,7 +9,7 @@ from watchdog.observers import Observer
 
 from deckz.exceptions import DeckzException
 from deckz.paths import GlobalPaths, Paths
-from deckz.running import run, run_file, run_standalones
+from deckz.running import run, run_file, run_section, run_standalones
 
 _logger = getLogger(__name__)
 
@@ -107,6 +107,36 @@ class _FileRunnerEventHandler(_BaseEventHandler):
         )
 
 
+class _SectionRunnerEventHandler(_BaseEventHandler):
+    def __init__(
+        self,
+        minimum_delay: int,
+        section: str,
+        flavor: str,
+        paths: Paths,
+        build_handout: bool,
+        build_presentation: bool,
+        build_print: bool,
+    ):
+        super().__init__(minimum_delay)
+        self._section = section
+        self._flavor = flavor
+        self._paths = paths
+        self._build_handout = build_handout
+        self._build_presentation = build_presentation
+        self._build_print = build_print
+
+    def run(self) -> None:
+        run_section(
+            section=self._section,
+            flavor=self._flavor,
+            paths=self._paths,
+            build_handout=self._build_handout,
+            build_presentation=self._build_presentation,
+            build_print=self._build_print,
+        )
+
+
 class _StandalonesRunnerEventHandler(_BaseEventHandler):
     def __init__(self, minimum_delay: int, current_dir: Path):
         super().__init__(minimum_delay)
@@ -184,6 +214,31 @@ def watch_file(
             minimum_delay,
             latex,
             paths,
+            build_handout=build_handout,
+            build_presentation=build_presentation,
+            build_print=build_print,
+        ),
+        watch=frozenset([paths.shared_dir, paths.user_config_dir]),
+        avoid=frozenset([paths.shared_tikz_pdf_dir, paths.pdf_dir, paths.build_dir]),
+    )
+
+
+def watch_section(
+    minimum_delay: int,
+    section: str,
+    flavor: str,
+    paths: Paths,
+    build_handout: bool,
+    build_presentation: bool,
+    build_print: bool,
+) -> None:
+    _logger.info("Watching the shared and user directories")
+    _watch(
+        _SectionRunnerEventHandler(
+            minimum_delay=minimum_delay,
+            section=section,
+            flavor=flavor,
+            paths=paths,
             build_handout=build_handout,
             build_presentation=build_presentation,
             build_print=build_print,
