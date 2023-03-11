@@ -15,7 +15,7 @@ jobs:
     container: nzmognzmp/deckz-ci-worker:latest
     steps:
       - name: Clone repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Install the package
         run: poetry install
       - name: Test the package style conventions
