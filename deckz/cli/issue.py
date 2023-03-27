@@ -31,7 +31,6 @@ def issue(
 
 
 class IssuesConfig(BaseModel):
-
     api_key: str
     repo: str
     owner: str

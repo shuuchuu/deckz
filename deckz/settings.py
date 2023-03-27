@@ -27,7 +27,6 @@ class DefaultImageValues(BaseModel):
 
 
 class Settings(BaseModel):
-
     build_command: List[str]
     default_img_values: DefaultImageValues = DefaultImageValues()
 

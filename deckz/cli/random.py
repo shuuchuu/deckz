@@ -68,7 +68,6 @@ def random(
 
 
 class MailsConfig(BaseModel):
-
     api_key: str
     mail: str
     to: Dict[str, EmailStr]

@@ -99,7 +99,6 @@ def run_all(
     build_presentation: bool,
     build_print: bool,
 ) -> None:
-
     paths = GlobalPaths.from_defaults(directory)
     settings = Settings.from_global_paths(paths)
     StandalonesBuilder(settings, paths).build()
