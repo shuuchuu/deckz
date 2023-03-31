@@ -1,5 +1,6 @@
 import sys
 from contextlib import redirect_stdout
+from dataclasses import dataclass
 from functools import partial
 from itertools import chain
 from logging import getLogger
@@ -9,12 +10,20 @@ from shutil import copyfile
 from tempfile import TemporaryDirectory
 from typing import Callable, List, Optional, Tuple
 
-from deckz.compiling import CompilePaths
 from deckz.compiling import compile as compiling_compile
 from deckz.exceptions import DeckzException
 from deckz.paths import GlobalPaths
 from deckz.settings import Settings
 from deckz.utils import copy_file_if_newer, import_module_and_submodules
+
+
+@dataclass(frozen=True)
+class CompilePaths:
+    latex: Path
+    build_pdf: Path
+    output_pdf: Path
+    build_log: Path
+    output_log: Path
 
 
 class StandalonesBuilder:
