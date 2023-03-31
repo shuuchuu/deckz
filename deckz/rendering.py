@@ -75,9 +75,9 @@ class Renderer:
         return "".join(substring.capitalize() or "_" for substring in string.split("_"))
 
     def _img(
-        self, path: str, modifier: str = "", scale: float = 1.0, lang: str = "fr"
+        self, value: str, modifier: str = "", scale: float = 1.0, lang: str = "fr"
     ) -> str:
-        metadata_path = (self._paths.shared_dir / path).with_suffix(".yml")
+        metadata_path = (self._paths.shared_dir / Path(value)).with_suffix(".yml")
         if metadata_path.exists():
             metadata = safe_load(metadata_path.read_text(encoding="utf8"))
 
@@ -101,4 +101,4 @@ class Renderer:
         else:
             info = ""
 
-        return f"\\img{modifier}{info}{{{path}}}{scale}"
+        return f"\\img{modifier}{info}{{{value}}}{{{scale:.2f}}}"
