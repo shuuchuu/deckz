@@ -36,12 +36,10 @@ root (git repository)
 ├── templates
 │   ├── jinja2
 │   │   ├── main.tex
-│   │   └── print.tex
 │   └── yml
 │       ├── company-config.yml
 │       ├── deck-config.yml
 │       ├── global-config.yml
-│       ├── targets.yml
 │       └── user-config.yml
 ├── shared
 │   ├── img
