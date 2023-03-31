@@ -1,7 +1,7 @@
 # `deckz`
 
-[![CI Status](https://img.shields.io/github/workflow/status/mlambda/deckz/CI?label=CI&style=for-the-badge)](https://github.com/mlambda/deckz/actions?query=workflow%3ACI)
-[![CD Status](https://img.shields.io/github/workflow/status/mlambda/deckz/CD?label=CD&style=for-the-badge)](https://github.com/mlambda/deckz/actions?query=workflow%3ACD)
+[![CI Status](https://img.shields.io/github/actions/workflow/status/mlambda/deckz/ci.yml?branch=main&label=CI&style=for-the-badge)](https://github.com/mlambda/deckz/actions?query=workflow%3ACI)
+[![CD Status](https://img.shields.io/github/actions/workflow/status/mlambda/deckz/cd.yml?branch=main&label=CD&style=for-the-badge)](https://github.com/mlambda/deckz/actions?query=workflow%3ACD)
 [![Test Coverage](https://img.shields.io/codecov/c/github/mlambda/deckz?style=for-the-badge)](https://codecov.io/gh/mlambda/deckz)
 [![PyPI Project](https://img.shields.io/pypi/v/deckz?style=for-the-badge)](https://pypi.org/project/deckz/)
 
