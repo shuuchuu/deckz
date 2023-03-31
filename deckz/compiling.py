@@ -7,15 +7,6 @@ from deckz.settings import Settings
 
 
 @dataclass(frozen=True)
-class CompilePaths:
-    latex: Path
-    build_pdf: Path
-    output_pdf: Path
-    build_log: Path
-    output_log: Path
-
-
-@dataclass(frozen=True)
 class CompileResult:
     ok: bool
     stdout: Optional[str] = ""
