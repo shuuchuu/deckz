@@ -5,7 +5,7 @@ from os.path import join as path_join
 from pathlib import Path
 from shutil import move
 from tempfile import NamedTemporaryFile
-from typing import Any, Callable, List, Tuple
+from typing import Any, Callable, Tuple
 
 from jinja2 import BaseLoader, Environment, TemplateNotFound
 from yaml import safe_load
@@ -74,14 +74,9 @@ class Renderer:
     def _to_camel_case(self, string: str) -> str:
         return "".join(substring.capitalize() or "_" for substring in string.split("_"))
 
-    def _img(self, args: List[Any]) -> str:
-        if not isinstance(args, list):
-            args = [args]
-        path = args[0]
-        modifier = args[1] if len(args) > 1 else ""
-        scale = "{%.2f}" % args[2] if len(args) > 2 else "{1}"
-        lang = args[3] if len(args) > 3 else "fr"
-
+    def _img(
+        self, path: str, modifier: str = "", scale: float = 1.0, lang: str = "fr"
+    ) -> str:
         metadata_path = (self._paths.shared_dir / path).with_suffix(".yml")
         if metadata_path.exists():
             metadata = safe_load(metadata_path.read_text(encoding="utf8"))
