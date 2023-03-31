@@ -1,6 +1,6 @@
-from logging import getLogger
 from pathlib import Path
 
+from rich import print
 from typer import Option
 
 from deckz.cli import app
@@ -15,10 +15,6 @@ def print_config(
     )
 ) -> None:
     """Print the resolved configuration."""
-    logger = getLogger(__name__)
-    paths = Paths.from_defaults(workdir)
-    config = get_config(paths)
-    logger.info(
-        "Resolved config as:\n%s",
-        "\n".join((f"  - {k}: {v}") for k, v in config.items()),
-    )
+    config = get_config(Paths.from_defaults(workdir))
+    max_length = max(len(key) for key in config)
+    print("\n".join((f"[green]{k:{max_length}}[/] {v}") for k, v in config.items()))
