@@ -1,0 +1,17 @@
+site_name: Deckz Documentation
+
+theme:
+  name: "material"
+
+nav:
+  - Index: index.md
+  - Code Reference: reference/
+
+plugins:
+  - search
+  - gen-files:
+      scripts:
+        - docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: api.md
+  - mkdocstrings
