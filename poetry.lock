@@ -36,7 +36,7 @@ wrapt = [
 name = "attrs"
 version = "22.2.0"
 description = "Classes Without Boilerplate"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.6"
 files = [
@@ -2179,4 +2179,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8.1"
-content-hash = "5bda947e1c3484bbe6f28d1597e3a41d055cb72b125efd8cd1bdf96c41a88a3a"
+content-hash = "18bdd14bf89ef6a91c68b8998eabce9973d5a0b0bdda438230503f9255226e82"

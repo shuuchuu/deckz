@@ -1,13 +1,12 @@
+from dataclasses import dataclass
 from pathlib import Path
 from subprocess import run
 from typing import Optional
 
-from attr import attrib, attrs
-
 from deckz.settings import Settings
 
 
-@attrs(auto_attribs=True, frozen=True)
+@dataclass(frozen=True)
 class CompilePaths:
     latex: Path
     build_pdf: Path
@@ -16,11 +15,11 @@ class CompilePaths:
     output_log: Path
 
 
-@attrs(auto_attribs=True, frozen=True)
+@dataclass(frozen=True)
 class CompileResult:
     ok: bool
-    stdout: Optional[str] = attrib(default="")
-    stderr: Optional[str] = attrib(default="")
+    stdout: Optional[str] = ""
+    stderr: Optional[str] = ""
 
 
 def compile(latex_path: Path, settings: Settings) -> CompileResult:

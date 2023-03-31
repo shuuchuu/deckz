@@ -1,10 +1,10 @@
+from dataclasses import dataclass
 from itertools import chain
 from logging import getLogger
 from pathlib import Path
-from typing import Container, Dict, Iterator, Type, TypeVar, Union
+from typing import Container, Dict, Iterator, Type, TypeVar
 
 from appdirs import user_config_dir as appdirs_user_config_dir
-from attr import attrib, attrs
 
 from deckz import app_name
 from deckz.exceptions import DeckzException
@@ -13,45 +13,43 @@ from deckz.utils import get_git_dir
 _logger = getLogger(__name__)
 
 
-def _path_converter(path: Union[str, Path]) -> Path:
-    return Path(path).resolve()
-
-
 _GlobalPathsType = TypeVar("_GlobalPathsType", bound="GlobalPaths")
 
 
-@attrs(auto_attribs=True)
+@dataclass
 class GlobalPaths:
-    current_dir: Path = attrib(converter=_path_converter)
-    git_dir: Path = attrib(converter=_path_converter)
-    settings: Path = attrib(converter=_path_converter)
-    shared_dir: Path = attrib(converter=_path_converter)
-    figures_dir: Path = attrib(converter=_path_converter)
-    shared_img_dir: Path = attrib(converter=_path_converter)
-    shared_code_dir: Path = attrib(converter=_path_converter)
-    shared_latex_dir: Path = attrib(converter=_path_converter)
-    shared_tikz_pdf_dir: Path = attrib(converter=_path_converter)
-    shared_plt_pdf_dir: Path = attrib(converter=_path_converter)
-    templates_dir: Path = attrib(converter=_path_converter)
-    plt_dir: Path = attrib(converter=_path_converter)
-    tikz_dir: Path = attrib(converter=_path_converter)
-    yml_templates_dir: Path = attrib(converter=_path_converter)
-    template_global_config: Path = attrib(converter=_path_converter)
-    template_user_config: Path = attrib(converter=_path_converter)
-    template_company_config: Path = attrib(converter=_path_converter)
-    template_deck_config: Path = attrib(converter=_path_converter)
-    jinja2_dir: Path = attrib(converter=_path_converter)
-    jinja2_main_template: Path = attrib(converter=_path_converter)
-    jinja2_print_template: Path = attrib(converter=_path_converter)
-    user_config_dir: Path = attrib(converter=_path_converter)
-    global_config: Path = attrib(converter=_path_converter)
-    github_issues: Path = attrib(converter=_path_converter)
-    mails: Path = attrib(converter=_path_converter)
-    gdrive_secrets: Path = attrib(converter=_path_converter)
-    gdrive_credentials: Path = attrib(converter=_path_converter)
-    user_config: Path = attrib(converter=_path_converter)
+    current_dir: Path
+    git_dir: Path
+    settings: Path
+    shared_dir: Path
+    figures_dir: Path
+    shared_img_dir: Path
+    shared_code_dir: Path
+    shared_latex_dir: Path
+    shared_tikz_pdf_dir: Path
+    shared_plt_pdf_dir: Path
+    templates_dir: Path
+    plt_dir: Path
+    tikz_dir: Path
+    yml_templates_dir: Path
+    template_global_config: Path
+    template_user_config: Path
+    template_company_config: Path
+    template_deck_config: Path
+    jinja2_dir: Path
+    jinja2_main_template: Path
+    jinja2_print_template: Path
+    user_config_dir: Path
+    global_config: Path
+    github_issues: Path
+    mails: Path
+    gdrive_secrets: Path
+    gdrive_credentials: Path
+    user_config: Path
 
-    def __attrs_post_init__(self) -> None:
+    def __post_init__(self) -> None:
+        for field, value in self.__dict__.items():
+            setattr(self, field, Path(value).resolve())
         self.user_config_dir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
@@ -122,15 +120,15 @@ class GlobalPaths:
 _PathsType = TypeVar("_PathsType", bound="Paths")
 
 
-@attrs(auto_attribs=True)
+@dataclass
 class Paths(GlobalPaths):
-    build_dir: Path = attrib(converter=_path_converter)
-    pdf_dir: Path = attrib(converter=_path_converter)
-    local_latex_dir: Path = attrib(converter=_path_converter)
-    company_config: Path = attrib(converter=_path_converter)
-    deck_config: Path = attrib(converter=_path_converter)
-    session_config: Path = attrib(converter=_path_converter)
-    targets: Path = attrib(converter=_path_converter)
+    build_dir: Path
+    pdf_dir: Path
+    local_latex_dir: Path
+    company_config: Path
+    deck_config: Path
+    session_config: Path
+    targets: Path
 
     @classmethod
     def _defaults_paths(
