@@ -49,8 +49,8 @@ def test_run(working_dir: Path) -> None:
     assert "John Doe" in text
 
 
-def test_run_all(working_dir: Path) -> None:
-    run_deckz("run-all")
+def test_check_all(working_dir: Path) -> None:
+    run_deckz("check-all")
 
     n_pages, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
     assert n_pages == 14
