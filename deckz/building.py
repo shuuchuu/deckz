@@ -1,11 +1,10 @@
+from dataclasses import dataclass
 from enum import Enum
 from logging import getLogger
 from multiprocessing import Pool, cpu_count
 from pathlib import Path
 from shutil import copyfile
 from typing import Any, Dict, List, Optional
-
-from attr import attrs
 
 from deckz.compiling import CompileResult
 from deckz.compiling import compile as compiling_compile
@@ -23,7 +22,7 @@ class CompileType(Enum):
     PrintHandout = "print-handout"
 
 
-@attrs(auto_attribs=True, frozen=True)
+@dataclass(frozen=True)
 class CompileItem:
     target: Target
     compile_type: CompileType

@@ -1,4 +1,5 @@
 from collections import defaultdict
+from dataclasses import dataclass, field
 from logging import getLogger
 from pathlib import Path, PurePosixPath
 from typing import (
@@ -15,7 +16,6 @@ from typing import (
     Union,
 )
 
-from attr import Attribute, Factory, attrib, attrs
 from pydantic import BaseModel, ValidationError
 from yaml import safe_load as safe_load
 
@@ -25,7 +25,7 @@ from deckz.paths import Paths
 _logger = getLogger(__name__)
 
 
-@attrs(auto_attribs=True)
+@dataclass(frozen=True)
 class Title:
     title: str
     level: int
@@ -48,17 +48,17 @@ Content = str
 ContentOrTitle = Union[Content, Title]
 
 
-@attrs(auto_attribs=True)
+@dataclass(frozen=True)
 class Part:
     title: Optional[str]
-    sections: List[ContentOrTitle] = Factory(list)
+    sections: List[ContentOrTitle] = field(default_factory=list)
 
 
-@attrs(auto_attribs=True)
+@dataclass
 class Dependencies:
-    used: Set[Path] = Factory(set)
-    missing: Set[str] = Factory(set)
-    unused: Set[Path] = Factory(set)
+    used: Set[Path] = field(default_factory=set)
+    missing: Set[str] = field(default_factory=set)
+    unused: Set[Path] = field(default_factory=set)
 
     def update(self, other: "Dependencies") -> None:
         self.used |= other.used
@@ -89,7 +89,7 @@ class Dependencies:
         return merged_dict
 
 
-@attrs(auto_attribs=True)
+@dataclass
 class Target:
     name: str
     dependencies: Dependencies
@@ -112,18 +112,18 @@ class Target:
         return Target(name, dependencies, parts, section_dependencies, section_flavors)
 
 
-@attrs(auto_attribs=True)
+@dataclass(frozen=True)
 class TargetBuilder:
-    _data: Dict[str, Any]
-    _paths: Paths
+    data: Dict[str, Any]
+    paths: Paths
 
     def build(self) -> Target:
         all_dependencies = Dependencies()
-        all_dependencies.unused.update(self._paths.local_latex_dir.glob("**/*.tex"))
+        all_dependencies.unused.update(self.paths.local_latex_dir.glob("**/*.tex"))
         all_items = []
         section_dependencies: DefaultDict[str, Dependencies] = defaultdict(Dependencies)
         section_flavors = defaultdict(set)
-        for section_config in self._data["sections"]:
+        for section_config in self.data["sections"]:
             if not isinstance(section_config, dict):
                 section_config = dict(path=section_config)
             section_path = section_config["path"]
@@ -142,9 +142,9 @@ class TargetBuilder:
             all_dependencies.update(dependencies)
             section_dependencies[section_path].update(dependencies)
         return Target(
-            name=self._data["name"],
+            name=self.data["name"],
             dependencies=all_dependencies,
-            parts=[Part(title=self._data["title"], sections=all_items)],
+            parts=[Part(title=self.data["title"], sections=all_items)],
             section_dependencies=section_dependencies,
             section_flavors=section_flavors,
         )
@@ -158,11 +158,11 @@ class TargetBuilder:
         section_dependencies: DefaultDict[str, Dependencies],
     ) -> Optional[Tuple[List[ContentOrTitle], Dependencies]]:
         section_path = Path(section_path_str)
-        local_section_dir = self._paths.local_latex_dir / section_path
+        local_section_dir = self.paths.local_latex_dir / section_path
         local_section_config_path = (local_section_dir / section_path).with_suffix(
             ".yml"
         )
-        shared_section_dir = self._paths.shared_latex_dir / section_path
+        shared_section_dir = self.paths.shared_latex_dir / section_path
         shared_section_config_path = (
             shared_section_dir / section_path.parts[-1]
         ).with_suffix(".yml")
@@ -179,14 +179,14 @@ class TargetBuilder:
         )
         if "flavor" not in custom_config:
             raise DeckzException(
-                f"Incorrect targets {self._paths.targets}. "
+                f"Incorrect targets {self.paths.targets}. "
                 f"Mandatory flavor not specified in {section_path} configuration."
             )
         flavor_name = custom_config["flavor"]
         if flavor_name not in section_config.flavors:
             flavors_string = ", ".join("'%s'" % f for f in section_config.flavors)
             raise DeckzException(
-                f"Incorrect targets {self._paths.targets}. "
+                f"Incorrect targets {self.paths.targets}. "
                 f"'{flavor_name}' not amongst available flavors: {flavors_string} "
                 f"of {section_config_path}."
             )
@@ -234,10 +234,8 @@ class TargetBuilder:
         if "excludes" in section_config and filename in section_config["excludes"]:
             return
         if filename.startswith("/"):
-            local_path = (self._paths.local_latex_dir / filename[1:]).with_suffix(
-                ".tex"
-            )
-            shared_path = (self._paths.shared_latex_dir / filename[1:]).with_suffix(
+            local_path = (self.paths.local_latex_dir / filename[1:]).with_suffix(".tex")
+            shared_path = (self.paths.shared_latex_dir / filename[1:]).with_suffix(
                 ".tex"
             )
         elif filename.startswith("$"):
@@ -258,8 +256,8 @@ class TargetBuilder:
             shared_path = (shared_section_dir / filename).with_suffix(".tex")
         if title is not None:
             items.append(Title(title=title, level=title_level))
-        local_relative_path = local_path.relative_to(self._paths.current_dir)
-        shared_relative_path = shared_path.relative_to(self._paths.shared_dir)
+        local_relative_path = local_path.relative_to(self.paths.current_dir)
+        shared_relative_path = shared_path.relative_to(self.paths.shared_dir)
         if local_path.exists():
             items.append(str(PurePosixPath(local_relative_path.with_suffix(""))))
             dependencies.used.add(local_path.resolve())
@@ -301,18 +299,18 @@ class TargetBuilder:
     def _parse_section_file(
         self, section_path: str, config: Dict[str, Any], title_level: int
     ) -> Optional[Tuple[List[ContentOrTitle], Dependencies]]:
-        local_section_file = (self._paths.local_latex_dir / section_path).with_suffix(
+        local_section_file = (self.paths.local_latex_dir / section_path).with_suffix(
             ".tex"
         )
-        shared_section_file = (self._paths.shared_latex_dir / section_path).with_suffix(
+        shared_section_file = (self.paths.shared_latex_dir / section_path).with_suffix(
             ".tex"
         )
         if local_section_file.exists():
             section_file = local_section_file
-            relative_path = section_file.relative_to(self._paths.current_dir)
+            relative_path = section_file.relative_to(self.paths.current_dir)
         elif shared_section_file.exists():
             section_file = shared_section_file
-            relative_path = section_file.relative_to(self._paths.shared_dir)
+            relative_path = section_file.relative_to(self.paths.shared_dir)
         else:
             return None
         config_file = section_file.with_suffix(".yml")
@@ -331,10 +329,26 @@ class TargetBuilder:
         return items, dependencies
 
 
-@attrs(auto_attribs=True)
+@dataclass(frozen=True)
 class Targets(Iterable[Target]):
-    _targets: List[Target] = attrib()
-    _paths: Paths
+    targets: List[Target]
+    paths: Paths
+
+    def __post_init__(self) -> None:
+        missing_dependencies = {
+            target.name: target.dependencies.missing
+            for target in self.targets
+            if target.dependencies.missing
+        }
+        if missing_dependencies:
+            raise DeckzException(
+                f"Incorrect targets {self.paths.targets}. "
+                "Could not find the following dependencies:\n%s"
+                % "\n".join(
+                    "  - %s:\n%s" % (k, "\n".join(f"    - {p}" for p in v))
+                    for k, v in missing_dependencies.items()
+                ),
+            )
 
     @classmethod
     def from_file(
@@ -363,23 +377,6 @@ class Targets(Iterable[Target]):
             cls._filter_targets(targets, frozenset(whitelist), paths)
         return Targets(targets, paths)
 
-    @_targets.validator
-    def _check_targets(self, attribute: Attribute, value: List[Target]) -> None:
-        missing_dependencies = {
-            target.name: target.dependencies.missing
-            for target in value
-            if target.dependencies.missing
-        }
-        if missing_dependencies:
-            raise DeckzException(
-                f"Incorrect targets {self._paths.targets}. "
-                "Could not find the following dependencies:\n%s"
-                % "\n".join(
-                    "  - %s:\n%s" % (k, "\n".join(f"    - {p}" for p in v))
-                    for k, v in missing_dependencies.items()
-                ),
-            )
-
     @staticmethod
     def _filter_targets(
         targets: Iterable[Target], whiteset: FrozenSet[str], paths: Paths
@@ -394,7 +391,7 @@ class Targets(Iterable[Target]):
         return [target for target in targets if target.name in whiteset]
 
     def __iter__(self) -> Iterator[Target]:
-        return iter(self._targets)
+        return iter(self.targets)
 
     def __len__(self) -> int:
-        return len(self._targets)
+        return len(self.targets)
