@@ -11,13 +11,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
+
       - name: Setup Python
         uses: actions/setup-python@v2
         with:
           python-version: "3.8"
+
       - name: Install Poetry
         uses: snok/install-poetry@v1
+
       - name: Build wheel and deploy on PyPI
         run: |
           export TAG=${GITHUB_REF##*/}
