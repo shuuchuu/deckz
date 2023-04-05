@@ -71,7 +71,7 @@ class GlobalPaths:
             jinja2_dir=jinja2_dir,
             user_config_dir=user_config_dir,
             figures_dir=figures_dir,
-            plt_dir=figures_dir / "plt",
+            plt_dir=figures_dir / "plots",
             shared_plt_pdf_dir=shared_dir / "plt",
             tikz_dir=figures_dir / "tikz",
             shared_tikz_pdf_dir=shared_dir / "tikz",
