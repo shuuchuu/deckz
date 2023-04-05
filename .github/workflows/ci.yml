@@ -31,3 +31,4 @@ jobs:
         with:
           fail_ci_if_error: true
           root_dir: ./
+          token: ${{ secrets.CODECOV_TOKEN }}
