@@ -1,38 +1,57 @@
 from logging import getLogger
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import List, Optional
+from typing import Any, Callable, Tuple, TypeVar
 
-from typer import Argument, Option, Typer, launch
+from click import argument, launch
 
 from deckz import app_name
-from deckz.cli import app
+from deckz.cli import app, option, option_workdir, options_output
 from deckz.paths import GlobalPaths, Paths
 from deckz.running import run, run_file, run_section, run_standalones
-from deckz.watching import watch
+from deckz.watching import watch as watching_watch
 
 _logger = getLogger(__name__)
 
 
-app_watch = Typer(help="Compile on change")
-app.add_typer(app_watch, name="watch")
+_T = TypeVar("_T", bound=Callable[..., Any])
 
 
-@app_watch.command()
+def _option_minimum_delay(command: _T) -> _T:
+    return option(
+        "--minimum-delay",
+        default=5,
+        help="Minimum number of seconds before recompiling",
+    )(command)
+
+
+@app.group()
+def watch() -> None:
+    """Compile on change"""
+    pass
+
+
+@watch.command()
+@argument("targets", nargs=-1)
+@options_output(handout=False, presentation=True, print=False)
+@_option_minimum_delay
+@option_workdir
 def deck(
-    targets: Optional[List[str]] = Argument(None, help="Targets to watch"),
-    handout: bool = Option(False, help="Produce PDFs without animations"),
-    presentation: bool = Option(True, help="Produce PDFs with animations"),
-    print: bool = Option(False, help="Produce a printable PDF"),
-    minimum_delay: int = Option(5, help="Minimum number of seconds before recompiling"),
-    workdir: Path = Option(
-        Path("."), help="Path to move into before running the command"
-    ),
+    targets: Tuple[str],
+    handout: bool,
+    presentation: bool,
+    print: bool,
+    minimum_delay: int,
+    workdir: Path,
 ) -> None:
-    """Compile on change."""
+    """
+    Compile on change.
+
+    Watching can be restricted to given TARGETS.
+    """
     _logger.info("Watching the shared, current and user directories")
     paths = Paths.from_defaults(workdir)
-    watch(
+    watching_watch(
         minimum_delay,
         frozenset([paths.shared_dir, paths.current_dir, paths.user_config_dir]),
         frozenset([paths.shared_tikz_pdf_dir, paths.pdf_dir, paths.build_dir]),
@@ -41,23 +60,26 @@ def deck(
         build_handout=handout,
         build_presentation=presentation,
         build_print=print,
-        target_whitelist=targets,
+        target_whitelist=targets or None,
     )
 
 
-@app_watch.command()
+@watch.command()
+@argument("section")
+@argument("flavor")
+@options_output(handout=False, presentation=True, print=False)
+@_option_minimum_delay
+@option_workdir
 def section(
-    section: str = Argument(..., help="Section to watch"),
-    flavor: str = Argument(..., help="Flavor of the section to watch"),
-    handout: bool = Option(False, help="Produce PDFs without animations"),
-    presentation: bool = Option(True, help="Produce PDFs with animations"),
-    print: bool = Option(False, help="Produce a printable PDF"),
-    minimum_delay: int = Option(5, help="Minimum number of seconds before recompiling"),
-    workdir: Path = Option(
-        Path("."), help="Path to move into before running the command"
-    ),
+    section: str,
+    flavor: str,
+    handout: bool,
+    presentation: bool,
+    print: bool,
+    minimum_delay: int,
+    workdir: Path,
 ) -> None:
-    """Compile a specific section on change."""
+    """Compile a specific FLAVOR of a given SECTION on change."""
     _logger.info(f"Watching {section} ⋅ {flavor}, the shared and user directories")
     global_paths = GlobalPaths.from_defaults(workdir)
     with TemporaryDirectory(prefix=f"{app_name}-") as build_dir, TemporaryDirectory(
@@ -76,7 +98,7 @@ def section(
             deck_config=global_paths.template_deck_config,
         )
         launch(str(pdf_dir))
-        watch(
+        watching_watch(
             minimum_delay,
             frozenset([paths.shared_dir, paths.user_config_dir]),
             frozenset([paths.shared_tikz_pdf_dir, paths.pdf_dir, paths.build_dir]),
@@ -90,18 +112,20 @@ def section(
         )
 
 
-@app_watch.command()
+@watch.command()
+@argument("latex")
+@options_output(handout=False, presentation=True, print=False)
+@_option_minimum_delay
+@option_workdir
 def file(
-    latex: str = Argument(..., help="File to watch, relative to share/latex"),
-    handout: bool = Option(False, help="Produce PDFs without animations"),
-    presentation: bool = Option(True, help="Produce PDFs with animations"),
-    print: bool = Option(False, help="Produce a printable PDF"),
-    minimum_delay: int = Option(5, help="Minimum number of seconds before recompiling"),
-    workdir: Path = Option(
-        Path("."), help="Path to move into before running the command"
-    ),
+    latex: str,
+    handout: bool,
+    presentation: bool,
+    print: bool,
+    minimum_delay: int,
+    workdir: Path,
 ) -> None:
-    """Compile a specific file on change."""
+    """Compile FILE on change, specified relative to share/latex."""
     _logger.info(f"Watching {latex}, the shared and user directories")
     global_paths = GlobalPaths.from_defaults(workdir)
     with TemporaryDirectory(prefix=f"{app_name}-") as build_dir, TemporaryDirectory(
@@ -120,7 +144,7 @@ def file(
             deck_config=global_paths.template_deck_config,
         )
         launch(str(pdf_dir))
-        watch(
+        watching_watch(
             minimum_delay,
             frozenset([paths.shared_dir, paths.user_config_dir]),
             frozenset([paths.shared_tikz_pdf_dir, paths.pdf_dir, paths.build_dir]),
@@ -133,17 +157,14 @@ def file(
         )
 
 
-@app_watch.command()
-def standalones(
-    minimum_delay: int = Option(5, help="Minimum number of seconds before recompiling"),
-    workdir: Path = Option(
-        Path("."), help="Path to move into before running the command"
-    ),
-) -> None:
+@watch.command()
+@_option_minimum_delay
+@option_workdir
+def standalones(minimum_delay: int, workdir: Path) -> None:
     """Compile standalones on change."""
     global_paths = GlobalPaths.from_defaults(workdir)
 
-    watch(
+    watching_watch(
         minimum_delay,
         frozenset([global_paths.tikz_dir, global_paths.plt_dir]),
         frozenset([global_paths.shared_tikz_pdf_dir, global_paths.shared_plt_pdf_dir]),

@@ -2,24 +2,21 @@ from logging import getLogger
 from pathlib import Path
 from typing import Optional
 
+from click import argument
 from pydantic import BaseModel
-from typer import Argument, Option
 from yaml import safe_load
 
-from deckz.cli import app
+from deckz.cli import app, option_workdir
 from deckz.github_querying import GitHubAPI
 from deckz.paths import GlobalPaths
 
 
 @app.command()
-def issue(
-    title: str = Argument(..., help="Title of the issue"),
-    body: Optional[str] = Argument(None, help="Body of the issue"),
-    workdir: Path = Option(
-        Path("."), help="Path to move into before running the command"
-    ),
-) -> None:
-    """Create an issue on GitHub."""
+@argument("title")
+@argument("body", required=False)
+@option_workdir
+def issue(title: str, body: Optional[str], workdir: Path) -> None:
+    """Create an issue on GitHub with a given TITLE and an optional BODY."""
     logger = getLogger(__name__)
     config = IssuesConfig.from_global_paths(GlobalPaths.from_defaults(workdir))
     api = GitHubAPI(config.api_key)

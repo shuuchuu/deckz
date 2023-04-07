@@ -1,20 +1,13 @@
 from pathlib import Path
 
-from typer import Option
-
-from deckz.cli import app
+from deckz.cli import app, option_workdir, options_output
 from deckz.running import run_all as running_run_all
 
 
 @app.command()
-def check_all(
-    handout: bool = Option(False, help="Produce PDFs without animations"),
-    presentation: bool = Option(True, help="Produce PDFs with animations"),
-    print: bool = Option(False, help="Produce printable PDFs"),
-    workdir: Path = Option(
-        Path("."), help="Path to move into before running the command"
-    ),
-) -> None:
+@options_output(handout=False, presentation=True, print=False)
+@option_workdir
+def check_all(handout: bool, presentation: bool, print: bool, workdir: Path) -> None:
     """Compile all shared slides (presentation only by default)."""
     running_run_all(
         directory=workdir,

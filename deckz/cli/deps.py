@@ -2,28 +2,32 @@ from collections import defaultdict
 from pathlib import Path
 from typing import DefaultDict, Dict, FrozenSet, Iterable, Mapping, Optional, Set, Tuple
 
+from click import argument
 from rich.console import Console
 from rich.padding import Padding
 from rich.progress import Progress, track
 from rich.table import Table
-from typer import Argument, Option
 from yaml import safe_load as yaml_safe_load
 
-from deckz.cli import app
+from deckz.cli import app, option, option_workdir
 from deckz.paths import GlobalPaths, Paths
 from deckz.targets import Targets
 
 
 @app.command()
+@argument("section", required=False)
+@argument("flavor", required=False)
+@option("--unused/--no-unused", default=True, help="Display the unused flavors")
+@option_workdir
 def deps(
-    section: Optional[str] = Argument(None, help="Section to study"),
-    flavor: Optional[str] = Argument(None, help="Flavor to study"),
-    unused: bool = Option(True, help="Display the unused flavors"),
-    workdir: Path = Option(
-        Path("."), help="Path to move into before running the command"
-    ),
+    section: Optional[str], flavor: Optional[str], unused: bool, workdir: Path
 ) -> None:
-    """Display information about shared sections and flavors usage."""
+    """
+    Display information about shared sections and flavors usage.
+
+    You can specify the SECTION, and further, the FLAVOR arguments to restrict the \
+        output.
+    """
     paths = GlobalPaths.from_defaults(workdir)
     with Progress() as progress:
         targets_progress = progress.add_task("Retrieving targets files", start=False)
