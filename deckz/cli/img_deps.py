@@ -1,13 +1,13 @@
 from pathlib import Path
 from re import compile as re_compile
-from typing import Dict, Iterator, List, Optional, Set
+from typing import Dict, Iterable, Iterator, List, Mapping, Optional, Set, Sized, Tuple
 
+from click import Abort, argument
 from rich.console import Console
 from rich.table import Table
-from typer import Abort, Argument, Option
 from yaml import safe_load
 
-from deckz.cli import app
+from deckz.cli import app, option, option_workdir
 from deckz.paths import GlobalPaths
 from deckz.targets import Dependencies, Targets
 
@@ -17,21 +17,26 @@ class UnknownSectionException(Exception):
 
 
 @app.command()
+@argument("sections", nargs=-1)
+@option(
+    "--verbose/--silent",
+    default=True,
+    help="Detailed output with a listing of used images",
+)
+@option(
+    "--descending/--ascending",
+    default=True,
+    help="Sort sections by ascending number of unlicensed images",
+)
+@option_workdir
 def img_deps(
-    sections: Optional[List[str]] = Argument(
-        None, help="Specific sessions to display, like nn/cnn or tools."
-    ),
-    workdir: Path = Option(
-        Path("."), help="Path to move into before running the command"
-    ),
-    verbose: bool = Option(True, help="Detailed output with a listing of used images"),
-    descending: bool = Option(
-        True,
-        "--descending/--ascending",
-        help="Sort sections by ascending number of unlicensed images",
-    ),
+    sections: Tuple[str], verbose: bool, descending: bool, workdir: Path
 ) -> None:
-    """Find unlicensed images with output detailed by section."""
+    """
+    Find unlicensed images with output detailed by section.
+
+    You can display info only about specific SECTIONS, like nn/cnn or tools."
+    """
     global_paths = GlobalPaths.from_defaults(workdir)
     console = Console(highlight=False)
     with console.status("Computing full section dependencies"):
@@ -109,9 +114,9 @@ def _display_section_images(
 
 
 def _ordered_sections(
-    dependencies: Dict[str, Dependencies],
-    images: Dict[str, Set[str]],
-    sections: Optional[List[str]],
+    dependencies: Mapping[str, Dependencies],
+    images: Mapping[str, Sized],
+    sections: Iterable[str],
     console: Console,
     descending: bool,
 ) -> List[str]:

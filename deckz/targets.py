@@ -374,7 +374,7 @@ class Targets(Iterable[Target]):
                 )
         targets = [TargetBuilder(data=target, paths=paths).build() for target in data]
         if whitelist is not None:
-            cls._filter_targets(targets, frozenset(whitelist), paths)
+            targets = cls._filter_targets(targets, frozenset(whitelist), paths)
         return Targets(targets, paths)
 
     @staticmethod

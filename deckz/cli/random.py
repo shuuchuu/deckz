@@ -3,28 +3,29 @@ from pathlib import Path
 from random import choice
 from typing import Dict
 
+from click import argument
 from pydantic import BaseModel, EmailStr
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.prompt import Prompt
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
-from typer import Argument, Option
 from yaml import safe_load
 
-from deckz.cli import app
+from deckz.cli import app, option, option_workdir
 from deckz.paths import GlobalPaths
 
 
 @app.command()
-def random(
-    reason: str = Argument(..., help='Reason for the deckz random ("Pay the bill")'),
-    dry_run: bool = Option(False, help="Roll the dice without sending emails"),
-    workdir: Path = Option(
-        Path("."), help="Path to move into before running the command"
-    ),
-) -> None:
-    """Roll the dice and email the result."""
+@argument("reason")
+@option("--dry-run", is_flag=True, help="Roll the dice without sending emails")
+@option_workdir
+def random(reason: str, dry_run: bool, workdir: Path) -> None:
+    """
+    Roll the dice and email the result.
+
+    The given REASON will be used as email object ("Pay the bill").
+    """
     logger = getLogger(__name__)
     config = MailsConfig.from_global_paths(GlobalPaths.from_defaults(workdir))
     console = Console()

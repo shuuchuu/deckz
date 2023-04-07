@@ -1,23 +1,22 @@
 from pathlib import Path
 from re import compile as re_compile
 
+from click import argument
 from rich.console import Console
-from typer import Argument, Option
 
-from deckz.cli import app
+from deckz.cli import app, option_workdir
 from deckz.paths import GlobalPaths
 
 
 @app.command()
-def img_search(
-    image: str = Argument(
-        ..., help="Specific image to track, like img/turing or tikz/variables"
-    ),
-    workdir: Path = Option(
-        Path("."), help="Path to move into before running the command"
-    ),
-) -> None:
-    """Find which latex files use a given image."""
+@argument("image")
+@option_workdir
+def img_search(image: str, workdir: Path) -> None:
+    """
+    Find which latex files use IMAGE.
+
+    Specify the specific image to track relative to the shared directory like img/turing
+    """
     global_paths = GlobalPaths.from_defaults(workdir)
     console = Console(highlight=False)
     pattern = re_compile(rf'(\\V{{\[?"{image}".*\]? \| image}})')
