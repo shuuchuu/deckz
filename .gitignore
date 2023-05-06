@@ -1,9 +1,10 @@
 __pycache__/
-*.egg-info
 .mypy_cache/
 .pytest_cache/
 .venv/
 build/
 dist/
+docs/reference/
 site/
+*.egg-info
 session-config.yml
