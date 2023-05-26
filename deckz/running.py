@@ -4,12 +4,12 @@ from typing import List, Optional
 
 from rich.progress import BarColumn, Progress
 
-from deckz.building import Builder
-from deckz.config import get_config
-from deckz.paths import GlobalPaths, Paths
-from deckz.settings import Settings
-from deckz.standalones import StandalonesBuilder
-from deckz.targets import Targets
+from .building import Builder
+from .config import get_config
+from .paths import GlobalPaths, Paths
+from .settings import Settings
+from .standalones import StandalonesBuilder
+from .targets import Targets
 
 _logger = getLogger(__name__)
 

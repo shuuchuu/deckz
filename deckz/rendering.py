@@ -10,8 +10,8 @@ from typing import Any, Callable, Tuple
 from jinja2 import BaseLoader, Environment, TemplateNotFound
 from yaml import safe_load
 
-from deckz.paths import Paths
-from deckz.settings import Settings
+from .paths import Paths
+from .settings import Settings
 
 
 class AbsoluteLoader(BaseLoader):

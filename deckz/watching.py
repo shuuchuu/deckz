@@ -7,7 +7,7 @@ from typing import Any, Callable, FrozenSet, Optional
 from watchdog.events import FileSystemEvent
 from watchdog.observers import Observer
 
-from deckz.exceptions import DeckzException
+from .exceptions import DeckzException
 
 _logger = getLogger(__name__)
 

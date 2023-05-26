@@ -6,14 +6,14 @@ from pathlib import Path
 from shutil import copyfile
 from typing import Any, Dict, List, Optional
 
-from deckz.compiling import CompileResult
-from deckz.compiling import compile as compiling_compile
-from deckz.exceptions import DeckzException
-from deckz.paths import Paths
-from deckz.rendering import Renderer
-from deckz.settings import Settings
-from deckz.targets import Target, Targets
-from deckz.utils import copy_file_if_newer
+from .compiling import CompileResult
+from .compiling import compile as compiling_compile
+from .exceptions import DeckzException
+from .paths import Paths
+from .rendering import Renderer
+from .settings import Settings
+from .targets import Target, Targets
+from .utils import copy_file_if_newer
 
 
 class CompileType(Enum):

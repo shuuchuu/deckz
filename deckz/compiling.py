@@ -3,7 +3,7 @@ from pathlib import Path
 from subprocess import run
 from typing import Optional
 
-from deckz.settings import Settings
+from .settings import Settings
 
 
 @dataclass(frozen=True)

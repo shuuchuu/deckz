@@ -3,9 +3,7 @@ from typing import List
 
 from click import argument
 
-from deckz.cli import app, option_workdir, options_output
-from deckz.paths import Paths
-from deckz.running import run as running_run
+from . import app, option_workdir, options_output
 
 
 @app.command()
@@ -20,6 +18,9 @@ def run(
 
     Compiling can be restricted to given TARGETS.
     """
+    from ..paths import Paths
+    from ..running import run as running_run
+
     paths = Paths.from_defaults(workdir)
     running_run(
         paths=paths,

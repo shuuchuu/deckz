@@ -1,18 +1,9 @@
-from logging import getLogger
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Any, Callable, Tuple, TypeVar
 
-from click import argument, launch
+from click import argument
 
-from deckz import app_name
-from deckz.cli import app, option, option_workdir, options_output
-from deckz.paths import GlobalPaths, Paths
-from deckz.running import run, run_file, run_section, run_standalones
-from deckz.watching import watch as watching_watch
-
-_logger = getLogger(__name__)
-
+from . import app, option, option_workdir, options_output
 
 _T = TypeVar("_T", bound=Callable[..., Any])
 
@@ -49,7 +40,15 @@ def deck(
 
     Watching can be restricted to given TARGETS.
     """
-    _logger.info("Watching the shared, current and user directories")
+    from logging import getLogger
+
+    from ..paths import Paths
+    from ..running import run
+    from ..watching import watch as watching_watch
+
+    logger = getLogger(__name__)
+
+    logger.info("Watching the shared, current and user directories")
     paths = Paths.from_defaults(workdir)
     watching_watch(
         minimum_delay,
@@ -80,12 +79,24 @@ def section(
     workdir: Path,
 ) -> None:
     """Compile a specific FLAVOR of a given SECTION on change."""
-    _logger.info(f"Watching {section} ⋅ {flavor}, the shared and user directories")
+    from logging import getLogger
+    from tempfile import TemporaryDirectory
+
+    from click import launch
+
+    from .. import app_name
+    from ..paths import GlobalPaths, Paths
+    from ..running import run_section
+    from ..watching import watch as watching_watch
+
+    logger = getLogger(__name__)
+
+    logger.info(f"Watching {section} ⋅ {flavor}, the shared and user directories")
     global_paths = GlobalPaths.from_defaults(workdir)
     with TemporaryDirectory(prefix=f"{app_name}-") as build_dir, TemporaryDirectory(
         prefix=f"{app_name}-"
     ) as pdf_dir:
-        _logger.info(
+        logger.info(
             f"Output directory located at [link=file://{pdf_dir}]{pdf_dir}[/link]",
             extra=dict(markup=True),
         )
@@ -126,12 +137,24 @@ def file(
     workdir: Path,
 ) -> None:
     """Compile FILE on change, specified relative to share/latex."""
-    _logger.info(f"Watching {latex}, the shared and user directories")
+    from logging import getLogger
+    from tempfile import TemporaryDirectory
+
+    from click import launch
+
+    from .. import app_name
+    from ..paths import GlobalPaths, Paths
+    from ..running import run_file
+    from ..watching import watch as watching_watch
+
+    logger = getLogger(__name__)
+
+    logger.info(f"Watching {latex}, the shared and user directories")
     global_paths = GlobalPaths.from_defaults(workdir)
     with TemporaryDirectory(prefix=f"{app_name}-") as build_dir, TemporaryDirectory(
         prefix=f"{app_name}-"
     ) as pdf_dir:
-        _logger.info(
+        logger.info(
             f"Output directory located at [link=file://{pdf_dir}]{pdf_dir}[/link]",
             extra=dict(markup=True),
         )
@@ -162,6 +185,10 @@ def file(
 @option_workdir
 def standalones(minimum_delay: int, workdir: Path) -> None:
     """Compile standalones on change."""
+    from ..paths import GlobalPaths
+    from ..running import run_standalones
+    from ..watching import watch as watching_watch
+
     global_paths = GlobalPaths.from_defaults(workdir)
 
     watching_watch(

@@ -8,7 +8,7 @@ from sys import modules
 
 from pygit2 import Repository, discover_repository
 
-from deckz.exceptions import DeckzException
+from .exceptions import DeckzException
 
 
 def get_git_dir(path: Path) -> Path:

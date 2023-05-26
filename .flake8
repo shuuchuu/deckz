@@ -9,4 +9,3 @@ exclude =
     .venv
 per-file-ignores =
     tests/*: D
-max-complexity = 9
