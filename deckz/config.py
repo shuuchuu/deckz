@@ -5,8 +5,8 @@ from typing import Any, Dict, Optional
 
 from yaml import safe_load
 
-from deckz.exceptions import DeckzException
-from deckz.paths import Paths
+from .exceptions import DeckzException
+from .paths import Paths
 
 
 def get_config(paths: Paths) -> Dict[str, Any]:

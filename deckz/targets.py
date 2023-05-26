@@ -19,8 +19,8 @@ from typing import (
 from pydantic import BaseModel, ValidationError
 from yaml import safe_load as safe_load
 
-from deckz.exceptions import DeckzException
-from deckz.paths import Paths
+from .exceptions import DeckzException
+from .paths import Paths
 
 _logger = getLogger(__name__)
 

@@ -1,11 +1,8 @@
 from pathlib import Path
-from re import compile as re_compile
 
 from click import argument
-from rich.console import Console
 
-from deckz.cli import app, option_workdir
-from deckz.paths import GlobalPaths
+from . import app, option_workdir
 
 
 @app.command()
@@ -17,6 +14,12 @@ def img_search(image: str, workdir: Path) -> None:
 
     Specify the specific image to track relative to the shared directory like img/turing
     """
+    from re import compile as re_compile
+
+    from rich.console import Console
+
+    from ..paths import GlobalPaths
+
     global_paths = GlobalPaths.from_defaults(workdir)
     console = Console(highlight=False)
     pattern = re_compile(rf'(\\V{{\[?"{image}".*\]? \| image}})')

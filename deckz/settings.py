@@ -3,8 +3,8 @@ from typing import Dict, List
 from pydantic import BaseModel
 from yaml import safe_load
 
-from deckz.exceptions import DeckzException
-from deckz.paths import GlobalPaths
+from .exceptions import DeckzException
+from .paths import GlobalPaths
 
 
 class LocalizedValues(BaseModel):

@@ -10,11 +10,11 @@ from shutil import copyfile
 from tempfile import TemporaryDirectory
 from typing import Callable, List, Optional, Tuple
 
-from deckz.compiling import compile as compiling_compile
-from deckz.exceptions import DeckzException
-from deckz.paths import GlobalPaths
-from deckz.settings import Settings
-from deckz.utils import copy_file_if_newer, import_module_and_submodules
+from .compiling import compile as compiling_compile
+from .exceptions import DeckzException
+from .paths import GlobalPaths
+from .settings import Settings
+from .utils import copy_file_if_newer, import_module_and_submodules
 
 
 @dataclass(frozen=True)

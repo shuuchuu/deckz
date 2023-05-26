@@ -1,15 +1,17 @@
-from logging import getLogger
 from pathlib import Path
-from shutil import rmtree
 
-from deckz.cli import app, option_workdir
-from deckz.paths import GlobalPaths, Paths
+from . import app, option_workdir
 
 
 @app.command()
 @option_workdir
 def clean_all(workdir: Path) -> None:
     """Wipe all build directories."""
+    from logging import getLogger
+    from shutil import rmtree
+
+    from ..paths import GlobalPaths, Paths
+
     logger = getLogger(__name__)
     paths = GlobalPaths.from_defaults(workdir)
     for deck_path in (p.parent for p in paths.git_dir.glob("**/targets.yml")):

@@ -1,15 +1,17 @@
-from logging import getLogger
 from pathlib import Path
-from shutil import rmtree
 
-from deckz.cli import app, option_workdir
-from deckz.paths import Paths
+from . import app, option_workdir
 
 
 @app.command()
 @option_workdir
 def clean(workdir: Path) -> None:
     """Wipe the build directory."""
+    from logging import getLogger
+    from shutil import rmtree
+
+    from ..paths import Paths
+
     logger = getLogger(__name__)
     paths = Paths.from_defaults(workdir)
     if not paths.build_dir.exists():

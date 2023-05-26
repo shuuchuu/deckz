@@ -6,9 +6,9 @@ from typing import Container, Dict, Iterator, Type, TypeVar
 
 from appdirs import user_config_dir as appdirs_user_config_dir
 
-from deckz import app_name
-from deckz.exceptions import DeckzException
-from deckz.utils import get_git_dir
+from . import app_name
+from .exceptions import DeckzException
+from .utils import get_git_dir
 
 _logger = getLogger(__name__)
 

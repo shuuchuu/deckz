@@ -6,7 +6,7 @@ from click import group
 from click import option as click_option
 from rich.logging import RichHandler
 
-from deckz.utils import import_module_and_submodules
+from ..utils import import_module_and_submodules
 
 _T = TypeVar("_T", bound=Callable[..., Any])
 
