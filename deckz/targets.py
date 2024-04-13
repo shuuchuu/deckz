@@ -1,20 +1,9 @@
 from collections import defaultdict
+from collections.abc import Iterable, Iterator, Set
 from dataclasses import dataclass, field
 from logging import getLogger
 from pathlib import Path, PurePosixPath
-from typing import (
-    Any,
-    DefaultDict,
-    Dict,
-    FrozenSet,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Set,
-    Tuple,
-    Union,
-)
+from typing import Any
 
 from pydantic import BaseModel, ValidationError
 from yaml import safe_load as safe_load
@@ -32,8 +21,8 @@ class Title:
 
 
 class DirSectionConfig(BaseModel):
-    default_titles: Optional[Dict[str, str]]
-    flavors: Dict[str, List[Union[str, Dict[str, Optional[str]]]]]
+    default_titles: dict[str, str] | None
+    flavors: dict[str, list[str | dict[str, str | None]]]
     title: str
 
     @classmethod
@@ -45,20 +34,20 @@ class DirSectionConfig(BaseModel):
 
 
 Content = str
-ContentOrTitle = Union[Content, Title]
+ContentOrTitle = Content | Title
 
 
 @dataclass(frozen=True)
 class Part:
-    title: Optional[str]
-    sections: List[ContentOrTitle] = field(default_factory=list)
+    title: str | None
+    sections: list[ContentOrTitle] = field(default_factory=list)
 
 
 @dataclass
 class Dependencies:
-    used: Set[Path] = field(default_factory=set)
-    missing: Set[str] = field(default_factory=set)
-    unused: Set[Path] = field(default_factory=set)
+    used: set[Path] = field(default_factory=set)
+    missing: set[str] = field(default_factory=set)
+    unused: set[Path] = field(default_factory=set)
 
     def update(self, other: "Dependencies") -> None:
         self.used |= other.used
@@ -78,8 +67,8 @@ class Dependencies:
 
     @staticmethod
     def merge_dicts(
-        *dependencies_dicts: Dict[str, "Dependencies"]
-    ) -> Dict[str, "Dependencies"]:
+        *dependencies_dicts: dict[str, "Dependencies"]
+    ) -> dict[str, "Dependencies"]:
         keys = set.union(*(set(d) for d in dependencies_dicts))
         merged_dict = {}
         for key in keys:
@@ -93,15 +82,15 @@ class Dependencies:
 class Target:
     name: str
     dependencies: Dependencies
-    parts: List[Part]
-    section_dependencies: DefaultDict[str, Dependencies]
-    section_flavors: DefaultDict[str, Set[str]]
+    parts: list[Part]
+    section_dependencies: defaultdict[str, Dependencies]
+    section_flavors: defaultdict[str, set[str]]
 
     @classmethod
     def from_targets(cls, targets: Iterable["Target"], name: str) -> "Target":
         dependencies = Dependencies.merge(*(t.dependencies for t in targets))
         parts = [p for t in targets for p in t.parts]
-        section_dependencies: DefaultDict[str, Dependencies] = defaultdict(Dependencies)
+        section_dependencies: defaultdict[str, Dependencies] = defaultdict(Dependencies)
         for t in targets:
             for k, v in t.section_dependencies.items():
                 section_dependencies[k].update(v)
@@ -114,14 +103,14 @@ class Target:
 
 @dataclass(frozen=True)
 class TargetBuilder:
-    data: Dict[str, Any]
+    data: dict[str, Any]
     paths: Paths
 
     def build(self) -> Target:
         all_dependencies = Dependencies()
         all_dependencies.unused.update(self.paths.local_latex_dir.glob("**/*.tex"))
         all_items = []
-        section_dependencies: DefaultDict[str, Dependencies] = defaultdict(Dependencies)
+        section_dependencies: defaultdict[str, Dependencies] = defaultdict(Dependencies)
         section_flavors = defaultdict(set)
         for section_config in self.data["sections"]:
             if not isinstance(section_config, dict):
@@ -152,11 +141,11 @@ class TargetBuilder:
     def _parse_section_dir(
         self,
         section_path_str: str,
-        custom_config: Dict[str, Any],
+        custom_config: dict[str, Any],
         title_level: int,
-        section_flavors: DefaultDict[str, Set[str]],
-        section_dependencies: DefaultDict[str, Dependencies],
-    ) -> Optional[Tuple[List[ContentOrTitle], Dependencies]]:
+        section_flavors: defaultdict[str, set[str]],
+        section_dependencies: defaultdict[str, Dependencies],
+    ) -> tuple[list[ContentOrTitle], Dependencies] | None:
         section_path = Path(section_path_str)
         local_section_dir = self.paths.local_latex_dir / section_path
         local_section_config_path = (local_section_dir / section_path).with_suffix(
@@ -192,7 +181,7 @@ class TargetBuilder:
             )
 
         flavor = section_config.flavors[flavor_name]
-        items: List[ContentOrTitle] = [Title(title=title, level=title_level)]
+        items: list[ContentOrTitle] = [Title(title=title, level=title_level)]
         for item in flavor:
             self._process_item(
                 item=item,
@@ -211,17 +200,17 @@ class TargetBuilder:
 
     def _process_item(
         self,
-        item: Union[str, Dict[str, Optional[str]]],
-        items: List[ContentOrTitle],
+        item: str | dict[str, str | None],
+        items: list[ContentOrTitle],
         dependencies: Dependencies,
-        default_titles: Optional[Dict[str, str]],
-        section_config: Dict[str, Any],
+        default_titles: dict[str, str] | None,
+        section_config: dict[str, Any],
         local_section_dir: Path,
         shared_section_dir: Path,
         section_path_str: str,
         title_level: int,
-        section_flavors: DefaultDict[str, Set[str]],
-        section_dependencies: DefaultDict[str, Dependencies],
+        section_flavors: defaultdict[str, set[str]],
+        section_dependencies: defaultdict[str, Dependencies],
     ) -> None:
         if isinstance(item, str):
             filename = item
@@ -273,9 +262,9 @@ class TargetBuilder:
         nested_section_path_str: str,
         flavor: str,
         title_level: int,
-        section_flavors: DefaultDict[str, Set[str]],
-        section_dependencies: DefaultDict[str, Dependencies],
-        items: List[ContentOrTitle],
+        section_flavors: defaultdict[str, set[str]],
+        section_dependencies: defaultdict[str, Dependencies],
+        items: list[ContentOrTitle],
         dependencies: Dependencies,
     ) -> None:
         if nested_section_path_str.startswith("$/"):
@@ -297,8 +286,8 @@ class TargetBuilder:
         dependencies.update(nested_dependencies)
 
     def _parse_section_file(
-        self, section_path: str, config: Dict[str, Any], title_level: int
-    ) -> Optional[Tuple[List[ContentOrTitle], Dependencies]]:
+        self, section_path: str, config: dict[str, Any], title_level: int
+    ) -> tuple[list[ContentOrTitle], Dependencies] | None:
         local_section_file = (self.paths.local_latex_dir / section_path).with_suffix(
             ".tex"
         )
@@ -314,7 +303,7 @@ class TargetBuilder:
         else:
             return None
         config_file = section_file.with_suffix(".yml")
-        items: List[ContentOrTitle] = []
+        items: list[ContentOrTitle] = []
         if "title" in config:
             title = config["title"]
         elif config_file.exists():
@@ -331,7 +320,7 @@ class TargetBuilder:
 
 @dataclass(frozen=True)
 class Targets(Iterable[Target]):
-    targets: List[Target]
+    targets: list[Target]
     paths: Paths
 
     def __post_init__(self) -> None:
@@ -352,7 +341,7 @@ class Targets(Iterable[Target]):
 
     @classmethod
     def from_file(
-        cls, paths: Paths, whitelist: Optional[List[str]] = None
+        cls, paths: Paths, whitelist: Iterable[str] | None = None
     ) -> "Targets":
         if not paths.targets.exists():
             raise DeckzException(f"Could not find {paths.targets}.")
@@ -362,9 +351,9 @@ class Targets(Iterable[Target]):
     @classmethod
     def from_data(
         cls,
-        data: List[Dict[str, Any]],
+        data: list[dict[str, Any]],
         paths: Paths,
-        whitelist: Optional[List[str]] = None,
+        whitelist: Iterable[str] | None = None,
     ) -> "Targets":
         for target_data in data:
             if target_data["name"] == "all":
@@ -379,8 +368,8 @@ class Targets(Iterable[Target]):
 
     @staticmethod
     def _filter_targets(
-        targets: Iterable[Target], whiteset: FrozenSet[str], paths: Paths
-    ) -> List[Target]:
+        targets: Iterable[Target], whiteset: Set[str], paths: Paths
+    ) -> list[Target]:
         unmatched = whiteset - frozenset(target.name for target in targets)
         if unmatched:
             raise DeckzException(

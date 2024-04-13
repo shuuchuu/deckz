@@ -1,5 +1,6 @@
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Tuple, TypeVar
+from typing import Any, TypeVar
 
 from click import argument
 
@@ -28,7 +29,7 @@ def watch() -> None:
 @_option_minimum_delay
 @option_workdir
 def deck(
-    targets: Tuple[str],
+    targets: tuple[str],
     handout: bool,
     presentation: bool,
     print: bool,

@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Optional
 
 from click import argument
 
@@ -11,9 +10,7 @@ from . import app, option, option_workdir
 @argument("flavor", required=False)
 @option("--unused/--no-unused", default=True, help="Display the unused flavors")
 @option_workdir
-def deps(
-    section: Optional[str], flavor: Optional[str], unused: bool, workdir: Path
-) -> None:
+def deps(section: str | None, flavor: str | None, unused: bool, workdir: Path) -> None:
     """
     Display information about shared sections and flavors usage.
 
@@ -21,16 +18,7 @@ def deps(
         output.
     """
     from collections import defaultdict
-    from typing import (
-        DefaultDict,
-        Dict,
-        FrozenSet,
-        Iterable,
-        Mapping,
-        Optional,
-        Set,
-        Tuple,
-    )
+    from collections.abc import Iterable, Mapping, MutableMapping, MutableSet, Set
 
     from rich.console import Console
     from rich.padding import Padding
@@ -42,8 +30,8 @@ def deps(
     from ..targets import Targets
 
     def _compute_shared_dependencies(
-        dependencies: Set[Path], paths: GlobalPaths
-    ) -> Set[str]:
+        dependencies: Iterable[Path], paths: GlobalPaths
+    ) -> set[str]:
         shared_dependencies = set()
         for dependency in dependencies:
             try:
@@ -55,8 +43,8 @@ def deps(
 
     def _process_targets(
         targets_path: Path,
-        all_targets_dependencies: Dict[str, Dict[str, Set[str]]],
-        by_sections: Mapping[str, Mapping[str, Set[Tuple[str, str]]]],
+        all_targets_dependencies: Mapping[str, MutableMapping[str, set[str]]],
+        by_sections: Mapping[str, Mapping[str, MutableSet[tuple[str, str]]]],
     ) -> None:
         paths = Paths.from_defaults(targets_path.parent)
         targets_name = str(paths.current_dir.relative_to(paths.git_dir))
@@ -82,28 +70,9 @@ def deps(
             )
             all_targets_dependencies[targets_name][target.name] = shared_dependencies
 
-    def _print_changed_report(
-        touched: FrozenSet[str],
-        all_targets_dependencies: Dict[str, Dict[str, Set[str]]],
-    ) -> None:
-        console = Console()
-        console.print()
-        console.print()
-        console.rule("[bold]Decks affected by uncommited changes", align="left")
-        console.print()
-        table = Table("Deck", "Targets")
-        for targets_name, targets_dependencies in all_targets_dependencies.items():
-            touched_targets = []
-            for target_name, target_dependencies in targets_dependencies.items():
-                if touched.intersection(target_dependencies):
-                    touched_targets.append(target_name)
-            if touched_targets:
-                table.add_row(targets_name, " ".join(touched_targets))
-        console.print(Padding(table if table.row_count else "None.", (0, 0, 0, 2)))
-
     def _print_unused_report(
         section_paths: Iterable[Path],
-        by_sections: Mapping[str, Mapping[str, Set[Tuple[str, str]]]],
+        by_sections: Mapping[str, Mapping[str, Set[tuple[str, str]]]],
         global_paths: GlobalPaths,
     ) -> None:
         console = Console()
@@ -132,8 +101,8 @@ def deps(
 
     def _print_section_report(
         section: str,
-        flavor: Optional[str],
-        by_sections: Mapping[str, Mapping[str, Set[Tuple[str, str]]]],
+        flavor: str | None,
+        by_sections: Mapping[str, Mapping[str, Set[tuple[str, str]]]],
     ) -> None:
         console = Console()
         console.print()
@@ -147,7 +116,7 @@ def deps(
         if flavor is None:
             flavors_dependencies = by_sections[section]
             for deck_path, target_name in sorted(
-                set.union(*flavors_dependencies.values())
+                set().union(*flavors_dependencies.values())
             ):
                 table.add_row(deck_path, target_name)
         else:
@@ -156,7 +125,7 @@ def deps(
                 table.add_row(deck_path, target_name)
         console.print(Padding(table if table.row_count else "None.", (0, 0, 0, 2)))
 
-    def _relative_to_shared_latex(paths: GlobalPaths, file_path: str) -> Optional[str]:
+    def _relative_to_shared_latex(paths: GlobalPaths, file_path: str) -> str | None:
         try:
             return str((paths.git_dir / file_path).relative_to(paths.shared_latex_dir))
         except ValueError:
@@ -187,8 +156,8 @@ def deps(
         )
         progress.start_task(sections_progress)
 
-    all_targets_dependencies: Dict[str, Dict[str, Set[str]]] = defaultdict(dict)
-    by_sections: DefaultDict[str, DefaultDict[str, Set[Tuple[str, str]]]] = defaultdict(
+    all_targets_dependencies: dict[str, dict[str, set[str]]] = defaultdict(dict)
+    by_sections: defaultdict[str, defaultdict[str, set[tuple[str, str]]]] = defaultdict(
         lambda: defaultdict(set)
     )
     for targets_path in track(targets_paths, description="Processing targets files"):

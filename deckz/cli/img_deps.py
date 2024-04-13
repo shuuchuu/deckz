@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Tuple
 
 from click import argument
 
@@ -24,15 +23,15 @@ class UnknownSectionException(Exception):
 )
 @option_workdir
 def img_deps(
-    sections: Tuple[str], verbose: bool, descending: bool, workdir: Path
+    sections: tuple[str], verbose: bool, descending: bool, workdir: Path
 ) -> None:
     """
     Find unlicensed images with output detailed by section.
 
     You can display info only about specific SECTIONS, like nn/cnn or tools."
     """
+    from collections.abc import Iterable, Iterator, Mapping, Set, Sized
     from re import compile as re_compile
-    from typing import Dict, Iterable, Iterator, List, Mapping, Optional, Set, Sized
 
     from click import Abort
     from rich.console import Console
@@ -43,8 +42,8 @@ def img_deps(
     from ..targets import Dependencies, Targets
 
     def _display_table(
-        sections: List[str],
-        images: Dict[str, Set[str]],
+        sections: Iterable[str],
+        images: Mapping[str, Set[str]],
         console: Console,
     ) -> None:
         table = Table("Section", "Unlicensed images")
@@ -65,7 +64,7 @@ def img_deps(
 
     def _display_section_images(
         section: str,
-        images: Dict[str, Set[str]],
+        images: Mapping[str, Set[str]],
         console: Console,
         global_paths: GlobalPaths,
     ) -> None:
@@ -97,7 +96,7 @@ def img_deps(
         sections: Iterable[str],
         console: Console,
         descending: bool,
-    ) -> List[str]:
+    ) -> list[str]:
         sections = sections or []
         unknown_sections = sorted(
             section for section in sections if section not in dependencies
@@ -126,7 +125,7 @@ def img_deps(
                 if not _image_license(image, global_paths):
                     yield image
 
-    def _image_license(image: str, global_paths: GlobalPaths) -> Optional[str]:
+    def _image_license(image: str, global_paths: GlobalPaths) -> str | None:
         metadata_path = (global_paths.shared_dir / image).with_suffix(".yml")
         if not metadata_path.exists():
             return None
@@ -136,7 +135,7 @@ def img_deps(
     global_paths = GlobalPaths.from_defaults(workdir)
     console = Console(highlight=False)
     with console.status("Computing full section dependencies"):
-        section_dependencies: Dict[str, Dependencies] = {}
+        section_dependencies: dict[str, Dependencies] = {}
         for paths in global_paths.decks_paths():
             targets = Targets.from_file(paths)
             for target in targets:

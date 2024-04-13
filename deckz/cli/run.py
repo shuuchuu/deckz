@@ -1,5 +1,5 @@
+from collections.abc import Iterable
 from pathlib import Path
-from typing import List
 
 from click import argument
 
@@ -11,7 +11,11 @@ from . import app, option_workdir, options_output
 @options_output(handout=True, presentation=True, print=True)
 @option_workdir
 def run(
-    targets: List[str], handout: bool, presentation: bool, print: bool, workdir: Path
+    targets: Iterable[str],
+    handout: bool,
+    presentation: bool,
+    print: bool,
+    workdir: Path,
 ) -> None:
     """
     Compile main targets.

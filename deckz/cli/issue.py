@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Optional
 
 from click import argument
 
@@ -10,7 +9,7 @@ from . import app, option_workdir
 @argument("title")
 @argument("body", required=False)
 @option_workdir
-def issue(title: str, body: Optional[str], workdir: Path) -> None:
+def issue(title: str, body: str | None, workdir: Path) -> None:
     """Create an issue on GitHub with a given TITLE and an optional BODY."""
     from logging import getLogger
 

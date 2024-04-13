@@ -1,6 +1,3 @@
-from typing import Optional
-
-
 class DeckzException(Exception):
-    def __init__(self, message: Optional[str] = None) -> None:
+    def __init__(self, message: str | None = None) -> None:
         super().__init__(message)

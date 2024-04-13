@@ -1,7 +1,7 @@
 from collections import ChainMap
 from pathlib import Path
 from shutil import copy as shutil_copy
-from typing import Any, Dict, Optional
+from typing import Any
 
 from yaml import safe_load
 
@@ -9,7 +9,7 @@ from .exceptions import DeckzException
 from .paths import Paths
 
 
-def get_config(paths: Paths) -> Dict[str, Any]:
+def get_config(paths: Paths) -> dict[str, Any]:
     return {
         k: v
         for k, v in sorted(
@@ -30,8 +30,8 @@ def get_config(paths: Paths) -> Dict[str, Any]:
 
 
 def _get_or_create_config(
-    config_path: Path, template_path: Optional[Path]
-) -> Dict[str, Any]:
+    config_path: Path, template_path: Path | None
+) -> dict[str, Any]:
     if not config_path.is_file():
         if template_path:
             if template_path.is_file():

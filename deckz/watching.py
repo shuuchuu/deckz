@@ -1,8 +1,9 @@
+from collections.abc import Callable, Set
 from logging import getLogger
 from pathlib import Path
 from threading import Thread
 from time import time
-from typing import Any, Callable, FrozenSet, Optional
+from typing import Any
 
 from watchdog.events import FileSystemEvent
 from watchdog.observers import Observer
@@ -25,7 +26,7 @@ class _BaseEventHandler:
         self._function_args = args
         self._function_kwargs = kwargs
         self._last_compile = 0.0
-        self._worker: Optional[Thread] = None
+        self._worker: Thread | None = None
         self._first_build = True
 
     def __call__(self) -> None:
@@ -59,8 +60,8 @@ class _BaseEventHandler:
 
 def watch(
     minimum_delay: int,
-    watch: FrozenSet[Path],
-    avoid: FrozenSet[Path],
+    watch: Set[Path],
+    avoid: Set[Path],
     function: Callable[..., Any],
     *function_args: Any,
     **function_kwargs: Any,

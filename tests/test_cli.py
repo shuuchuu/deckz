@@ -1,7 +1,7 @@
 import sys  # noqa: F401
 from pathlib import Path
 from shutil import copytree
-from typing import Any, Tuple
+from typing import Any
 from unittest.mock import patch
 
 import appdirs
@@ -24,7 +24,7 @@ def working_dir(tmp_path: Path, monkeypatch: Any) -> Path:
     return working_dir
 
 
-def extract_info(pdf_path: Path) -> Tuple[int, str]:
+def extract_info(pdf_path: Path) -> tuple[int, str]:
     with open(pdf_path, "rb") as fh:
         pages = list(extract_pages(fh))
         fh.seek(0)

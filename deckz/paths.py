@@ -1,8 +1,9 @@
+from collections.abc import Container, Iterator
 from dataclasses import dataclass
 from itertools import chain
 from logging import getLogger
 from pathlib import Path
-from typing import Container, Dict, Iterator, Type, TypeVar
+from typing import TypeVar
 
 from appdirs import user_config_dir as appdirs_user_config_dir
 
@@ -53,7 +54,7 @@ class GlobalPaths:
         self.user_config_dir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
-    def _defaults_global_paths(cls, current_dir: Path) -> Dict[str, Path]:
+    def _defaults_global_paths(cls, current_dir: Path) -> dict[str, Path]:
         current_dir = current_dir.resolve()
         git_dir = get_git_dir(current_dir)
         shared_dir = git_dir / "shared"
@@ -95,7 +96,7 @@ class GlobalPaths:
 
     @classmethod
     def from_defaults(
-        cls: Type[_GlobalPathsType],
+        cls: type[_GlobalPathsType],
         current_dir: Path,
         check_depth: bool = True,
         **kwargs: Path,
@@ -133,7 +134,7 @@ class Paths(GlobalPaths):
     @classmethod
     def _defaults_paths(
         cls, current_dir: Path, check_depth: bool, skip: Container[str]
-    ) -> Dict[str, Path]:
+    ) -> dict[str, Path]:
         defaults = super()._defaults_global_paths(current_dir)
         if check_depth and not defaults["current_dir"].relative_to(
             defaults["git_dir"]
@@ -165,7 +166,7 @@ class Paths(GlobalPaths):
 
     @classmethod
     def from_defaults(
-        cls: Type[_PathsType],
+        cls: type[_PathsType],
         current_dir: Path,
         check_depth: bool = True,
         **kwargs: Path,

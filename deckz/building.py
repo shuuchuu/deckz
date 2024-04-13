@@ -4,7 +4,7 @@ from logging import getLogger
 from multiprocessing import Pool, cpu_count
 from pathlib import Path
 from shutil import copyfile
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .compiling import CompileResult
 from .compiling import compile as compiling_compile
@@ -32,7 +32,7 @@ class CompileItem:
 class Builder:
     def __init__(
         self,
-        latex_config: Dict[str, Any],
+        latex_config: dict[str, Any],
         settings: Settings,
         paths: Paths,
         targets: Targets,
@@ -50,7 +50,7 @@ class Builder:
         self._logger = getLogger(__name__)
         self._renderer = Renderer(paths, settings)
 
-    def _list_items(self) -> List[CompileItem]:
+    def _list_items(self) -> list[CompileItem]:
         to_compile = []
         all_target = Target.from_targets(self._targets, "all")
         if self._handout:
@@ -90,7 +90,7 @@ class Builder:
                 )
         return all(result.ok for result in results)
 
-    def _get_filename(self, target: Optional[Target], compile_type: CompileType) -> str:
+    def _get_filename(self, target: Target | None, compile_type: CompileType) -> str:
         name = self._latex_config["deck_acronym"]
         if target is not None:
             name += f"-{target.name}"
@@ -113,7 +113,7 @@ class Builder:
         return result
 
     def _setup_build_dir(
-        self, target: Optional[Target], compile_type: CompileType
+        self, target: Target | None, compile_type: CompileType
     ) -> Path:
         target_build_dir = self._paths.build_dir
         if target is not None:
@@ -141,7 +141,7 @@ class Builder:
             print=item.compile_type is CompileType.PrintHandout,
         )
 
-    def _copy_dependencies(self, target: Target, target_build_dir: Path) -> List[Path]:
+    def _copy_dependencies(self, target: Target, target_build_dir: Path) -> list[Path]:
         copied = []
         for dependency in target.dependencies.used:
             try:
@@ -165,7 +165,7 @@ class Builder:
         return copied
 
     def _render_dependencies(
-        self, to_render: List[Path], target_build_dir: Path
+        self, to_render: list[Path], target_build_dir: Path
     ) -> None:
         for item in to_render:
             self._renderer.render(template_path=item, output_path=item.with_suffix(""))

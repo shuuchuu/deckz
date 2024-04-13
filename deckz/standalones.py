@@ -1,4 +1,5 @@
 import sys
+from collections.abc import Callable
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from functools import partial
@@ -8,7 +9,6 @@ from multiprocessing import Pool
 from pathlib import Path
 from shutil import copyfile
 from tempfile import TemporaryDirectory
-from typing import Callable, List, Optional, Tuple
 
 from .compiling import compile as compiling_compile
 from .exceptions import DeckzException
@@ -36,7 +36,7 @@ class StandalonesBuilder:
         self.tikz_builder.build()
 
 
-_plt_registry: List[Tuple[Path, Path, Callable[[], None]]] = []
+_plt_registry: list[tuple[Path, Path, Callable[[], None]]] = []
 
 
 def _clear_register() -> None:
@@ -44,7 +44,7 @@ def _clear_register() -> None:
 
 
 def register_plot(
-    name: Optional[str] = None,
+    name: str | None = None,
 ) -> Callable[[Callable[[], None]], Callable[[], None]]:
     def worker(f: Callable[[], None]) -> Callable[[], None]:
         _, *submodules, _ = f.__module__.split(".")

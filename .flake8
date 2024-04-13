@@ -1,6 +1,6 @@
 [flake8]
-ignore=B008,W503
-max-line-length=88
+ignore = B008, W503
+max-line-length = 88
 exclude =
     __pycache__,
     .git,
@@ -9,3 +9,4 @@ exclude =
     .venv
 per-file-ignores =
     tests/*: D
+pep585-activation = always

@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
 from subprocess import run
-from typing import Optional
 
 from .settings import Settings
 
@@ -9,8 +8,8 @@ from .settings import Settings
 @dataclass(frozen=True)
 class CompileResult:
     ok: bool
-    stdout: Optional[str] = ""
-    stderr: Optional[str] = ""
+    stdout: str | None = ""
+    stderr: str | None = ""
 
 
 def compile(latex_path: Path, settings: Settings) -> CompileResult:

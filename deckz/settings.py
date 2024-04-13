@@ -1,5 +1,3 @@
-from typing import Dict, List
-
 from pydantic import BaseModel
 from yaml import safe_load
 
@@ -8,9 +6,9 @@ from .paths import GlobalPaths
 
 
 class LocalizedValues(BaseModel):
-    fr: Dict[str, str] = {}
-    en: Dict[str, str] = {}
-    all: Dict[str, str] = {}
+    fr: dict[str, str] = {}
+    en: dict[str, str] = {}
+    all: dict[str, str] = {}
 
     def get_default(self, value: str, lang: str) -> str:
         if lang == "fr" and value in self.fr:
@@ -27,7 +25,7 @@ class DefaultImageValues(BaseModel):
 
 
 class Settings(BaseModel):
-    build_command: List[str]
+    build_command: list[str]
     default_img_values: DefaultImageValues = DefaultImageValues()
 
     @classmethod

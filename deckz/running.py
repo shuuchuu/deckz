@@ -1,6 +1,6 @@
+from collections.abc import Iterable
 from logging import getLogger
 from pathlib import Path
-from typing import List, Optional
 
 from rich.progress import BarColumn, Progress
 
@@ -19,7 +19,7 @@ def run(
     build_handout: bool,
     build_presentation: bool,
     build_print: bool,
-    target_whitelist: Optional[List[str]] = None,
+    target_whitelist: Iterable[str] | None = None,
 ) -> None:
     config = get_config(paths)
     targets = Targets.from_file(paths=paths, whitelist=target_whitelist)

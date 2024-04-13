@@ -28,12 +28,14 @@ watchdog = "^3"
 black = "^23"
 flake8 = "^6"
 flake8-bugbear = "^23"
+flake8-new-union-types = "^0.4"
+flake8-pep585 = "^0.1"
 isort = "^5"
 mkdocs = "^1"
 mkdocs-gen-files = "^0.4"
 mkdocs-literate-nav = "^0.6"
 mkdocs-material = "^9"
-mkdocstrings = {extras = ["python"], version = "^0.20.0"}
+mkdocstrings = {extras = ["python"], version = "^0.20"}
 mypy = "^1"
 "pdfminer.six" = "^20221105"
 pylint = "^2"
@@ -47,6 +49,19 @@ deckz = 'deckz.cli:main'
 
 [tool.isort]
 profile = "black"
+
+[tool.mypy]
+disallow_untyped_defs = true
+ignore_missing_imports = true
+strict_optional = true
+
+[tool.pylint."MASTER"]
+jobs = 0
+load-plugins = "pylint.extensions.docparams"
+
+[tool.pylint."MESSAGES CONTROL"]
+disable = "all"
+enable = ["missing-param-doc", "differing-param-doc", "differing-type-doc", "missing-return-doc"]
 
 [build-system]
 build-backend = "poetry.core.masonry.api"

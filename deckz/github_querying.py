@@ -1,5 +1,5 @@
 from logging import getLogger
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import BaseModel
 from requests import post
@@ -12,7 +12,7 @@ class IssuesConfig(BaseModel):
     api_key: str
     repo: str
     owner: str
-    project: Optional[int] = None
+    project: int | None = None
 
     @classmethod
     def from_global_paths(cls, paths: GlobalPaths) -> "IssuesConfig":
@@ -24,7 +24,7 @@ class GitHubAPI:
         self._api_key = api_key
         self._logger = getLogger(__name__)
 
-    def _run_query(self, query: str) -> Dict[str, Any]:
+    def _run_query(self, query: str) -> dict[str, Any]:
         response = post(
             "https://api.github.com/graphql",
             json=dict(query=query),
@@ -38,8 +38,8 @@ class GitHubAPI:
         owner: str,
         repo: str,
         title: str,
-        body: Optional[str],
-        project_number: Optional[int],
+        body: str | None,
+        project_number: int | None,
     ) -> str:
         self._logger.info("Retrieving repository id")
         repo_id = self.get_repo_id(owner=owner, repo=repo)

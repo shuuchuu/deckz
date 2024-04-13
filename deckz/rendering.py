@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from filecmp import cmp
 from functools import cached_property
 from os import unlink
@@ -5,7 +6,7 @@ from os.path import join as path_join
 from pathlib import Path
 from shutil import move
 from tempfile import NamedTemporaryFile
-from typing import Any, Callable, Tuple
+from typing import Any
 
 from jinja2 import BaseLoader, Environment, TemplateNotFound
 from yaml import safe_load
@@ -17,7 +18,7 @@ from .settings import Settings
 class AbsoluteLoader(BaseLoader):
     def get_source(
         self, environment: Environment, template: str
-    ) -> Tuple[str, str, Callable[[], bool]]:
+    ) -> tuple[str, str, Callable[[], bool]]:
         template_path = Path(template)
         if not template_path.exists():
             raise TemplateNotFound(template)

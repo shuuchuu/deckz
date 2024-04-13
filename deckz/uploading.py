@@ -2,7 +2,7 @@ from logging import getLogger
 from pathlib import Path
 from pickle import dump as pickle_dump
 from pickle import load as pickle_load
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -75,7 +75,7 @@ class Uploader:
 
         return build("drive", "v3", credentials=creds, cache_discovery=False)
 
-    def _check_folders(self) -> Tuple[str, str]:
+    def _check_folders(self) -> tuple[str, str]:
         self._logger.info("Checking/creating folder hierarchy")
         folders = [app_name]
         folders.extend(self._paths.current_dir.relative_to(self._paths.git_dir).parts)
@@ -98,7 +98,7 @@ class Uploader:
         ).execute()
         return folder_id, folder_link
 
-    def _create_backup(self, folder_id: str) -> Optional[str]:
+    def _create_backup(self, folder_id: str) -> str | None:
         file_ids = self._list(folder=False, parents=[folder_id], name=None)
         backup_id = None
         if file_ids:
@@ -119,10 +119,10 @@ class Uploader:
                 self._service.files().delete(fileId=old_backup_id).execute()
         return backup_id
 
-    def _upload(self, folder_id: str) -> Dict[Path, str]:
+    def _upload(self, folder_id: str) -> dict[Path, str]:
         self._logger.info("Uploading pdfs")
         pdfs = sorted((self._paths.pdf_dir).glob("*.pdf"), key=lambda p: p.name)
-        links: Dict[Path, str] = {}
+        links: dict[Path, str] = {}
         progress = self._build_progress()
         with progress:
             for pdf in pdfs:
@@ -154,7 +154,7 @@ class Uploader:
                 links[pdf] = response.get("webViewLink")
         return links
 
-    def _create_folder(self, parent: str, name: str) -> Tuple[str, str]:
+    def _create_folder(self, parent: str, name: str) -> tuple[str, str]:
         file_metadata = dict(
             name=name, mimeType="application/vnd.google-apps.folder", parents=[parent]
         )
@@ -167,23 +167,21 @@ class Uploader:
 
     def _list(
         self,
-        folder: Optional[bool],
-        parents: List[str],
-        name: Optional[str],
-    ) -> List[str]:
+        folder: bool | None,
+        parents: list[str],
+        name: str | None,
+    ) -> list[str]:
         return [item.get("id") for item in self._query(folder, parents, name)]
 
     def _get(
-        self, folder: Optional[bool], parents: List[str], name: Optional[str]
-    ) -> Optional[Any]:
+        self, folder: bool | None, parents: list[str], name: str | None
+    ) -> Any | None:
         results = self._query(folder, parents, name)
         if len(results) > 1:
             raise DeckzException("Found several files while trying to retrieve one.")
         return results[0] if results else None
 
-    def _query(
-        self, folder: Optional[bool], parents: List[str], name: Optional[str]
-    ) -> Any:
+    def _query(self, folder: bool | None, parents: list[str], name: str | None) -> Any:
         page_token = None
         results = []
         query_conditions = ["trashed = false"]

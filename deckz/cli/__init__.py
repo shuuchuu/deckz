@@ -1,6 +1,7 @@
+from collections.abc import Callable
 from logging import INFO, basicConfig
 from pathlib import Path
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 from click import group
 from click import option as click_option
