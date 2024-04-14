@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 
 from typer import Argument
 from typing_extensions import Annotated
@@ -9,7 +10,7 @@ from . import WorkdirOption, app
 @app.command()
 def issue(
     title: str,
-    body: Annotated[str | None, Argument()] = None,
+    body: Annotated[Optional[str], Argument()] = None,  # noqa: NU002
     workdir: Annotated[Path, WorkdirOption] = Path("."),
 ) -> None:
     """Create an issue on GitHub with a given TITLE and an optional BODY."""

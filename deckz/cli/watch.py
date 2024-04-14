@@ -63,7 +63,7 @@ def section(
     from logging import getLogger
     from tempfile import TemporaryDirectory
 
-    from click import launch
+    from typer import launch
 
     from .. import app_name
     from ..paths import GlobalPaths, Paths
@@ -117,7 +117,7 @@ def file(
     from logging import getLogger
     from tempfile import TemporaryDirectory
 
-    from click import launch
+    from typer import launch
 
     from .. import app_name
     from ..paths import GlobalPaths, Paths

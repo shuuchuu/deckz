@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 
 from typer import Argument, Option
 from typing_extensions import Annotated
@@ -8,8 +9,8 @@ from . import WorkdirOption, app
 
 @app.command()
 def deps(
-    section: Annotated[str | None, Argument()] = None,
-    flavor: Annotated[str | None, Argument()] = None,
+    section: Annotated[Optional[str], Argument()] = None,  # noqa: NU002
+    flavor: Annotated[Optional[str], Argument()] = None,  # noqa: NU002
     unused: Annotated[
         bool, Option("--unused/--no-unused", help="Display the unused flavors")
     ] = True,

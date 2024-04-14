@@ -6,10 +6,6 @@ from typing_extensions import Annotated
 from . import WorkdirOption, app
 
 
-class UnknownSectionException(Exception):
-    pass
-
-
 @app.command()
 def img_deps(
     sections: list[str],
@@ -36,11 +32,11 @@ def img_deps(
     from collections.abc import Iterable, Iterator, Mapping, Set, Sized
     from re import compile as re_compile
 
-    from click import Abort
     from rich.console import Console
     from rich.table import Table
     from yaml import safe_load
 
+    from ..exceptions import DeckzException
     from ..paths import GlobalPaths
     from ..targets import Dependencies, Targets
 
@@ -110,7 +106,7 @@ def img_deps(
                 f"[red]Could not find section{'s' * (len(unknown_sections) > 1)} "
                 f"{to_print}."
             )
-            raise Abort()
+            raise DeckzException(f"Could not find sections {', '.join(sections)}.")
         return sorted(
             sections or dependencies, key=lambda s: len(images[s]), reverse=descending
         )
