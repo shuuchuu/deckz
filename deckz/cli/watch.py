@@ -1,40 +1,25 @@
-from collections.abc import Callable
 from pathlib import Path
-from typing import Any, TypeVar
 
-from click import argument
+from typer import Typer
+from typing_extensions import Annotated
 
-from . import app, option, option_workdir, options_output
+from . import HandoutOption, Option, PresentationOption, PrintOption, WorkdirOption, app
 
-_T = TypeVar("_T", bound=Callable[..., Any])
-
-
-def _option_minimum_delay(command: _T) -> _T:
-    return option(
-        "--minimum-delay",
-        default=5,
-        help="Minimum number of seconds before recompiling",
-    )(command)
+_MinimumDelayOption = Option(help="Minimum number of seconds before recompiling")
 
 
-@app.group()
-def watch() -> None:
-    """Compile on change"""
-    pass
+watch = Typer()
+app.add_typer(watch, name="watch")
 
 
 @watch.command()
-@argument("targets", nargs=-1)
-@options_output(handout=False, presentation=True, print=False)
-@_option_minimum_delay
-@option_workdir
 def deck(
-    targets: tuple[str],
-    handout: bool,
-    presentation: bool,
-    print: bool,
-    minimum_delay: int,
-    workdir: Path,
+    targets: list[str],
+    handout: Annotated[bool, HandoutOption] = False,
+    presentation: Annotated[bool, PresentationOption] = True,
+    print: Annotated[bool, PrintOption] = False,
+    minimum_delay: Annotated[int, _MinimumDelayOption] = 5,
+    workdir: Annotated[Path, WorkdirOption] = Path("."),
 ) -> None:
     """
     Compile on change.
@@ -65,19 +50,14 @@ def deck(
 
 
 @watch.command()
-@argument("section")
-@argument("flavor")
-@options_output(handout=False, presentation=True, print=False)
-@_option_minimum_delay
-@option_workdir
 def section(
     section: str,
     flavor: str,
-    handout: bool,
-    presentation: bool,
-    print: bool,
-    minimum_delay: int,
-    workdir: Path,
+    handout: Annotated[bool, HandoutOption] = False,
+    presentation: Annotated[bool, PresentationOption] = True,
+    print: Annotated[bool, PrintOption] = False,
+    minimum_delay: Annotated[int, _MinimumDelayOption] = 5,
+    workdir: Annotated[Path, WorkdirOption] = Path("."),
 ) -> None:
     """Compile a specific FLAVOR of a given SECTION on change."""
     from logging import getLogger
@@ -125,17 +105,13 @@ def section(
 
 
 @watch.command()
-@argument("latex")
-@options_output(handout=False, presentation=True, print=False)
-@_option_minimum_delay
-@option_workdir
 def file(
     latex: str,
-    handout: bool,
-    presentation: bool,
-    print: bool,
-    minimum_delay: int,
-    workdir: Path,
+    handout: Annotated[bool, HandoutOption] = False,
+    presentation: Annotated[bool, PresentationOption] = True,
+    print: Annotated[bool, PrintOption] = False,
+    minimum_delay: Annotated[int, _MinimumDelayOption] = 5,
+    workdir: Annotated[Path, WorkdirOption] = Path("."),
 ) -> None:
     """Compile FILE on change, specified relative to share/latex."""
     from logging import getLogger
@@ -182,9 +158,10 @@ def file(
 
 
 @watch.command()
-@_option_minimum_delay
-@option_workdir
-def standalones(minimum_delay: int, workdir: Path) -> None:
+def standalones(
+    minimum_delay: Annotated[int, _MinimumDelayOption] = 5,
+    workdir: Annotated[Path, WorkdirOption] = Path("."),
+) -> None:
     """Compile standalones on change."""
     from ..paths import GlobalPaths
     from ..running import run_standalones

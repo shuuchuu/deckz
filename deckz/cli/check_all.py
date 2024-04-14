@@ -1,12 +1,17 @@
 from pathlib import Path
 
-from . import app, option_workdir, options_output
+from typing_extensions import Annotated
+
+from . import HandoutOption, PresentationOption, PrintOption, WorkdirOption, app
 
 
 @app.command()
-@options_output(handout=False, presentation=True, print=False)
-@option_workdir
-def check_all(handout: bool, presentation: bool, print: bool, workdir: Path) -> None:
+def check_all(
+    handout: Annotated[bool, HandoutOption] = False,
+    presentation: Annotated[bool, PresentationOption] = True,
+    print: Annotated[bool, PrintOption] = False,
+    workdir: Annotated[Path, WorkdirOption] = Path("."),
+) -> None:
     """Compile all shared slides (presentation only by default)."""
     from ..running import run_all as running_run_all
 

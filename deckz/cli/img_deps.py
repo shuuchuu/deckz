@@ -1,8 +1,9 @@
 from pathlib import Path
 
-from click import argument
+from typer import Option
+from typing_extensions import Annotated
 
-from . import app, option, option_workdir
+from . import WorkdirOption, app
 
 
 class UnknownSectionException(Exception):
@@ -10,20 +11,22 @@ class UnknownSectionException(Exception):
 
 
 @app.command()
-@argument("sections", nargs=-1)
-@option(
-    "--verbose/--silent",
-    default=True,
-    help="Detailed output with a listing of used images",
-)
-@option(
-    "--descending/--ascending",
-    default=True,
-    help="Sort sections by ascending number of unlicensed images",
-)
-@option_workdir
 def img_deps(
-    sections: tuple[str], verbose: bool, descending: bool, workdir: Path
+    sections: list[str],
+    verbose: Annotated[
+        bool,
+        Option(
+            "--verbose/--silent", help="Detailed output with a listing of used images"
+        ),
+    ] = True,
+    descending: Annotated[
+        bool,
+        Option(
+            "--descending/--ascending",
+            help="Sort sections by ascending number of unlicensed images",
+        ),
+    ] = True,
+    workdir: Annotated[Path, WorkdirOption] = Path("."),
 ) -> None:
     """
     Find unlicensed images with output detailed by section.

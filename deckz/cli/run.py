@@ -1,21 +1,17 @@
-from collections.abc import Iterable
 from pathlib import Path
 
-from click import argument
+from typing_extensions import Annotated
 
-from . import app, option_workdir, options_output
+from . import HandoutOption, PresentationOption, PrintOption, WorkdirOption, app
 
 
 @app.command()
-@argument("targets", nargs=-1)
-@options_output(handout=True, presentation=True, print=True)
-@option_workdir
 def run(
-    targets: Iterable[str],
-    handout: bool,
-    presentation: bool,
-    print: bool,
-    workdir: Path,
+    targets: list[str],
+    handout: Annotated[bool, HandoutOption] = True,
+    presentation: Annotated[bool, PresentationOption] = True,
+    print: Annotated[bool, PrintOption] = True,
+    workdir: Annotated[Path, WorkdirOption] = Path("."),
 ) -> None:
     """
     Compile main targets.

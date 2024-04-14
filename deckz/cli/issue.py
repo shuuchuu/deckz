@@ -1,15 +1,17 @@
 from pathlib import Path
 
-from click import argument
+from typer import Argument
+from typing_extensions import Annotated
 
-from . import app, option_workdir
+from . import WorkdirOption, app
 
 
 @app.command()
-@argument("title")
-@argument("body", required=False)
-@option_workdir
-def issue(title: str, body: str | None, workdir: Path) -> None:
+def issue(
+    title: str,
+    body: Annotated[str | None, Argument()] = None,
+    workdir: Annotated[Path, WorkdirOption] = Path("."),
+) -> None:
     """Create an issue on GitHub with a given TITLE and an optional BODY."""
     from logging import getLogger
 

@@ -1,11 +1,12 @@
 from pathlib import Path
 
-from . import app, option_workdir
+from typing_extensions import Annotated
+
+from . import WorkdirOption, app
 
 
 @app.command()
-@option_workdir
-def print_config(workdir: Path) -> None:
+def print_config(workdir: Annotated[Path, WorkdirOption] = Path(".")) -> None:
     """Print the resolved configuration."""
     from rich import print
 

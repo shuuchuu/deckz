@@ -1,15 +1,17 @@
 from pathlib import Path
 
-from click import argument
+from typer import Option
+from typing_extensions import Annotated
 
-from . import app, option, option_workdir
+from . import WorkdirOption, app
 
 
 @app.command()
-@argument("reason")
-@option("--dry-run", is_flag=True, help="Roll the dice without sending emails")
-@option_workdir
-def random(reason: str, dry_run: bool, workdir: Path) -> None:
+def random(
+    reason: str,
+    dry_run: Annotated[bool, Option(help="Roll the dice without sending emails")],
+    workdir: Annotated[Path, WorkdirOption] = Path("."),
+) -> None:
     """
     Roll the dice and email the result.
 

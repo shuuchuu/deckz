@@ -1,16 +1,20 @@
 from pathlib import Path
 
-from click import argument
+from typer import Argument, Option
+from typing_extensions import Annotated
 
-from . import app, option, option_workdir
+from . import WorkdirOption, app
 
 
 @app.command()
-@argument("section", required=False)
-@argument("flavor", required=False)
-@option("--unused/--no-unused", default=True, help="Display the unused flavors")
-@option_workdir
-def deps(section: str | None, flavor: str | None, unused: bool, workdir: Path) -> None:
+def deps(
+    section: Annotated[str | None, Argument()] = None,
+    flavor: Annotated[str | None, Argument()] = None,
+    unused: Annotated[
+        bool, Option("--unused/--no-unused", help="Display the unused flavors")
+    ] = True,
+    workdir: Annotated[Path, WorkdirOption] = Path("."),
+) -> None:
     """
     Display information about shared sections and flavors usage.
 

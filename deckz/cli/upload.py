@@ -1,11 +1,12 @@
 from pathlib import Path
 
-from ..cli import app, option_workdir
+from typing_extensions import Annotated
+
+from . import WorkdirOption, app
 
 
 @app.command()
-@option_workdir
-def upload(workdir: Path) -> None:
+def upload(workdir: Annotated[Path, WorkdirOption] = Path(".")) -> None:
     """Upload pdfs to Google Drive."""
     from ..paths import Paths
     from ..uploading import Uploader
