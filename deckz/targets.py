@@ -28,7 +28,7 @@ class DirSectionConfig(BaseModel):
     @classmethod
     def from_yaml_file(cls, path: Path) -> "DirSectionConfig":
         try:
-            return cls.parse_obj(safe_load(path.read_text(encoding="utf8")))
+            return cls.model_validate(safe_load(path.read_text(encoding="utf8")))
         except (IOError, ValidationError) as e:
             raise DeckzException(f"Could not load {path} section config") from e
 

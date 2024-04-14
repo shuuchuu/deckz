@@ -34,6 +34,6 @@ class Settings(BaseModel):
             raise DeckzException(
                 f"Could not find settings file at {global_paths.settings}."
             )
-        return cls.parse_obj(
+        return cls.model_validate(
             safe_load(global_paths.settings.read_text(encoding="utf8"))
         )

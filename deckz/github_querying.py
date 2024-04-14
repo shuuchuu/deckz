@@ -16,7 +16,9 @@ class IssuesConfig(BaseModel):
 
     @classmethod
     def from_global_paths(cls, paths: GlobalPaths) -> "IssuesConfig":
-        return cls.parse_obj(safe_load(paths.github_issues.read_text(encoding="utf8")))
+        return cls.model_validate(
+            safe_load(paths.github_issues.read_text(encoding="utf8"))
+        )
 
 
 class GitHubAPI:
