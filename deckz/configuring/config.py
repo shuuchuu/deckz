@@ -5,7 +5,7 @@ from typing import Any
 
 from yaml import safe_load
 
-from .exceptions import DeckzException
+from ..exceptions import DeckzException
 from .paths import Paths
 
 

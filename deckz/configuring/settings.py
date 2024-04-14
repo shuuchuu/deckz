@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from yaml import safe_load
 
-from .exceptions import DeckzException
+from ..exceptions import DeckzException
 from .paths import GlobalPaths
 
 

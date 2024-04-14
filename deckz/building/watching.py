@@ -8,7 +8,7 @@ from typing import Any
 from watchdog.events import FileSystemEvent
 from watchdog.observers import Observer
 
-from .exceptions import DeckzException
+from ..exceptions import DeckzException
 
 _logger = getLogger(__name__)
 

@@ -11,7 +11,7 @@ def clean(workdir: Annotated[Path, WorkdirOption] = Path(".")) -> None:
     from logging import getLogger
     from shutil import rmtree
 
-    from ..paths import Paths
+    from ..configuring.paths import Paths
 
     logger = getLogger(__name__)
     paths = Paths.from_defaults(workdir)

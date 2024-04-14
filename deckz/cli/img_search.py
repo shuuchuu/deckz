@@ -19,7 +19,7 @@ def img_search(
 
     from rich.console import Console
 
-    from ..paths import GlobalPaths
+    from ..configuring.paths import GlobalPaths
 
     global_paths = GlobalPaths.from_defaults(workdir)
     console = Console(highlight=False)

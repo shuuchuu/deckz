@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from subprocess import run
 
-from .settings import Settings
+from ..configuring.settings import Settings
 
 
 @dataclass(frozen=True)

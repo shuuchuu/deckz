@@ -28,9 +28,9 @@ def deck(
     """
     from logging import getLogger
 
-    from ..paths import Paths
+    from ..building.watching import watch as watching_watch
+    from ..configuring.paths import Paths
     from ..running import run
-    from ..watching import watch as watching_watch
 
     logger = getLogger(__name__)
 
@@ -66,9 +66,9 @@ def section(
     from typer import launch
 
     from .. import app_name
-    from ..paths import GlobalPaths, Paths
+    from ..building.watching import watch as watching_watch
+    from ..configuring.paths import GlobalPaths, Paths
     from ..running import run_section
-    from ..watching import watch as watching_watch
 
     logger = getLogger(__name__)
 
@@ -120,9 +120,9 @@ def file(
     from typer import launch
 
     from .. import app_name
-    from ..paths import GlobalPaths, Paths
+    from ..building.watching import watch as watching_watch
+    from ..configuring.paths import GlobalPaths, Paths
     from ..running import run_file
-    from ..watching import watch as watching_watch
 
     logger = getLogger(__name__)
 
@@ -163,9 +163,9 @@ def standalones(
     workdir: Annotated[Path, WorkdirOption] = Path("."),
 ) -> None:
     """Compile standalones on change."""
-    from ..paths import GlobalPaths
+    from ..building.watching import watch as watching_watch
+    from ..configuring.paths import GlobalPaths
     from ..running import run_standalones
-    from ..watching import watch as watching_watch
 
     global_paths = GlobalPaths.from_defaults(workdir)
 

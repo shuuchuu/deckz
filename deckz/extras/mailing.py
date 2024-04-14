@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from yaml import safe_load
 
-from .paths import GlobalPaths
+from ..configuring.paths import GlobalPaths
 
 
 class MailsConfig(BaseModel):

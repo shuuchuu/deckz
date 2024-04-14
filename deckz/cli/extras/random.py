@@ -3,7 +3,7 @@ from pathlib import Path
 from typer import Option
 from typing_extensions import Annotated
 
-from . import WorkdirOption, app
+from .. import WorkdirOption, app
 
 
 @app.command()
@@ -26,8 +26,8 @@ def random(
     from sendgrid import SendGridAPIClient
     from sendgrid.helpers.mail import Mail
 
-    from ..mailing import MailsConfig
-    from ..paths import GlobalPaths
+    from ...configuring.paths import GlobalPaths
+    from ...extras.mailing import MailsConfig
 
     logger = getLogger(__name__)
     config = MailsConfig.from_global_paths(GlobalPaths.from_defaults(workdir))

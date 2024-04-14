@@ -8,8 +8,8 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 from yaml import safe_load as safe_load
 
-from .exceptions import DeckzException
-from .paths import Paths
+from ..configuring.paths import Paths
+from ..exceptions import DeckzException
 
 _logger = getLogger(__name__)
 

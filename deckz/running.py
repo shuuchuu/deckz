@@ -4,12 +4,12 @@ from pathlib import Path
 
 from rich.progress import BarColumn, Progress
 
-from .building import Builder
-from .config import get_config
-from .paths import GlobalPaths, Paths
-from .settings import Settings
-from .standalones import StandalonesBuilder
-from .targets import Targets
+from .building.building import Builder
+from .building.standalones import StandalonesBuilder
+from .configuring.config import get_config
+from .configuring.paths import GlobalPaths, Paths
+from .configuring.settings import Settings
+from .parsing.targets import Targets
 
 _logger = getLogger(__name__)
 

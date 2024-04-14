@@ -18,9 +18,9 @@ from rich.progress import (
     TransferSpeedColumn,
 )
 
-from . import app_name
-from .exceptions import DeckzException
-from .paths import Paths
+from .. import app_name
+from ..configuring.paths import Paths
+from ..exceptions import DeckzException
 
 
 class Uploader:

@@ -11,8 +11,8 @@ from typing import Any
 from jinja2 import BaseLoader, Environment, TemplateNotFound
 from yaml import safe_load
 
-from .paths import Paths
-from .settings import Settings
+from ..configuring.paths import Paths
+from ..configuring.settings import Settings
 
 
 class AbsoluteLoader(BaseLoader):

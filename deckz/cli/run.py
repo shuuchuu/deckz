@@ -18,7 +18,7 @@ def run(
 
     Compiling can be restricted to given TARGETS.
     """
-    from ..paths import Paths
+    from ..configuring.paths import Paths
     from ..running import run as running_run
 
     paths = Paths.from_defaults(workdir)

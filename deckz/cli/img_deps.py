@@ -36,9 +36,9 @@ def img_deps(
     from rich.table import Table
     from yaml import safe_load
 
+    from ..configuring.paths import GlobalPaths
     from ..exceptions import DeckzException
-    from ..paths import GlobalPaths
-    from ..targets import Dependencies, Targets
+    from ..parsing.targets import Dependencies, Targets
 
     def _display_table(
         sections: Iterable[str],

@@ -4,7 +4,7 @@ from typing import Optional
 from typer import Argument
 from typing_extensions import Annotated
 
-from . import WorkdirOption, app
+from .. import WorkdirOption, app
 
 
 @app.command()
@@ -16,8 +16,8 @@ def issue(
     """Create an issue on GitHub with a given TITLE and an optional BODY."""
     from logging import getLogger
 
-    from ..github_querying import GitHubAPI, IssuesConfig
-    from ..paths import GlobalPaths
+    from ...configuring.paths import GlobalPaths
+    from ...extras.github_querying import GitHubAPI, IssuesConfig
 
     logger = getLogger(__name__)
     config = IssuesConfig.from_global_paths(GlobalPaths.from_defaults(workdir))

@@ -31,8 +31,8 @@ def deps(
     from rich.table import Table
     from yaml import safe_load as yaml_safe_load
 
-    from ..paths import GlobalPaths, Paths
-    from ..targets import Targets
+    from ..configuring.paths import GlobalPaths, Paths
+    from ..parsing.targets import Targets
 
     def _compute_shared_dependencies(
         dependencies: Iterable[Path], paths: GlobalPaths

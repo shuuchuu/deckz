@@ -6,14 +6,14 @@ from pathlib import Path
 from shutil import copyfile
 from typing import Any
 
+from ..configuring.paths import Paths
+from ..configuring.settings import Settings
+from ..exceptions import DeckzException
+from ..parsing.targets import Target, Targets
+from ..utils import copy_file_if_newer
 from .compiling import CompileResult
 from .compiling import compile as compiling_compile
-from .exceptions import DeckzException
-from .paths import Paths
 from .rendering import Renderer
-from .settings import Settings
-from .targets import Target, Targets
-from .utils import copy_file_if_newer
 
 
 class CompileType(Enum):

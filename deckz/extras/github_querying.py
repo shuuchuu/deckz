@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from requests import post
 from yaml import safe_load
 
-from .paths import GlobalPaths
+from ..configuring.paths import GlobalPaths
 
 
 class IssuesConfig(BaseModel):

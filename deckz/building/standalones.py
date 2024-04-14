@@ -10,11 +10,11 @@ from pathlib import Path
 from shutil import copyfile
 from tempfile import TemporaryDirectory
 
+from ..configuring.paths import GlobalPaths
+from ..configuring.settings import Settings
+from ..exceptions import DeckzException
+from ..utils import copy_file_if_newer, import_module_and_submodules
 from .compiling import compile as compiling_compile
-from .exceptions import DeckzException
-from .paths import GlobalPaths
-from .settings import Settings
-from .utils import copy_file_if_newer, import_module_and_submodules
 
 
 @dataclass(frozen=True)
