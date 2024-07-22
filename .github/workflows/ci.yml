@@ -12,7 +12,7 @@ jobs:
   style:
     name: Check style conventions and test the package
     runs-on: ubuntu-latest
-    container: nzmognzmp/deckz-ci-worker:latest
+    container: shuuchuu/deckz-ci:latest
     steps:
       - name: Clone repository
         uses: actions/checkout@v3

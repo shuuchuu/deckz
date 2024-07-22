@@ -25,12 +25,6 @@ typer = "^0.12"
 watchdog = "^4"
 
 [tool.poetry.group.dev.dependencies]
-black = "*"
-flake8 = "*"
-flake8-bugbear = "*"
-flake8-new-union-types = "*"
-flake8-pep585 = "*"
-isort = "*"
 mkdocs = "*"
 mkdocs-gen-files = "*"
 mkdocs-literate-nav = "*"
@@ -38,30 +32,22 @@ mkdocs-material = "*"
 mkdocstrings = {extras = ["python"], version = "*"}
 mypy = "*"
 "pdfminer.six" = "*"
-pylint = "*"
 pytest = "*"
 pytest-cov = "*"
+ruff = "^0.5.4"
 types-PyYAML = "*"
 types-requests = "*"
 
 [tool.poetry.scripts]
 deckz = 'deckz.cli:main'
 
-[tool.isort]
-profile = "black"
+[tool.ruff]
+target-version = "py310"
 
 [tool.mypy]
 disallow_untyped_defs = true
 ignore_missing_imports = true
 strict_optional = true
-
-[tool.pylint."MASTER"]
-jobs = 0
-load-plugins = "pylint.extensions.docparams"
-
-[tool.pylint."MESSAGES CONTROL"]
-disable = "all"
-enable = ["missing-param-doc", "differing-param-doc", "differing-type-doc", "missing-return-doc"]
 
 [build-system]
 build-backend = "poetry.core.masonry.api"
