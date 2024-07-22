@@ -165,10 +165,12 @@ class TikzBuilder:
             formatted_fails = "\n".join(
                 "- %s (%s)"
                 % (
-                    f.relative_to(self._paths.shared_dir),
-                    "no log" if not l.exists() else "[link=file://%s]log[/link]" % l,
+                    file_path.relative_to(self._paths.shared_dir),
+                    "no log"
+                    if not log_path.exists()
+                    else f"[link=file://{log_path}]log[/link]",
                 )
-                for f, l in failed
+                for file_path, log_path in failed
             )
             raise DeckzException(
                 f"Standalone compilation errored for {len(failed)} files:\n"
