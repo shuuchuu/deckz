@@ -1,8 +1,8 @@
 # `deckz`
 
-[![CI Status](https://img.shields.io/github/actions/workflow/status/mlambda/deckz/ci.yml?branch=main&label=CI&style=for-the-badge)](https://github.com/mlambda/deckz/actions?query=workflow%3ACI)
-[![CD Status](https://img.shields.io/github/actions/workflow/status/mlambda/deckz/cd.yml?branch=main&label=CD&style=for-the-badge)](https://github.com/mlambda/deckz/actions?query=workflow%3ACD)
-[![Test Coverage](https://img.shields.io/codecov/c/github/mlambda/deckz?style=for-the-badge)](https://codecov.io/gh/mlambda/deckz)
+[![CI Status](https://img.shields.io/github/actions/workflow/status/shuuchuu/deckz/ci.yml?branch=main&label=CI&style=for-the-badge)](https://github.com/shuuchuu/deckz/actions?query=workflow%3ACI)
+[![CD Status](https://img.shields.io/github/actions/workflow/status/shuuchuu/deckz/cd.yml?branch=main&label=CD&style=for-the-badge)](https://github.com/shuuchuu/deckz/actions?query=workflow%3ACD)
+[![Test Coverage](https://img.shields.io/codecov/c/github/shuuchuu/deckz?style=for-the-badge)](https://codecov.io/gh/shuuchuu/deckz)
 [![PyPI Project](https://img.shields.io/pypi/v/deckz?style=for-the-badge)](https://pypi.org/project/deckz/)
 
 Tool to handle a large number of beamer decks, used by several persons, with shared slides amongst the decks. It is currently not meant to be usable directly by people finding about the package on GitHub. Please open an issue if you want more details or want to discuss this solution.
