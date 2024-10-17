@@ -1,12 +1,10 @@
 from pathlib import Path
 
-from typing_extensions import Annotated
-
 from . import WorkdirOption, app
 
 
 @app.command()
-def clean(workdir: Annotated[Path, WorkdirOption] = Path(".")) -> None:
+def clean(workdir: WorkdirOption = Path(".")) -> None:
     """Wipe the build directory."""
     from logging import getLogger
     from shutil import rmtree

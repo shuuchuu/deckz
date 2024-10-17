@@ -1,6 +1,5 @@
-from importlib import import_module
+from importlib import import_module, reload
 from importlib import invalidate_caches as importlib_invalidate_caches
-from importlib import reload
 from pathlib import Path
 from pkgutil import walk_packages
 from shutil import copyfile
@@ -47,7 +46,7 @@ def import_module_and_submodules(package_name: str) -> None:
         if (
             path_string
             and hasattr(module_finder, "path")
-            and module_finder.path != path_string  # type: ignore
+            and module_finder.path != path_string
         ):
             continue
         subpackage = f"{package_name}.{name}"

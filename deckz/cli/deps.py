@@ -9,12 +9,12 @@ from . import WorkdirOption, app
 
 @app.command()
 def deps(
-    section: Annotated[Optional[str], Argument()] = None,  # noqa: NU002
-    flavor: Annotated[Optional[str], Argument()] = None,  # noqa: NU002
+    section: Annotated[Optional[str], Argument()] = None,
+    flavor: Annotated[Optional[str], Argument()] = None,
     unused: Annotated[
         bool, Option("--unused/--no-unused", help="Display the unused flavors")
     ] = True,
-    workdir: Annotated[Path, WorkdirOption] = Path("."),
+    workdir: WorkdirOption = Path("."),
 ) -> None:
     """
     Display information about shared sections and flavors usage.

@@ -10,8 +10,8 @@ from .. import WorkdirOption, app
 @app.command()
 def issue(
     title: str,
-    body: Annotated[Optional[str], Argument()] = None,  # noqa: NU002
-    workdir: Annotated[Path, WorkdirOption] = Path("."),
+    body: Annotated[Optional[str], Argument()] = None,
+    workdir: WorkdirOption = Path("."),
 ) -> None:
     """Create an issue on GitHub with a given TITLE and an optional BODY."""
     from logging import getLogger

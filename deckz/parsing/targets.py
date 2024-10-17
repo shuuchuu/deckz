@@ -21,7 +21,7 @@ class Title:
 
 
 class DirSectionConfig(BaseModel):
-    default_titles: dict[str, str] | None
+    default_titles: dict[str, str] | None = None
     flavors: dict[str, list[str | dict[str, str | None]]]
     title: str
 
@@ -67,7 +67,7 @@ class Dependencies:
 
     @staticmethod
     def merge_dicts(
-        *dependencies_dicts: dict[str, "Dependencies"]
+        *dependencies_dicts: dict[str, "Dependencies"],
     ) -> dict[str, "Dependencies"]:
         keys = set.union(*(set(d) for d in dependencies_dicts))
         merged_dict = {}

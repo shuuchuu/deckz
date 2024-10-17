@@ -5,7 +5,7 @@ from threading import Thread
 from time import time
 from typing import Any
 
-from watchdog.events import FileSystemEvent
+from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 from ..exceptions import DeckzException
@@ -13,7 +13,7 @@ from ..exceptions import DeckzException
 _logger = getLogger(__name__)
 
 
-class _BaseEventHandler:
+class _BaseEventHandler(FileSystemEventHandler):
     def __init__(
         self,
         minimum_delay: int,

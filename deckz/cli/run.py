@@ -1,17 +1,22 @@
 from pathlib import Path
 
-from typing_extensions import Annotated
-
-from . import HandoutOption, PresentationOption, PrintOption, WorkdirOption, app
+from . import (
+    HandoutOption,
+    PresentationOption,
+    PrintOption,
+    TargetOption,
+    WorkdirOption,
+    app,
+)
 
 
 @app.command()
 def run(
-    targets: list[str],
-    handout: Annotated[bool, HandoutOption] = True,
-    presentation: Annotated[bool, PresentationOption] = True,
-    print: Annotated[bool, PrintOption] = True,
-    workdir: Annotated[Path, WorkdirOption] = Path("."),
+    targets: TargetOption,
+    handout: HandoutOption = True,
+    presentation: PresentationOption = True,
+    print: PrintOption = True,
+    workdir: WorkdirOption = Path("."),
 ) -> None:
     """
     Compile main targets.
