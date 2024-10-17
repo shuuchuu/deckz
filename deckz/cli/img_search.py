@@ -1,14 +1,12 @@
 from pathlib import Path
 
-from typing_extensions import Annotated
-
 from . import WorkdirOption, app
 
 
 @app.command()
 def img_search(
     image: str,
-    workdir: Annotated[Path, WorkdirOption] = Path("."),
+    workdir: WorkdirOption = Path("."),
 ) -> None:
     """
     Find which latex files use IMAGE.

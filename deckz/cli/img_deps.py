@@ -22,7 +22,7 @@ def img_deps(
             help="Sort sections by ascending number of unlicensed images",
         ),
     ] = True,
-    workdir: Annotated[Path, WorkdirOption] = Path("."),
+    workdir: WorkdirOption = Path("."),
 ) -> None:
     """
     Find unlicensed images with output detailed by section.

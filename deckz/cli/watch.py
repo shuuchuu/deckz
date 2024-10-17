@@ -3,9 +3,19 @@ from pathlib import Path
 from typer import Typer
 from typing_extensions import Annotated
 
-from . import HandoutOption, Option, PresentationOption, PrintOption, WorkdirOption, app
+from . import (
+    HandoutOption,
+    Option,
+    PresentationOption,
+    PrintOption,
+    TargetOption,
+    WorkdirOption,
+    app,
+)
 
-_MinimumDelayOption = Option(help="Minimum number of seconds before recompiling")
+_MinimumDelayOption = Annotated[
+    int, Option(help="Minimum number of seconds before recompiling")
+]
 
 
 watch = Typer()
@@ -14,12 +24,12 @@ app.add_typer(watch, name="watch")
 
 @watch.command()
 def deck(
-    targets: list[str],
-    handout: Annotated[bool, HandoutOption] = False,
-    presentation: Annotated[bool, PresentationOption] = True,
-    print: Annotated[bool, PrintOption] = False,
-    minimum_delay: Annotated[int, _MinimumDelayOption] = 5,
-    workdir: Annotated[Path, WorkdirOption] = Path("."),
+    targets: TargetOption,
+    handout: HandoutOption = False,
+    presentation: PresentationOption = True,
+    print: PrintOption = False,
+    minimum_delay: _MinimumDelayOption = 5,
+    workdir: WorkdirOption = Path("."),
 ) -> None:
     """
     Compile on change.
@@ -53,11 +63,11 @@ def deck(
 def section(
     section: str,
     flavor: str,
-    handout: Annotated[bool, HandoutOption] = False,
-    presentation: Annotated[bool, PresentationOption] = True,
-    print: Annotated[bool, PrintOption] = False,
-    minimum_delay: Annotated[int, _MinimumDelayOption] = 5,
-    workdir: Annotated[Path, WorkdirOption] = Path("."),
+    handout: HandoutOption = False,
+    presentation: PresentationOption = True,
+    print: PrintOption = False,
+    minimum_delay: _MinimumDelayOption = 5,
+    workdir: WorkdirOption = Path("."),
 ) -> None:
     """Compile a specific FLAVOR of a given SECTION on change."""
     from logging import getLogger
@@ -74,9 +84,10 @@ def section(
 
     logger.info(f"Watching {section} ⋅ {flavor}, the shared and user directories")
     global_paths = GlobalPaths.from_defaults(workdir)
-    with TemporaryDirectory(prefix=f"{app_name}-") as build_dir, TemporaryDirectory(
-        prefix=f"{app_name}-"
-    ) as pdf_dir:
+    with (
+        TemporaryDirectory(prefix=f"{app_name}-") as build_dir,
+        TemporaryDirectory(prefix=f"{app_name}-") as pdf_dir,
+    ):
         logger.info(
             f"Output directory located at [link=file://{pdf_dir}]{pdf_dir}[/link]",
             extra=dict(markup=True),
@@ -107,11 +118,11 @@ def section(
 @watch.command()
 def file(
     latex: str,
-    handout: Annotated[bool, HandoutOption] = False,
-    presentation: Annotated[bool, PresentationOption] = True,
-    print: Annotated[bool, PrintOption] = False,
-    minimum_delay: Annotated[int, _MinimumDelayOption] = 5,
-    workdir: Annotated[Path, WorkdirOption] = Path("."),
+    handout: HandoutOption = False,
+    presentation: PresentationOption = True,
+    print: PrintOption = False,
+    minimum_delay: _MinimumDelayOption = 5,
+    workdir: WorkdirOption = Path("."),
 ) -> None:
     """Compile FILE on change, specified relative to share/latex."""
     from logging import getLogger
@@ -128,9 +139,10 @@ def file(
 
     logger.info(f"Watching {latex}, the shared and user directories")
     global_paths = GlobalPaths.from_defaults(workdir)
-    with TemporaryDirectory(prefix=f"{app_name}-") as build_dir, TemporaryDirectory(
-        prefix=f"{app_name}-"
-    ) as pdf_dir:
+    with (
+        TemporaryDirectory(prefix=f"{app_name}-") as build_dir,
+        TemporaryDirectory(prefix=f"{app_name}-") as pdf_dir,
+    ):
         logger.info(
             f"Output directory located at [link=file://{pdf_dir}]{pdf_dir}[/link]",
             extra=dict(markup=True),
@@ -159,8 +171,8 @@ def file(
 
 @watch.command()
 def standalones(
-    minimum_delay: Annotated[int, _MinimumDelayOption] = 5,
-    workdir: Annotated[Path, WorkdirOption] = Path("."),
+    minimum_delay: _MinimumDelayOption = 5,
+    workdir: WorkdirOption = Path("."),
 ) -> None:
     """Compile standalones on change."""
     from ..building.watching import watch as watching_watch

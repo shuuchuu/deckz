@@ -42,7 +42,7 @@ def run_deckz(*args: str) -> None:
 
 
 def test_run(working_dir: Path) -> None:
-    run_deckz("run", "p1")
+    run_deckz("run", "--targets", "p1")
 
     n_pages, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
     assert n_pages == 14
