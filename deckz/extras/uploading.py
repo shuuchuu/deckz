@@ -20,7 +20,7 @@ from rich.progress import (
 
 from .. import app_name
 from ..configuring.paths import Paths
-from ..exceptions import DeckzException
+from ..exceptions import DeckzError
 
 
 class Uploader:
@@ -107,7 +107,7 @@ class Uploader:
             if old_backup_info is not None:
                 old_backup_id = old_backup_info.get("id")
                 self._service.files().update(
-                    fileId=old_backup_id, body=dict(name="backup-old")
+                    fileId=old_backup_id, body={"name": "backup-old"}
                 ).execute()
             backup_id, _ = self._create_folder(parent=folder_id, name="backup")
             for file_id in file_ids:
@@ -127,7 +127,7 @@ class Uploader:
         with progress:
             for pdf in pdfs:
                 pdf_size = pdf.stat().st_size
-                file_metadata = dict(name=pdf.name, parents=[folder_id])
+                file_metadata = {"name": pdf.name, "parents": [folder_id]}
                 media = MediaFileUpload(
                     str(pdf),
                     chunksize=256 * 1024,
@@ -155,9 +155,11 @@ class Uploader:
         return links
 
     def _create_folder(self, parent: str, name: str) -> tuple[str, str]:
-        file_metadata = dict(
-            name=name, mimeType="application/vnd.google-apps.folder", parents=[parent]
-        )
+        file_metadata = {
+            "name": name,
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": [parent],
+        }
         file = (
             self._service.files()
             .create(body=file_metadata, fields="id,webViewLink")
@@ -178,7 +180,8 @@ class Uploader:
     ) -> Any | None:
         results = self._query(folder, parents, name)
         if len(results) > 1:
-            raise DeckzException("Found several files while trying to retrieve one.")
+            msg = "Found several files while trying to retrieve one."
+            raise DeckzError(msg)
         return results[0] if results else None
 
     def _query(self, folder: bool | None, parents: list[str], name: str | None) -> Any:

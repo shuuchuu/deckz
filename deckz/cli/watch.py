@@ -1,40 +1,34 @@
 from pathlib import Path
 
-from typer import Typer
-from typing_extensions import Annotated
+from cyclopts import App
 
-from . import (
-    HandoutOption,
-    Option,
-    PresentationOption,
-    PrintOption,
-    TargetOption,
-    WorkdirOption,
-    app,
-)
+from . import app
 
-_MinimumDelayOption = Annotated[
-    int, Option(help="Minimum number of seconds before recompiling")
-]
-
-
-watch = Typer()
-app.add_typer(watch, name="watch")
+watch = App(name="watch")
+app.command(watch)
 
 
 @watch.command()
 def deck(
-    targets: TargetOption,
-    handout: HandoutOption = False,
-    presentation: PresentationOption = True,
-    print: PrintOption = False,
-    minimum_delay: _MinimumDelayOption = 5,
-    workdir: WorkdirOption = Path("."),
+    targets: list[str] | None = None,
+    /,
+    *,
+    handout: bool = False,
+    presentation: bool = True,
+    print: bool = False,  # noqa: A002
+    minimum_delay: int = 5,
+    workdir: Path = Path(),
 ) -> None:
-    """
-    Compile on change.
+    """Compile on change.
 
-    Watching can be restricted to given TARGETS.
+    Args:
+        targets: Restrict compilation to these targets
+        handout: Produce PDFs without animations
+        presentation: Produce PDFs with animations
+        print: Produce printable PDFs
+        minimum_delay: Minimum number of seconds before recompiling
+        workdir: Path to move into before running the command
+
     """
     from logging import getLogger
 
@@ -55,7 +49,7 @@ def deck(
         build_handout=handout,
         build_presentation=presentation,
         build_print=print,
-        target_whitelist=targets or None,
+        target_whitelist=targets,
     )
 
 
@@ -63,13 +57,26 @@ def deck(
 def section(
     section: str,
     flavor: str,
-    handout: HandoutOption = False,
-    presentation: PresentationOption = True,
-    print: PrintOption = False,
-    minimum_delay: _MinimumDelayOption = 5,
-    workdir: WorkdirOption = Path("."),
+    /,
+    *,
+    handout: bool = False,
+    presentation: bool = True,
+    print: bool = False,  # noqa: A002
+    minimum_delay: int = 5,
+    workdir: Path = Path(),
 ) -> None:
-    """Compile a specific FLAVOR of a given SECTION on change."""
+    """Compile a specific FLAVOR of a given SECTION on change.
+
+    Args:
+        section: Section to compile
+        flavor: Flavor of SECTION to compile
+        handout: Produce PDFs without animations
+        presentation: Produce PDFs with animations
+        print: Produce printable PDFs
+        minimum_delay: Minimum number of seconds before recompiling
+        workdir: Path to move into before running the command
+
+    """
     from logging import getLogger
     from tempfile import TemporaryDirectory
 
@@ -90,7 +97,7 @@ def section(
     ):
         logger.info(
             f"Output directory located at [link=file://{pdf_dir}]{pdf_dir}[/link]",
-            extra=dict(markup=True),
+            extra={"markup": True},
         )
         paths = Paths.from_defaults(
             workdir,
@@ -118,13 +125,26 @@ def section(
 @watch.command()
 def file(
     latex: str,
-    handout: HandoutOption = False,
-    presentation: PresentationOption = True,
-    print: PrintOption = False,
-    minimum_delay: _MinimumDelayOption = 5,
-    workdir: WorkdirOption = Path("."),
+    /,
+    *,
+    handout: bool = False,
+    presentation: bool = True,
+    print: bool = False,  # noqa: A002
+    minimum_delay: int = 5,
+    workdir: Path = Path(),
 ) -> None:
-    """Compile FILE on change, specified relative to share/latex."""
+    """Compile a file on change.
+
+    Args:
+        latex: File to compile on change. Its path should be specified relative to \
+            shared/latex
+        handout: Produce PDFs without animations
+        presentation: Produce PDFs with animations
+        print: Produce printable PDFs
+        minimum_delay: Minimum number of seconds before recompiling
+        workdir: Path to move into before running the command
+
+    """
     from logging import getLogger
     from tempfile import TemporaryDirectory
 
@@ -145,7 +165,7 @@ def file(
     ):
         logger.info(
             f"Output directory located at [link=file://{pdf_dir}]{pdf_dir}[/link]",
-            extra=dict(markup=True),
+            extra={"markup": True},
         )
         paths = Paths.from_defaults(
             workdir,
@@ -170,11 +190,14 @@ def file(
 
 
 @watch.command()
-def standalones(
-    minimum_delay: _MinimumDelayOption = 5,
-    workdir: WorkdirOption = Path("."),
-) -> None:
-    """Compile standalones on change."""
+def standalones(*, minimum_delay: int = 5, workdir: Path = Path()) -> None:
+    """Compile standalones on change.
+
+    Args:
+        minimum_delay: Minimum number of seconds before recompiling
+        workdir: Path to move into before running the command
+
+    """
     from ..building.watching import watch as watching_watch
     from ..configuring.paths import GlobalPaths
     from ..running import run_standalones

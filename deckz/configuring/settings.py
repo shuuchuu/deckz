@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from yaml import safe_load
 
-from ..exceptions import DeckzException
+from ..exceptions import DeckzError
 from .paths import GlobalPaths
 
 
@@ -15,7 +15,7 @@ class LocalizedValues(BaseModel):
             return self.fr[value]
         if lang == "en" and value in self.en:
             return self.en[value]
-        return self.all[value] if value in self.all else value
+        return self.all.get(value, value)
 
 
 class DefaultImageValues(BaseModel):
@@ -31,9 +31,8 @@ class Settings(BaseModel):
     @classmethod
     def from_global_paths(cls, global_paths: GlobalPaths) -> "Settings":
         if not global_paths.settings.is_file():
-            raise DeckzException(
-                f"Could not find settings file at {global_paths.settings}."
-            )
+            msg = f"Could not find settings file at {global_paths.settings}."
+            raise DeckzError(msg)
         return cls.model_validate(
             safe_load(global_paths.settings.read_text(encoding="utf8"))
         )

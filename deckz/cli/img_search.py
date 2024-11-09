@@ -1,17 +1,22 @@
 from pathlib import Path
 
-from . import WorkdirOption, app
+from . import app
 
 
 @app.command()
 def img_search(
     image: str,
-    workdir: WorkdirOption = Path("."),
+    /,
+    *,
+    workdir: Path = Path(),
 ) -> None:
-    """
-    Find which latex files use IMAGE.
+    """Find which latex files use IMAGE.
 
-    Specify the specific image to track relative to the shared directory like img/turing
+    Args:
+        image: Image to search in LaTeX files. Specify the path relative to the shared \
+            directory and whithout extension, e.g. img/turing
+        workdir: Path to move into before running the command
+
     """
     from re import compile as re_compile
 

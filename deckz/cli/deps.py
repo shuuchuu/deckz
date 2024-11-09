@@ -1,26 +1,25 @@
 from pathlib import Path
-from typing import Optional
 
-from typer import Argument, Option
-from typing_extensions import Annotated
-
-from . import WorkdirOption, app
+from . import app
 
 
 @app.command()
 def deps(
-    section: Annotated[Optional[str], Argument()] = None,
-    flavor: Annotated[Optional[str], Argument()] = None,
-    unused: Annotated[
-        bool, Option("--unused/--no-unused", help="Display the unused flavors")
-    ] = True,
-    workdir: WorkdirOption = Path("."),
+    section: str | None = None,
+    flavor: str | None = None,
+    /,
+    *,
+    unused: bool = True,
+    workdir: Path = Path(),
 ) -> None:
-    """
-    Display information about shared sections and flavors usage.
+    """Display information about shared sections and flavors usage.
 
-    You can specify the SECTION, and further, the FLAVOR arguments to restrict the \
-        output.
+    Args:
+        section: Restrict the output to only this section
+        flavor: Restrict the output further to only this section
+        unused: Display unused flavors
+        workdir: Path to move into before running the command
+
     """
     from collections import defaultdict
     from collections.abc import Iterable, Mapping, MutableMapping, MutableSet, Set

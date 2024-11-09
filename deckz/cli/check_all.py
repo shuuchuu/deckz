@@ -1,16 +1,25 @@
 from pathlib import Path
 
-from . import HandoutOption, PresentationOption, PrintOption, WorkdirOption, app
+from . import app
 
 
 @app.command()
 def check_all(
-    handout: HandoutOption = False,
-    presentation: PresentationOption = True,
-    print: PrintOption = False,
-    workdir: WorkdirOption = Path("."),
+    *,
+    handout: bool = False,
+    presentation: bool = True,
+    print: bool = False,  # noqa: A002
+    workdir: Path = Path(),
 ) -> None:
-    """Compile all shared slides (presentation only by default)."""
+    """Compile all shared slides (presentation only by default).
+
+    Args:
+        handout: Produce PDFs without animations
+        presentation: Produce PDFs with animations
+        print: Produce printable PDFs
+        workdir: Path to move into before running the command
+
+    """
     from ..running import run_all as running_run_all
 
     running_run_all(

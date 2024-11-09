@@ -12,6 +12,7 @@ version = "20.3.1"
 Jinja2 = "^3"
 PyYAML = "^6"
 appdirs = "^1"
+cyclopts = "^3"
 email-validator = "^2"
 google-api-python-client = "^2"
 google-auth-oauthlib = "^1"
@@ -21,7 +22,7 @@ pygit2 = "^1"
 python = "^3.10"
 rich = "^13"
 sendgrid = "^6"
-typer = "^0.12"
+typer = "^0.13"
 watchdog = "^5"
 
 [tool.poetry.group.dev.dependencies]
@@ -43,6 +44,11 @@ deckz = 'deckz.cli:main'
 
 [tool.ruff]
 target-version = "py310"
+
+[tool.ruff.lint]
+ignore = ["C901", "D1", "D203", "D213"]
+preview = true
+select = ["A", "B", "C", "D", "DOC", "E", "EM", "F", "N", "PIE", "PTH", "RET", "RUF", "SIM", "SLF", "UP", "W"]
 
 [tool.mypy]
 disallow_untyped_defs = true

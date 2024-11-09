@@ -1,33 +1,27 @@
 from pathlib import Path
 
-from typer import Option
-from typing_extensions import Annotated
-
-from . import WorkdirOption, app
+from . import app
 
 
 @app.command()
 def img_deps(
-    sections: list[str],
-    verbose: Annotated[
-        bool,
-        Option(
-            "--verbose/--silent", help="Detailed output with a listing of used images"
-        ),
-    ] = True,
-    descending: Annotated[
-        bool,
-        Option(
-            "--descending/--ascending",
-            help="Sort sections by ascending number of unlicensed images",
-        ),
-    ] = True,
-    workdir: WorkdirOption = Path("."),
+    sections: list[str] | None = None,
+    /,
+    *,
+    verbose: bool = True,
+    descending: bool = True,
+    workdir: Path = Path(),
 ) -> None:
-    """
-    Find unlicensed images with output detailed by section.
+    """Find unlicensed images with output detailed by section.
 
     You can display info only about specific SECTIONS, like nn/cnn or tools."
+
+    Args:
+        sections: Restrict the output to these sections
+        verbose: Detailed output with a listing of used images
+        descending: Sort sections by ascending number of unlicensed images
+        workdir: Path to move into before running the command
+
     """
     from collections.abc import Iterable, Iterator, Mapping, Set, Sized
     from re import compile as re_compile
@@ -37,7 +31,7 @@ def img_deps(
     from yaml import safe_load
 
     from ..configuring.paths import GlobalPaths
-    from ..exceptions import DeckzException
+    from ..exceptions import DeckzError
     from ..parsing.targets import Dependencies, Targets
 
     def _display_table(
@@ -85,7 +79,7 @@ def img_deps(
                 " or ".join(
                     f"[link=file://{m}]{m.relative_to(global_paths.current_dir)}[/link]"
                     for m in matches
-                    if not m.suffix == ".yml"
+                    if m.suffix != ".yml"
                 )
             )
 
@@ -106,7 +100,8 @@ def img_deps(
                 f"[red]Could not find section{'s' * (len(unknown_sections) > 1)} "
                 f"{to_print}."
             )
-            raise DeckzException(f"Could not find sections {', '.join(sections)}.")
+            msg = f"Could not find sections {', '.join(sections)}."
+            raise DeckzError(msg)
         return sorted(
             sections or dependencies, key=lambda s: len(images[s]), reverse=descending
         )
@@ -146,7 +141,7 @@ def img_deps(
         for section, dependencies in section_dependencies.items():
             images[section] = set(_section_images(section, dependencies, global_paths))
     to_iterate = _ordered_sections(
-        section_dependencies, images, sections, console, descending
+        section_dependencies, images, sections or [], console, descending
     )
     if verbose:
         console.print("[bold]Sections and their unlicensed images[/]")

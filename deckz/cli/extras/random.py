@@ -1,21 +1,30 @@
+# noqa: A005
 from pathlib import Path
 
-from typer import Option
-from typing_extensions import Annotated
-
-from .. import WorkdirOption, app
+from .. import app
 
 
 @app.command()
 def random(
     reason: str,
-    dry_run: Annotated[bool, Option(help="Roll the dice without sending emails")],
-    workdir: WorkdirOption = Path("."),
+    /,
+    *,
+    dry_run: bool = False,
+    workdir: Path = Path(),
 ) -> None:
-    """
-    Roll the dice and email the result.
+    """Roll the dice and email the result.
 
     The given REASON will be used as email object ("Pay the bill").
+
+    Args:
+        reason: Reason to mention in the email for rolling the dice
+        dry_run: Roll the dice and display the result without sending any email
+        workdir: Path to move into before running the command
+
+    Raises:
+        ValueError: If the number given during recipients selection are not between 0 \
+            and n - 1 where n is the number of possible recipients
+
     """
     from logging import getLogger
     from random import choice
@@ -50,9 +59,8 @@ def random(
         try:
             numbers = [int(number_str.strip()) for number_str in numbers_str]
             if not all(0 < n <= len(names) for n in numbers):
-                raise ValueError(
-                    "All numbers should be between 1 and the number of participants"
-                )
+                msg = "All numbers should be between 1 and the number of participants"
+                raise ValueError(msg)
             ok = True
         except Exception:
             console.print("Could not parse your selection, please try again.")

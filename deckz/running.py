@@ -45,7 +45,7 @@ def run_file(
 ) -> None:
     config = get_config(paths)
     targets = Targets.from_data(
-        [dict(name="section", title="section", sections=[dict(path=latex)])],
+        [{"name": "section", "title": "section", "sections": [{"path": "latex"}]}],
         paths=paths,
     )
     settings = Settings.from_global_paths(paths)
@@ -72,11 +72,11 @@ def run_section(
     config = get_config(paths)
     targets = Targets.from_data(
         [
-            dict(
-                name="section",
-                title="section",
-                sections=[dict(path=section, flavor=flavor)],
-            )
+            {
+                "name": "section",
+                "title": "section",
+                "sections": [{"path": section, "flavor": flavor}],
+            }
         ],
         paths=paths,
     )

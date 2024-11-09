@@ -1,11 +1,16 @@
 from pathlib import Path
 
-from .. import WorkdirOption, app
+from .. import app
 
 
 @app.command()
-def upload(workdir: WorkdirOption = Path(".")) -> None:
-    """Upload pdfs to Google Drive."""
+def upload(*, workdir: Path = Path()) -> None:
+    """Upload pdfs to Google Drive.
+
+    Args:
+        workdir: Path to move into before running the command
+
+    """
     from ...configuring.paths import Paths
     from ...extras.uploading import Uploader
 

@@ -25,7 +25,7 @@ def working_dir(tmp_path: Path, monkeypatch: Any) -> Path:
 
 
 def extract_info(pdf_path: Path) -> tuple[int, str]:
-    with open(pdf_path, "rb") as fh:
+    with pdf_path.open("rb") as fh:
         pages = list(extract_pages(fh))
         fh.seek(0)
         text = extract_text(fh)
@@ -33,7 +33,7 @@ def extract_info(pdf_path: Path) -> tuple[int, str]:
 
 
 def run_deckz(*args: str) -> None:
-    with patch("sys.argv", ["deckz"] + list(args)):
+    with patch("sys.argv", ["deckz", *args]):
         try:
             main()
         except SystemExit as e:
@@ -42,7 +42,7 @@ def run_deckz(*args: str) -> None:
 
 
 def test_run(working_dir: Path) -> None:
-    run_deckz("run", "--targets", "p1")
+    run_deckz("run", "p1")
 
     n_pages, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
     assert n_pages == 14

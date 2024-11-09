@@ -1,19 +1,24 @@
 from pathlib import Path
-from typing import Optional
 
-from typer import Argument
-from typing_extensions import Annotated
-
-from .. import WorkdirOption, app
+from .. import app
 
 
 @app.command()
 def issue(
     title: str,
-    body: Annotated[Optional[str], Argument()] = None,
-    workdir: WorkdirOption = Path("."),
+    body: str | None = None,
+    /,
+    *,
+    workdir: Path = Path(),
 ) -> None:
-    """Create an issue on GitHub with a given TITLE and an optional BODY."""
+    """Create an issue on GitHub.
+
+    Args:
+        title: Title of the issue to create
+        body: Optional body of the issue to create
+        workdir: Path to move into before running the command
+
+    """
     from logging import getLogger
 
     from ...configuring.paths import GlobalPaths
@@ -25,5 +30,5 @@ def issue(
     url = api.create_issue(config.owner, config.repo, title, body, config.project)
     logger.info(
         f"Successfully created the issue [link={url}]on GitHub[/link]",
-        extra=dict(markup=True),
+        extra={"markup": True},
     )

@@ -12,7 +12,7 @@ from tempfile import TemporaryDirectory
 
 from ..configuring.paths import GlobalPaths
 from ..configuring.settings import Settings
-from ..exceptions import DeckzException
+from ..exceptions import DeckzError
 from ..utils import copy_file_if_newer, import_module_and_submodules
 from .compiling import compile as compiling_compile
 
@@ -146,7 +146,7 @@ class TikzBuilder:
                     (item_path.latex for _, item_path in items),
                 )
 
-            for (_, paths), result in zip(items, results):
+            for (_, paths), result in zip(items, results, strict=True):
                 if result.ok:
                     paths.output_pdf.parent.mkdir(parents=True, exist_ok=True)
                     copyfile(paths.build_pdf, paths.output_pdf)
@@ -156,27 +156,29 @@ class TikzBuilder:
                     copyfile(paths.build_log, paths.output_log)
 
         failed = []
-        for (input_path, paths), result in zip(items, results):
+        for (input_path, paths), result in zip(items, results, strict=True):
             if not result.ok:
                 failed.append((input_path, paths.output_log))
                 self._logger.warning("Standalone compilation of %s errored", input_path)
                 self._logger.warning("Captured stderr\n%s", result.stderr)
         if failed:
+
+            def linkify(path: Path) -> str:
+                return f"[link=file://{path}]log[/link]"
+
             formatted_fails = "\n".join(
-                "- %s (%s)"
-                % (
-                    file_path.relative_to(self._paths.shared_dir),
-                    "no log"
-                    if not log_path.exists()
-                    else f"[link=file://{log_path}]log[/link]",
+                (
+                    f"- {file_path.relative_to(self._paths.shared_dir)} "
+                    f'({linkify(log_path) if log_path.exists() else "no log"})'
                 )
                 for file_path, log_path in failed
             )
-            raise DeckzException(
+            msg = (
                 f"Standalone compilation errored for {len(failed)} files:\n"
                 f"{formatted_fails}\n"
                 "Please also check the errors above."
             )
+            raise DeckzError(msg)
 
     def _needs_compile(self, input_file: Path, compile_paths: CompilePaths) -> bool:
         return (
@@ -191,9 +193,8 @@ class TikzBuilder:
             mode="exec",
         )
         output_file.parent.mkdir(parents=True, exist_ok=True)
-        with output_file.open("w", encoding="utf8") as fh:
-            with redirect_stdout(fh):
-                exec(compiled)
+        with output_file.open("w", encoding="utf8") as fh, redirect_stdout(fh):
+            exec(compiled)
 
     def _compute_compile_paths(self, input_file: Path, build_dir: Path) -> CompilePaths:
         latex = (build_dir / input_file.relative_to(self._paths.tikz_dir)).with_suffix(
@@ -228,6 +229,5 @@ class TikzBuilder:
         elif input_file.suffix == ".tex":
             copy_file_if_newer(input_file, compile_paths.latex)
         else:
-            raise ValueError(
-                f"Unsupported standalone file extension {input_file.suffix}"
-            )
+            msg = f"Unsupported standalone file extension {input_file.suffix}"
+            raise ValueError(msg)

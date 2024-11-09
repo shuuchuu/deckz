@@ -8,7 +8,7 @@ from typing import Any
 
 from ..configuring.paths import Paths
 from ..configuring.settings import Settings
-from ..exceptions import DeckzException
+from ..exceptions import DeckzError
 from ..parsing.targets import Target, Targets
 from ..utils import copy_file_if_newer
 from .compiling import CompileResult
@@ -75,7 +75,7 @@ class Builder:
         self._logger.info(f"Building {len(items)} PDFs used in {n_outputs} outputs")
         with Pool(min(cpu_count(), len(items))) as pool:
             results = pool.map(self._build_item, items)
-        for item, result in zip(items, results):
+        for item, result in zip(items, results, strict=True):
             if item.target is not None:
                 compilation = f"{item.target.name}/{item.compile_type.value}"
             else:
@@ -172,22 +172,25 @@ class Builder:
 
     def _setup_link(self, source: Path, target: Path) -> None:
         if not target.exists():
-            raise DeckzException(
+            msg = (
                 f"{target} could not be found. Please make sure it exists before "
                 "proceeding."
             )
+            raise DeckzError(msg)
         target = target.resolve()
         if source.is_symlink():
             if source.resolve().samefile(target):
                 return
-            raise DeckzException(
+            msg = (
                 f"{source} already exists in the build directory and does not point to "
                 f"{target}. Please clean the build directory."
             )
-        elif source.exists():
-            raise DeckzException(
+            raise DeckzError(msg)
+        if source.exists():
+            msg = (
                 f"{source} already exists in the build directory. Please clean the "
                 "build directory."
             )
+            raise DeckzError(msg)
         source.parent.mkdir(parents=True, exist_ok=True)
         source.symlink_to(target)

@@ -12,9 +12,9 @@ class CompileResult:
     stderr: str | None = ""
 
 
-def compile(latex_path: Path, settings: Settings) -> CompileResult:
+def compile(latex_path: Path, settings: Settings) -> CompileResult:  # noqa: A001
     completed_process = run(
-        settings.build_command + [latex_path.name],
+        [*settings.build_command, latex_path.name],
         cwd=latex_path.parent,
         capture_output=True,
         encoding="utf8",

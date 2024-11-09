@@ -29,8 +29,8 @@ class GitHubAPI:
     def _run_query(self, query: str) -> dict[str, Any]:
         response = post(
             "https://api.github.com/graphql",
-            json=dict(query=query),
-            headers=dict(Authorization=f"token {self._api_key}"),
+            json={"query": query},
+            headers={"Authorization": f"token {self._api_key}"},
         )
         response.raise_for_status()
         return response.json()
