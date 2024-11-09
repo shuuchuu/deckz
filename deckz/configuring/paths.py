@@ -8,7 +8,7 @@ from typing import TypeVar
 from appdirs import user_config_dir as appdirs_user_config_dir
 
 from .. import app_name
-from ..exceptions import DeckzException
+from ..exceptions import DeckzError
 from ..utils import get_git_dir
 
 _logger = getLogger(__name__)
@@ -63,36 +63,36 @@ class GlobalPaths:
         yml_templates_dir = templates_dir / "yml"
         jinja2_dir = templates_dir / "jinja2"
         user_config_dir = Path(appdirs_user_config_dir(app_name))
-        return dict(
-            current_dir=current_dir,
-            git_dir=git_dir,
-            shared_dir=shared_dir,
-            templates_dir=templates_dir,
-            yml_templates_dir=yml_templates_dir,
-            jinja2_dir=jinja2_dir,
-            user_config_dir=user_config_dir,
-            figures_dir=figures_dir,
-            plt_dir=figures_dir / "plots",
-            shared_plt_pdf_dir=shared_dir / "plt",
-            tikz_dir=figures_dir / "tikz",
-            shared_tikz_pdf_dir=shared_dir / "tikz",
-            settings=git_dir / "settings.yml",
-            shared_img_dir=shared_dir / "img",
-            shared_code_dir=shared_dir / "code",
-            shared_latex_dir=shared_dir / "latex",
-            template_global_config=yml_templates_dir / "global-config.yml",
-            template_user_config=yml_templates_dir / "user-config.yml",
-            template_company_config=yml_templates_dir / "company-config.yml",
-            template_deck_config=yml_templates_dir / "deck-config.yml",
-            jinja2_main_template=jinja2_dir / "main.tex",
-            jinja2_print_template=jinja2_dir / "print.tex",
-            global_config=git_dir / "global-config.yml",
-            github_issues=user_config_dir / "github-issues.yml",
-            mails=user_config_dir / "mails.yml",
-            gdrive_secrets=user_config_dir / "gdrive-secrets.json",
-            gdrive_credentials=user_config_dir / "gdrive-credentials.pickle",
-            user_config=user_config_dir / "user-config.yml",
-        )
+        return {
+            "current_dir": current_dir,
+            "git_dir": git_dir,
+            "shared_dir": shared_dir,
+            "templates_dir": templates_dir,
+            "yml_templates_dir": yml_templates_dir,
+            "jinja2_dir": jinja2_dir,
+            "user_config_dir": user_config_dir,
+            "figures_dir": figures_dir,
+            "plt_dir": figures_dir / "plots",
+            "shared_plt_pdf_dir": shared_dir / "plt",
+            "tikz_dir": figures_dir / "tikz",
+            "shared_tikz_pdf_dir": shared_dir / "tikz",
+            "settings": git_dir / "settings.yml",
+            "shared_img_dir": shared_dir / "img",
+            "shared_code_dir": shared_dir / "code",
+            "shared_latex_dir": shared_dir / "latex",
+            "template_global_config": yml_templates_dir / "global-config.yml",
+            "template_user_config": yml_templates_dir / "user-config.yml",
+            "template_company_config": yml_templates_dir / "company-config.yml",
+            "template_deck_config": yml_templates_dir / "deck-config.yml",
+            "jinja2_main_template": jinja2_dir / "main.tex",
+            "jinja2_print_template": jinja2_dir / "print.tex",
+            "global_config": git_dir / "global-config.yml",
+            "github_issues": user_config_dir / "github-issues.yml",
+            "mails": user_config_dir / "mails.yml",
+            "gdrive_secrets": user_config_dir / "gdrive-secrets.json",
+            "gdrive_credentials": user_config_dir / "gdrive-credentials.pickle",
+            "user_config": user_config_dir / "user-config.yml",
+        }
 
     @classmethod
     def from_defaults(
@@ -139,24 +139,25 @@ class Paths(GlobalPaths):
         if check_depth and not defaults["current_dir"].relative_to(
             defaults["git_dir"]
         ).match("*/*"):
-            raise DeckzException(
+            msg = (
                 f"Not deep enough from root {defaults['git_dir']}. "
                 "Please follow the directory hierarchy root > company > deck and "
                 "invoke this tool from the deck directory."
             )
-        additional_defaults_items = dict(
-            build_dir=lambda: defaults["current_dir"] / ".build",
-            pdf_dir=lambda: defaults["current_dir"] / "pdf",
-            local_latex_dir=lambda: defaults["current_dir"] / "latex",
-            company_config=lambda: (
+            raise DeckzError(msg)
+        additional_defaults_items = {
+            "build_dir": lambda: defaults["current_dir"] / ".build",
+            "pdf_dir": lambda: defaults["current_dir"] / "pdf",
+            "local_latex_dir": lambda: defaults["current_dir"] / "latex",
+            "company_config": lambda: (
                 defaults["git_dir"]
                 / defaults["current_dir"].relative_to(defaults["git_dir"]).parts[0]
                 / "company-config.yml"
             ),
-            deck_config=lambda: defaults["current_dir"] / "deck-config.yml",
-            session_config=lambda: defaults["current_dir"] / "session-config.yml",
-            targets=lambda: defaults["current_dir"] / "targets.yml",
-        )
+            "deck_config": lambda: defaults["current_dir"] / "deck-config.yml",
+            "session_config": lambda: defaults["current_dir"] / "session-config.yml",
+            "targets": lambda: defaults["current_dir"] / "targets.yml",
+        }
         additional_defaults = {
             key: value_function()
             for key, value_function in additional_defaults_items.items()

@@ -7,31 +7,29 @@ from sys import modules
 
 from pygit2 import Repository, discover_repository
 
-from .exceptions import DeckzException
+from .exceptions import DeckzError
 
 
 def get_git_dir(path: Path) -> Path:
     repository = discover_repository(str(path))
     if repository is None:
-        raise DeckzException(
+        msg = (
             "Could not find the path of the current git working directory. "
             "Are you in one?"
         )
+        raise DeckzError(msg)
     return Path(Repository(repository).workdir).resolve()
 
 
 def copy_file_if_newer(original: Path, copy: Path) -> None:
     if copy.exists() and copy.stat().st_mtime > original.stat().st_mtime:
         return
-    else:
-        copy.parent.mkdir(parents=True, exist_ok=True)
-        copyfile(original, copy)
+    copy.parent.mkdir(parents=True, exist_ok=True)
+    copyfile(original, copy)
 
 
 def import_module_and_submodules(package_name: str) -> None:
-    """
-    From https://github.com/allenai/allennlp/blob/master/allennlp/common/util.py
-    """
+    """From https://github.com/allenai/allennlp/blob/master/allennlp/common/util.py."""
     importlib_invalidate_caches()
 
     if package_name in modules:

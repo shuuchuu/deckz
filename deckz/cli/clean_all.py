@@ -1,11 +1,16 @@
 from pathlib import Path
 
-from . import WorkdirOption, app
+from . import app
 
 
 @app.command()
-def clean_all(workdir: WorkdirOption = Path(".")) -> None:
-    """Wipe all build directories."""
+def clean_all(*, workdir: Path = Path()) -> None:
+    """Wipe all build directories.
+
+    Args:
+        workdir: Path to move into before running the command
+
+    """
     from logging import getLogger
     from shutil import rmtree
 

@@ -9,7 +9,7 @@ from pydantic import BaseModel, ValidationError
 from yaml import safe_load as safe_load
 
 from ..configuring.paths import Paths
-from ..exceptions import DeckzException
+from ..exceptions import DeckzError
 
 _logger = getLogger(__name__)
 
@@ -29,8 +29,9 @@ class DirSectionConfig(BaseModel):
     def from_yaml_file(cls, path: Path) -> "DirSectionConfig":
         try:
             return cls.model_validate(safe_load(path.read_text(encoding="utf8")))
-        except (IOError, ValidationError) as e:
-            raise DeckzException(f"Could not load {path} section config") from e
+        except (OSError, ValidationError) as e:
+            msg = f"Could not load {path} section config"
+            raise DeckzError(msg) from e
 
 
 Content = str
@@ -114,7 +115,7 @@ class TargetBuilder:
         section_flavors = defaultdict(set)
         for section_config in self.data["sections"]:
             if not isinstance(section_config, dict):
-                section_config = dict(path=section_config)
+                section_config = {"path": section_config}
             section_path = section_config["path"]
             section_flavors[section_path].add(section_config.get("flavor"))
             result = self._parse_section_dir(
@@ -163,22 +164,22 @@ class TargetBuilder:
         else:
             return None
         section_config = DirSectionConfig.from_yaml_file(section_config_path)
-        title = (
-            custom_config["title"] if "title" in custom_config else section_config.title
-        )
+        title = custom_config.get("title", section_config.title)
         if "flavor" not in custom_config:
-            raise DeckzException(
+            msg = (
                 f"Incorrect targets {self.paths.targets}. "
                 f"Mandatory flavor not specified in {section_path} configuration."
             )
+            raise DeckzError(msg)
         flavor_name = custom_config["flavor"]
         if flavor_name not in section_config.flavors:
-            flavors_string = ", ".join("'%s'" % f for f in section_config.flavors)
-            raise DeckzException(
+            flavors_string = ", ".join(f"'{f}'" for f in section_config.flavors)
+            msg = (
                 f"Incorrect targets {self.paths.targets}. "
                 f"'{flavor_name}' not amongst available flavors: {flavors_string} "
                 f"of {section_config_path}."
             )
+            raise DeckzError(msg)
 
         flavor = section_config.flavors[flavor_name]
         items: list[ContentOrTitle] = [Title(title=title, level=title_level)]
@@ -214,10 +215,7 @@ class TargetBuilder:
     ) -> None:
         if isinstance(item, str):
             filename = item
-            if default_titles is not None:
-                title = default_titles.get(filename)
-            else:
-                title = None
+            title = None if default_titles is None else default_titles.get(filename)
         else:
             filename, title = next(iter(item.items()))
         if "excludes" in section_config and filename in section_config["excludes"]:
@@ -273,7 +271,7 @@ class TargetBuilder:
             nested_section_path = f"{section_path_str}/{nested_section_path_str[1:]}"
         parsed_nested_dir = self._parse_section_dir(
             nested_section_path,
-            dict(flavor=flavor),
+            {"flavor": flavor},
             title_level,
             section_flavors,
             section_dependencies,
@@ -330,21 +328,28 @@ class Targets(Iterable[Target]):
             if target.dependencies.missing
         }
         if missing_dependencies:
-            raise DeckzException(
-                f"Incorrect targets {self.paths.targets}. "
-                "Could not find the following dependencies:\n%s"
-                % "\n".join(
-                    "  - %s:\n%s" % (k, "\n".join(f"    - {p}" for p in v))
-                    for k, v in missing_dependencies.items()
-                ),
+
+            def format_paths(paths: set[str]) -> str:
+                return "\n".join(f"    - {p}" for p in paths)
+
+            missing_deps = "\n".join(
+                f"  - {k}:\n{format_paths(v)}" for k, v in missing_dependencies.items()
             )
+            msg = (
+                f"Incorrect targets {self.paths.targets}. "
+                "Could not find the following dependencies:\n"
+                f"{missing_deps}"
+            )
+
+            raise DeckzError(msg)
 
     @classmethod
     def from_file(
         cls, paths: Paths, whitelist: Iterable[str] | None = None
     ) -> "Targets":
         if not paths.targets.exists():
-            raise DeckzException(f"Could not find {paths.targets}.")
+            msg = f"Could not find {paths.targets}."
+            raise DeckzError(msg)
         content = safe_load(paths.targets.read_text(encoding="utf8"))
         return cls.from_data(data=content, paths=paths, whitelist=whitelist)
 
@@ -357,10 +362,11 @@ class Targets(Iterable[Target]):
     ) -> "Targets":
         for target_data in data:
             if target_data["name"] == "all":
-                raise DeckzException(
+                msg = (
                     f"Incorrect targets {paths.targets}: "
                     '"all" is a reserved target name.'
                 )
+                raise DeckzError(msg)
         targets = [TargetBuilder(data=target, paths=paths).build() for target in data]
         if whitelist is not None:
             targets = cls._filter_targets(targets, frozenset(whitelist), paths)
@@ -372,11 +378,12 @@ class Targets(Iterable[Target]):
     ) -> list[Target]:
         unmatched = whiteset - frozenset(target.name for target in targets)
         if unmatched:
-            raise DeckzException(
+            unmatched_targets = "\n".join(f"  - {name}" for name in unmatched)
+            msg = (
                 f"Incorrect targets {paths.targets}. "
-                "Could not find the following targets:\n%s"
-                % "\n".join("  - %s" % name for name in unmatched)
+                f"Could not find the following targets:\n{unmatched_targets}"
             )
+            raise DeckzError(msg)
         return [target for target in targets if target.name in whiteset]
 
     def __iter__(self) -> Iterator[Target]:

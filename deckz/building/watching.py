@@ -8,7 +8,7 @@ from typing import Any
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-from ..exceptions import DeckzException
+from ..exceptions import DeckzError
 
 _logger = getLogger(__name__)
 
@@ -41,7 +41,7 @@ class _BaseEventHandler(FileSystemEventHandler):
                 self._function(*self._function_args, **self._function_kwargs)
                 _logger.info("Build finished")
             except Exception as e:
-                _logger.error(str(e), extra=dict(markup=True))
+                _logger.error(str(e), extra={"markup": True})
         finally:
             self._compiling = False
 
@@ -49,13 +49,12 @@ class _BaseEventHandler(FileSystemEventHandler):
         current_time = time()
         if self._last_compile + self._minimum_delay > current_time:
             return
-        elif self._worker is not None and self._worker.is_alive():
+        if self._worker is not None and self._worker.is_alive():
             _logger.info("Still on last build, not starting a new build")
             return
-        else:
-            self._last_compile = current_time
-            self._worker = Thread(target=self.__call__)
-            self._worker.start()
+        self._last_compile = current_time
+        self._worker = Thread(target=self.__call__)
+        self._worker.start()
 
 
 def watch(
@@ -94,4 +93,5 @@ def watch(
         _logger.info("Stopped watching")
     else:
         observer.join()
-        raise DeckzException("Stopped watching abnormally")
+        msg = "Stopped watching abnormally"
+        raise DeckzError(msg)

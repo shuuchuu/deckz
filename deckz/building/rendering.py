@@ -1,7 +1,7 @@
 from collections.abc import Callable
+from contextlib import suppress
 from filecmp import cmp
 from functools import cached_property
-from os import unlink
 from os.path import join as path_join
 from pathlib import Path
 from shutil import move
@@ -47,10 +47,8 @@ class Renderer:
             if not output_path.exists() or not cmp(fh.name, str(output_path)):
                 move(fh.name, output_path)
         finally:
-            try:
-                unlink(fh.name)
-            except FileNotFoundError:
-                pass
+            with suppress(FileNotFoundError):
+                Path(fh.name).unlink()
 
     @cached_property
     def _env(self) -> Environment:
@@ -68,7 +66,7 @@ class Renderer:
             autoescape=False,
         )
         env.filters["camelcase"] = self._to_camel_case
-        env.filters["path_join"] = lambda paths: path_join(*paths)
+        env.filters["path_join"] = lambda paths: path_join(*paths)  # noqa: PTH118
         env.filters["image"] = self._img
         return env
 
@@ -86,8 +84,7 @@ class Renderer:
                 if lang != "fr":
                     key_en = f"{key}_en"
                     return metadata[key_en] if key_en in metadata else metadata[key]
-                else:
-                    return metadata[key]
+                return metadata[key]
 
             title = self._settings.default_img_values.title.get_default(
                 get_en_or_fr("title"), lang
@@ -95,10 +92,10 @@ class Renderer:
             author = self._settings.default_img_values.author.get_default(
                 get_en_or_fr("author"), lang
             )
-            license = self._settings.default_img_values.license.get_default(
+            license_name = self._settings.default_img_values.license.get_default(
                 get_en_or_fr("license"), lang
             )
-            info = f"[{title}, {author}, {license}.]"
+            info = f"[{title}, {author}, {license_name}.]"
         else:
             info = ""
 

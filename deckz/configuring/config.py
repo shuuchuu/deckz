@@ -5,14 +5,13 @@ from typing import Any
 
 from yaml import safe_load
 
-from ..exceptions import DeckzException
+from ..exceptions import DeckzError
 from .paths import Paths
 
 
 def get_config(paths: Paths) -> dict[str, Any]:
-    return {
-        k: v
-        for k, v in sorted(
+    return dict(
+        sorted(
             ChainMap(
                 *(
                     _get_or_create_config(config_path, template_path)
@@ -26,7 +25,7 @@ def get_config(paths: Paths) -> dict[str, Any]:
                 ),
             ).items()
         )
-    }
+    )
 
 
 def _get_or_create_config(
@@ -36,16 +35,16 @@ def _get_or_create_config(
         if template_path:
             if template_path.is_file():
                 shutil_copy(str(template_path), str(config_path), follow_symlinks=True)
-                raise DeckzException(
+                msg = (
                     f"{config_path} was not found, copied {template_path} there. "
                     "Please edit it."
                 )
-            else:
-                raise DeckzException(
-                    f"Neither {config_path} nor {template_path} were found. "
-                    "Please create both."
-                )
-        else:
-            return {}
+                raise DeckzError(msg)
+            msg = (
+                f"Neither {config_path} nor {template_path} were found. "
+                "Please create both."
+            )
+            raise DeckzError(msg)
+        return {}
 
     return safe_load(config_path.read_text(encoding="utf8"))
