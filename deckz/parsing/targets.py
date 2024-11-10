@@ -310,7 +310,7 @@ class TargetBuilder:
             title = None
         if title is not None:
             items.append(Title(title=title, level=title_level))
-        items.append(str(PurePosixPath(relative_path)))
+        items.append(str(PurePosixPath(relative_path.with_suffix(""))))
         dependencies = Dependencies()
         dependencies.used.add(section_file.resolve())
         return items, dependencies
