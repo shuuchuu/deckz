@@ -189,7 +189,7 @@ class DeckParser:
         if resolved_path:
             section.path = resolved_path
         else:
-            section.parsing_error = f"Unresolvable section path {logical_path}."
+            section.parsing_error = f"unresolvable section path {logical_path}"
             return section
         definition_logical_path = (logical_path / logical_path.name).with_suffix(".yml")
         definition_resolved_path = self._resolve(
@@ -197,7 +197,7 @@ class DeckParser:
         )
         if definition_resolved_path is None:
             section.parsing_error = (
-                f"Unresolvable section definition path {definition_logical_path}."
+                f"unresolvable section definition path {definition_logical_path}"
             )
             return section
         try:
@@ -213,7 +213,7 @@ class DeckParser:
         if section.title is None:
             section.title = section_definition.title
         if flavor not in section_definition.flavors:
-            section.parsing_error = f"Flavor {flavor} not found."
+            section.parsing_error = f"flavor {flavor} not found"
             return section
         for node_include in section_definition.flavors[flavor]:
             if node_include.title:
@@ -259,7 +259,7 @@ class DeckParser:
         if resolved_path:
             file.path = resolved_path
         else:
-            file.parsing_error = f"Unresolvable file path {logical_path}."
+            file.parsing_error = f"unresolvable file path {logical_path}"
         return file
 
     @staticmethod

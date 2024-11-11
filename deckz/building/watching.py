@@ -93,5 +93,5 @@ def watch(
         _logger.info("Stopped watching")
     else:
         observer.join()
-        msg = "Stopped watching abnormally"
+        msg = "stopped watching abnormally"
         raise DeckzError(msg)

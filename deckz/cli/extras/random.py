@@ -59,7 +59,7 @@ def random(
         try:
             numbers = [int(number_str.strip()) for number_str in numbers_str]
             if not all(0 < n <= len(names) for n in numbers):
-                msg = "All numbers should be between 1 and the number of participants"
+                msg = "all numbers should be between 1 and the number of participants"
                 raise ValueError(msg)
             ok = True
         except Exception:

@@ -174,7 +174,7 @@ class Builder:
         if not target.exists():
             msg = (
                 f"{target} could not be found. Please make sure it exists before "
-                "proceeding."
+                "proceeding"
             )
             raise DeckzError(msg)
         target = target.resolve()
@@ -183,13 +183,13 @@ class Builder:
                 return
             msg = (
                 f"{source} already exists in the build directory and does not point to "
-                f"{target}. Please clean the build directory."
+                f"{target}. Please clean the build directory"
             )
             raise DeckzError(msg)
         if source.exists():
             msg = (
                 f"{source} already exists in the build directory. Please clean the "
-                "build directory."
+                "build directory"
             )
             raise DeckzError(msg)
         source.parent.mkdir(parents=True, exist_ok=True)

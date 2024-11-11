@@ -180,7 +180,7 @@ class Uploader:
     ) -> Any | None:
         results = self._query(folder, parents, name)
         if len(results) > 1:
-            msg = "Found several files while trying to retrieve one."
+            msg = "found several files while trying to retrieve one"
             raise DeckzError(msg)
         return results[0] if results else None
 

@@ -31,7 +31,7 @@ class Settings(BaseModel):
     @classmethod
     def from_global_paths(cls, global_paths: GlobalPaths) -> "Settings":
         if not global_paths.settings.is_file():
-            msg = f"Could not find settings file at {global_paths.settings}."
+            msg = f"could not find settings file at {global_paths.settings}"
             raise DeckzError(msg)
         return cls.model_validate(
             safe_load(global_paths.settings.read_text(encoding="utf8"))

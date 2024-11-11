@@ -140,9 +140,9 @@ class Paths(GlobalPaths):
             defaults["git_dir"]
         ).match("*/*"):
             msg = (
-                f"Not deep enough from root {defaults['git_dir']}. "
+                f"not deep enough from root {defaults['git_dir']}. "
                 "Please follow the directory hierarchy root > company > deck and "
-                "invoke this tool from the deck directory."
+                "invoke this tool from the deck directory"
             )
             raise DeckzError(msg)
         additional_defaults_items = {

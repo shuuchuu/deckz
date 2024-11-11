@@ -30,7 +30,7 @@ class DirSectionConfig(BaseModel):
         try:
             return cls.model_validate(safe_load(path.read_text(encoding="utf8")))
         except (OSError, ValidationError) as e:
-            msg = f"Could not load {path} section config"
+            msg = f"could not load {path} section config"
             raise DeckzError(msg) from e
 
 
@@ -167,17 +167,17 @@ class TargetBuilder:
         title = custom_config.get("title", section_config.title)
         if "flavor" not in custom_config:
             msg = (
-                f"Incorrect targets {self.paths.targets}. "
-                f"Mandatory flavor not specified in {section_path} configuration."
+                f"incorrect targets {self.paths.targets}. "
+                f"Mandatory flavor not specified in {section_path} configuration"
             )
             raise DeckzError(msg)
         flavor_name = custom_config["flavor"]
         if flavor_name not in section_config.flavors:
             flavors_string = ", ".join(f"'{f}'" for f in section_config.flavors)
             msg = (
-                f"Incorrect targets {self.paths.targets}. "
+                f"incorrect targets {self.paths.targets}. "
                 f"'{flavor_name}' not amongst available flavors: {flavors_string} "
-                f"of {section_config_path}."
+                f"of {section_config_path}"
             )
             raise DeckzError(msg)
 
@@ -336,7 +336,7 @@ class Targets(Iterable[Target]):
                 f"  - {k}:\n{format_paths(v)}" for k, v in missing_dependencies.items()
             )
             msg = (
-                f"Incorrect targets {self.paths.targets}. "
+                f"incorrect targets {self.paths.targets}. "
                 "Could not find the following dependencies:\n"
                 f"{missing_deps}"
             )
@@ -348,7 +348,7 @@ class Targets(Iterable[Target]):
         cls, paths: Paths, whitelist: Iterable[str] | None = None
     ) -> "Targets":
         if not paths.targets.exists():
-            msg = f"Could not find {paths.targets}."
+            msg = f"could not find {paths.targets}"
             raise DeckzError(msg)
         content = safe_load(paths.targets.read_text(encoding="utf8"))
         return cls.from_data(data=content, paths=paths, whitelist=whitelist)
@@ -363,8 +363,8 @@ class Targets(Iterable[Target]):
         for target_data in data:
             if target_data["name"] == "all":
                 msg = (
-                    f"Incorrect targets {paths.targets}: "
-                    '"all" is a reserved target name.'
+                    f"incorrect targets {paths.targets}: "
+                    '"all" is a reserved target name'
                 )
                 raise DeckzError(msg)
         targets = [TargetBuilder(data=target, paths=paths).build() for target in data]
@@ -380,7 +380,7 @@ class Targets(Iterable[Target]):
         if unmatched:
             unmatched_targets = "\n".join(f"  - {name}" for name in unmatched)
             msg = (
-                f"Incorrect targets {paths.targets}. "
+                f"incorrect targets {paths.targets}. "
                 f"Could not find the following targets:\n{unmatched_targets}"
             )
             raise DeckzError(msg)

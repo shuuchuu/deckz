@@ -174,7 +174,7 @@ class TikzBuilder:
                 for file_path, log_path in failed
             )
             msg = (
-                f"Standalone compilation errored for {len(failed)} files:\n"
+                f"standalone compilation errored for {len(failed)} files:\n"
                 f"{formatted_fails}\n"
                 "Please also check the errors above."
             )
@@ -229,5 +229,5 @@ class TikzBuilder:
         elif input_file.suffix == ".tex":
             copy_file_if_newer(input_file, compile_paths.latex)
         else:
-            msg = f"Unsupported standalone file extension {input_file.suffix}"
+            msg = f"unsupported standalone file extension {input_file.suffix}"
             raise ValueError(msg)

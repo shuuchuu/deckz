@@ -100,7 +100,7 @@ def img_deps(
                 f"[red]Could not find section{'s' * (len(unknown_sections) > 1)} "
                 f"{to_print}."
             )
-            msg = f"Could not find sections {', '.join(sections)}."
+            msg = f"could not find sections {', '.join(sections)}."
             raise DeckzError(msg)
         return sorted(
             sections or dependencies, key=lambda s: len(images[s]), reverse=descending

@@ -13,10 +13,7 @@ from .exceptions import DeckzError
 def get_git_dir(path: Path) -> Path:
     repository = discover_repository(str(path))
     if repository is None:
-        msg = (
-            "Could not find the path of the current git working directory. "
-            "Are you in one?"
-        )
+        msg = "could not find the path of the current git working directory"
         raise DeckzError(msg)
     return Path(Repository(repository).workdir).resolve()
 

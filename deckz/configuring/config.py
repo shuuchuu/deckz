@@ -37,12 +37,12 @@ def _get_or_create_config(
                 shutil_copy(str(template_path), str(config_path), follow_symlinks=True)
                 msg = (
                     f"{config_path} was not found, copied {template_path} there. "
-                    "Please edit it."
+                    "Please edit it"
                 )
                 raise DeckzError(msg)
             msg = (
-                f"Neither {config_path} nor {template_path} were found. "
-                "Please create both."
+                f"neither {config_path} nor {template_path} were found. "
+                "Please create both"
             )
             raise DeckzError(msg)
         return {}
