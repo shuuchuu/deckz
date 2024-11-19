@@ -1,19 +1,22 @@
+from collections.abc import MutableSequence
+
 from ...configuring.paths import Paths
-from ..targets import Part as TargetsPart
-from ..targets import Title
+from ..targets import PartSlides, Title
 from ..tree_parsing import Deck, File, Part, Section
 
-ContentSlide = str
+Content = str
+TitleOrContent = Title | Content
 
 
 class SlidesVisitor:
     def __init__(self, paths: Paths) -> None:
-        self.parts: list[TargetsPart] = []
         self._paths = paths
 
-    def visit_file(self, file: File, level: int) -> None:
+    def visit_file(
+        self, file: File, sections: MutableSequence[TitleOrContent], level: int
+    ) -> None:
         if file.title:
-            self.parts[-1].sections.append(Title(file.title, level))
+            sections.append(Title(file.title, level))
         if file.path.is_relative_to(self._paths.shared_dir):
             path = file.path.relative_to(self._paths.shared_dir)
         elif file.path.is_relative_to(self._paths.current_dir):
@@ -21,23 +24,23 @@ class SlidesVisitor:
         else:
             raise ValueError
         path = path.with_suffix("")
-        self.parts[-1].sections.append(str(path))
+        sections.append(str(path))
 
-    def visit_section(self, section: Section, level: int) -> None:
+    def visit_section(
+        self, section: Section, sections: MutableSequence[TitleOrContent], level: int
+    ) -> None:
         if section.title:
-            self.parts[-1].sections.append(Title(section.title, level))
+            sections.append(Title(section.title, level))
         for node in section.children:
-            node.accept(self, level + 1)
+            node.accept(self, sections, level + 1)
 
-    def visit_part(self, part: Part) -> None:
-        self.parts.append(TargetsPart(part.title, []))
+    def visit_part(self, part: Part) -> PartSlides:
+        sections: list[TitleOrContent] = []
         for node in part.nodes:
-            node.accept(self, 0)
+            node.accept(self, sections, 0)
+        return PartSlides(part.title, sections)
 
-
-def build_targets_parts(deck: Deck, paths: Paths) -> list[TargetsPart]:
-    visitor = SlidesVisitor(paths)
-    for part in deck.parts:
-        part.accept(visitor)
-
-    return visitor.parts
+    def visit_deck(self, deck: Deck) -> dict[str, PartSlides]:
+        return {
+            part_name: self.visit_part(part) for part_name, part in deck.parts.items()
+        }

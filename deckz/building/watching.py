@@ -41,7 +41,7 @@ class _BaseEventHandler(FileSystemEventHandler):
                 self._function(*self._function_args, **self._function_kwargs)
                 _logger.info("Build finished")
             except Exception as e:
-                _logger.error(str(e), extra={"markup": True})
+                _logger.exception(str(e), extra={"markup": True})
         finally:
             self._compiling = False
 

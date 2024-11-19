@@ -22,8 +22,7 @@ pygit2 = "^1"
 python = "^3.10"
 rich = "^13"
 sendgrid = "^6"
-typer = "^0.13"
-watchdog = "^5"
+watchdog = "^6"
 
 [tool.poetry.group.dev.dependencies]
 mkdocs = "*"

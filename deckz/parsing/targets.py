@@ -39,7 +39,7 @@ ContentOrTitle = Content | Title
 
 
 @dataclass(frozen=True)
-class Part:
+class PartSlides:
     title: str | None
     sections: list[ContentOrTitle] = field(default_factory=list)
 
@@ -83,7 +83,7 @@ class Dependencies:
 class Target:
     name: str
     dependencies: Dependencies
-    parts: list[Part]
+    parts: list[PartSlides]
     section_dependencies: defaultdict[str, Dependencies]
     section_flavors: defaultdict[str, set[str]]
 
@@ -134,7 +134,7 @@ class TargetBuilder:
         return Target(
             name=self.data["name"],
             dependencies=all_dependencies,
-            parts=[Part(title=self.data["title"], sections=all_items)],
+            parts=[PartSlides(title=self.data["title"], sections=all_items)],
             section_dependencies=section_dependencies,
             section_flavors=section_flavors,
         )

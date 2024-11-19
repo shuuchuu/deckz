@@ -1,18 +1,24 @@
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Literal, Protocol
+from typing import Annotated, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
 from pydantic.functional_validators import BeforeValidator
+from typing_extensions import ParamSpec
 from yaml import safe_load
 
 from ..configuring.paths import Paths
 
+_P = ParamSpec("_P")
+_T = TypeVar("_T", covariant=True)
 
-class Visitor(Protocol):
-    def visit_file(self, file: "File", *args: Any, **kwargs: Any) -> None: ...
-    def visit_section(self, section: "Section", *args: Any, **kwargs: Any) -> None: ...
-    def visit_part(self, part: "Part", *args: Any, **kwargs: Any) -> None: ...
+
+class Visitor(Protocol[_P, _T]):
+    def visit_file(self, file: "File", *args: _P.args, **kwargs: _P.kwargs) -> _T: ...
+    def visit_section(
+        self, section: "Section", *args: _P.args, **kwargs: _P.kwargs
+    ) -> _T: ...
 
 
 @dataclass
@@ -22,8 +28,10 @@ class File:
     path: Path
     parsing_error: str | None
 
-    def accept(self, visitor: Visitor, *args: Any, **kwargs: Any) -> None:
-        visitor.visit_file(self, *args, **kwargs)
+    def accept(
+        self, visitor: Visitor[_P, _T], *args: _P.args, **kwargs: _P.kwargs
+    ) -> _T:
+        return visitor.visit_file(self, *args, **kwargs)
 
 
 @dataclass
@@ -35,24 +43,30 @@ class Section:
     children: list["File | Section"]
     parsing_error: str | None
 
-    def accept(self, visitor: Visitor, *args: Any, **kwargs: Any) -> None:
-        visitor.visit_section(self, *args, **kwargs)
+    def accept(
+        self, visitor: Visitor[_P, _T], *args: _P.args, **kwargs: _P.kwargs
+    ) -> _T:
+        return visitor.visit_section(self, *args, **kwargs)
 
 
 @dataclass
 class Part:
-    name: str
-    title: str
+    title: str | None
     nodes: list[File | Section]
-
-    def accept(self, visitor: Visitor, *args: Any, **kwargs: Any) -> None:
-        visitor.visit_part(self, *args, **kwargs)
 
 
 @dataclass
 class Deck:
     acronym: str
-    parts: list[Part]
+    parts: dict[str, Part]
+
+    def filter(self, whitelist: Iterable[str]) -> None:
+        if frozenset(whitelist).difference(self.parts):
+            msg = "provided whitelist has part names not in the deck"
+            raise ValueError(msg)
+        to_remove = frozenset(self.parts).difference(whitelist)
+        for part_name in to_remove:
+            del self.parts[part_name]
 
 
 class SectionInclude(BaseModel):
@@ -110,7 +124,7 @@ def _normalize_part_content(v: str | dict[str, str]) -> FileInclude | SectionInc
 
 class PartDefinition(BaseModel):
     name: str
-    title: str
+    title: str | None = None
     sections: list[
         Annotated[
             SectionInclude | FileInclude, BeforeValidator(_normalize_part_content)
@@ -135,11 +149,11 @@ class DeckParser:
         part_definitions = adapter.validate_python(content)
 
         return Deck(
-            acronym=deck_config.deck_acronym, parts=self._parse_parts(part_definitions)
+            acronym=deck_config.deck_acronym, parts=self.parse_parts(part_definitions)
         )
 
-    def _parse_parts(self, part_definitions: list[PartDefinition]) -> list[Part]:
-        parts = []
+    def parse_parts(self, part_definitions: list[PartDefinition]) -> dict[str, Part]:
+        parts = {}
         for part_definition in part_definitions:
             part_nodes: list[File | Section] = []
             for node_include in part_definition.sections:
@@ -160,12 +174,9 @@ class DeckParser:
                             title=node_include.title,
                         )
                     )
-            parts.append(
-                Part(
-                    name=part_definition.name,
-                    title=part_definition.title,
-                    nodes=part_nodes,
-                )
+            parts[part_definition.name] = Part(
+                title=part_definition.title,
+                nodes=part_nodes,
             )
         return parts
 

@@ -1,6 +1,6 @@
 from collections.abc import Iterable
-from logging import getLogger
 from pathlib import Path
+from sys import stderr
 
 from rich import print as rich_print
 from rich.progress import BarColumn, Progress
@@ -10,13 +10,47 @@ from .building.standalones import StandalonesBuilder
 from .configuring.config import get_config
 from .configuring.paths import GlobalPaths, Paths
 from .configuring.settings import Settings
-from .parsing.targets import Targets
-from .parsing.tree_parsing import DeckParser
-from .parsing.visitors.dependencies import build_dependencies
-from .parsing.visitors.rich_tree import build_tree
-from .parsing.visitors.titles_and_contents import build_targets_parts
+from .exceptions import DeckzError
+from .parsing.tree_parsing import (
+    Deck,
+    DeckParser,
+    FileInclude,
+    PartDefinition,
+    SectionInclude,
+)
+from .parsing.visitors.dependencies import DependenciesVisitor
+from .parsing.visitors.rich_tree import RichTreeVisitor
+from .parsing.visitors.titles_and_contents import SlidesVisitor
 
-_logger = getLogger(__name__)
+
+def _build(
+    deck: Deck,
+    paths: Paths,
+    build_handout: bool,
+    build_presentation: bool,
+    build_print: bool,
+) -> bool:
+    config = get_config(paths)
+    tree = RichTreeVisitor().visit_deck(deck)
+    if tree is not None:
+        rich_print(tree, file=stderr)
+        msg = "deck parsing failed"
+        raise DeckzError(msg)
+    dependencies = DependenciesVisitor().visit_deck(deck)
+    parts_slides = SlidesVisitor(paths).visit_deck(deck)
+    settings = Settings.from_global_paths(paths)
+    StandalonesBuilder(settings, paths).build()
+    return Builder(
+        latex_config=config,
+        settings=settings,
+        paths=paths,
+        deck_name=deck.acronym,
+        parts_slides=parts_slides,
+        dependencies=dependencies,
+        build_handout=build_handout,
+        build_presentation=build_presentation,
+        build_print=build_print,
+    ).build()
 
 
 def run(
@@ -26,29 +60,16 @@ def run(
     build_print: bool,
     target_whitelist: Iterable[str] | None = None,
 ) -> None:
-    config = get_config(paths)
-    # targets = Targets.from_file(paths=paths, whitelist=target_whitelist)
     deck = DeckParser(paths).parse()
-    dependencies = build_dependencies(deck, paths)
-    print(dependencies)
-    # tree = build_tree(deck)
-    # rich_print(tree)
-    # parts = build_targets_parts(deck, paths)
-    # print([i for t in targets.targets for i in t.parts])
-    # print("*********************")
-    # print(parts)
-    # print(parts == [i for t in targets.targets for i in t.parts])
-    # settings = Settings.from_global_paths(paths)
-    # StandalonesBuilder(settings, paths).build()
-    # Builder(
-    #     config,
-    #     settings,
-    #     paths,
-    #     targets,
-    #     build_handout=build_handout,
-    #     build_presentation=build_presentation,
-    #     build_print=build_print,
-    # ).build()
+    if target_whitelist is not None:
+        deck.filter(target_whitelist)
+    _build(
+        deck=deck,
+        paths=paths,
+        build_handout=build_handout,
+        build_presentation=build_presentation,
+        build_print=build_print,
+    )
 
 
 def run_file(
@@ -58,22 +79,24 @@ def run_file(
     build_presentation: bool,
     build_print: bool,
 ) -> None:
-    config = get_config(paths)
-    targets = Targets.from_data(
-        [{"name": "section", "title": "section", "sections": [{"path": "latex"}]}],
-        paths=paths,
+    deck = Deck(
+        acronym="deck",
+        parts=DeckParser(paths).parse_parts(
+            [
+                PartDefinition.model_construct(
+                    name="part_name",
+                    sections=[FileInclude(path=Path(latex))],
+                )
+            ]
+        ),
     )
-    settings = Settings.from_global_paths(paths)
-    StandalonesBuilder(settings, paths).build()
-    Builder(
-        config,
-        settings,
-        paths,
-        targets,
+    _build(
+        deck=deck,
+        paths=paths,
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
-    ).build()
+    )
 
 
 def run_section(
@@ -84,28 +107,24 @@ def run_section(
     build_presentation: bool,
     build_print: bool,
 ) -> None:
-    config = get_config(paths)
-    targets = Targets.from_data(
-        [
-            {
-                "name": "section",
-                "title": "section",
-                "sections": [{"path": section, "flavor": flavor}],
-            }
-        ],
-        paths=paths,
+    deck = Deck(
+        acronym="deck",
+        parts=DeckParser(paths).parse_parts(
+            [
+                PartDefinition.model_construct(
+                    name="part_name",
+                    sections=[SectionInclude(path=Path(section), flavor=flavor)],
+                )
+            ]
+        ),
     )
-    settings = Settings.from_global_paths(paths)
-    StandalonesBuilder(settings, paths).build()
-    Builder(
-        config,
-        settings,
-        paths,
-        targets,
+    _build(
+        deck=deck,
+        paths=paths,
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
-    ).build()
+    )
 
 
 def run_all(
@@ -126,18 +145,14 @@ def run_all(
         task_id = progress.add_task("Building decks…", total=len(targets_paths))
         for target_paths in targets_paths:
             deck_paths = Paths.from_defaults(target_paths.parent)
-            config = get_config(deck_paths)
-            targets = Targets.from_file(paths=deck_paths)
-            builder = Builder(
-                config,
-                settings,
-                deck_paths,
-                targets,
+            deck = DeckParser(deck_paths).parse()
+            result = _build(
+                deck=deck,
+                paths=deck_paths,
                 build_handout=build_handout,
                 build_presentation=build_presentation,
                 build_print=build_print,
             )
-            result = builder.build()
             if not result:
                 break
             progress.update(task_id, advance=1)
