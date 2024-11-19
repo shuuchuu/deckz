@@ -31,13 +31,13 @@ def _build(
     build_print: bool,
 ) -> bool:
     config = get_config(paths)
-    tree = RichTreeVisitor().visit_deck(deck)
+    tree = RichTreeVisitor().process_deck(deck)
     if tree is not None:
         rich_print(tree, file=stderr)
         msg = "deck parsing failed"
         raise DeckzError(msg)
-    dependencies = DependenciesVisitor().visit_deck(deck)
-    parts_slides = SlidesVisitor(paths).visit_deck(deck)
+    dependencies = DependenciesVisitor().process_deck(deck)
+    parts_slides = SlidesVisitor(paths).process_deck(deck)
     settings = Settings.from_global_paths(paths)
     StandalonesBuilder(settings, paths).build()
     return Builder(

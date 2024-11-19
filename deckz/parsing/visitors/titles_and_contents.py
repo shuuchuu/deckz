@@ -34,13 +34,13 @@ class SlidesVisitor:
         for node in section.children:
             node.accept(self, sections, level + 1)
 
-    def visit_part(self, part: Part) -> PartSlides:
+    def process_part(self, part: Part) -> PartSlides:
         sections: list[TitleOrContent] = []
         for node in part.nodes:
             node.accept(self, sections, 0)
         return PartSlides(part.title, sections)
 
-    def visit_deck(self, deck: Deck) -> dict[str, PartSlides]:
+    def process_deck(self, deck: Deck) -> dict[str, PartSlides]:
         return {
-            part_name: self.visit_part(part) for part_name, part in deck.parts.items()
+            part_name: self.process_part(part) for part_name, part in deck.parts.items()
         }

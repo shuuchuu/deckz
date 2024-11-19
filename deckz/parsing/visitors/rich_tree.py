@@ -51,7 +51,7 @@ class RichTreeVisitor:
 
         return tree, error
 
-    def visit_part(self, part_name: str, part: Part) -> Tree | None:
+    def process_part(self, part_name: str, part: Part) -> Tree | None:
         error = False
         children_trees = []
         for child in part.nodes:
@@ -67,10 +67,10 @@ class RichTreeVisitor:
         tree.children.extend(children_trees)
         return tree
 
-    def visit_deck(self, deck: Deck) -> Tree | None:
+    def process_deck(self, deck: Deck) -> Tree | None:
         part_trees = []
         for part_name, part in deck.parts.items():
-            part_tree = self.visit_part(part_name, part)
+            part_tree = self.process_part(part_name, part)
             if part_tree is not None:
                 part_trees.append(part_tree)
 

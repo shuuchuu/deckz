@@ -12,13 +12,13 @@ class DependenciesVisitor:
         for node in section.children:
             node.accept(self, dependencies)
 
-    def visit_part(self, part: Part) -> set[Path]:
+    def process_part(self, part: Part) -> set[Path]:
         dependencies: set[Path] = set()
         for node in part.nodes:
             node.accept(self, dependencies)
         return dependencies
 
-    def visit_deck(self, deck: Deck) -> dict[str, set[Path]]:
+    def process_deck(self, deck: Deck) -> dict[str, set[Path]]:
         return {
-            part_name: self.visit_part(part) for part_name, part in deck.parts.items()
+            part_name: self.process_part(part) for part_name, part in deck.parts.items()
         }
