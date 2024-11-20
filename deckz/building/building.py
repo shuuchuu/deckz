@@ -10,7 +10,7 @@ from typing import Any
 from ..configuring.paths import Paths
 from ..configuring.settings import Settings
 from ..exceptions import DeckzError
-from ..parsing.targets import PartSlides, Target
+from ..parsing.targets import PartSlides
 from ..utils import copy_file_if_newer
 from .compiling import CompileResult
 from .compiling import compile as compiling_compile
@@ -100,13 +100,6 @@ class Builder:
                     CompileItem([slides], dependencies, CompileType.Handout, False)
                 )
         return to_compile
-
-    def _get_filename(self, target: Target | None, compile_type: CompileType) -> str:
-        name = self._latex_config["deck_acronym"]
-        if target is not None:
-            name += f"-{target.name}"
-        name += f"-{compile_type.value}"
-        return name.lower()
 
     def _build_item(self, name: str, item: CompileItem) -> CompileResult:
         build_dir = self._setup_build_dir(name)
