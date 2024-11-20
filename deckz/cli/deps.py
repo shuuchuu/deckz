@@ -140,12 +140,12 @@ def deps(
         targets_progress = progress.add_task("Retrieving targets files", start=False)
         sections_progress = progress.add_task("Retrieving section files", start=False)
 
-        targets_paths = list(paths.git_dir.glob("**/targets.yml"))
+        targets_paths = list(paths.git_dir.rglob("targets.yml"))
         progress.update(
             targets_progress, total=len(targets_paths), completed=len(targets_paths)
         )
         progress.start_task(targets_progress)
-        ymls = paths.shared_latex_dir.glob("**/*.yml")
+        ymls = paths.shared_latex_dir.rglob("*.yml")
         section_paths = []
         for yml in ymls:
             with yml.open(encoding="utf8") as fh:

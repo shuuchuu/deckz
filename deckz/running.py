@@ -136,7 +136,7 @@ def run_all(
     paths = GlobalPaths.from_defaults(directory)
     settings = Settings.from_global_paths(paths)
     StandalonesBuilder(settings, paths).build()
-    targets_paths = list(paths.git_dir.glob("**/targets.yml"))
+    targets_paths = list(paths.git_dir.rglob("targets.yml"))
     with Progress(
         "[progress.description]{task.description}",
         BarColumn(),

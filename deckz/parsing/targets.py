@@ -109,7 +109,7 @@ class TargetBuilder:
 
     def build(self) -> Target:
         all_dependencies = Dependencies()
-        all_dependencies.unused.update(self.paths.local_latex_dir.glob("**/*.tex"))
+        all_dependencies.unused.update(self.paths.local_latex_dir.glob("*.tex"))
         all_items = []
         section_dependencies: defaultdict[str, Dependencies] = defaultdict(Dependencies)
         section_flavors = defaultdict(set)

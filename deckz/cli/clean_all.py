@@ -18,7 +18,7 @@ def clean_all(*, workdir: Path = Path()) -> None:
 
     logger = getLogger(__name__)
     paths = GlobalPaths.from_defaults(workdir)
-    for deck_path in (p.parent for p in paths.git_dir.glob("**/targets.yml")):
+    for deck_path in (p.parent for p in paths.git_dir.rglob("targets.yml")):
         deck_paths = Paths.from_defaults(deck_path)
         if not deck_paths.build_dir.exists():
             logger.info(f"Nothing to do: {deck_paths.build_dir} doesn't exist")

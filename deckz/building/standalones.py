@@ -123,8 +123,8 @@ class TikzBuilder:
             items = [
                 (input_path, paths)
                 for input_path in chain(
-                    self._paths.tikz_dir.glob("**/*.py"),
-                    self._paths.tikz_dir.glob("**/*.tex"),
+                    self._paths.tikz_dir.rglob("*.py"),
+                    self._paths.tikz_dir.rglob("*.tex"),
                 )
                 if self._needs_compile(
                     input_path,

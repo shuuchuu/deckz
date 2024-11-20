@@ -72,13 +72,13 @@ def watch(
     dirs_to_avoid = avoid | {
         r_to_avoid
         for dir_to_avoid in avoid
-        for p in dir_to_avoid.glob("**/*")
+        for p in dir_to_avoid.rglob("*")
         if (r_to_avoid := p.resolve()).is_dir()
     }
     dirs_to_watch = watch | {
         r_to_watch
         for dir_to_watch in watch
-        for p in dir_to_watch.glob("**/*")
+        for p in dir_to_watch.rglob("*")
         if (r_to_watch := p.resolve()).is_dir() and r_to_watch not in dirs_to_avoid
     }
     for dir_to_watch in dirs_to_watch:
