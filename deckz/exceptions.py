@@ -8,3 +8,7 @@ class UnresolvableFileError(DeckzError):
 
 class UnresolvableSectionError(DeckzError):
     pass
+
+
+class GitRepositoryNotFoundError(DeckzError):
+    pass

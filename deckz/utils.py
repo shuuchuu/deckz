@@ -1,3 +1,5 @@
+"""Provide general utility functions that would not fit in other modules."""
+
 from importlib import import_module, reload
 from importlib import invalidate_caches as importlib_invalidate_caches
 from pathlib import Path
@@ -7,18 +9,39 @@ from sys import modules
 
 from pygit2 import Repository, discover_repository
 
-from .exceptions import DeckzError
+from .exceptions import GitRepositoryNotFoundError
 
 
 def get_git_dir(path: Path) -> Path:
+    """Search and resolve the path of the git dir containing the path given as argument.
+
+    Args:
+        path: Path contained in the git dir to search for.
+
+    Raises:
+        GitRepositoryNotFoundError: Raised if no git repository is found in the path \
+            ancestors.
+
+    Returns:
+        Resolved path to the git repository containing the path given as argument.
+    """
     repository = discover_repository(str(path))
     if repository is None:
         msg = "could not find the path of the current git working directory"
-        raise DeckzError(msg)
+        raise GitRepositoryNotFoundError(msg)
     return Path(Repository(repository).workdir).resolve()
 
 
 def copy_file_if_newer(original: Path, copy: Path) -> None:
+    """Copy `original` to `copy` if `copy` is older than `original` or does not exist.
+
+    Whether `original` is more recent than `copy` or not is determined by the last \
+    modification time.
+
+    Args:
+        original: Path of the file that you want to copy.
+        copy: Path of the destination.
+    """
     if copy.exists() and copy.stat().st_mtime > original.stat().st_mtime:
         return
     copy.parent.mkdir(parents=True, exist_ok=True)
@@ -26,7 +49,13 @@ def copy_file_if_newer(original: Path, copy: Path) -> None:
 
 
 def import_module_and_submodules(package_name: str) -> None:
-    """From https://github.com/allenai/allennlp/blob/master/allennlp/common/util.py."""
+    """Import all modules and submodules from a package.
+
+    From https://github.com/allenai/allennlp/blob/master/allennlp/common/util.py.
+
+    Args:
+        package_name: Name of the package to fully import.
+    """
     importlib_invalidate_caches()
 
     if package_name in modules:
