@@ -8,16 +8,11 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 from yaml import safe_load as safe_load
 
-from ..configuring.paths import Paths
-from ..exceptions import DeckzError
+from .configuring.paths import Paths
+from .exceptions import DeckzError
+from .models.slides import PartSlides, Title, TitleOrContent
 
 _logger = getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class Title:
-    title: str
-    level: int
 
 
 class DirSectionConfig(BaseModel):
@@ -32,16 +27,6 @@ class DirSectionConfig(BaseModel):
         except (OSError, ValidationError) as e:
             msg = f"could not load {path} section config"
             raise DeckzError(msg) from e
-
-
-Content = str
-ContentOrTitle = Content | Title
-
-
-@dataclass(frozen=True)
-class PartSlides:
-    title: str | None
-    sections: list[ContentOrTitle] = field(default_factory=list)
 
 
 @dataclass
@@ -146,7 +131,7 @@ class TargetBuilder:
         title_level: int,
         section_flavors: defaultdict[str, set[str]],
         section_dependencies: defaultdict[str, Dependencies],
-    ) -> tuple[list[ContentOrTitle], Dependencies] | None:
+    ) -> tuple[list[TitleOrContent], Dependencies] | None:
         section_path = Path(section_path_str)
         local_section_dir = self.paths.local_latex_dir / section_path
         local_section_config_path = (local_section_dir / section_path).with_suffix(
@@ -182,7 +167,7 @@ class TargetBuilder:
             raise DeckzError(msg)
 
         flavor = section_config.flavors[flavor_name]
-        items: list[ContentOrTitle] = [Title(title=title, level=title_level)]
+        items: list[TitleOrContent] = [Title(title=title, level=title_level)]
         for item in flavor:
             self._process_item(
                 item=item,
@@ -202,7 +187,7 @@ class TargetBuilder:
     def _process_item(
         self,
         item: str | dict[str, str | None],
-        items: list[ContentOrTitle],
+        items: list[TitleOrContent],
         dependencies: Dependencies,
         default_titles: dict[str, str] | None,
         section_config: dict[str, Any],
@@ -262,7 +247,7 @@ class TargetBuilder:
         title_level: int,
         section_flavors: defaultdict[str, set[str]],
         section_dependencies: defaultdict[str, Dependencies],
-        items: list[ContentOrTitle],
+        items: list[TitleOrContent],
         dependencies: Dependencies,
     ) -> None:
         if nested_section_path_str.startswith("$/"):
@@ -285,7 +270,7 @@ class TargetBuilder:
 
     def _parse_section_file(
         self, section_path: str, config: dict[str, Any], title_level: int
-    ) -> tuple[list[ContentOrTitle], Dependencies] | None:
+    ) -> tuple[list[TitleOrContent], Dependencies] | None:
         local_section_file = (self.paths.local_latex_dir / section_path).with_suffix(
             ".tex"
         )
@@ -301,7 +286,7 @@ class TargetBuilder:
         else:
             return None
         config_file = section_file.with_suffix(".yml")
-        items: list[ContentOrTitle] = []
+        items: list[TitleOrContent] = []
         if "title" in config:
             title = config["title"]
         elif config_file.exists():

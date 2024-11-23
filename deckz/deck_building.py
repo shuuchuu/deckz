@@ -1,161 +1,66 @@
-from collections.abc import Iterable
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Literal, Protocol, TypeVar
+from typing import Literal
 
-from pydantic import BaseModel, TypeAdapter, ValidationError
-from pydantic.functional_validators import BeforeValidator
-from typing_extensions import ParamSpec
+from pydantic import TypeAdapter, ValidationError
 from yaml import safe_load
 
-from ..configuring.paths import Paths
-
-_P = ParamSpec("_P")
-_T = TypeVar("_T", covariant=True)
-
-
-class Visitor(Protocol[_P, _T]):
-    def visit_file(self, file: "File", *args: _P.args, **kwargs: _P.kwargs) -> _T: ...
-    def visit_section(
-        self, section: "Section", *args: _P.args, **kwargs: _P.kwargs
-    ) -> _T: ...
+from .models.deck import Deck, File, Node, Part, Section
+from .models.definitions import (
+    DeckConfig,
+    FileInclude,
+    PartDefinition,
+    SectionDefinition,
+    SectionInclude,
+)
 
 
-@dataclass
-class File:
-    title: str | None
-    logical_path: Path
-    path: Path
-    parsing_error: str | None
+class DeckBuilder:
+    def __init__(self, local_latex_dir: Path, shared_latex_dir: Path) -> None:
+        self._local_latex_dir = local_latex_dir
+        self._shared_latex_dir = shared_latex_dir
 
-    def accept(
-        self, visitor: Visitor[_P, _T], *args: _P.args, **kwargs: _P.kwargs
-    ) -> _T:
-        return visitor.visit_file(self, *args, **kwargs)
-
-
-@dataclass
-class Section:
-    title: str | None
-    logical_path: Path
-    path: Path
-    flavor: str
-    children: list["File | Section"]
-    parsing_error: str | None
-
-    def accept(
-        self, visitor: Visitor[_P, _T], *args: _P.args, **kwargs: _P.kwargs
-    ) -> _T:
-        return visitor.visit_section(self, *args, **kwargs)
-
-
-@dataclass
-class Part:
-    title: str | None
-    nodes: list[File | Section]
-
-
-@dataclass
-class Deck:
-    acronym: str
-    parts: dict[str, Part]
-
-    def filter(self, whitelist: Iterable[str]) -> None:
-        if frozenset(whitelist).difference(self.parts):
-            msg = "provided whitelist has part names not in the deck"
-            raise ValueError(msg)
-        to_remove = frozenset(self.parts).difference(whitelist)
-        for part_name in to_remove:
-            del self.parts[part_name]
-
-
-class SectionInclude(BaseModel):
-    flavor: str
-    path: Path
-    title: str | None = None
-    title_unset: bool = False
-
-
-class FileInclude(BaseModel):
-    path: Path
-    title: str | None = None
-    title_unset: bool = False
-
-
-def _normalize_flavor_content(v: str | dict[str, str]) -> FileInclude | SectionInclude:
-    if isinstance(v, str):
-        return FileInclude(path=Path(v))
-    assert len(v) == 1
-    path, flavor_or_title = next(iter(v.items()))
-    if path.startswith("$"):
-        return SectionInclude(flavor=flavor_or_title, path=Path(path[1:]))
-    if flavor_or_title is None:
-        return FileInclude(path=Path(path), title_unset=True)
-    return FileInclude(path=Path(path), title=flavor_or_title)
-
-
-class SectionDefinition(BaseModel):
-    title: str
-    default_titles: dict[Path, str] | None = None
-    flavors: dict[
-        str,
-        list[
-            Annotated[
-                SectionInclude | FileInclude, BeforeValidator(_normalize_flavor_content)
-            ]
-        ],
-    ]
-    version: int | None = None
-
-
-def _normalize_part_content(v: str | dict[str, str]) -> FileInclude | SectionInclude:
-    if isinstance(v, str):
-        return FileInclude(path=Path(v))
-    if isinstance(v, dict) and "path" not in v:
-        assert len(v) == 1
-        path, flavor = next(iter(v.items()))
-        return SectionInclude(path=Path(path), flavor=flavor, title=None)
-    if "flavor" not in v:
-        return FileInclude(path=Path(v["path"]), title=v.get("title"))
-    return SectionInclude(
-        path=Path(v["path"]), flavor=v["flavor"], title=v.get("title")
-    )
-
-
-class PartDefinition(BaseModel):
-    name: str
-    title: str | None = None
-    sections: list[
-        Annotated[
-            SectionInclude | FileInclude, BeforeValidator(_normalize_part_content)
-        ]
-    ]
-
-
-class DeckConfig(BaseModel, extra="allow"):
-    deck_acronym: str
-
-
-class DeckParser:
-    def __init__(self, paths: Paths) -> None:
-        self._paths = paths
-
-    def parse(self) -> Deck:
-        content = safe_load(self._paths.deck_config.read_text(encoding="utf8"))
+    def from_targets(self, deck_config_path: Path, targets_path: Path) -> Deck:
+        content = safe_load(deck_config_path.read_text(encoding="utf8"))
         deck_config = DeckConfig.model_validate(content)
 
-        content = safe_load(self._paths.targets.read_text(encoding="utf8"))
+        content = safe_load(targets_path.read_text(encoding="utf8"))
         adapter = TypeAdapter(list[PartDefinition])
         part_definitions = adapter.validate_python(content)
 
         return Deck(
-            acronym=deck_config.deck_acronym, parts=self.parse_parts(part_definitions)
+            acronym=deck_config.deck_acronym, parts=self._parse_parts(part_definitions)
         )
 
-    def parse_parts(self, part_definitions: list[PartDefinition]) -> dict[str, Part]:
+    def from_section(self, section: str, flavor: str) -> Deck:
+        return Deck(
+            acronym="deck",
+            parts=self._parse_parts(
+                [
+                    PartDefinition.model_construct(
+                        name="part_name",
+                        sections=[SectionInclude(path=Path(section), flavor=flavor)],
+                    )
+                ]
+            ),
+        )
+
+    def from_file(self, latex: str) -> Deck:
+        return Deck(
+            acronym="deck",
+            parts=self._parse_parts(
+                [
+                    PartDefinition.model_construct(
+                        name="part_name",
+                        sections=[FileInclude(path=Path(latex))],
+                    )
+                ]
+            ),
+        )
+
+    def _parse_parts(self, part_definitions: list[PartDefinition]) -> dict[str, Part]:
         parts = {}
         for part_definition in part_definitions:
-            part_nodes: list[File | Section] = []
+            part_nodes: list[Node] = []
             for node_include in part_definition.sections:
                 if isinstance(node_include, SectionInclude):
                     part_nodes.append(
@@ -281,8 +186,8 @@ class DeckParser:
         self, logical_path: Path, resolve_target: Literal["file", "dir"]
     ) -> Path | None:
         relative_logical_path = logical_path.relative_to("/")
-        local_path = self._paths.local_latex_dir / relative_logical_path
-        shared_path = self._paths.shared_latex_dir / relative_logical_path
+        local_path = self._local_latex_dir / relative_logical_path
+        shared_path = self._shared_latex_dir / relative_logical_path
         existence_tester = Path.is_file if resolve_target == "file" else Path.is_dir
         for path in [local_path, shared_path]:
             if existence_tester(path):

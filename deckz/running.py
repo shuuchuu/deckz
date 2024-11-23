@@ -10,17 +10,12 @@ from .building.standalones import StandalonesBuilder
 from .configuring.config import get_config
 from .configuring.paths import GlobalPaths, Paths
 from .configuring.settings import Settings
+from .deck_building import DeckBuilder
 from .exceptions import DeckzError
-from .parsing.tree_parsing import (
-    Deck,
-    DeckParser,
-    FileInclude,
-    PartDefinition,
-    SectionInclude,
-)
-from .parsing.visitors.dependencies import DependenciesVisitor
-from .parsing.visitors.rich_tree import RichTreeVisitor
-from .parsing.visitors.titles_and_contents import SlidesVisitor
+from .models.deck import Deck
+from .processing.dependencies import DependenciesProcessor
+from .processing.rich_tree import RichTreeProcessor
+from .processing.titles_and_contents import SlidesProcessor
 
 
 def _build(
@@ -31,13 +26,13 @@ def _build(
     build_print: bool,
 ) -> bool:
     config = get_config(paths)
-    tree = RichTreeVisitor().process_deck(deck)
+    tree = RichTreeProcessor().process(deck)
     if tree is not None:
         rich_print(tree, file=stderr)
         msg = "deck parsing failed"
         raise DeckzError(msg)
-    dependencies = DependenciesVisitor().process_deck(deck)
-    parts_slides = SlidesVisitor(paths).process_deck(deck)
+    dependencies = DependenciesProcessor().process(deck)
+    parts_slides = SlidesProcessor(paths.shared_dir, paths.current_dir).process(deck)
     settings = Settings.from_global_paths(paths)
     StandalonesBuilder(settings, paths).build()
     return Builder(
@@ -60,7 +55,9 @@ def run(
     build_print: bool,
     target_whitelist: Iterable[str] | None = None,
 ) -> None:
-    deck = DeckParser(paths).parse()
+    deck = DeckBuilder(paths.local_latex_dir, paths.shared_latex_dir).from_targets(
+        paths.deck_config, paths.targets
+    )
     if target_whitelist is not None:
         deck.filter(target_whitelist)
     _build(
@@ -79,17 +76,7 @@ def run_file(
     build_presentation: bool,
     build_print: bool,
 ) -> None:
-    deck = Deck(
-        acronym="deck",
-        parts=DeckParser(paths).parse_parts(
-            [
-                PartDefinition.model_construct(
-                    name="part_name",
-                    sections=[FileInclude(path=Path(latex))],
-                )
-            ]
-        ),
-    )
+    deck = DeckBuilder(paths.local_latex_dir, paths.shared_latex_dir).from_file(latex)
     _build(
         deck=deck,
         paths=paths,
@@ -107,16 +94,8 @@ def run_section(
     build_presentation: bool,
     build_print: bool,
 ) -> None:
-    deck = Deck(
-        acronym="deck",
-        parts=DeckParser(paths).parse_parts(
-            [
-                PartDefinition.model_construct(
-                    name="part_name",
-                    sections=[SectionInclude(path=Path(section), flavor=flavor)],
-                )
-            ]
-        ),
+    deck = DeckBuilder(paths.local_latex_dir, paths.shared_latex_dir).from_section(
+        section, flavor
     )
     _build(
         deck=deck,
@@ -145,7 +124,9 @@ def run_all(
         task_id = progress.add_task("Building decks…", total=len(targets_paths))
         for target_paths in targets_paths:
             deck_paths = Paths.from_defaults(target_paths.parent)
-            deck = DeckParser(deck_paths).parse()
+            deck = DeckBuilder(
+                deck_paths.local_latex_dir, deck_paths.shared_latex_dir
+            ).from_targets(deck_paths.deck_config, deck_paths.targets)
             result = _build(
                 deck=deck,
                 paths=deck_paths,

@@ -32,7 +32,7 @@ def img_deps(
 
     from ..configuring.paths import GlobalPaths
     from ..exceptions import DeckzError
-    from ..parsing.targets import Dependencies, Targets
+    from ..targets import Dependencies, Targets
 
     def _display_table(
         sections: Iterable[str],

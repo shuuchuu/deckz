@@ -31,7 +31,7 @@ def deps(
     from yaml import safe_load as yaml_safe_load
 
     from ..configuring.paths import GlobalPaths, Paths
-    from ..parsing.targets import Targets
+    from ..targets import Targets
 
     def _compute_shared_dependencies(
         dependencies: Iterable[Path], paths: GlobalPaths
