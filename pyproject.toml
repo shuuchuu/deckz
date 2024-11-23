@@ -49,6 +49,9 @@ ignore = ["C901", "D1", "D203", "D213"]
 preview = true
 select = ["A", "B", "C", "D", "DOC", "E", "EM", "F", "N", "PIE", "PTH", "RET", "RUF", "SIM", "SLF", "UP", "W"]
 
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
 [tool.mypy]
 disallow_untyped_defs = true
 ignore_missing_imports = true
