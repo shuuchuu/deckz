@@ -2,11 +2,9 @@ from typing import TYPE_CHECKING, Protocol, TypeVar
 
 from typing_extensions import ParamSpec
 
-from ..models.deck import Deck
-
 # Necessary to avoid circular imports with ..models.deck
 if TYPE_CHECKING:
-    from ..models.deck import File, Section
+    from ..models.deck import Deck, File, Section
 
 _P = ParamSpec("_P")
 _T = TypeVar("_T", covariant=True)
@@ -20,4 +18,4 @@ class NodeVisitor(Protocol[_P, _T]):
 
 
 class Processor(Protocol[_T]):
-    def process(self, deck: Deck) -> _T: ...
+    def process(self, deck: "Deck") -> _T: ...

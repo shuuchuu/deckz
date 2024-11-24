@@ -1,6 +1,12 @@
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from . import app
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping, Set
+
+    from rich.console import Console
 
 
 @app.command()
@@ -21,153 +27,115 @@ def deps(
         workdir: Path to move into before running the command
 
     """
-    from collections import defaultdict
-    from collections.abc import Iterable, Mapping, MutableMapping, MutableSet, Set
-
     from rich.console import Console
-    from rich.padding import Padding
-    from rich.progress import Progress, track
-    from rich.table import Table
-    from yaml import safe_load as yaml_safe_load
 
-    from ..configuring.paths import GlobalPaths, Paths
-    from ..targets import Targets
+    from ..configuring.paths import GlobalPaths
+    from ..processing.section_stats import SectionStatsProcessor
+    from ..repository import decks_iterator
 
-    def _compute_shared_dependencies(
-        dependencies: Iterable[Path], paths: GlobalPaths
-    ) -> set[str]:
-        shared_dependencies = set()
-        for dependency in dependencies:
-            try:
-                relative_dependency = dependency.relative_to(paths.shared_latex_dir)
-                shared_dependencies.add(str(relative_dependency))
-            except ValueError:
-                pass
-        return shared_dependencies
-
-    def _process_targets(
-        targets_path: Path,
-        all_targets_dependencies: Mapping[str, MutableMapping[str, set[str]]],
-        by_sections: Mapping[str, Mapping[str, MutableSet[tuple[str, str]]]],
-    ) -> None:
-        paths = Paths.from_defaults(targets_path.parent)
-        targets_name = str(paths.current_dir.relative_to(paths.git_dir))
-        targets = Targets.from_file(paths)
-        for target in targets:
-            for section_path, dependencies in target.section_dependencies.items():
-                section_flavors = target.section_flavors[section_path]
-                shared = False
-                for dependency_path in dependencies.used:
-                    if (
-                        _relative_to_shared_latex(paths, str(dependency_path))
-                        is not None
-                    ):
-                        shared = True
-                        break
-                if shared:
-                    for section_flavor in section_flavors:
-                        by_sections[section_path][section_flavor].add(
-                            (targets_name, target.name)
-                        )
-            shared_dependencies = _compute_shared_dependencies(
-                target.dependencies.used, paths
-            )
-            all_targets_dependencies[targets_name][target.name] = shared_dependencies
-
-    def _print_unused_report(
-        section_paths: Iterable[Path],
-        by_sections: Mapping[str, Mapping[str, Set[tuple[str, str]]]],
-        global_paths: GlobalPaths,
-    ) -> None:
-        console = Console()
-        console.print()
-        console.print()
-        console.rule("[bold]Unused flavors", align="left")
-        console.print()
-        table = Table("Section", "Flavors")
-        flavors = defaultdict(set)
-        for section_path in section_paths:
-            with section_path.open(encoding="utf8") as fh:
-                section_config = yaml_safe_load(fh)
-            section_name = "/".join(
-                section_path.relative_to(global_paths.shared_latex_dir).parts[:-1]
-            )
-            flavors[section_name].update(section_config["flavors"])
-        for section_name, section_flavors in sorted(flavors.items()):
-            unused_flavors = [
-                flavor
-                for flavor in section_flavors
-                if not by_sections[section_name][flavor]
-            ]
-            if unused_flavors:
-                table.add_row(section_name, " ".join(sorted(unused_flavors)))
-        console.print(Padding(table if table.row_count else "None.", (0, 0, 0, 2)))
-
-    def _print_section_report(
-        section: str,
-        flavor: str | None,
-        by_sections: Mapping[str, Mapping[str, Set[tuple[str, str]]]],
-    ) -> None:
-        console = Console()
-        console.print()
-        console.print()
-        title = section
-        if flavor is not None:
-            title += f" {flavor}"
-        console.rule(f"[bold]Decks depending on [italic]{title}", align="left")
-        console.print()
-        table = Table("Deck", "Targets")
-        if flavor is None:
-            flavors_dependencies = by_sections[section]
-            for deck_path, target_name in sorted(
-                set().union(*flavors_dependencies.values())
-            ):
-                table.add_row(deck_path, target_name)
-        else:
-            flavors_dependencies = by_sections[section]
-            for deck_path, target_name in sorted(flavors_dependencies[flavor]):
-                table.add_row(deck_path, target_name)
-        console.print(Padding(table if table.row_count else "None.", (0, 0, 0, 2)))
-
-    def _relative_to_shared_latex(paths: GlobalPaths, file_path: str) -> str | None:
-        try:
-            return str((paths.git_dir / file_path).relative_to(paths.shared_latex_dir))
-        except ValueError:
-            return None
+    if not unused and section is None:
+        return
 
     paths = GlobalPaths.from_defaults(workdir)
-    with Progress() as progress:
-        targets_progress = progress.add_task("Retrieving targets files", start=False)
-        sections_progress = progress.add_task("Retrieving section files", start=False)
 
-        targets_paths = list(paths.git_dir.rglob("targets.yml"))
-        progress.update(
-            targets_progress, total=len(targets_paths), completed=len(targets_paths)
-        )
-        progress.start_task(targets_progress)
-        ymls = paths.shared_latex_dir.rglob("*.yml")
-        section_paths = []
-        for yml in ymls:
-            with yml.open(encoding="utf8") as fh:
-                content = yaml_safe_load(fh)
-                if not isinstance(content, dict):
-                    continue
-                if {"title", "flavors"}.issubset(content):
-                    section_paths.append(yml)
+    console = Console()
 
-        progress.update(
-            sections_progress, total=len(section_paths), completed=len(section_paths)
-        )
-        progress.start_task(sections_progress)
-
-    all_targets_dependencies: dict[str, dict[str, set[str]]] = defaultdict(dict)
-    by_sections: defaultdict[str, defaultdict[str, set[tuple[str, str]]]] = defaultdict(
-        lambda: defaultdict(set)
-    )
-    for targets_path in track(targets_paths, description="Processing targets files"):
-        _process_targets(targets_path, all_targets_dependencies, by_sections)
+    with console.status("Processing decks"):
+        deck_paths, decks = zip(*decks_iterator(paths.git_dir), strict=True)
+        section_stats_processor = SectionStatsProcessor()
+        section_stats_list = [section_stats_processor.process(deck) for deck in decks]
 
     if unused:
-        _print_unused_report(section_paths, by_sections, paths)
+        unused_flavors = _compute_unused_flavors(
+            paths.shared_latex_dir, section_stats_list
+        )
+        _print_unused_report(unused_flavors, console)
+
     if section is not None:
-        _print_section_report(section, flavor, by_sections)
+        if unused:
+            console.print()
+        using = _compute_decks_using_flavor(
+            section, flavor, section_stats_list, deck_paths
+        )
+        _print_section_report(section, flavor, using, console)
+
+
+def _compute_unused_flavors(
+    shared_latex_dir: Path,
+    section_stats_list: "Iterable[Mapping[str, Set[tuple[Path, str]]]]",
+) -> dict[Path, set[str]]:
+    from itertools import chain
+
+    from ..repository import shared_sections_iterator
+
+    unused_flavors = {
+        p: set(d.flavors) for p, d in shared_sections_iterator(shared_latex_dir)
+    }
+    for section_stats in section_stats_list:
+        for path, section_flavor in chain(*section_stats.values()):
+            path = path.relative_to("/")
+            if path in unused_flavors and section_flavor in unused_flavors[path]:
+                unused_flavors[path].remove(section_flavor)
+                if not unused_flavors[path]:
+                    del unused_flavors[path]
+    return unused_flavors
+
+
+def _compute_decks_using_flavor(
+    section: str,
+    flavor: str,
+    section_stats_list: "Iterable[Mapping[str, Set[tuple[Path, str]]]]",
+    deck_paths: "Iterable[Path]",
+):
+    section_path = Path(section)
+    using = {}
+    for deck_path, section_stats in zip(deck_paths, section_stats_list, strict=True):
+        for part_name, flavors in section_stats.items():
+            for path, part_flavor in flavors:
+                if path.relative_to("/") == section_path and (
+                    flavor is None or flavor == part_flavor
+                ):
+                    if deck_path not in using:
+                        using[deck_path] = set()
+                    using[deck_path].add(part_name)
+    return using
+
+
+def _print_unused_report(
+    unused_flavors: "Mapping[Path, Iterable[str]]", console: "Console"
+) -> None:
+    from rich.padding import Padding
+    from rich.table import Table
+
+    console.rule("[bold]Unused flavors", align="left")
+    console.print()
+    if unused_flavors:
+        content = Table("Section", "Flavors")
+        for path, flavors in unused_flavors.items():
+            content.add_row(str(path), " ".join(sorted(flavors)))
+    else:
+        content = "None."
+    console.print(Padding(content, (0, 0, 0, 2)))
+
+
+def _print_section_report(
+    section: str,
+    flavor: str | None,
+    using: "Mapping[Path, Iterable[str]]",
+    console: "Console",
+) -> None:
+    from rich.padding import Padding
+    from rich.table import Table
+
+    title = section
+    if flavor is not None:
+        title += f" {flavor}"
+    console.rule(f"[bold]Decks depending on [italic]{title}", align="left")
+    console.print()
+    if using:
+        content = Table("Deck", "Parts")
+        for deck, part_names in using.items():
+            content.add_row(str(deck), " ".join(sorted(part_names)))
+    else:
+        content = "None."
+    console.print(Padding(content, (0, 0, 0, 2)))
