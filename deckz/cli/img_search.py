@@ -18,6 +18,7 @@ def img_search(
         workdir: Path to move into before running the command
 
     """
+    from re import VERBOSE
     from re import compile as re_compile
 
     from rich.console import Console
@@ -26,9 +27,25 @@ def img_search(
 
     global_paths = GlobalPaths.from_defaults(workdir)
     console = Console(highlight=False)
-    pattern = re_compile(rf'(\\V{{\[?"{image}".*\]? \| image}})')
-    current_dir = global_paths.current_dir
+    pattern = re_compile(
+        rf"""
+        \\V{{
+            \s*
+            "{image}"
+            \s*
+            \|
+            \s*
+            image
+            \s*
+            (?:\([^)]*\))?
+            \s*
+          }}
+        """,
+        VERBOSE,
+    )
     for latex_dir in global_paths.latex_dirs():
         for f in latex_dir.rglob("*.tex"):
             if pattern.search(f.read_text(encoding="utf8")):
-                console.print(f"[link=file://{f}]{f.relative_to(current_dir)}[/link]")
+                console.print(
+                    f"[link=file://{f}]{f.relative_to(global_paths.git_dir)}[/link]"
+                )
