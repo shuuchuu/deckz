@@ -5,7 +5,7 @@ from ..models import Deck, File, Part, PartSlides, Section, Title, TitleOrConten
 from . import NodeVisitor, Processor
 
 
-class SlidesProcessor(Processor):
+class SlidesProcessor(Processor[dict[str, PartSlides]]):
     def __init__(self, shared_dir: Path, current_dir: Path) -> None:
         self._visitor = _SlidesNodeVisitor(
             shared_dir=shared_dir, current_dir=current_dir
@@ -24,7 +24,7 @@ class SlidesProcessor(Processor):
         return PartSlides(part.title, sections)
 
 
-class _SlidesNodeVisitor(NodeVisitor):
+class _SlidesNodeVisitor(NodeVisitor[[MutableSequence[TitleOrContent], int], None]):
     def __init__(self, shared_dir: Path, current_dir: Path) -> None:
         self._shared_dir = shared_dir
         self._current_dir = current_dir

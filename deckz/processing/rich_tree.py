@@ -6,7 +6,7 @@ from ..models import Deck, File, Part, Section
 from . import NodeVisitor, Processor
 
 
-class RichTreeProcessor(Processor):
+class RichTreeProcessor(Processor[Tree | None]):
     def __init__(self, only_errors: bool = True) -> None:
         self._node_visitor = _RichTreeVisitor(only_errors)
         self._only_errors = only_errors
@@ -41,7 +41,7 @@ class RichTreeProcessor(Processor):
         return tree
 
 
-class _RichTreeVisitor(NodeVisitor):
+class _RichTreeVisitor(NodeVisitor[[Path], tuple[Tree | None, bool]]):
     def __init__(self, only_errors: bool = True) -> None:
         self._only_errors = only_errors
 
