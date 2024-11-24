@@ -30,7 +30,7 @@ def deps(
     from rich.console import Console
 
     from ..configuring.paths import GlobalPaths
-    from ..deps import SectionDeps
+    from ..sections_analyzer import SectionsAnalyzer
 
     if not unused and section is None:
         return
@@ -39,11 +39,13 @@ def deps(
 
     console = Console()
 
-    section_stats = SectionDeps(paths.git_dir, paths.shared_latex_dir)
+    sections_analyzer = SectionsAnalyzer(
+        paths.git_dir, paths.shared_dir, paths.shared_latex_dir
+    )
 
     if unused:
         with console.status("Processing decks"):
-            _print_unused_report(section_stats.unused_flavors(), console)
+            _print_unused_report(sections_analyzer.unused_flavors(), console)
 
     if section is not None:
         if unused:
@@ -52,7 +54,7 @@ def deps(
             _print_section_report(
                 section,
                 flavor,
-                section_stats.parts_using_flavor(section, flavor),
+                sections_analyzer.parts_using_flavor(section, flavor),
                 console,
             )
 

@@ -5,9 +5,9 @@ from ..models import Deck, File, Part, Section
 from . import NodeVisitor, Processor
 
 
-class DependenciesProcessor(Processor[dict[str, set[Path]]]):
+class PartDependenciesProcessor(Processor[dict[str, set[Path]]]):
     def __init__(self) -> None:
-        self._node_visitor = _DependenciesNodeVisitor()
+        self._node_visitor = _PartDependenciesNodeVisitor()
 
     def process(self, deck: Deck) -> dict[str, set[Path]]:
         return {
@@ -22,7 +22,7 @@ class DependenciesProcessor(Processor[dict[str, set[Path]]]):
         return dependencies
 
 
-class _DependenciesNodeVisitor(NodeVisitor[[MutableSet[Path]], None]):
+class _PartDependenciesNodeVisitor(NodeVisitor[[MutableSet[Path]], None]):
     def visit_file(self, file: File, dependencies: MutableSet[Path]) -> None:
         dependencies.add(file.path)
 

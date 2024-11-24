@@ -13,7 +13,7 @@ from .configuring.settings import Settings
 from .deck_building import DeckBuilder
 from .exceptions import DeckzError
 from .models import Deck
-from .processing.dependencies import DependenciesProcessor
+from .processing.part_dependencies import PartDependenciesProcessor
 from .processing.rich_tree import RichTreeProcessor
 from .processing.titles_and_contents import SlidesProcessor
 
@@ -31,7 +31,7 @@ def _build(
         rich_print(tree, file=stderr)
         msg = "deck parsing failed"
         raise DeckzError(msg)
-    dependencies = DependenciesProcessor().process(deck)
+    dependencies = PartDependenciesProcessor().process(deck)
     parts_slides = SlidesProcessor(paths.shared_dir, paths.current_dir).process(deck)
     settings = Settings.from_global_paths(paths)
     StandalonesBuilder(settings, paths).build()

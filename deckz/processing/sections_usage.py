@@ -6,9 +6,9 @@ from ..models import Deck, File, Part, Section
 from . import NodeVisitor, Processor
 
 
-class SectionStatsProcessor(Processor[dict[str, dict[Path, set[str]]]]):
+class SectionsUsageProcessor(Processor[dict[str, dict[Path, set[str]]]]):
     def __init__(self, shared_latex_dir: Path) -> None:
-        self._node_visitor = _SectionStatsNodeVisitor(shared_latex_dir)
+        self._node_visitor = _SectionsUsageNodeVisitor(shared_latex_dir)
 
     def process(self, deck: Deck) -> dict[str, dict[Path, set[str]]]:
         return {
@@ -27,7 +27,7 @@ class SectionStatsProcessor(Processor[dict[str, dict[Path, set[str]]]]):
         return section_stats
 
 
-class _SectionStatsNodeVisitor(
+class _SectionsUsageNodeVisitor(
     NodeVisitor[[MutableMapping[Path, MutableSet[str]]], None]
 ):
     def __init__(self, shared_latex_dir: Path) -> None:
