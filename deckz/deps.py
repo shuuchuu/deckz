@@ -68,7 +68,7 @@ class SectionDeps:
     @property
     def _section_stats(self) -> dict[Path, dict[str, dict[Path, set[str]]]]:
         if not hasattr(self, "__section_stats"):
-            section_stats_processor = SectionStatsProcessor()
+            section_stats_processor = SectionStatsProcessor(self._shared_latex_dir)
             self.__section_stats = {
                 deck_path: section_stats_processor.process(deck)
                 for deck_path, deck in self._decks.items()
