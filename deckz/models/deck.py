@@ -45,7 +45,7 @@ class File(Node):
 @dataclass
 class Section(Node):
     flavor: str
-    children: list["File | Section"]
+    children: list[Node]
 
     def accept(
         self, visitor: NodeVisitor[_P, _T], *args: _P.args, **kwargs: _P.kwargs

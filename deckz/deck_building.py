@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Literal
 
@@ -135,19 +136,35 @@ class DeckBuilder:
         if flavor not in section_definition.flavors:
             section.parsing_error = f"flavor {flavor} not found"
             return section
-        for node_include in section_definition.flavors[flavor]:
+        section.children.extend(
+            self._parse_nodes(
+                section_definition.flavors[flavor],
+                default_titles=section_definition.default_titles,
+                logical_path=logical_path,
+            )
+        )
+        return section
+
+    def _parse_nodes(
+        self,
+        node_includes: Iterable[FileInclude | SectionInclude],
+        default_titles: dict[Path, str] | None,
+        logical_path: Path,
+    ) -> list[Node]:
+        nodes: list[Node] = []
+        for node_include in node_includes:
             if node_include.title:
                 title = node_include.title
             elif (
                 not node_include.title_unset
-                and section_definition.default_titles
-                and node_include.path in section_definition.default_titles
+                and default_titles
+                and node_include.path in default_titles
             ):
-                title = section_definition.default_titles[node_include.path]
+                title = default_titles[node_include.path]
             else:
                 title = None
             if isinstance(node_include, FileInclude):
-                section.children.append(
+                nodes.append(
                     self._parse_file(
                         base_logical_path=logical_path,
                         logical_path=node_include.path,
@@ -155,7 +172,7 @@ class DeckBuilder:
                     )
                 )
             else:
-                section.children.append(
+                nodes.append(
                     self._parse_section(
                         base_logical_path=logical_path,
                         logical_path=node_include.path,
@@ -163,7 +180,7 @@ class DeckBuilder:
                         flavor=node_include.flavor,
                     )
                 )
-        return section
+        return nodes
 
     def _parse_file(
         self, base_logical_path: Path, logical_path: Path, title: str | None
