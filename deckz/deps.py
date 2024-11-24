@@ -19,7 +19,6 @@ class SectionDeps:
             for section_flavors in section_stats.values():
                 for path, flavors in section_flavors.items():
                     for flavor in flavors:
-                        # path = path.relative_to("/")
                         if path in unused_flavors and flavor in unused_flavors[path]:
                             unused_flavors[path].remove(flavor)
                             if not unused_flavors[path]:
