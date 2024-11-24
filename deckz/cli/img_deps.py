@@ -24,6 +24,7 @@ def img_deps(
 
     """
     from collections.abc import Iterable, Iterator, Mapping, Set, Sized
+    from re import VERBOSE
     from re import compile as re_compile
 
     from rich.console import Console
@@ -106,7 +107,22 @@ def img_deps(
             sections or dependencies, key=lambda s: len(images[s]), reverse=descending
         )
 
-    _pattern = re_compile(r'\\V{\[?"(.+?)".*\]? \| image}')
+    _pattern = re_compile(
+        r"""
+        \\V{
+            \s*
+            "(.+?)"
+            \s*
+            \|
+            \s*
+            image
+            \s*
+            (?:\([^)]*\))?
+            \s*
+          }
+        """,
+        VERBOSE,
+    )
 
     def _section_images(
         section: str, dependencies: Dependencies, global_paths: GlobalPaths
