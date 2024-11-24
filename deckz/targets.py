@@ -10,7 +10,7 @@ from yaml import safe_load as safe_load
 
 from .configuring.paths import Paths
 from .exceptions import DeckzError
-from .models.slides import PartSlides, Title, TitleOrContent
+from .models import PartSlides, Title, TitleOrContent
 
 _logger = getLogger(__name__)
 

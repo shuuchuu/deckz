@@ -1,7 +1,7 @@
 from collections.abc import MutableSet
 from pathlib import Path
 
-from ..models.deck import Deck, File, Part, Section
+from ..models import Deck, File, Part, Section
 from . import NodeVisitor, Processor
 
 

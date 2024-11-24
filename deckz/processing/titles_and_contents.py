@@ -1,8 +1,7 @@
 from collections.abc import MutableSequence
 from pathlib import Path
 
-from ..models.deck import Deck, File, Part, Section
-from ..models.slides import PartSlides, Title, TitleOrContent
+from ..models import Deck, File, Part, PartSlides, Section, Title, TitleOrContent
 from . import NodeVisitor, Processor
 
 

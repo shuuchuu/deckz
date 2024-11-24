@@ -12,7 +12,7 @@ from .configuring.paths import GlobalPaths, Paths
 from .configuring.settings import Settings
 from .deck_building import DeckBuilder
 from .exceptions import DeckzError
-from .models.deck import Deck
+from .models import Deck
 from .processing.dependencies import DependenciesProcessor
 from .processing.rich_tree import RichTreeProcessor
 from .processing.titles_and_contents import SlidesProcessor

@@ -4,11 +4,15 @@ from typing import Literal
 from pydantic import TypeAdapter, ValidationError
 from yaml import safe_load
 
-from .models.deck import Deck, File, Node, Part, Section
-from .models.definitions import (
+from .models import (
+    Deck,
     DeckConfig,
+    File,
     FileInclude,
+    Node,
+    Part,
     PartDefinition,
+    Section,
     SectionDefinition,
     SectionInclude,
 )

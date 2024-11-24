@@ -2,7 +2,7 @@ from pathlib import Path
 
 from rich.tree import Tree
 
-from ..models.deck import Deck, File, Part, Section
+from ..models import Deck, File, Part, Section
 from . import NodeVisitor, Processor
 
 
