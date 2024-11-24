@@ -106,12 +106,6 @@ class DeckBuilder:
             flavor=flavor,
             children=[],
         )
-        resolved_path = self._resolve(logical_path, resolve_target="dir")
-        if resolved_path:
-            section.path = resolved_path
-        else:
-            section.parsing_error = f"unresolvable section path {logical_path}"
-            return section
         definition_logical_path = (logical_path / logical_path.name).with_suffix(".yml")
         definition_resolved_path = self._resolve(
             definition_logical_path.with_suffix(".yml"), "file"
@@ -121,6 +115,7 @@ class DeckBuilder:
                 f"unresolvable section definition path {definition_logical_path}"
             )
             return section
+        section.path = definition_resolved_path.parent
         try:
             content = safe_load(definition_resolved_path.read_text(encoding="utf8"))
         except Exception as e:
