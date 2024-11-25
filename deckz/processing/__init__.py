@@ -4,7 +4,7 @@ from typing_extensions import ParamSpec
 
 # Necessary to avoid circular imports with ..models.deck
 if TYPE_CHECKING:
-    from ..models import Deck, File, Section
+    from ..models.deck import Deck, File, Section
 
 _P = ParamSpec("_P")
 _T = TypeVar("_T", covariant=True)

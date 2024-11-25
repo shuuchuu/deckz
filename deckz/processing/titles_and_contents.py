@@ -1,7 +1,8 @@
 from collections.abc import MutableSequence
 from pathlib import Path
 
-from ..models import Deck, File, Part, PartSlides, Section, Title, TitleOrContent
+from ..models.deck import Deck, File, Part, Section
+from ..models.slides import PartSlides, Title, TitleOrContent
 from . import NodeVisitor, Processor
 
 
@@ -34,10 +35,10 @@ class _SlidesNodeVisitor(NodeVisitor[[MutableSequence[TitleOrContent], int], Non
     ) -> None:
         if file.title:
             sections.append(Title(file.title, level))
-        if file.path.is_relative_to(self._shared_dir):
-            path = file.path.relative_to(self._shared_dir)
-        elif file.path.is_relative_to(self._current_dir):
-            path = file.path.relative_to(self._current_dir)
+        if file.resolved_path.is_relative_to(self._shared_dir):
+            path = file.resolved_path.relative_to(self._shared_dir)
+        elif file.resolved_path.is_relative_to(self._current_dir):
+            path = file.resolved_path.relative_to(self._current_dir)
         else:
             raise ValueError
         path = path.with_suffix("")

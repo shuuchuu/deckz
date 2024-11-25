@@ -1,38 +1,42 @@
-from pathlib import Path
+from pathlib import PurePath
 from typing import Annotated
 
 from pydantic import BaseModel
 from pydantic.functional_validators import BeforeValidator
 
+from .scalars import IncludePath
+
 
 class SectionInclude(BaseModel):
     flavor: str
-    path: Path
+    path: IncludePath
     title: str | None = None
     title_unset: bool = False
 
 
 class FileInclude(BaseModel):
-    path: Path
+    path: IncludePath
     title: str | None = None
     title_unset: bool = False
 
 
 def _normalize_flavor_content(v: str | dict[str, str]) -> FileInclude | SectionInclude:
     if isinstance(v, str):
-        return FileInclude(path=Path(v))
+        return FileInclude(path=IncludePath(PurePath(v)))
     assert len(v) == 1
     path, flavor_or_title = next(iter(v.items()))
     if path.startswith("$"):
-        return SectionInclude(flavor=flavor_or_title, path=Path(path[1:]))
+        return SectionInclude(
+            flavor=flavor_or_title, path=IncludePath(PurePath(path[1:]))
+        )
     if flavor_or_title is None:
-        return FileInclude(path=Path(path), title_unset=True)
-    return FileInclude(path=Path(path), title=flavor_or_title)
+        return FileInclude(path=IncludePath(PurePath(path)), title_unset=True)
+    return FileInclude(path=IncludePath(PurePath(path)), title=flavor_or_title)
 
 
 class SectionDefinition(BaseModel):
     title: str
-    default_titles: dict[Path, str] | None = None
+    default_titles: dict[IncludePath, str] | None = None
     flavors: dict[
         str,
         list[
@@ -46,15 +50,17 @@ class SectionDefinition(BaseModel):
 
 def _normalize_part_content(v: str | dict[str, str]) -> FileInclude | SectionInclude:
     if isinstance(v, str):
-        return FileInclude(path=Path(v))
+        return FileInclude(path=IncludePath(PurePath(v)))
     if isinstance(v, dict) and "path" not in v:
         assert len(v) == 1
         path, flavor = next(iter(v.items()))
-        return SectionInclude(path=Path(path), flavor=flavor, title=None)
+        return SectionInclude(
+            path=IncludePath(PurePath(path)), flavor=flavor, title=None
+        )
     if "flavor" not in v:
-        return FileInclude(path=Path(v["path"]), title=v.get("title"))
+        return FileInclude(path=IncludePath(PurePath(v["path"])), title=v.get("title"))
     return SectionInclude(
-        path=Path(v["path"]), flavor=v["flavor"], title=v.get("title")
+        path=IncludePath(PurePath(v["path"])), flavor=v["flavor"], title=v.get("title")
     )
 
 

@@ -7,12 +7,12 @@ both of which are `Node`s and have a `process` method to allow visitors to be de
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TypeVar
 
 from typing_extensions import ParamSpec
 
 from ..processing import NodeVisitor
+from .scalars import ResolvedPath, UnresolvedPath
 
 __all__ = ["Deck", "File", "Node", "Part", "Section"]
 
@@ -23,8 +23,11 @@ _T = TypeVar("_T", covariant=True)
 @dataclass
 class Node(ABC):
     title: str | None
-    logical_path: Path
-    path: Path
+    unresolved_path: UnresolvedPath
+    # resolved_path and parsing_error could benefit from a refactoring using something
+    # like Either because we cannot have both a ResolvedPath and a parsing_error at the
+    # same time.
+    resolved_path: ResolvedPath
     parsing_error: str | None
 
     @abstractmethod

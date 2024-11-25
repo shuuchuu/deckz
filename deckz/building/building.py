@@ -10,7 +10,7 @@ from typing import Any
 from ..configuring.paths import Paths
 from ..configuring.settings import Settings
 from ..exceptions import DeckzError
-from ..models import PartSlides
+from ..models.slides import PartSlides
 from ..utils import copy_file_if_newer
 from .compiling import CompileResult
 from .compiling import compile as compiling_compile

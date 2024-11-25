@@ -1,22 +1,19 @@
 from collections.abc import Iterable
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Literal
 
 from pydantic import TypeAdapter, ValidationError
 from yaml import safe_load
 
-from .models import (
-    Deck,
+from .models.deck import Deck, File, Node, Part, Section
+from .models.definitions import (
     DeckConfig,
-    File,
     FileInclude,
-    Node,
-    Part,
     PartDefinition,
-    Section,
     SectionDefinition,
     SectionInclude,
 )
+from .models.scalars import IncludePath, ResolvedPath, UnresolvedPath
 
 
 class DeckBuilder:
@@ -43,7 +40,11 @@ class DeckBuilder:
                 [
                     PartDefinition.model_construct(
                         name="part_name",
-                        sections=[SectionInclude(path=Path(section), flavor=flavor)],
+                        sections=[
+                            SectionInclude(
+                                path=IncludePath(PurePath(section)), flavor=flavor
+                            )
+                        ],
                     )
                 ]
             ),
@@ -56,7 +57,7 @@ class DeckBuilder:
                 [
                     PartDefinition.model_construct(
                         name="part_name",
-                        sections=[FileInclude(path=Path(latex))],
+                        sections=[FileInclude(path=IncludePath(PurePath(latex)))],
                     )
                 ]
             ),
@@ -70,8 +71,8 @@ class DeckBuilder:
                 if isinstance(node_include, SectionInclude):
                     part_nodes.append(
                         self._parse_section(
-                            base_logical_path=Path("/"),
-                            logical_path=node_include.path,
+                            base_unresolved_path=UnresolvedPath(PurePath()),
+                            include_path=node_include.path,
                             title=node_include.title,
                             flavor=node_include.flavor,
                         )
@@ -79,8 +80,8 @@ class DeckBuilder:
                 else:
                     part_nodes.append(
                         self._parse_file(
-                            base_logical_path=Path("/"),
-                            logical_path=node_include.path,
+                            base_unresolved_path=UnresolvedPath(PurePath()),
+                            include_path=node_include.path,
                             title=node_include.title,
                         )
                     )
@@ -92,21 +93,25 @@ class DeckBuilder:
 
     def _parse_section(
         self,
-        base_logical_path: Path,
-        logical_path: Path,
+        base_unresolved_path: UnresolvedPath,
+        include_path: IncludePath,
         title: str | None,
         flavor: str,
     ) -> Section:
-        logical_path = self._compute_logical_path(base_logical_path, logical_path)
+        unresolved_path = self._compute_unresolved_path(
+            base_unresolved_path, include_path
+        )
         section = Section(
             title=title,
-            logical_path=logical_path,
-            path=logical_path,
+            unresolved_path=unresolved_path,
+            resolved_path=ResolvedPath(Path()),
             parsing_error=None,
             flavor=flavor,
             children=[],
         )
-        definition_logical_path = (logical_path / logical_path.name).with_suffix(".yml")
+        definition_logical_path = (unresolved_path / unresolved_path.name).with_suffix(
+            ".yml"
+        )
         definition_resolved_path = self._resolve(
             definition_logical_path.with_suffix(".yml"), "file"
         )
@@ -115,7 +120,7 @@ class DeckBuilder:
                 f"unresolvable section definition path {definition_logical_path}"
             )
             return section
-        section.path = definition_resolved_path.parent
+        section.resolved_path = definition_resolved_path.parent
         try:
             content = safe_load(definition_resolved_path.read_text(encoding="utf8"))
         except Exception as e:
@@ -135,7 +140,7 @@ class DeckBuilder:
             self._parse_nodes(
                 section_definition.flavors[flavor],
                 default_titles=section_definition.default_titles,
-                logical_path=logical_path,
+                base_unresolved_path=unresolved_path,
             )
         )
         return section
@@ -143,8 +148,8 @@ class DeckBuilder:
     def _parse_nodes(
         self,
         node_includes: Iterable[FileInclude | SectionInclude],
-        default_titles: dict[Path, str] | None,
-        logical_path: Path,
+        default_titles: dict[IncludePath, str] | None,
+        base_unresolved_path: UnresolvedPath,
     ) -> list[Node]:
         nodes: list[Node] = []
         for node_include in node_includes:
@@ -161,16 +166,16 @@ class DeckBuilder:
             if isinstance(node_include, FileInclude):
                 nodes.append(
                     self._parse_file(
-                        base_logical_path=logical_path,
-                        logical_path=node_include.path,
+                        base_unresolved_path=base_unresolved_path,
+                        include_path=node_include.path,
                         title=title,
                     )
                 )
             else:
                 nodes.append(
                     self._parse_section(
-                        base_logical_path=logical_path,
-                        logical_path=node_include.path,
+                        base_unresolved_path=base_unresolved_path,
+                        include_path=node_include.path,
                         title=title,
                         flavor=node_include.flavor,
                     )
@@ -178,34 +183,44 @@ class DeckBuilder:
         return nodes
 
     def _parse_file(
-        self, base_logical_path: Path, logical_path: Path, title: str | None
+        self,
+        base_unresolved_path: UnresolvedPath,
+        include_path: IncludePath,
+        title: str | None,
     ) -> File:
-        logical_path = self._compute_logical_path(base_logical_path, logical_path)
+        unresolved_path = self._compute_unresolved_path(
+            base_unresolved_path, include_path
+        )
         file = File(
             title=title,
-            logical_path=logical_path,
-            path=logical_path,
+            unresolved_path=unresolved_path,
+            resolved_path=ResolvedPath(Path()),
             parsing_error=None,
         )
-        resolved_path = self._resolve(logical_path.with_suffix(".tex"), "file")
+        resolved_path = self._resolve(unresolved_path.with_suffix(".tex"), "file")
         if resolved_path:
-            file.path = resolved_path
+            file.resolved_path = resolved_path
         else:
-            file.parsing_error = f"unresolvable file path {logical_path}"
+            file.parsing_error = f"unresolvable file path {unresolved_path}"
         return file
 
     @staticmethod
-    def _compute_logical_path(base_logical_path: Path, logical_path: Path) -> Path:
-        return logical_path if logical_path.root else base_logical_path / logical_path
+    def _compute_unresolved_path(
+        base_unresolved_path: UnresolvedPath, include_path: IncludePath
+    ) -> UnresolvedPath:
+        return UnresolvedPath(
+            include_path.relative_to("/")
+            if include_path.root
+            else base_unresolved_path / include_path
+        )
 
     def _resolve(
-        self, logical_path: Path, resolve_target: Literal["file", "dir"]
-    ) -> Path | None:
-        relative_logical_path = logical_path.relative_to("/")
-        local_path = self._local_latex_dir / relative_logical_path
-        shared_path = self._shared_latex_dir / relative_logical_path
+        self, unresolved_path: UnresolvedPath, resolve_target: Literal["file", "dir"]
+    ) -> ResolvedPath | None:
+        local_path = self._local_latex_dir / unresolved_path
+        shared_path = self._shared_latex_dir / unresolved_path
         existence_tester = Path.is_file if resolve_target == "file" else Path.is_dir
         for path in [local_path, shared_path]:
             if existence_tester(path):
-                return path.resolve()
+                return ResolvedPath(path.resolve())
         return None

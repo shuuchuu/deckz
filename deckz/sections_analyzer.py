@@ -1,5 +1,5 @@
 from collections.abc import Iterable, Iterator
-from pathlib import Path
+from pathlib import Path, PurePath
 from re import VERBOSE
 from re import compile as re_compile
 
@@ -7,7 +7,9 @@ from yaml import safe_load
 
 from .configuring.paths import Paths
 from .deck_building import DeckBuilder
-from .models import Deck, SectionDefinition
+from .models.deck import Deck
+from .models.definitions import SectionDefinition
+from .models.scalars import ResolvedPath, UnresolvedPath
 from .processing.section_dependencies import SectionDependenciesProcessor
 from .processing.sections_usage import SectionsUsageProcessor
 
@@ -18,7 +20,7 @@ class SectionsAnalyzer:
         self._shared_dir = shared_dir
         self._shared_latex_dir = shared_latex_dir
 
-    def unused_flavors(self) -> dict[Path, set[str]]:
+    def unused_flavors(self) -> dict[UnresolvedPath, set[str]]:
         unused_flavors = {p: set(d.flavors) for p, d in self._shared_sections.items()}
         for section_stats in self._sections_usage.values():
             for section_flavors in section_stats.values():
@@ -35,7 +37,7 @@ class SectionsAnalyzer:
         section: str,
         flavor: str | None,
     ) -> dict[Path, set[str]]:
-        section_path = Path(section)
+        section_path = UnresolvedPath(PurePath(section))
         using: dict[Path, set[str]] = {}
         for deck_path, section_stats in self._sections_usage.items():
             for part_name, section_flavors in section_stats.items():
@@ -46,9 +48,9 @@ class SectionsAnalyzer:
                         using[deck_path].add(part_name)
         return using
 
-    def sections_unlicensed_images(self) -> dict[Path, frozenset[Path]]:
+    def sections_unlicensed_images(self) -> dict[UnresolvedPath, frozenset[Path]]:
         return {
-            s.relative_to("/"): frozenset(
+            s: frozenset(
                 i for i in self._section_images(d) if not self._is_image_licensed(i)
             )
             for s, d in self._section_dependencies.items()
@@ -68,18 +70,18 @@ class SectionsAnalyzer:
         return self.__decks
 
     @property
-    def _shared_sections(self) -> dict[Path, SectionDefinition]:
+    def _shared_sections(self) -> dict[UnresolvedPath, SectionDefinition]:
         if not hasattr(self, "__shared_sections"):
             self.__shared_sections = {}
             for path in self._shared_latex_dir.rglob("*.yml"):
                 content = safe_load(path.read_text(encoding="utf8"))
                 self.__shared_sections[
-                    path.parent.relative_to(self._shared_latex_dir)
+                    UnresolvedPath(path.parent.relative_to(self._shared_latex_dir))
                 ] = SectionDefinition.model_validate(content)
         return self.__shared_sections
 
     @property
-    def _sections_usage(self) -> dict[Path, dict[str, dict[Path, set[str]]]]:
+    def _sections_usage(self) -> dict[Path, dict[str, dict[UnresolvedPath, set[str]]]]:
         """Compute sections usage over all decks.
 
         Returns:
@@ -94,10 +96,10 @@ class SectionsAnalyzer:
         return self.__sections_usage
 
     @property
-    def _section_dependencies(self) -> dict[Path, set[Path]]:
+    def _section_dependencies(self) -> dict[UnresolvedPath, set[ResolvedPath]]:
         if not hasattr(self, "__section_dependencies"):
             section_dependencies_processor = SectionDependenciesProcessor()
-            self.__section_dependencies: dict[Path, set[Path]] = {}
+            self.__section_dependencies: dict[UnresolvedPath, set[ResolvedPath]] = {}
             for deck in self._decks.values():
                 section_dependencies = section_dependencies_processor.process(deck)
                 for path, deps in section_dependencies.items():

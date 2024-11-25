@@ -1,8 +1,9 @@
-from pathlib import Path
+from pathlib import PurePath
 
 from rich.tree import Tree
 
-from ..models import Deck, File, Part, Section
+from ..models.deck import Deck, File, Part, Section
+from ..models.scalars import UnresolvedPath
 from . import NodeVisitor, Processor
 
 
@@ -28,7 +29,9 @@ class RichTreeProcessor(Processor[Tree | None]):
         error = False
         children_trees = []
         for child in part.nodes:
-            child_tree, child_error = child.accept(self._node_visitor, Path("/"))
+            child_tree, child_error = child.accept(
+                self._node_visitor, UnresolvedPath(PurePath())
+            )
             error = error or child_error
             if child_tree is not None:
                 children_trees.append(child_tree)
@@ -41,29 +44,31 @@ class RichTreeProcessor(Processor[Tree | None]):
         return tree
 
 
-class _RichTreeVisitor(NodeVisitor[[Path], tuple[Tree | None, bool]]):
+class _RichTreeVisitor(NodeVisitor[[UnresolvedPath], tuple[Tree | None, bool]]):
     def __init__(self, only_errors: bool = True) -> None:
         self._only_errors = only_errors
 
-    def visit_file(self, file: File, base_path: Path) -> tuple[Tree | None, bool]:
+    def visit_file(
+        self, file: File, base_path: UnresolvedPath
+    ) -> tuple[Tree | None, bool]:
         if self._only_errors and file.parsing_error is None:
             return None, False
         path = (
-            file.logical_path.relative_to(base_path)
-            if file.logical_path.is_relative_to(base_path)
-            else file.logical_path
+            file.unresolved_path.relative_to(base_path)
+            if file.unresolved_path.is_relative_to(base_path)
+            else file.unresolved_path
         )
         if file.parsing_error is None:
             return Tree(str(path)), False
         return Tree(f"[red]{path} ({file.parsing_error})[/]"), True
 
     def visit_section(
-        self, section: Section, base_path: Path
+        self, section: Section, base_path: UnresolvedPath
     ) -> tuple[Tree | None, bool]:
         error = section.parsing_error is not None
         children_trees = []
         for child in section.children:
-            child_tree, child_error = child.accept(self, section.logical_path)
+            child_tree, child_error = child.accept(self, section.unresolved_path)
             error = error or child_error
             if child_tree is not None:
                 children_trees.append(child_tree)
@@ -72,9 +77,9 @@ class _RichTreeVisitor(NodeVisitor[[Path], tuple[Tree | None, bool]]):
             return None, False
 
         path = (
-            section.logical_path.relative_to(base_path)
-            if section.logical_path.is_relative_to(base_path)
-            else section.logical_path
+            section.unresolved_path.relative_to(base_path)
+            if section.unresolved_path.is_relative_to(base_path)
+            else section.unresolved_path
         )
 
         if section.parsing_error is not None:

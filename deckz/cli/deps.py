@@ -8,6 +8,8 @@ if TYPE_CHECKING:
 
     from rich.console import Console
 
+    from ..models.scalars import UnresolvedPath
+
 
 @app.command()
 def deps(
@@ -60,7 +62,7 @@ def deps(
 
 
 def _print_unused_report(
-    unused_flavors: "Mapping[Path, Iterable[str]]", console: "Console"
+    unused_flavors: "Mapping[UnresolvedPath, Iterable[str]]", console: "Console"
 ) -> None:
     from rich.padding import Padding
     from rich.table import Table

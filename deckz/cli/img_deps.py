@@ -29,10 +29,11 @@ def img_deps(
     from rich.table import Table
 
     from ..configuring.paths import GlobalPaths
+    from ..models.scalars import UnresolvedPath
     from ..sections_analyzer import SectionsAnalyzer
 
     def _display_table(
-        unlicensed_images: Mapping[Path, Set[Path]],
+        unlicensed_images: Mapping[UnresolvedPath, Set[Path]],
         console: Console,
     ) -> None:
         if unlicensed_images:
@@ -44,7 +45,7 @@ def img_deps(
             console.print("No unlicensed image!")
 
     def _display_section_images(
-        unlicensed_images: Mapping[Path, Set[Path]],
+        unlicensed_images: Mapping[UnresolvedPath, Set[Path]],
         console: Console,
         global_paths: GlobalPaths,
     ) -> None:
