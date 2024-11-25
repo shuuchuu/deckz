@@ -1,4 +1,5 @@
 from collections.abc import Iterable, Iterator
+from multiprocessing import Pool
 from pathlib import Path, PurePath
 from re import VERBOSE
 from re import compile as re_compile
@@ -56,16 +57,21 @@ class SectionsAnalyzer:
             for s, d in self._section_dependencies.items()
         }
 
+    def _build_deck(self, targets_path: Path) -> tuple[Path, Deck]:
+        paths = Paths.from_defaults(targets_path.parent)
+        return (
+            targets_path.parent.relative_to(self._git_dir),
+            DeckBuilder(paths.local_latex_dir, paths.shared_latex_dir).from_targets(
+                paths.deck_config, targets_path
+            ),
+        )
+
     @property
     def _decks(self) -> dict[Path, Deck]:
         if not hasattr(self, "__decks"):
-            self.__decks = {}
-            for targets_path in self._git_dir.rglob("targets.yml"):
-                paths = Paths.from_defaults(targets_path.parent)
-                self.__decks[targets_path.parent.relative_to(self._git_dir)] = (
-                    DeckBuilder(
-                        paths.local_latex_dir, paths.shared_latex_dir
-                    ).from_targets(paths.deck_config, targets_path)
+            with Pool() as pool:
+                self.__decks = dict(
+                    pool.map(self._build_deck, self._git_dir.rglob("targets.yml"))
                 )
         return self.__decks
 
