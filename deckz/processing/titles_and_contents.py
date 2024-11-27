@@ -2,17 +2,18 @@ from collections.abc import MutableSequence
 from pathlib import Path
 
 from ..models.deck import Deck, File, Part, Section
+from ..models.scalars import PartName
 from ..models.slides import PartSlides, Title, TitleOrContent
 from . import NodeVisitor, Processor
 
 
-class SlidesProcessor(Processor[dict[str, PartSlides]]):
+class SlidesProcessor(Processor[dict[PartName, PartSlides]]):
     def __init__(self, shared_dir: Path, current_dir: Path) -> None:
         self._visitor = _SlidesNodeVisitor(
             shared_dir=shared_dir, current_dir=current_dir
         )
 
-    def process(self, deck: Deck) -> dict[str, PartSlides]:
+    def process(self, deck: Deck) -> dict[PartName, PartSlides]:
         return {
             part_name: self._process_part(part)
             for part_name, part in deck.parts.items()

@@ -2,6 +2,7 @@ from pathlib import Path
 
 from cyclopts import App
 
+from ..models.scalars import PartName
 from . import app
 
 watch = App(name="watch")
@@ -10,7 +11,7 @@ app.command(watch)
 
 @watch.command()
 def deck(
-    targets: list[str] | None = None,
+    parts: list[PartName] | None = None,
     /,
     *,
     handout: bool = False,
@@ -22,7 +23,7 @@ def deck(
     """Compile on change.
 
     Args:
-        targets: Restrict compilation to these targets
+        parts: Restrict deck compilation to these parts
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
@@ -49,7 +50,7 @@ def deck(
         build_handout=handout,
         build_presentation=presentation,
         build_print=print,
-        target_whitelist=targets,
+        target_whitelist=parts,
     )
 
 

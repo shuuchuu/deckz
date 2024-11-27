@@ -12,7 +12,7 @@ from typing import TypeVar
 from typing_extensions import ParamSpec
 
 from ..processing import NodeVisitor
-from .scalars import ResolvedPath, UnresolvedPath
+from .scalars import PartName, ResolvedPath, UnresolvedPath
 
 __all__ = ["Deck", "File", "Node", "Part", "Section"]
 
@@ -65,9 +65,9 @@ class Part:
 @dataclass
 class Deck:
     acronym: str
-    parts: dict[str, Part]
+    parts: dict[PartName, Part]
 
-    def filter(self, whitelist: Iterable[str]) -> None:
+    def filter(self, whitelist: Iterable[PartName]) -> None:
         if frozenset(whitelist).difference(self.parts):
             msg = "provided whitelist has part names not in the deck"
             raise ValueError(msg)

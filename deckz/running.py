@@ -13,6 +13,7 @@ from .configuring.settings import Settings
 from .deck_building import DeckBuilder
 from .exceptions import DeckzError
 from .models.deck import Deck
+from .models.scalars import PartName
 from .processing.part_dependencies import PartDependenciesProcessor
 from .processing.rich_tree import RichTreeProcessor
 from .processing.titles_and_contents import SlidesProcessor
@@ -53,13 +54,13 @@ def run(
     build_handout: bool,
     build_presentation: bool,
     build_print: bool,
-    target_whitelist: Iterable[str] | None = None,
+    parts_whitelist: Iterable[PartName] | None = None,
 ) -> None:
     deck = DeckBuilder(paths.local_latex_dir, paths.shared_latex_dir).from_targets(
         paths.deck_config, paths.targets
     )
-    if target_whitelist is not None:
-        deck.filter(target_whitelist)
+    if parts_whitelist is not None:
+        deck.filter(parts_whitelist)
     _build(
         deck=deck,
         paths=paths,

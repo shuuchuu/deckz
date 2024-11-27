@@ -10,6 +10,7 @@ from typing import Any
 from ..configuring.paths import Paths
 from ..configuring.settings import Settings
 from ..exceptions import DeckzError
+from ..models.scalars import PartName
 from ..models.slides import PartSlides
 from ..utils import copy_file_if_newer
 from .compiling import CompileResult
@@ -38,8 +39,8 @@ class Builder:
         settings: Settings,
         paths: Paths,
         deck_name: str,
-        parts_slides: Mapping[str, PartSlides],
-        dependencies: Mapping[str, Set[Path]],
+        parts_slides: Mapping[PartName, PartSlides],
+        dependencies: Mapping[PartName, Set[Path]],
         build_presentation: bool,
         build_handout: bool,
         build_print: bool,
@@ -57,7 +58,7 @@ class Builder:
         self._renderer = Renderer(paths, settings)
 
     def _name_compile_item(
-        self, compile_type: CompileType, name: str | None = None
+        self, compile_type: CompileType, name: PartName | None = None
     ) -> str:
         return (
             f"{self._deck_name}-{name}-{compile_type.value}"

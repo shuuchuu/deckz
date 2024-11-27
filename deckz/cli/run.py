@@ -1,11 +1,12 @@
 from pathlib import Path
 
+from ..models.scalars import PartName
 from . import app
 
 
 @app.command()
 def run(
-    targets: list[str] | None = None,
+    parts: list[PartName] | None = None,
     /,
     *,
     handout: bool = True,
@@ -13,10 +14,10 @@ def run(
     print: bool = True,  # noqa: A002
     workdir: Path = Path(),
 ) -> None:
-    """Compile main targets.
+    """Compile the deck in WORKDIR.
 
     Args:
-        targets: Restrict compilation to these targets
+        parts: Restrict deck compilation to these parts
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
@@ -32,5 +33,5 @@ def run(
         build_handout=handout,
         build_presentation=presentation,
         build_print=print,
-        target_whitelist=targets,
+        parts_whitelist=parts,
     )

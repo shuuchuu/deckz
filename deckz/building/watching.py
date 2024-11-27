@@ -3,7 +3,7 @@ from logging import getLogger
 from pathlib import Path
 from threading import Thread
 from time import time
-from typing import Any
+from typing import Any, ParamSpec
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
@@ -13,14 +13,17 @@ from ..exceptions import DeckzError
 _logger = getLogger(__name__)
 
 
+_P = ParamSpec("_P")
+
+
 class _BaseEventHandler(FileSystemEventHandler):
     def __init__(
         self,
         minimum_delay: int,
-        function: Callable[..., Any],
-        *args: Any,
-        **kwargs: Any,
-    ):
+        function: Callable[_P, Any],
+        *args: _P.args,
+        **kwargs: _P.kwargs,
+    ) -> None:
         self._minimum_delay = minimum_delay
         self._function = function
         self._function_args = args
@@ -61,9 +64,9 @@ def watch(
     minimum_delay: int,
     watch: Set[Path],
     avoid: Set[Path],
-    function: Callable[..., Any],
-    *function_args: Any,
-    **function_kwargs: Any,
+    function: Callable[_P, Any],
+    *function_args: _P.args,
+    **function_kwargs: _P.kwargs,
 ) -> None:
     event_handler = _BaseEventHandler(
         minimum_delay, function, *function_args, **function_kwargs

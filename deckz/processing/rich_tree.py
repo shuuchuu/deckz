@@ -3,7 +3,7 @@ from pathlib import PurePath
 from rich.tree import Tree
 
 from ..models.deck import Deck, File, Part, Section
-from ..models.scalars import UnresolvedPath
+from ..models.scalars import PartName, UnresolvedPath
 from . import NodeVisitor, Processor
 
 
@@ -25,7 +25,7 @@ class RichTreeProcessor(Processor[Tree | None]):
             return tree
         return None
 
-    def _process_part(self, part_name: str, part: Part) -> Tree | None:
+    def _process_part(self, part_name: PartName, part: Part) -> Tree | None:
         error = False
         children_trees = []
         for child in part.nodes:

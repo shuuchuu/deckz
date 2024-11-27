@@ -3,15 +3,15 @@ from pathlib import Path
 from typing import cast
 
 from ..models.deck import Deck, File, Part, Section
-from ..models.scalars import UnresolvedPath
+from ..models.scalars import PartName, UnresolvedPath
 from . import NodeVisitor, Processor
 
 
-class SectionsUsageProcessor(Processor[dict[str, dict[UnresolvedPath, set[str]]]]):
+class SectionsUsageProcessor(Processor[dict[PartName, dict[UnresolvedPath, set[str]]]]):
     def __init__(self, shared_latex_dir: Path) -> None:
         self._node_visitor = _SectionsUsageNodeVisitor(shared_latex_dir)
 
-    def process(self, deck: Deck) -> dict[str, dict[UnresolvedPath, set[str]]]:
+    def process(self, deck: Deck) -> dict[PartName, dict[UnresolvedPath, set[str]]]:
         return {
             part_name: self._process_part(part)
             for part_name, part in deck.parts.items()

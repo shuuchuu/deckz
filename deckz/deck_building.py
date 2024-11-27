@@ -13,7 +13,7 @@ from .models.definitions import (
     SectionDefinition,
     SectionInclude,
 )
-from .models.scalars import IncludePath, ResolvedPath, UnresolvedPath
+from .models.scalars import IncludePath, PartName, ResolvedPath, UnresolvedPath
 
 
 class DeckBuilder:
@@ -39,7 +39,7 @@ class DeckBuilder:
             parts=self._parse_parts(
                 [
                     PartDefinition.model_construct(
-                        name="part_name",
+                        name=PartName("part_name"),
                         sections=[
                             SectionInclude(
                                 path=IncludePath(PurePath(section)), flavor=flavor
@@ -56,14 +56,16 @@ class DeckBuilder:
             parts=self._parse_parts(
                 [
                     PartDefinition.model_construct(
-                        name="part_name",
+                        name=PartName("part_name"),
                         sections=[FileInclude(path=IncludePath(PurePath(latex)))],
                     )
                 ]
             ),
         )
 
-    def _parse_parts(self, part_definitions: list[PartDefinition]) -> dict[str, Part]:
+    def _parse_parts(
+        self, part_definitions: list[PartDefinition]
+    ) -> dict[PartName, Part]:
         parts = {}
         for part_definition in part_definitions:
             part_nodes: list[Node] = []

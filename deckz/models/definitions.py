@@ -4,7 +4,7 @@ from typing import Annotated
 from pydantic import BaseModel
 from pydantic.functional_validators import BeforeValidator
 
-from .scalars import IncludePath
+from .scalars import IncludePath, PartName
 
 
 class SectionInclude(BaseModel):
@@ -65,7 +65,7 @@ def _normalize_part_content(v: str | dict[str, str]) -> FileInclude | SectionInc
 
 
 class PartDefinition(BaseModel):
-    name: str
+    name: PartName
     title: str | None = None
     sections: list[
         Annotated[

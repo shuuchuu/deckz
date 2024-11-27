@@ -1,15 +1,15 @@
 from collections.abc import MutableSet
 
 from ..models.deck import Deck, File, Part, Section
-from ..models.scalars import ResolvedPath
+from ..models.scalars import PartName, ResolvedPath
 from . import NodeVisitor, Processor
 
 
-class PartDependenciesProcessor(Processor[dict[str, set[ResolvedPath]]]):
+class PartDependenciesProcessor(Processor[dict[PartName, set[ResolvedPath]]]):
     def __init__(self) -> None:
         self._node_visitor = _PartDependenciesNodeVisitor()
 
-    def process(self, deck: Deck) -> dict[str, set[ResolvedPath]]:
+    def process(self, deck: Deck) -> dict[PartName, set[ResolvedPath]]:
         return {
             part_name: self._process_part(part)
             for part_name, part in deck.parts.items()

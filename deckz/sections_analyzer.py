@@ -10,7 +10,7 @@ from .configuring.paths import Paths
 from .deck_building import DeckBuilder
 from .models.deck import Deck
 from .models.definitions import SectionDefinition
-from .models.scalars import ResolvedPath, UnresolvedPath
+from .models.scalars import PartName, ResolvedPath, UnresolvedPath
 from .processing.section_dependencies import SectionDependenciesProcessor
 from .processing.sections_usage import SectionsUsageProcessor
 
@@ -37,9 +37,9 @@ class SectionsAnalyzer:
         self,
         section: str,
         flavor: str | None,
-    ) -> dict[Path, set[str]]:
+    ) -> dict[Path, set[PartName]]:
         section_path = UnresolvedPath(PurePath(section))
-        using: dict[Path, set[str]] = {}
+        using: dict[Path, set[PartName]] = {}
         for deck_path, section_stats in self._sections_usage.items():
             for part_name, section_flavors in section_stats.items():
                 for path, flavors in section_flavors.items():
@@ -87,7 +87,9 @@ class SectionsAnalyzer:
         return self.__shared_sections
 
     @property
-    def _sections_usage(self) -> dict[Path, dict[str, dict[UnresolvedPath, set[str]]]]:
+    def _sections_usage(
+        self,
+    ) -> dict[Path, dict[PartName, dict[UnresolvedPath, set[str]]]]:
         """Compute sections usage over all decks.
 
         Returns:
