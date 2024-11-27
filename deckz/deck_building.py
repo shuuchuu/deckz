@@ -13,7 +13,13 @@ from .models.definitions import (
     SectionDefinition,
     SectionInclude,
 )
-from .models.scalars import IncludePath, PartName, ResolvedPath, UnresolvedPath
+from .models.scalars import (
+    FlavorName,
+    IncludePath,
+    PartName,
+    ResolvedPath,
+    UnresolvedPath,
+)
 
 
 class DeckBuilder:
@@ -33,7 +39,7 @@ class DeckBuilder:
             acronym=deck_config.deck_acronym, parts=self._parse_parts(part_definitions)
         )
 
-    def from_section(self, section: str, flavor: str) -> Deck:
+    def from_section(self, section: str, flavor: FlavorName) -> Deck:
         return Deck(
             acronym="deck",
             parts=self._parse_parts(
@@ -98,7 +104,7 @@ class DeckBuilder:
         base_unresolved_path: UnresolvedPath,
         include_path: IncludePath,
         title: str | None,
-        flavor: str,
+        flavor: FlavorName,
     ) -> Section:
         unresolved_path = self._compute_unresolved_path(
             base_unresolved_path, include_path

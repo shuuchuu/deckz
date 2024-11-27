@@ -4,11 +4,11 @@ from typing import Annotated
 from pydantic import BaseModel
 from pydantic.functional_validators import BeforeValidator
 
-from .scalars import IncludePath, PartName
+from .scalars import FlavorName, IncludePath, PartName
 
 
 class SectionInclude(BaseModel):
-    flavor: str
+    flavor: FlavorName
     path: IncludePath
     title: str | None = None
     title_unset: bool = False
@@ -27,7 +27,7 @@ def _normalize_flavor_content(v: str | dict[str, str]) -> FileInclude | SectionI
     path, flavor_or_title = next(iter(v.items()))
     if path.startswith("$"):
         return SectionInclude(
-            flavor=flavor_or_title, path=IncludePath(PurePath(path[1:]))
+            flavor=FlavorName(flavor_or_title), path=IncludePath(PurePath(path[1:]))
         )
     if flavor_or_title is None:
         return FileInclude(path=IncludePath(PurePath(path)), title_unset=True)
@@ -38,7 +38,7 @@ class SectionDefinition(BaseModel):
     title: str
     default_titles: dict[IncludePath, str] | None = None
     flavors: dict[
-        str,
+        FlavorName,
         list[
             Annotated[
                 SectionInclude | FileInclude, BeforeValidator(_normalize_flavor_content)
@@ -55,12 +55,14 @@ def _normalize_part_content(v: str | dict[str, str]) -> FileInclude | SectionInc
         assert len(v) == 1
         path, flavor = next(iter(v.items()))
         return SectionInclude(
-            path=IncludePath(PurePath(path)), flavor=flavor, title=None
+            path=IncludePath(PurePath(path)), flavor=FlavorName(flavor), title=None
         )
     if "flavor" not in v:
         return FileInclude(path=IncludePath(PurePath(v["path"])), title=v.get("title"))
     return SectionInclude(
-        path=IncludePath(PurePath(v["path"])), flavor=v["flavor"], title=v.get("title")
+        path=IncludePath(PurePath(v["path"])),
+        flavor=FlavorName(v["flavor"]),
+        title=v.get("title"),
     )
 
 

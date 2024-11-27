@@ -12,7 +12,7 @@ from typing import TypeVar
 from typing_extensions import ParamSpec
 
 from ..processing import NodeVisitor
-from .scalars import PartName, ResolvedPath, UnresolvedPath
+from .scalars import FlavorName, PartName, ResolvedPath, UnresolvedPath
 
 __all__ = ["Deck", "File", "Node", "Part", "Section"]
 
@@ -47,7 +47,7 @@ class File(Node):
 
 @dataclass
 class Section(Node):
-    flavor: str
+    flavor: FlavorName
     children: list[Node]
 
     def accept(

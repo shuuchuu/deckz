@@ -13,7 +13,7 @@ from .configuring.settings import Settings
 from .deck_building import DeckBuilder
 from .exceptions import DeckzError
 from .models.deck import Deck
-from .models.scalars import PartName
+from .models.scalars import FlavorName, PartName
 from .processing.part_dependencies import PartDependenciesProcessor
 from .processing.rich_tree import RichTreeProcessor
 from .processing.titles_and_contents import SlidesProcessor
@@ -89,7 +89,7 @@ def run_file(
 
 def run_section(
     section: str,
-    flavor: str,
+    flavor: FlavorName,
     paths: Paths,
     build_handout: bool,
     build_presentation: bool,

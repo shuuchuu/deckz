@@ -2,7 +2,7 @@ from pathlib import Path
 
 from cyclopts import App
 
-from ..models.scalars import PartName
+from ..models.scalars import FlavorName, PartName
 from . import app
 
 watch = App(name="watch")
@@ -50,14 +50,14 @@ def deck(
         build_handout=handout,
         build_presentation=presentation,
         build_print=print,
-        target_whitelist=parts,
+        parts_whitelist=parts,
     )
 
 
 @watch.command()
 def section(
     section: str,
-    flavor: str,
+    flavor: FlavorName,
     /,
     *,
     handout: bool = False,
