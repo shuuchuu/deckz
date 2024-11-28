@@ -1,4 +1,4 @@
-FROM python:3.10-slim-bullseye
+FROM python:3.12-slim-bullseye
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -19,7 +19,6 @@ RUN apt update \
   && apt-get autoremove --purge -y \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* \
-  && curl -sSL https://install.python-poetry.org | python - \
-  && ln -s /root/.local/bin/poetry /usr/bin
+  && curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ENTRYPOINT ["/bin/bash"]
