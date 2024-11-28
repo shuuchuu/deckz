@@ -18,7 +18,6 @@ RUN apt update \
   && apt-get remove -y .*-doc .*-man >/dev/null \
   && apt-get autoremove --purge -y \
   && apt-get clean \
-  && rm -rf /var/lib/apt/lists/* \
-  && curl -LsSf https://astral.sh/uv/install.sh | sh
+  && rm -rf /var/lib/apt/lists/*
 
 ENTRYPOINT ["/bin/bash"]
