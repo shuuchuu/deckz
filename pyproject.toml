@@ -1,54 +1,60 @@
-[tool.poetry]
-authors = ["m09 <142691+m09@users.noreply.github.com>"]
+[project]
+authors = [
+  {name = "m09", email = "142691+m09@users.noreply.github.com"},
+]
 classifiers = ["Topic :: Software Development :: Build Tools"]
+dependencies = [
+  "appdirs >= 1, < 2",
+  "cyclopts >= 3.1.1, < 4",
+  "email-validator >= 2, < 3",
+  "google-api-python-client >= 2, < 3",
+  "google-auth-oauthlib >= 1, < 2",
+  "jinja2 >= 3, < 4",
+  "matplotlib >= 3, < 4",
+  "pydantic >= 2, < 3",
+  "pygit2 >= 1, < 2",
+  "rich >= 13, < 14",
+  "sendgrid >= 6, < 7",
+  "typer >= 0.13, < 1",
+  "watchdog >= 6, < 7",
+]
 description = "Tool to handle multiple beamer decks."
 homepage = "https://github.com/mlambda/deckz"
 license = "Apache-2.0"
 name = "deckz"
 readme = "README.md"
-version = "20.3.1"
+requires-python = ">= 3.12"
+version = "21.0.0"
 
-[tool.poetry.dependencies]
-Jinja2 = "^3"
-PyYAML = "^6"
-appdirs = "^1"
-cyclopts = "^3"
-email-validator = "^2"
-google-api-python-client = "^2"
-google-auth-oauthlib = "^1"
-matplotlib = "^3"
-pydantic = "^2"
-pygit2 = "^1"
-python = "^3.10"
-rich = "^13"
-sendgrid = "^6"
-typer = "^0.13"
-watchdog = "^5"
+[dependency-groups]
+dev = [
+  "mkdocs",
+  "mkdocs-gen-files",
+  "mkdocs-literate-nav",
+  "mkdocs-material",
+  "mkdocstrings",
+  "mypy",
+  "pdfminer.six",
+  "pytest-cov",
+  "pytest",
+  "ruff",
+  "types-pyyaml",
+  "types-requests",
+]
 
-[tool.poetry.group.dev.dependencies]
-mkdocs = "*"
-mkdocs-gen-files = "*"
-mkdocs-literate-nav = "*"
-mkdocs-material = "*"
-mkdocstrings = {extras = ["python"], version = "*"}
-mypy = "*"
-"pdfminer.six" = "*"
-pytest = "*"
-pytest-cov = "*"
-ruff = "*"
-types-PyYAML = "*"
-types-requests = "*"
-
-[tool.poetry.scripts]
+[project.scripts]
 deckz = 'deckz.cli:main'
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py312"
 
 [tool.ruff.lint]
-ignore = ["C901", "D1", "D203", "D213"]
+ignore = ["D1", "D203", "D213"]
 preview = true
 select = ["A", "B", "C", "D", "DOC", "E", "EM", "F", "N", "PIE", "PTH", "RET", "RUF", "SIM", "SLF", "UP", "W"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.mypy]
 disallow_untyped_defs = true
@@ -56,5 +62,5 @@ ignore_missing_imports = true
 strict_optional = true
 
 [build-system]
-build-backend = "poetry.core.masonry.api"
-requires = ["poetry-core"]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
