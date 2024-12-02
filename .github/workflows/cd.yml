@@ -19,6 +19,6 @@ jobs:
       - name: Build and deploy on PyPI
         run: |
           export TAG=${GITHUB_REF##*/}
-          test v$(poetry version | cut -f 2 -d " ") = $TAG
+          test $(uv version | cut -f 2 -d " ") == $TAG
           uv build
           uv publish
