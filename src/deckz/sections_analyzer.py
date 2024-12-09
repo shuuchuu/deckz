@@ -1,4 +1,5 @@
 from collections.abc import Iterable, Iterator
+from functools import cached_property
 from multiprocessing import Pool
 from pathlib import Path, PurePath
 from re import VERBOSE
@@ -66,27 +67,22 @@ class SectionsAnalyzer:
             ),
         )
 
-    @property
+    @cached_property
     def _decks(self) -> dict[Path, Deck]:
-        if not hasattr(self, "__decks"):
-            with Pool() as pool:
-                self.__decks = dict(
-                    pool.map(self._build_deck, self._git_dir.rglob("targets.yml"))
-                )
-        return self.__decks
+        with Pool() as pool:
+            return dict(pool.map(self._build_deck, self._git_dir.rglob("targets.yml")))
 
-    @property
+    @cached_property
     def _shared_sections(self) -> dict[UnresolvedPath, SectionDefinition]:
-        if not hasattr(self, "__shared_sections"):
-            self.__shared_sections = {}
-            for path in self._shared_latex_dir.rglob("*.yml"):
-                content = safe_load(path.read_text(encoding="utf8"))
-                self.__shared_sections[
-                    UnresolvedPath(path.parent.relative_to(self._shared_latex_dir))
-                ] = SectionDefinition.model_validate(content)
-        return self.__shared_sections
+        result = {}
+        for path in self._shared_latex_dir.rglob("*.yml"):
+            content = safe_load(path.read_text(encoding="utf8"))
+            result[UnresolvedPath(path.parent.relative_to(self._shared_latex_dir))] = (
+                SectionDefinition.model_validate(content)
+            )
+        return result
 
-    @property
+    @cached_property
     def _sections_usage(
         self,
     ) -> dict[Path, dict[PartName, dict[UnresolvedPath, set[FlavorName]]]]:
@@ -95,26 +91,23 @@ class SectionsAnalyzer:
         Returns:
             Nested dictionaries: deck path -> part name -> section path -> flavor.
         """
-        if not hasattr(self, "__sections_usage"):
-            section_stats_processor = SectionsUsageProcessor(self._shared_latex_dir)
-            self.__sections_usage = {
-                deck_path: section_stats_processor.process(deck)
-                for deck_path, deck in self._decks.items()
-            }
-        return self.__sections_usage
+        section_stats_processor = SectionsUsageProcessor(self._shared_latex_dir)
+        return {
+            deck_path: section_stats_processor.process(deck)
+            for deck_path, deck in self._decks.items()
+        }
 
     @property
     def _section_dependencies(self) -> dict[UnresolvedPath, set[ResolvedPath]]:
-        if not hasattr(self, "__section_dependencies"):
-            section_dependencies_processor = SectionDependenciesProcessor()
-            self.__section_dependencies: dict[UnresolvedPath, set[ResolvedPath]] = {}
-            for deck in self._decks.values():
-                section_dependencies = section_dependencies_processor.process(deck)
-                for path, deps in section_dependencies.items():
-                    if path not in self.__section_dependencies:
-                        self.__section_dependencies[path] = set()
-                    self.__section_dependencies[path].update(deps)
-        return self.__section_dependencies
+        section_dependencies_processor = SectionDependenciesProcessor()
+        result: dict[UnresolvedPath, set[ResolvedPath]] = {}
+        for deck in self._decks.values():
+            section_dependencies = section_dependencies_processor.process(deck)
+            for path, deps in section_dependencies.items():
+                if path not in result:
+                    result[path] = set()
+                result[path].update(deps)
+        return result
 
     _pattern = re_compile(
         r"""
