@@ -10,7 +10,7 @@ from ..utils import get_git_dir
 
 
 def _join(base_key: str, to_add: str) -> Path:
-    return Field(default_factory=lambda data: data[base_key].resolve() / to_add)
+    return Field(default_factory=lambda data: data[base_key] / to_add)
 
 
 _Path = Annotated[Path, AfterValidator(Path.resolve)]
