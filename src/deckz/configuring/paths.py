@@ -45,7 +45,7 @@ class GlobalPaths(BaseModel):
     )
     global_config: _Path = _join("git_dir", "global-config.yml")
     github_issues: _Path = _join("user_config_dir", "github-issues.yml")
-    mails: Path = _join("user_config_dir", "mails.yml")
+    mails: _Path = _join("user_config_dir", "mails.yml")
     gdrive_secrets: _Path = _join("user_config_dir", "gdrive-secrets.json")
     gdrive_credentials: _Path = _join("user_config_dir", "gdrive-credentials.pickle")
     user_config: _Path = _join("user_config_dir", "user-config.yml")
