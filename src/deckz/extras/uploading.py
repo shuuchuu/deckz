@@ -19,14 +19,14 @@ from rich.progress import (
 )
 
 from .. import app_name
-from ..configuring.paths import Paths
+from ..configuring.settings import DeckSettings
 from ..exceptions import DeckzError
 
 
 class Uploader:
-    def __init__(self, paths: Paths):
+    def __init__(self, settings: DeckSettings):
         self._logger = getLogger(__name__)
-        self._paths = paths
+        self._settings = settings
         self._service = self._build_service()
         folder_id, folder_link = self._check_folders()
         backup_id = self._create_backup(folder_id)
@@ -55,8 +55,8 @@ class Uploader:
         return progress.add_task("upload", filename=filename, total=size)
 
     def _build_service(self) -> Any:
-        if self._paths.gdrive_credentials.is_file():
-            with self._paths.gdrive_credentials.open("rb") as fh:
+        if self._settings.paths.gdrive_credentials.is_file():
+            with self._settings.paths.gdrive_credentials.open("rb") as fh:
                 creds = pickle_load(fh)
         else:
             creds = None
@@ -66,11 +66,11 @@ class Uploader:
                 creds.refresh(Request())
             else:
                 flow = InstalledAppFlow.from_client_secrets_file(
-                    self._paths.gdrive_secrets,
+                    self._settings.paths.gdrive_secrets,
                     ["https://www.googleapis.com/auth/drive.file"],
                 )
                 creds = flow.run_local_server(port=0)
-            with self._paths.gdrive_credentials.open("wb") as fh:
+            with self._settings.paths.gdrive_credentials.open("wb") as fh:
                 pickle_dump(creds, fh)
 
         return build("drive", "v3", credentials=creds, cache_discovery=False)
@@ -78,7 +78,11 @@ class Uploader:
     def _check_folders(self) -> tuple[str, str]:
         self._logger.info("Checking/creating folder hierarchy")
         folders = [app_name]
-        folders.extend(self._paths.current_dir.relative_to(self._paths.git_dir).parts)
+        folders.extend(
+            self._settings.paths.current_dir.relative_to(
+                self._settings.paths.git_dir
+            ).parts
+        )
         parent = "root"
         for folder in folders:
             folder_info = self._get(folder=True, parents=[parent], name=folder)
@@ -121,7 +125,9 @@ class Uploader:
 
     def _upload(self, folder_id: str) -> dict[Path, str]:
         self._logger.info("Uploading pdfs")
-        pdfs = sorted((self._paths.pdf_dir).glob("*.pdf"), key=lambda p: p.name)
+        pdfs = sorted(
+            (self._settings.paths.pdf_dir).glob("*.pdf"), key=lambda p: p.name
+        )
         links: dict[Path, str] = {}
         progress = self._build_progress()
         with progress:

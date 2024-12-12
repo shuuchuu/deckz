@@ -29,7 +29,7 @@ def img_deps(
     from rich.table import Table
 
     from ..analyzing.images_analyzer import ImagesAnalyzer
-    from ..configuring.paths import GlobalPaths
+    from ..configuring.settings import GlobalSettings
     from ..models.scalars import UnresolvedPath
 
     def _display_table(
@@ -47,7 +47,7 @@ def img_deps(
     def _display_section_images(
         unlicensed_images: Mapping[UnresolvedPath, Set[Path]],
         console: Console,
-        global_paths: GlobalPaths,
+        shared_dir: Path,
     ) -> None:
         if unlicensed_images:
             for section, images in unlicensed_images.items():
@@ -63,7 +63,7 @@ def img_deps(
                     matches = image.parent.glob(f"{image.name}.*")
                     console.print(
                         " or ".join(
-                            f"[link=file://{m}]{m.relative_to(global_paths.shared_dir)}[/link]"
+                            f"[link=file://{m}]{m.relative_to(shared_dir)}[/link]"
                             for m in matches
                             if m.suffix != ".yml"
                         )
@@ -71,11 +71,13 @@ def img_deps(
         else:
             console.print("No unlicensed image!")
 
-    global_paths = GlobalPaths(current_dir=workdir)
+    settings = GlobalSettings.from_yaml(workdir)
     console = Console(highlight=False)
 
     with console.status("Finding unlicensed images"):
-        images_analyzer = ImagesAnalyzer(global_paths.shared_dir, global_paths.git_dir)
+        images_analyzer = ImagesAnalyzer(
+            settings.paths.shared_dir, settings.paths.git_dir
+        )
         unlicensed_images = images_analyzer.sections_unlicensed_images()
         sorted_unlicensed_images = {
             k: v
@@ -88,6 +90,8 @@ def img_deps(
         }
     if verbose:
         console.print("[bold]Sections and their unlicensed images[/]")
-        _display_section_images(sorted_unlicensed_images, console, global_paths)
+        _display_section_images(
+            sorted_unlicensed_images, console, settings.paths.shared_dir
+        )
     else:
         _display_table(sorted_unlicensed_images, console)

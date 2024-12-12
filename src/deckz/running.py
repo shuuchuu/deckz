@@ -8,8 +8,7 @@ from rich.progress import BarColumn, Progress
 from .building.building import Builder
 from .building.standalones import StandalonesBuilder
 from .configuring.config import get_config
-from .configuring.paths import GlobalPaths, Paths
-from .configuring.settings import Settings
+from .configuring.settings import DeckSettings, GlobalSettings
 from .deck_building import DeckBuilder
 from .exceptions import DeckzError
 from .models.deck import Deck
@@ -17,30 +16,30 @@ from .models.scalars import FlavorName, PartName
 from .processing.part_dependencies import PartDependenciesProcessor
 from .processing.rich_tree import RichTreeProcessor
 from .processing.titles_and_contents import SlidesProcessor
-from .utils import all_paths
+from .utils import all_deck_settings
 
 
 def _build(
     deck: Deck,
-    paths: Paths,
+    settings: DeckSettings,
     build_handout: bool,
     build_presentation: bool,
     build_print: bool,
 ) -> bool:
-    config = get_config(paths)
+    config = get_config(settings)
     tree = RichTreeProcessor().process(deck)
     if tree is not None:
         rich_print(tree, file=stderr)
         msg = "deck parsing failed"
         raise DeckzError(msg)
     dependencies = PartDependenciesProcessor().process(deck)
-    parts_slides = SlidesProcessor(paths.shared_dir, paths.current_dir).process(deck)
-    settings = Settings.from_global_paths(paths)
-    StandalonesBuilder(settings, paths).build()
+    parts_slides = SlidesProcessor(
+        settings.paths.shared_dir, settings.paths.current_dir
+    ).process(deck)
+    StandalonesBuilder(settings).build()
     return Builder(
         latex_config=config,
         settings=settings,
-        paths=paths,
         deck_name=deck.acronym,
         parts_slides=parts_slides,
         dependencies=dependencies,
@@ -51,20 +50,20 @@ def _build(
 
 
 def run(
-    paths: Paths,
+    settings: DeckSettings,
     build_handout: bool,
     build_presentation: bool,
     build_print: bool,
     parts_whitelist: Iterable[PartName] | None = None,
 ) -> None:
-    deck = DeckBuilder(paths.local_latex_dir, paths.shared_latex_dir).from_targets(
-        paths.deck_config, paths.targets
-    )
+    deck = DeckBuilder(
+        settings.paths.local_latex_dir, settings.paths.shared_latex_dir
+    ).from_targets(settings.paths.deck_config, settings.paths.targets)
     if parts_whitelist is not None:
         deck.filter(parts_whitelist)
     _build(
         deck=deck,
-        paths=paths,
+        settings=settings,
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
@@ -73,15 +72,17 @@ def run(
 
 def run_file(
     latex: str,
-    paths: Paths,
+    settings: DeckSettings,
     build_handout: bool,
     build_presentation: bool,
     build_print: bool,
 ) -> None:
-    deck = DeckBuilder(paths.local_latex_dir, paths.shared_latex_dir).from_file(latex)
+    deck = DeckBuilder(
+        settings.paths.local_latex_dir, settings.paths.shared_latex_dir
+    ).from_file(latex)
     _build(
         deck=deck,
-        paths=paths,
+        settings=settings,
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
@@ -91,17 +92,17 @@ def run_file(
 def run_section(
     section: str,
     flavor: FlavorName,
-    paths: Paths,
+    settings: DeckSettings,
     build_handout: bool,
     build_presentation: bool,
     build_print: bool,
 ) -> None:
-    deck = DeckBuilder(paths.local_latex_dir, paths.shared_latex_dir).from_section(
-        section, flavor
-    )
+    deck = DeckBuilder(
+        settings.paths.local_latex_dir, settings.paths.shared_latex_dir
+    ).from_section(section, flavor)
     _build(
         deck=deck,
-        paths=paths,
+        settings=settings,
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
@@ -114,23 +115,23 @@ def run_all(
     build_presentation: bool,
     build_print: bool,
 ) -> None:
-    global_paths = GlobalPaths(current_dir=directory)
-    settings = Settings.from_global_paths(global_paths)
-    StandalonesBuilder(settings, global_paths).build()
-    deck_paths = list(all_paths(global_paths.git_dir))
+    global_settings = GlobalSettings.from_yaml(directory)
+    StandalonesBuilder(global_settings).build()
+    decks_settings = list(all_deck_settings(global_settings.paths.git_dir))
     with Progress(
         "[progress.description]{task.description}",
         BarColumn(),
         "[progress.percentage]{task.percentage:>3.0f}%",
     ) as progress:
-        task_id = progress.add_task("Building decks…", total=len(deck_paths))
-        for paths in deck_paths:
+        task_id = progress.add_task("Building decks…", total=len(decks_settings))
+        for deck_settings in decks_settings:
             deck = DeckBuilder(
-                paths.local_latex_dir, paths.shared_latex_dir
-            ).from_targets(paths.deck_config, paths.targets)
+                deck_settings.paths.local_latex_dir,
+                deck_settings.paths.shared_latex_dir,
+            ).from_targets(deck_settings.paths.deck_config, deck_settings.paths.targets)
             result = _build(
                 deck=deck,
-                paths=paths,
+                settings=deck_settings,
                 build_handout=build_handout,
                 build_presentation=build_presentation,
                 build_print=build_print,
@@ -141,7 +142,6 @@ def run_all(
 
 
 def run_standalones(directory: Path) -> None:
-    paths = GlobalPaths(current_dir=directory)
-    settings = Settings.from_global_paths(paths)
-    standalones_builder = StandalonesBuilder(settings, paths)
+    settings = GlobalSettings.from_yaml(directory)
+    standalones_builder = StandalonesBuilder(settings)
     standalones_builder.build()

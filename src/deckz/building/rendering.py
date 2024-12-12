@@ -11,8 +11,7 @@ from typing import Any
 from jinja2 import BaseLoader, Environment, TemplateNotFound
 from yaml import safe_load
 
-from ..configuring.paths import Paths
-from ..configuring.settings import Settings
+from ..configuring.settings import DeckSettings
 
 
 class AbsoluteLoader(BaseLoader):
@@ -32,8 +31,7 @@ class AbsoluteLoader(BaseLoader):
 
 
 class Renderer:
-    def __init__(self, paths: Paths, settings: Settings):
-        self._paths = paths
+    def __init__(self, settings: DeckSettings):
         self._settings = settings
 
     def render(
@@ -76,7 +74,9 @@ class Renderer:
     def _img(
         self, value: str, modifier: str = "", scale: float = 1.0, lang: str = "fr"
     ) -> str:
-        metadata_path = (self._paths.shared_dir / Path(value)).with_suffix(".yml")
+        metadata_path = (self._settings.paths.shared_dir / Path(value)).with_suffix(
+            ".yml"
+        )
         if metadata_path.exists():
             metadata = safe_load(metadata_path.read_text(encoding="utf8"))
 

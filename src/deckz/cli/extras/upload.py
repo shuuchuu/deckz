@@ -11,8 +11,7 @@ def upload(*, workdir: Path = Path()) -> None:
         workdir: Path to move into before running the command
 
     """
-    from ...configuring.paths import Paths
+    from ...configuring.settings import DeckSettings
     from ...extras.uploading import Uploader
 
-    paths = Paths(current_dir=workdir)
-    Uploader(paths)
+    Uploader(DeckSettings.from_yaml(workdir))

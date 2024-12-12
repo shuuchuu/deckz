@@ -32,17 +32,16 @@ def deps(
     from rich.console import Console
 
     from ..analyzing.sections_analyzer import SectionsAnalyzer
-    from ..configuring.paths import GlobalPaths
+    from ..configuring.settings import GlobalSettings
 
     if not unused and section is None:
         return
 
-    global_paths = GlobalPaths(current_dir=workdir)
-
     console = Console()
 
+    settings = GlobalSettings.from_yaml(workdir)
     sections_analyzer = SectionsAnalyzer(
-        global_paths.shared_latex_dir, global_paths.git_dir
+        settings.paths.shared_latex_dir, settings.paths.git_dir
     )
 
     if unused:

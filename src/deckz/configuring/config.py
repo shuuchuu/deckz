@@ -6,21 +6,33 @@ from typing import Any
 from yaml import safe_load
 
 from ..exceptions import DeckzError
-from .paths import Paths
+from .settings import DeckSettings
 
 
-def get_config(paths: Paths) -> dict[str, Any]:
+def get_config(settings: DeckSettings) -> dict[str, Any]:
     return dict(
         sorted(
             ChainMap(
                 *(
                     _get_or_create_config(config_path, template_path)
                     for config_path, template_path in [
-                        (paths.session_config, None),
-                        (paths.deck_config, paths.template_deck_config),
-                        (paths.company_config, paths.template_company_config),
-                        (paths.user_config, paths.template_user_config),
-                        (paths.global_config, paths.template_global_config),
+                        (settings.paths.session_config, None),
+                        (
+                            settings.paths.deck_config,
+                            settings.paths.template_deck_config,
+                        ),
+                        (
+                            settings.paths.company_config,
+                            settings.paths.template_company_config,
+                        ),
+                        (
+                            settings.paths.user_config,
+                            settings.paths.template_user_config,
+                        ),
+                        (
+                            settings.paths.global_config,
+                            settings.paths.template_global_config,
+                        ),
                     ]
                 ),
             ).items()

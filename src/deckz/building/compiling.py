@@ -1,8 +1,7 @@
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from subprocess import run
-
-from ..configuring.settings import Settings
 
 
 @dataclass(frozen=True)
@@ -12,9 +11,9 @@ class CompileResult:
     stderr: str | None = ""
 
 
-def compile(latex_path: Path, settings: Settings) -> CompileResult:  # noqa: A001
+def compile(latex_path: Path, build_command: Iterable[str]) -> CompileResult:  # noqa: A001
     completed_process = run(
-        [*settings.build_command, latex_path.name],
+        [*build_command, latex_path.name],
         cwd=latex_path.parent,
         capture_output=True,
         encoding="utf8",

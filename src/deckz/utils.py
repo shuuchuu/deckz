@@ -2,10 +2,10 @@
 
 from collections.abc import Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .configuring.paths import Paths
+    from .configuring.settings import DeckSettings
     from .deck_building import Deck
 
 
@@ -61,6 +61,14 @@ def import_module_and_submodules(package_name: str) -> None:
         import_module_and_submodules(subpackage)
 
 
+def intermediate_dirs(start: Path, end: Path) -> Iterator[Path]:
+    start = start.resolve()
+    yield start
+    for part in end.resolve().relative_to(start).parts:
+        start /= part
+        yield start
+
+
 def get_git_dir(path: Path) -> Path:
     """Search and resolve the path of the git dir containing the path given as argument.
 
@@ -85,14 +93,20 @@ def get_git_dir(path: Path) -> Path:
     return Path(Repository(repository).workdir).resolve()
 
 
-def _build_deck(paths: "Paths") -> tuple[Path, "Deck"]:
+def load_yaml(path: Path) -> Any:
+    from yaml import safe_load
+
+    return safe_load(path.read_text(encoding="utf8"))
+
+
+def _build_deck(settings: "DeckSettings") -> tuple[Path, "Deck"]:
     from .deck_building import DeckBuilder
 
     return (
-        paths.targets.parent.relative_to(paths.git_dir),
-        DeckBuilder(paths.local_latex_dir, paths.shared_latex_dir).from_targets(
-            paths.deck_config, paths.targets
-        ),
+        settings.paths.targets.parent.relative_to(settings.paths.git_dir),
+        DeckBuilder(
+            settings.paths.local_latex_dir, settings.paths.shared_latex_dir
+        ).from_targets(settings.paths.deck_config, settings.paths.targets),
     )
 
 
@@ -100,19 +114,19 @@ def all_decks(git_dir: Path) -> dict[Path, "Deck"]:
     from multiprocessing import Pool
 
     with Pool() as pool:
-        return dict(pool.map(_build_deck, list(all_paths(git_dir))))
+        return dict(pool.map(_build_deck, list(all_deck_settings(git_dir))))
 
 
-def all_paths(git_dir: Path) -> Iterator["Paths"]:
+def all_deck_settings(git_dir: Path) -> Iterator["DeckSettings"]:
     """Yield all deck paths that can be found recursively from the git directory.
 
     Yields:
         Paths of each deck found.
     """
-    from .configuring.paths import Paths
+    from .configuring.settings import DeckSettings
 
     for targets_path in git_dir.rglob("targets.yml"):
-        yield Paths(current_dir=targets_path.parent)
+        yield DeckSettings.from_yaml(targets_path.parent)
 
 
 def section_files(latex_dirs: Iterator[Path]) -> Iterator[Path]:
@@ -125,5 +139,5 @@ def latex_dirs(git_dir: Path, shared_latex_dir: Path) -> Iterator[Path]:
 
     return chain(
         [shared_latex_dir],
-        (paths.local_latex_dir for paths in all_paths(git_dir)),
+        (settings.paths.local_latex_dir for settings in all_deck_settings(git_dir)),
     )

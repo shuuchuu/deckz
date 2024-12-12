@@ -23,10 +23,10 @@ def img_search(
 
     from rich.console import Console
 
-    from ..configuring.paths import GlobalPaths
+    from ..configuring.settings import GlobalSettings
     from ..utils import latex_dirs
 
-    global_paths = GlobalPaths(current_dir=workdir)
+    settings = GlobalSettings.from_yaml(workdir)
     console = Console(highlight=False)
     pattern = re_compile(
         rf"""
@@ -44,9 +44,11 @@ def img_search(
         """,
         VERBOSE,
     )
-    for latex_dir in latex_dirs(global_paths.git_dir, global_paths.shared_latex_dir):
+    for latex_dir in latex_dirs(
+        settings.paths.git_dir, settings.paths.shared_latex_dir
+    ):
         for f in latex_dir.rglob("*.tex"):
             if pattern.search(f.read_text(encoding="utf8")):
                 console.print(
-                    f"[link=file://{f}]{f.relative_to(global_paths.git_dir)}[/link]"
+                    f"[link=file://{f}]{f.relative_to(settings.paths.git_dir)}[/link]"
                 )

@@ -24,12 +24,11 @@ def run(
         workdir: Path to move into before running the command
 
     """
-    from ..configuring.paths import Paths
+    from ..configuring.settings import DeckSettings
     from ..running import run as running_run
 
-    paths = Paths(current_dir=workdir)
     running_run(
-        paths=paths,
+        settings=DeckSettings.from_yaml(workdir),
         build_handout=handout,
         build_presentation=presentation,
         build_print=print,

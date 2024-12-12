@@ -7,8 +7,7 @@ from pathlib import Path
 from shutil import copyfile
 from typing import Any
 
-from ..configuring.paths import Paths
-from ..configuring.settings import Settings
+from ..configuring.settings import DeckSettings
 from ..exceptions import DeckzError
 from ..models.scalars import PartName
 from ..models.slides import PartSlides
@@ -36,8 +35,7 @@ class Builder:
     def __init__(
         self,
         latex_config: dict[str, Any],
-        settings: Settings,
-        paths: Paths,
+        settings: DeckSettings,
         deck_name: str,
         parts_slides: Mapping[PartName, PartSlides],
         dependencies: Mapping[PartName, Set[Path]],
@@ -47,7 +45,6 @@ class Builder:
     ):
         self._latex_config = latex_config
         self._settings = settings
-        self._paths = paths
         self._deck_name = deck_name
         self._parts_slides = parts_slides
         self._dependencies = dependencies
@@ -55,7 +52,7 @@ class Builder:
         self._handout = build_handout
         self._print = build_print
         self._logger = getLogger(__name__)
-        self._renderer = Renderer(paths, settings)
+        self._renderer = Renderer(settings)
 
     def _name_compile_item(
         self, compile_type: CompileType, name: PartName | None = None
@@ -106,31 +103,31 @@ class Builder:
         build_dir = self._setup_build_dir(name)
         latex_path = build_dir / f"{name}.tex"
         build_pdf_path = latex_path.with_suffix(".pdf")
-        output_pdf_path = self._paths.pdf_dir / f"{name}.pdf"
+        output_pdf_path = self._settings.paths.pdf_dir / f"{name}.pdf"
         self._render_latex(item, latex_path)
         copied = self._copy_dependencies(item.dependencies, build_dir)
         self._render_dependencies(copied)
-        result = compiling_compile(latex_path, self._settings)
+        result = compiling_compile(latex_path, self._settings.build_command)
         if result.ok:
-            self._paths.pdf_dir.mkdir(parents=True, exist_ok=True)
+            self._settings.paths.pdf_dir.mkdir(parents=True, exist_ok=True)
             copyfile(build_pdf_path, output_pdf_path)
         return result
 
     def _setup_build_dir(self, name: str) -> Path:
-        target_build_dir = self._paths.build_dir / name
+        target_build_dir = self._settings.paths.build_dir / name
         target_build_dir.mkdir(parents=True, exist_ok=True)
         for item in [
-            self._paths.shared_img_dir,
-            self._paths.shared_tikz_pdf_dir,
-            self._paths.shared_plt_pdf_dir,
-            self._paths.shared_code_dir,
+            self._settings.paths.shared_img_dir,
+            self._settings.paths.shared_tikz_pdf_dir,
+            self._settings.paths.shared_plt_pdf_dir,
+            self._settings.paths.shared_code_dir,
         ]:
             self._setup_link(target_build_dir / item.name, item)
         return target_build_dir
 
     def _render_latex(self, item: CompileItem, output_path: Path) -> None:
         self._renderer.render(
-            template_path=self._paths.jinja2_main_template,
+            template_path=self._settings.paths.jinja2_main_template,
             output_path=output_path,
             config=self._latex_config,
             parts=item.parts,
@@ -148,12 +145,12 @@ class Builder:
             try:
                 link_dir = (
                     target_build_dir
-                    / dependency.relative_to(self._paths.shared_dir).parent
+                    / dependency.relative_to(self._settings.paths.shared_dir).parent
                 )
             except ValueError:
                 link_dir = (
                     target_build_dir
-                    / dependency.relative_to(self._paths.current_dir).parent
+                    / dependency.relative_to(self._settings.paths.current_dir).parent
                 )
             link_dir.mkdir(parents=True, exist_ok=True)
             destination = (link_dir / dependency.name).with_suffix(".tex.j2")

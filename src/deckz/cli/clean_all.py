@@ -14,14 +14,12 @@ def clean_all(*, workdir: Path = Path()) -> None:
     from logging import getLogger
     from shutil import rmtree
 
-    from ..configuring.paths import GlobalPaths
-    from ..utils import all_paths
+    from ..utils import all_deck_settings, get_git_dir
 
     logger = getLogger(__name__)
-    global_paths = GlobalPaths(current_dir=workdir)
-    for paths in all_paths(global_paths.git_dir):
-        if not paths.build_dir.exists():
-            logger.info(f"Nothing to do: {paths.build_dir} doesn't exist")
+    for settings in all_deck_settings(get_git_dir(workdir).resolve()):
+        if not settings.paths.build_dir.exists():
+            logger.info(f"Nothing to do: {settings.paths.build_dir} doesn't exist")
         else:
-            logger.info(f"Deleting {paths.build_dir}")
-            rmtree(paths.build_dir)
+            logger.info(f"Deleting {settings.paths.build_dir}")
+            rmtree(settings.paths.build_dir)

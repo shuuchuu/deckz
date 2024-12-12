@@ -1,9 +1,9 @@
-# noqa: A005
 from pathlib import Path
 
 from .. import app
 
 
+# ruff: noqa: A005
 @app.command()
 def random(
     reason: str,
@@ -35,11 +35,11 @@ def random(
     from sendgrid import SendGridAPIClient
     from sendgrid.helpers.mail import Mail
 
-    from ...configuring.paths import GlobalPaths
+    from ...configuring.settings import GlobalSettings
     from ...extras.mailing import MailsConfig
 
     logger = getLogger(__name__)
-    config = MailsConfig.from_global_paths(GlobalPaths(current_dir=workdir))
+    config = MailsConfig.from_yaml(GlobalSettings.from_yaml(workdir).paths.mails)
     console = Console()
     names = list(config.to)
     names_list_str = "\n".join(

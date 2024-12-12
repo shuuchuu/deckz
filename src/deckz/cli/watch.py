@@ -34,22 +34,28 @@ def deck(
     from logging import getLogger
 
     from ..building.watching import watch as watching_watch
-    from ..configuring.paths import Paths
+    from ..configuring.settings import DeckSettings
     from ..running import run
 
     logger = getLogger(__name__)
 
     logger.info("Watching the shared, current and user directories")
-    paths = Paths(current_dir=workdir)
-    to_watch = [paths.shared_dir, paths.current_dir]
-    if paths.user_config_dir.exists():
-        to_watch.append(paths.user_config_dir)
+    settings = DeckSettings.from_yaml(workdir)
+    to_watch = [settings.paths.shared_dir, settings.paths.current_dir]
+    if settings.paths.user_config_dir.exists():
+        to_watch.append(settings.paths.user_config_dir)
     watching_watch(
         minimum_delay,
         frozenset(to_watch),
-        frozenset([paths.shared_tikz_pdf_dir, paths.pdf_dir, paths.build_dir]),
+        frozenset(
+            [
+                settings.paths.shared_tikz_pdf_dir,
+                settings.paths.pdf_dir,
+                settings.paths.build_dir,
+            ]
+        ),
         run,
-        paths=paths,
+        settings=settings,
         build_handout=handout,
         build_presentation=presentation,
         build_print=print,
@@ -88,7 +94,7 @@ def section(
 
     from .. import app_name
     from ..building.watching import watch as watching_watch
-    from ..configuring.paths import Paths
+    from ..configuring.settings import DeckSettings
     from ..running import run_section
 
     logger = getLogger(__name__)
@@ -102,21 +108,29 @@ def section(
             f"Output directory located at [link=file://{pdf_dir}]{pdf_dir}[/link]",
             extra={"markup": True},
         )
-        paths = Paths(
-            current_dir=workdir, build_dir=Path(build_dir), pdf_dir=Path(pdf_dir)
-        )
+        settings = DeckSettings.from_yaml(workdir)
+        settings.paths.build_dir = Path(build_dir)
+        settings.paths.pdf_dir = Path(pdf_dir)
+
         launch(str(pdf_dir))
-        to_watch = [paths.shared_dir, paths.current_dir]
-        if paths.user_config_dir.exists():
-            to_watch.append(paths.user_config_dir)
+
+        to_watch = [settings.paths.shared_dir, settings.paths.current_dir]
+        if settings.paths.user_config_dir.exists():
+            to_watch.append(settings.paths.user_config_dir)
         watching_watch(
             minimum_delay,
             frozenset(to_watch),
-            frozenset([paths.shared_tikz_pdf_dir, paths.pdf_dir, paths.build_dir]),
+            frozenset(
+                [
+                    settings.paths.shared_tikz_pdf_dir,
+                    settings.paths.pdf_dir,
+                    settings.paths.build_dir,
+                ]
+            ),
             run_section,
             section=section,
             flavor=flavor,
-            paths=paths,
+            settings=settings,
             build_handout=handout,
             build_presentation=presentation,
             build_print=print,
@@ -153,7 +167,7 @@ def file(
 
     from .. import app_name
     from ..building.watching import watch as watching_watch
-    from ..configuring.paths import Paths
+    from ..configuring.settings import DeckSettings
     from ..running import run_file
 
     logger = getLogger(__name__)
@@ -167,20 +181,26 @@ def file(
             f"Output directory located at [link=file://{pdf_dir}]{pdf_dir}[/link]",
             extra={"markup": True},
         )
-        paths = Paths(
-            current_dir=workdir, build_dir=Path(build_dir), pdf_dir=Path(pdf_dir)
-        )
+        settings = DeckSettings.from_yaml(workdir)
+        settings.paths.build_dir = Path(build_dir)
+        settings.paths.pdf_dir = Path(pdf_dir)
         launch(str(pdf_dir))
-        to_watch = [paths.shared_dir]
-        if paths.user_config_dir.exists():
-            to_watch.append(paths.user_config_dir)
+        to_watch = [settings.paths.shared_dir]
+        if settings.paths.user_config_dir.exists():
+            to_watch.append(settings.paths.user_config_dir)
         watching_watch(
             minimum_delay,
             frozenset(to_watch),
-            frozenset([paths.shared_tikz_pdf_dir, paths.pdf_dir, paths.build_dir]),
+            frozenset(
+                [
+                    settings.paths.shared_tikz_pdf_dir,
+                    settings.paths.pdf_dir,
+                    settings.paths.build_dir,
+                ]
+            ),
             run_file,
             latex=latex,
-            paths=paths,
+            settings=settings,
             build_handout=handout,
             build_presentation=presentation,
             build_print=print,
@@ -197,15 +217,20 @@ def standalones(*, minimum_delay: int = 5, workdir: Path = Path()) -> None:
 
     """
     from ..building.watching import watch as watching_watch
-    from ..configuring.paths import GlobalPaths
+    from ..configuring.settings import GlobalSettings
     from ..running import run_standalones
 
-    global_paths = GlobalPaths(current_dir=workdir)
+    settings = GlobalSettings.from_yaml(workdir)
 
     watching_watch(
         minimum_delay,
-        frozenset([global_paths.tikz_dir, global_paths.plt_dir]),
-        frozenset([global_paths.shared_tikz_pdf_dir, global_paths.shared_plt_pdf_dir]),
+        frozenset([settings.paths.tikz_dir, settings.paths.plt_dir]),
+        frozenset(
+            [
+                settings.paths.shared_tikz_pdf_dir,
+                settings.paths.shared_plt_pdf_dir,
+            ]
+        ),
         run_standalones,
         workdir,
     )

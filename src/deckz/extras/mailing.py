@@ -1,7 +1,8 @@
-from pydantic import BaseModel, EmailStr
-from yaml import safe_load
+from pathlib import Path
 
-from ..configuring.paths import GlobalPaths
+from pydantic import BaseModel, EmailStr
+
+from ..utils import load_yaml
 
 
 class MailsConfig(BaseModel):
@@ -10,5 +11,5 @@ class MailsConfig(BaseModel):
     to: dict[str, EmailStr]
 
     @classmethod
-    def from_global_paths(cls, paths: GlobalPaths) -> "MailsConfig":
-        return cls.model_validate(safe_load(paths.mails.read_text(encoding="utf8")))
+    def from_yaml(cls, path: Path) -> "MailsConfig":
+        return cls.model_validate(load_yaml(path))

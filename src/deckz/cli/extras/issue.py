@@ -21,11 +21,14 @@ def issue(
     """
     from logging import getLogger
 
-    from ...configuring.paths import GlobalPaths
+    from ...configuring.settings import GlobalSettings
     from ...extras.github_querying import GitHubAPI, IssuesConfig
 
     logger = getLogger(__name__)
-    config = IssuesConfig.from_global_paths(GlobalPaths(current_dir=workdir))
+
+    config = IssuesConfig.from_yaml(
+        GlobalSettings.from_yaml(workdir).paths.github_issues
+    )
     api = GitHubAPI(config.api_key)
     url = api.create_issue(config.owner, config.repo, title, body, config.project)
     logger.info(

@@ -10,8 +10,7 @@ from pathlib import Path
 from shutil import copyfile
 from tempfile import TemporaryDirectory
 
-from ..configuring.paths import GlobalPaths
-from ..configuring.settings import Settings
+from ..configuring.settings import GlobalSettings
 from ..exceptions import DeckzError
 from ..utils import copy_file_if_newer, import_module_and_submodules
 from .compiling import compile as compiling_compile
@@ -27,9 +26,9 @@ class CompilePaths:
 
 
 class StandalonesBuilder:
-    def __init__(self, settings: Settings, paths: GlobalPaths):
-        self.plt_builder = PltBuilder(settings, paths)
-        self.tikz_builder = TikzBuilder(settings, paths)
+    def __init__(self, settings: GlobalSettings):
+        self.plt_builder = PltBuilder(settings)
+        self.tikz_builder = TikzBuilder(settings)
 
     def build(self) -> None:
         self.plt_builder.build()
@@ -64,9 +63,8 @@ def register_plot(
 
 
 class PltBuilder:
-    def __init__(self, settings: Settings, paths: GlobalPaths):
+    def __init__(self, settings: GlobalSettings):
         self._settings = settings
-        self._paths = paths
         self._logger = getLogger(__name__)
 
     def build(self) -> None:
@@ -81,7 +79,8 @@ class PltBuilder:
         except ModuleNotFoundError:
             self._logger.warning("Could not find plots module, will not produce plots.")
         full_items = [
-            (self._paths.shared_plt_pdf_dir / o, p, f) for o, p, f in _plt_registry
+            (self._settings.paths.shared_plt_pdf_dir / o, p, f)
+            for o, p, f in _plt_registry
         ]
         to_build = [(o, p, f) for o, p, f in full_items if self._needs_compile(p, o)]
 
@@ -112,8 +111,7 @@ class PltBuilder:
 
 
 class TikzBuilder:
-    def __init__(self, settings: Settings, paths: GlobalPaths):
-        self._paths = paths
+    def __init__(self, settings: GlobalSettings):
         self._settings = settings
         self._logger = getLogger(__name__)
 
@@ -123,8 +121,8 @@ class TikzBuilder:
             items = [
                 (input_path, paths)
                 for input_path in chain(
-                    self._paths.tikz_dir.rglob("*.py"),
-                    self._paths.tikz_dir.rglob("*.tex"),
+                    self._settings.paths.tikz_dir.rglob("*.py"),
+                    self._settings.paths.tikz_dir.rglob("*.tex"),
                 )
                 if self._needs_compile(
                     input_path,
@@ -142,7 +140,9 @@ class TikzBuilder:
 
             with Pool() as pool:
                 results = pool.map(
-                    partial(compiling_compile, settings=self._settings),
+                    partial(
+                        compiling_compile, build_command=self._settings.build_command
+                    ),
                     (item_path.latex for _, item_path in items),
                 )
 
@@ -168,8 +168,8 @@ class TikzBuilder:
 
             formatted_fails = "\n".join(
                 (
-                    f"- {file_path.relative_to(self._paths.shared_dir)} "
-                    f'({linkify(log_path) if log_path.exists() else "no log"})'
+                    f"- {file_path.relative_to(self._settings.paths.shared_dir)}"
+                    f' ({linkify(log_path) if log_path.exists() else "no log"})'
                 )
                 for file_path, log_path in failed
             )
@@ -197,13 +197,13 @@ class TikzBuilder:
             exec(compiled)
 
     def _compute_compile_paths(self, input_file: Path, build_dir: Path) -> CompilePaths:
-        latex = (build_dir / input_file.relative_to(self._paths.tikz_dir)).with_suffix(
-            ".tex"
-        )
+        latex = (
+            build_dir / input_file.relative_to(self._settings.paths.tikz_dir)
+        ).with_suffix(".tex")
         build_pdf = latex.with_suffix(".pdf")
         output_pdf = (
-            self._paths.shared_tikz_pdf_dir
-            / input_file.relative_to(self._paths.tikz_dir)
+            self._settings.paths.shared_tikz_pdf_dir
+            / input_file.relative_to(self._settings.paths.tikz_dir)
         ).with_suffix(".pdf")
         build_log = latex.with_suffix(".log")
         output_log = output_pdf.with_suffix(".log")
@@ -218,7 +218,9 @@ class TikzBuilder:
     def _prepare(self, input_file: Path, compile_paths: CompilePaths) -> None:
         build_dir = compile_paths.latex.parent
         build_dir.mkdir(parents=True, exist_ok=True)
-        dirs_to_link = [d for d in self._paths.shared_dir.iterdir() if d.is_dir()]
+        dirs_to_link = [
+            d for d in self._settings.paths.shared_dir.iterdir() if d.is_dir()
+        ]
         for d in dirs_to_link:
             build_d = build_dir / d.name
             if not build_d.exists():

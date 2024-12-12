@@ -1,11 +1,11 @@
 from logging import getLogger
-from typing import Any
+from pathlib import Path
+from typing import Any, Self
 
 from pydantic import BaseModel
 from requests import post
-from yaml import safe_load
 
-from ..configuring.paths import GlobalPaths
+from ..utils import load_yaml
 
 
 class IssuesConfig(BaseModel):
@@ -15,10 +15,8 @@ class IssuesConfig(BaseModel):
     project: int | None = None
 
     @classmethod
-    def from_global_paths(cls, paths: GlobalPaths) -> "IssuesConfig":
-        return cls.model_validate(
-            safe_load(paths.github_issues.read_text(encoding="utf8"))
-        )
+    def from_yaml(cls, path: Path) -> Self:
+        return cls.model_validate(load_yaml(path))
 
 
 class GitHubAPI:

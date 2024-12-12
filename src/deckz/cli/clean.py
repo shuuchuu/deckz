@@ -14,12 +14,12 @@ def clean(*, workdir: Path = Path()) -> None:
     from logging import getLogger
     from shutil import rmtree
 
-    from ..configuring.paths import Paths
+    from ..configuring.settings import DeckSettings
 
     logger = getLogger(__name__)
-    paths = Paths(current_dir=workdir)
-    if not paths.build_dir.exists():
-        logger.info(f"Nothing to do: {paths.build_dir} doesn't exist")
+    settings = DeckSettings.from_yaml(workdir)
+    if not settings.paths.build_dir.exists():
+        logger.info(f"Nothing to do: {settings.paths.build_dir} doesn't exist")
     else:
-        logger.info(f"Deleting {paths.build_dir}")
-        rmtree(paths.build_dir)
+        logger.info(f"Deleting {settings.paths.build_dir}")
+        rmtree(settings.paths.build_dir)
