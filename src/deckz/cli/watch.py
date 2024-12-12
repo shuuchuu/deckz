@@ -40,10 +40,13 @@ def deck(
     logger = getLogger(__name__)
 
     logger.info("Watching the shared, current and user directories")
-    paths = Paths.from_defaults(workdir)
+    paths = Paths(current_dir=workdir)
+    to_watch = [paths.shared_dir, paths.current_dir]
+    if paths.user_config_dir.exists():
+        to_watch.append(paths.user_config_dir)
     watching_watch(
         minimum_delay,
-        frozenset([paths.shared_dir, paths.current_dir, paths.user_config_dir]),
+        frozenset(to_watch),
         frozenset([paths.shared_tikz_pdf_dir, paths.pdf_dir, paths.build_dir]),
         run,
         paths=paths,
@@ -85,13 +88,12 @@ def section(
 
     from .. import app_name
     from ..building.watching import watch as watching_watch
-    from ..configuring.paths import GlobalPaths, Paths
+    from ..configuring.paths import Paths
     from ..running import run_section
 
     logger = getLogger(__name__)
 
-    logger.info(f"Watching {section} ⋅ {flavor}, the shared and user directories")
-    global_paths = GlobalPaths.from_defaults(workdir)
+    logger.info("Watching the shared, current and user directories")
     with (
         TemporaryDirectory(prefix=f"{app_name}-") as build_dir,
         TemporaryDirectory(prefix=f"{app_name}-") as pdf_dir,
@@ -100,18 +102,16 @@ def section(
             f"Output directory located at [link=file://{pdf_dir}]{pdf_dir}[/link]",
             extra={"markup": True},
         )
-        paths = Paths.from_defaults(
-            workdir,
-            check_depth=False,
-            build_dir=Path(build_dir),
-            pdf_dir=Path(pdf_dir),
-            company_config=global_paths.template_company_config,
-            deck_config=global_paths.template_deck_config,
+        paths = Paths(
+            current_dir=workdir, build_dir=Path(build_dir), pdf_dir=Path(pdf_dir)
         )
         launch(str(pdf_dir))
+        to_watch = [paths.shared_dir, paths.current_dir]
+        if paths.user_config_dir.exists():
+            to_watch.append(paths.user_config_dir)
         watching_watch(
             minimum_delay,
-            frozenset([paths.shared_dir, paths.user_config_dir]),
+            frozenset(to_watch),
             frozenset([paths.shared_tikz_pdf_dir, paths.pdf_dir, paths.build_dir]),
             run_section,
             section=section,
@@ -153,13 +153,12 @@ def file(
 
     from .. import app_name
     from ..building.watching import watch as watching_watch
-    from ..configuring.paths import GlobalPaths, Paths
+    from ..configuring.paths import Paths
     from ..running import run_file
 
     logger = getLogger(__name__)
 
     logger.info(f"Watching {latex}, the shared and user directories")
-    global_paths = GlobalPaths.from_defaults(workdir)
     with (
         TemporaryDirectory(prefix=f"{app_name}-") as build_dir,
         TemporaryDirectory(prefix=f"{app_name}-") as pdf_dir,
@@ -168,18 +167,16 @@ def file(
             f"Output directory located at [link=file://{pdf_dir}]{pdf_dir}[/link]",
             extra={"markup": True},
         )
-        paths = Paths.from_defaults(
-            workdir,
-            check_depth=False,
-            build_dir=Path(build_dir),
-            pdf_dir=Path(pdf_dir),
-            company_config=global_paths.template_company_config,
-            deck_config=global_paths.template_deck_config,
+        paths = Paths(
+            current_dir=workdir, build_dir=Path(build_dir), pdf_dir=Path(pdf_dir)
         )
         launch(str(pdf_dir))
+        to_watch = [paths.shared_dir]
+        if paths.user_config_dir.exists():
+            to_watch.append(paths.user_config_dir)
         watching_watch(
             minimum_delay,
-            frozenset([paths.shared_dir, paths.user_config_dir]),
+            frozenset(to_watch),
             frozenset([paths.shared_tikz_pdf_dir, paths.pdf_dir, paths.build_dir]),
             run_file,
             latex=latex,
@@ -203,7 +200,7 @@ def standalones(*, minimum_delay: int = 5, workdir: Path = Path()) -> None:
     from ..configuring.paths import GlobalPaths
     from ..running import run_standalones
 
-    global_paths = GlobalPaths.from_defaults(workdir)
+    global_paths = GlobalPaths(current_dir=workdir)
 
     watching_watch(
         minimum_delay,

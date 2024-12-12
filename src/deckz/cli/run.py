@@ -27,7 +27,7 @@ def run(
     from ..configuring.paths import Paths
     from ..running import run as running_run
 
-    paths = Paths.from_defaults(workdir)
+    paths = Paths(current_dir=workdir)
     running_run(
         paths=paths,
         build_handout=handout,

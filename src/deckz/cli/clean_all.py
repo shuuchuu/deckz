@@ -14,14 +14,14 @@ def clean_all(*, workdir: Path = Path()) -> None:
     from logging import getLogger
     from shutil import rmtree
 
-    from ..configuring.paths import GlobalPaths, Paths
+    from ..configuring.paths import GlobalPaths
+    from ..utils import all_paths
 
     logger = getLogger(__name__)
-    paths = GlobalPaths.from_defaults(workdir)
-    for deck_path in (p.parent for p in paths.git_dir.rglob("targets.yml")):
-        deck_paths = Paths.from_defaults(deck_path)
-        if not deck_paths.build_dir.exists():
-            logger.info(f"Nothing to do: {deck_paths.build_dir} doesn't exist")
+    global_paths = GlobalPaths(current_dir=workdir)
+    for paths in all_paths(global_paths.git_dir):
+        if not paths.build_dir.exists():
+            logger.info(f"Nothing to do: {paths.build_dir} doesn't exist")
         else:
-            logger.info(f"Deleting {deck_paths.build_dir}")
-            rmtree(deck_paths.build_dir)
+            logger.info(f"Deleting {paths.build_dir}")
+            rmtree(paths.build_dir)

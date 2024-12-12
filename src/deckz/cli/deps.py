@@ -31,18 +31,18 @@ def deps(
     """
     from rich.console import Console
 
+    from ..analyzing.sections_analyzer import SectionsAnalyzer
     from ..configuring.paths import GlobalPaths
-    from ..sections_analyzer import SectionsAnalyzer
 
     if not unused and section is None:
         return
 
-    paths = GlobalPaths.from_defaults(workdir)
+    global_paths = GlobalPaths(current_dir=workdir)
 
     console = Console()
 
     sections_analyzer = SectionsAnalyzer(
-        paths.git_dir, paths.shared_dir, paths.shared_latex_dir
+        global_paths.shared_latex_dir, global_paths.git_dir
     )
 
     if unused:

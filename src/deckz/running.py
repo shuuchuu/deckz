@@ -17,6 +17,7 @@ from .models.scalars import FlavorName, PartName
 from .processing.part_dependencies import PartDependenciesProcessor
 from .processing.rich_tree import RichTreeProcessor
 from .processing.titles_and_contents import SlidesProcessor
+from .utils import all_paths
 
 
 def _build(
@@ -113,24 +114,23 @@ def run_all(
     build_presentation: bool,
     build_print: bool,
 ) -> None:
-    paths = GlobalPaths.from_defaults(directory)
-    settings = Settings.from_global_paths(paths)
-    StandalonesBuilder(settings, paths).build()
-    targets_paths = list(paths.git_dir.rglob("targets.yml"))
+    global_paths = GlobalPaths(current_dir=directory)
+    settings = Settings.from_global_paths(global_paths)
+    StandalonesBuilder(settings, global_paths).build()
+    deck_paths = list(all_paths(global_paths.git_dir))
     with Progress(
         "[progress.description]{task.description}",
         BarColumn(),
         "[progress.percentage]{task.percentage:>3.0f}%",
     ) as progress:
-        task_id = progress.add_task("Building decks…", total=len(targets_paths))
-        for target_paths in targets_paths:
-            deck_paths = Paths.from_defaults(target_paths.parent)
+        task_id = progress.add_task("Building decks…", total=len(deck_paths))
+        for paths in deck_paths:
             deck = DeckBuilder(
-                deck_paths.local_latex_dir, deck_paths.shared_latex_dir
-            ).from_targets(deck_paths.deck_config, deck_paths.targets)
+                paths.local_latex_dir, paths.shared_latex_dir
+            ).from_targets(paths.deck_config, paths.targets)
             result = _build(
                 deck=deck,
-                paths=deck_paths,
+                paths=paths,
                 build_handout=build_handout,
                 build_presentation=build_presentation,
                 build_print=build_print,
@@ -141,7 +141,7 @@ def run_all(
 
 
 def run_standalones(directory: Path) -> None:
-    paths = GlobalPaths.from_defaults(directory)
+    paths = GlobalPaths(current_dir=directory)
     settings = Settings.from_global_paths(paths)
     standalones_builder = StandalonesBuilder(settings, paths)
     standalones_builder.build()

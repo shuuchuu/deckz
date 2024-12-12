@@ -39,7 +39,7 @@ def random(
     from ...extras.mailing import MailsConfig
 
     logger = getLogger(__name__)
-    config = MailsConfig.from_global_paths(GlobalPaths.from_defaults(workdir))
+    config = MailsConfig.from_global_paths(GlobalPaths(current_dir=workdir))
     console = Console()
     names = list(config.to)
     names_list_str = "\n".join(

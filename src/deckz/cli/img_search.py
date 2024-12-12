@@ -24,8 +24,9 @@ def img_search(
     from rich.console import Console
 
     from ..configuring.paths import GlobalPaths
+    from ..utils import latex_dirs
 
-    global_paths = GlobalPaths.from_defaults(workdir)
+    global_paths = GlobalPaths(current_dir=workdir)
     console = Console(highlight=False)
     pattern = re_compile(
         rf"""
@@ -43,7 +44,7 @@ def img_search(
         """,
         VERBOSE,
     )
-    for latex_dir in global_paths.latex_dirs():
+    for latex_dir in latex_dirs(global_paths.git_dir, global_paths.shared_latex_dir):
         for f in latex_dir.rglob("*.tex"):
             if pattern.search(f.read_text(encoding="utf8")):
                 console.print(

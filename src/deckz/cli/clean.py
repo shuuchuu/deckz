@@ -17,7 +17,7 @@ def clean(*, workdir: Path = Path()) -> None:
     from ..configuring.paths import Paths
 
     logger = getLogger(__name__)
-    paths = Paths.from_defaults(workdir)
+    paths = Paths(current_dir=workdir)
     if not paths.build_dir.exists():
         logger.info(f"Nothing to do: {paths.build_dir} doesn't exist")
     else:

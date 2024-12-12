@@ -14,5 +14,5 @@ def upload(*, workdir: Path = Path()) -> None:
     from ...configuring.paths import Paths
     from ...extras.uploading import Uploader
 
-    paths = Paths.from_defaults(workdir)
+    paths = Paths(current_dir=workdir)
     Uploader(paths)

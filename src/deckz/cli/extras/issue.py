@@ -25,7 +25,7 @@ def issue(
     from ...extras.github_querying import GitHubAPI, IssuesConfig
 
     logger = getLogger(__name__)
-    config = IssuesConfig.from_global_paths(GlobalPaths.from_defaults(workdir))
+    config = IssuesConfig.from_global_paths(GlobalPaths(current_dir=workdir))
     api = GitHubAPI(config.api_key)
     url = api.create_issue(config.owner, config.repo, title, body, config.project)
     logger.info(

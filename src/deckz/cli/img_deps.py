@@ -28,9 +28,9 @@ def img_deps(
     from rich.console import Console
     from rich.table import Table
 
+    from ..analyzing.images_analyzer import ImagesAnalyzer
     from ..configuring.paths import GlobalPaths
     from ..models.scalars import UnresolvedPath
-    from ..sections_analyzer import SectionsAnalyzer
 
     def _display_table(
         unlicensed_images: Mapping[UnresolvedPath, Set[Path]],
@@ -71,16 +71,12 @@ def img_deps(
         else:
             console.print("No unlicensed image!")
 
-    global_paths = GlobalPaths.from_defaults(workdir)
+    global_paths = GlobalPaths(current_dir=workdir)
     console = Console(highlight=False)
 
     with console.status("Finding unlicensed images"):
-        sections_analyzer = SectionsAnalyzer(
-            global_paths.git_dir,
-            global_paths.shared_dir,
-            global_paths.shared_latex_dir,
-        )
-        unlicensed_images = sections_analyzer.sections_unlicensed_images()
+        images_analyzer = ImagesAnalyzer(global_paths.shared_dir, global_paths.git_dir)
+        unlicensed_images = images_analyzer.sections_unlicensed_images()
         sorted_unlicensed_images = {
             k: v
             for k, v in sorted(
