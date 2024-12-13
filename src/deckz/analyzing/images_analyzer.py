@@ -4,12 +4,10 @@ from pathlib import Path
 from re import VERBOSE
 from re import compile as re_compile
 
-from yaml import safe_load
-
 from ..models.deck import Deck
 from ..models.scalars import ResolvedPath, UnresolvedPath
 from ..processing.section_dependencies import SectionDependenciesProcessor
-from ..utils import all_decks
+from ..utils import all_decks, load_yaml
 
 
 class ImagesAnalyzer:
@@ -70,4 +68,4 @@ class ImagesAnalyzer:
         metadata_path = path.with_suffix(".yml")
         if not metadata_path.exists():
             return False
-        return "license" in safe_load(metadata_path.read_text(encoding="utf8"))
+        return "license" in load_yaml(metadata_path)

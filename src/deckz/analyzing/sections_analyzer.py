@@ -1,13 +1,11 @@
 from functools import cached_property
 from pathlib import Path, PurePath
 
-from yaml import safe_load
-
 from ..models.deck import Deck
 from ..models.definitions import SectionDefinition
 from ..models.scalars import FlavorName, PartName, UnresolvedPath
 from ..processing.sections_usage import SectionsUsageProcessor
-from ..utils import all_decks
+from ..utils import all_decks, load_yaml
 
 
 class SectionsAnalyzer:
@@ -51,7 +49,7 @@ class SectionsAnalyzer:
     def _shared_sections(self) -> dict[UnresolvedPath, SectionDefinition]:
         result = {}
         for path in self._shared_latex_dir.rglob("*.yml"):
-            content = safe_load(path.read_text(encoding="utf8"))
+            content = load_yaml(path)
             result[UnresolvedPath(path.parent.relative_to(self._shared_latex_dir))] = (
                 SectionDefinition.model_validate(content)
             )

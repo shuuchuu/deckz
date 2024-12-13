@@ -9,9 +9,9 @@ from tempfile import NamedTemporaryFile
 from typing import Any
 
 from jinja2 import BaseLoader, Environment, TemplateNotFound
-from yaml import safe_load
 
 from ..configuring.settings import DeckSettings
+from ..utils import load_yaml
 
 
 class AbsoluteLoader(BaseLoader):
@@ -78,7 +78,7 @@ class Renderer:
             ".yml"
         )
         if metadata_path.exists():
-            metadata = safe_load(metadata_path.read_text(encoding="utf8"))
+            metadata = load_yaml(metadata_path)
 
             def get_en_or_fr(key: str) -> str:
                 if lang != "fr":

@@ -13,10 +13,10 @@ def print_config(*, workdir: Path = Path()) -> None:
     """
     from rich import print as rich_print
 
-    from ..configuring.config import get_config
     from ..configuring.settings import DeckSettings
+    from ..configuring.variables import get_variables
 
-    config = get_config(DeckSettings.from_yaml(workdir))
+    config = get_variables(DeckSettings.from_yaml(workdir))
     max_length = max(len(key) for key in config)
     rich_print(
         "\n".join((f"[green]{k:{max_length}}[/] {v}") for k, v in config.items())

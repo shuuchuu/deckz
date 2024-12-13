@@ -1,4 +1,3 @@
-from collections.abc import Iterator
 from functools import reduce
 from pathlib import Path
 from typing import Annotated, Any, Self
@@ -16,7 +15,7 @@ from pydantic import (
 
 from .. import app_name
 from ..exceptions import DeckzError
-from ..utils import get_git_dir, intermediate_dirs, load_yaml
+from ..utils import get_git_dir, intermediate_dirs, load_all_yamls
 
 
 class LocalizedValues(BaseModel):
@@ -122,13 +121,6 @@ class DeckPaths(GlobalPaths):
         return self
 
 
-def _load_all_ymls(start: Path, end: Path, name: str) -> Iterator[dict[str, Any]]:
-    for path in intermediate_dirs(start, end):
-        file = path / name
-        if file.is_file():
-            yield load_yaml(path / name)
-
-
 class GlobalSettings(BaseModel):
     build_command: list[str]
     default_img_values: DefaultImageValues = Field(default_factory=DefaultImageValues)
@@ -143,7 +135,9 @@ class GlobalSettings(BaseModel):
             raise DeckzError(msg)
         content: dict[str, Any] = reduce(
             lambda a, b: {**a, **b},
-            _load_all_ymls(git_dir, resolved_path, "deckz.yml"),
+            load_all_yamls(
+                p / "deckz.yml" for p in intermediate_dirs(git_dir, resolved_path)
+            ),
             {},
         )
         if "paths" not in content:

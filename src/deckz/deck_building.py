@@ -3,7 +3,6 @@ from pathlib import Path, PurePath
 from typing import Literal
 
 from pydantic import TypeAdapter, ValidationError
-from yaml import safe_load
 
 from .models.deck import Deck, File, Node, Part, Section
 from .models.definitions import (
@@ -20,6 +19,7 @@ from .models.scalars import (
     ResolvedPath,
     UnresolvedPath,
 )
+from .utils import load_yaml
 
 
 class DeckBuilder:
@@ -28,10 +28,10 @@ class DeckBuilder:
         self._shared_latex_dir = shared_latex_dir
 
     def from_targets(self, deck_config_path: Path, targets_path: Path) -> Deck:
-        content = safe_load(deck_config_path.read_text(encoding="utf8"))
+        content = load_yaml(deck_config_path)
         deck_config = DeckConfig.model_validate(content)
 
-        content = safe_load(targets_path.read_text(encoding="utf8"))
+        content = load_yaml(targets_path)
         adapter = TypeAdapter(list[PartDefinition])
         part_definitions = adapter.validate_python(content)
 
@@ -130,7 +130,7 @@ class DeckBuilder:
             return section
         section.resolved_path = definition_resolved_path.parent
         try:
-            content = safe_load(definition_resolved_path.read_text(encoding="utf8"))
+            content = load_yaml(definition_resolved_path)
         except Exception as e:
             section.parsing_error = f"{e}"
             return section

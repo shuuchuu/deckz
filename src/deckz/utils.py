@@ -1,6 +1,7 @@
 """Provide general utility functions that would not fit in other modules."""
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -97,6 +98,12 @@ def load_yaml(path: Path) -> Any:
     from yaml import safe_load
 
     return safe_load(path.read_text(encoding="utf8"))
+
+
+def load_all_yamls(paths: Iterable[Path]) -> Iterator[Any]:
+    for path in paths:
+        with suppress(FileNotFoundError):
+            yield load_yaml(path)
 
 
 def _build_deck(settings: "DeckSettings") -> tuple[Path, "Deck"]:

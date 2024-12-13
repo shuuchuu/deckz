@@ -7,8 +7,8 @@ from rich.progress import BarColumn, Progress
 
 from .building.building import Builder
 from .building.standalones import StandalonesBuilder
-from .configuring.config import get_config
 from .configuring.settings import DeckSettings, GlobalSettings
+from .configuring.variables import get_variables
 from .deck_building import DeckBuilder
 from .exceptions import DeckzError
 from .models.deck import Deck
@@ -26,7 +26,7 @@ def _build(
     build_presentation: bool,
     build_print: bool,
 ) -> bool:
-    config = get_config(settings)
+    config = get_variables(settings)
     tree = RichTreeProcessor().process(deck)
     if tree is not None:
         rich_print(tree, file=stderr)
