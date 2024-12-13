@@ -1,7 +1,10 @@
 site_name: Deckz Documentation
 
 theme:
-  name: "material"
+  name: material
+
+extra_css:
+  - css/code_select.css
 
 nav:
   - Index: index.md
@@ -11,7 +14,8 @@ plugins:
   - search
   - gen-files:
       scripts:
-        - docs/gen_ref_pages.py
+        - scripts/gen_ref_pages.py
   - literate-nav:
-      nav_file: api.md
+      nav_file: SUMMARY.md
+  - section-index
   - mkdocstrings

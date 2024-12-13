@@ -32,7 +32,7 @@ dev = [
   "mkdocs-gen-files",
   "mkdocs-literate-nav",
   "mkdocs-material",
-  "mkdocstrings",
+  "mkdocstrings[python]",
   "mypy",
   "pdfminer.six",
   "pytest-cov",
@@ -40,6 +40,7 @@ dev = [
   "ruff",
   "types-pyyaml",
   "types-requests",
+  "mkdocs-section-index>=0.3.9",
 ]
 
 [project.scripts]
