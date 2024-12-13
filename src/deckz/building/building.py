@@ -34,7 +34,7 @@ class CompileItem:
 class Builder:
     def __init__(
         self,
-        latex_config: dict[str, Any],
+        variables: dict[str, Any],
         settings: DeckSettings,
         deck_name: str,
         parts_slides: Mapping[PartName, PartSlides],
@@ -43,7 +43,7 @@ class Builder:
         build_handout: bool,
         build_print: bool,
     ):
-        self._latex_config = latex_config
+        self._variables = variables
         self._settings = settings
         self._deck_name = deck_name
         self._parts_slides = parts_slides
@@ -129,7 +129,7 @@ class Builder:
         self._renderer.render(
             template_path=self._settings.paths.jinja2_main_template,
             output_path=output_path,
-            config=self._latex_config,
+            variables=self._variables,
             parts=item.parts,
             handout=item.compile_type
             in [CompileType.Handout, CompileType.PrintHandout],

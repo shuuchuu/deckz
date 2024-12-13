@@ -26,7 +26,7 @@ def _build(
     build_presentation: bool,
     build_print: bool,
 ) -> bool:
-    config = get_variables(settings)
+    variables = get_variables(settings)
     tree = RichTreeProcessor().process(deck)
     if tree is not None:
         rich_print(tree, file=stderr)
@@ -38,7 +38,7 @@ def _build(
     ).process(deck)
     StandalonesBuilder(settings).build()
     return Builder(
-        latex_config=config,
+        variables=variables,
         settings=settings,
         deck_name=deck.acronym,
         parts_slides=parts_slides,
