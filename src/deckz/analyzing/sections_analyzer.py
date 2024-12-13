@@ -14,7 +14,9 @@ class SectionsAnalyzer:
         self._git_dir = git_dir
 
     def unused_flavors(self) -> dict[UnresolvedPath, set[FlavorName]]:
-        unused_flavors = {p: set(d.flavors) for p, d in self._shared_sections.items()}
+        unused_flavors = {
+            p: {f.name for f in d.flavors} for p, d in self._shared_sections.items()
+        }
         for section_stats in self._sections_usage.values():
             for section_flavors in section_stats.values():
                 for path, flavors in section_flavors.items():

@@ -20,7 +20,7 @@ class RichTreeProcessor(Processor[Tree | None]):
                 part_trees.append(part_tree)
 
         if part_trees:
-            tree = Tree(deck.acronym)
+            tree = Tree(deck.name)
             tree.children.extend(part_trees)
             return tree
         return None

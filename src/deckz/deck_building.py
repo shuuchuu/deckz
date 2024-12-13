@@ -2,12 +2,13 @@ from collections.abc import Iterable
 from pathlib import Path, PurePath
 from typing import Literal
 
-from pydantic import TypeAdapter, ValidationError
+from pydantic import ValidationError
 
 from .models.deck import Deck, File, Node, Part, Section
 from .models.definitions import (
-    DeckConfig,
+    DeckDefinition,
     FileInclude,
+    NodeInclude,
     PartDefinition,
     SectionDefinition,
     SectionInclude,
@@ -27,21 +28,15 @@ class DeckBuilder:
         self._local_latex_dir = local_latex_dir
         self._shared_latex_dir = shared_latex_dir
 
-    def from_targets(self, deck_config_path: Path, targets_path: Path) -> Deck:
-        content = load_yaml(deck_config_path)
-        deck_config = DeckConfig.model_validate(content)
-
-        content = load_yaml(targets_path)
-        adapter = TypeAdapter(list[PartDefinition])
-        part_definitions = adapter.validate_python(content)
-
+    def from_deck_definition(self, deck_definition_path: Path) -> Deck:
+        deck_definition = DeckDefinition.model_validate(load_yaml(deck_definition_path))
         return Deck(
-            acronym=deck_config.deck_acronym, parts=self._parse_parts(part_definitions)
+            name=deck_definition.name, parts=self._parse_parts(deck_definition.parts)
         )
 
     def from_section(self, section: str, flavor: FlavorName) -> Deck:
         return Deck(
-            acronym="deck",
+            name="deck",
             parts=self._parse_parts(
                 [
                     PartDefinition.model_construct(
@@ -58,7 +53,7 @@ class DeckBuilder:
 
     def from_file(self, latex: str) -> Deck:
         return Deck(
-            acronym="deck",
+            name="deck",
             parts=self._parse_parts(
                 [
                     PartDefinition.model_construct(
@@ -82,6 +77,7 @@ class DeckBuilder:
                             base_unresolved_path=UnresolvedPath(PurePath()),
                             include_path=node_include.path,
                             title=node_include.title,
+                            title_unset="title" not in node_include.model_fields_set,
                             flavor=node_include.flavor,
                         )
                     )
@@ -104,6 +100,7 @@ class DeckBuilder:
         base_unresolved_path: UnresolvedPath,
         include_path: IncludePath,
         title: str | None,
+        title_unset: bool,
         flavor: FlavorName,
     ) -> Section:
         unresolved_path = self._compute_unresolved_path(
@@ -139,14 +136,20 @@ class DeckBuilder:
         except ValidationError as e:
             section.parsing_error = f"{e}"
             return section
-        if section.title is None:
-            section.title = section_definition.title
-        if flavor not in section_definition.flavors:
+        for flavor_definition in section_definition.flavors:
+            if flavor_definition.name == flavor:
+                break
+        else:
             section.parsing_error = f"flavor {flavor} not found"
             return section
+        if title_unset:
+            if "title" in flavor_definition.model_fields_set:
+                section.title = flavor_definition.title
+            else:
+                section.title = section_definition.title
         section.children.extend(
             self._parse_nodes(
-                section_definition.flavors[flavor],
+                flavor_definition.includes,
                 default_titles=section_definition.default_titles,
                 base_unresolved_path=unresolved_path,
             )
@@ -155,7 +158,7 @@ class DeckBuilder:
 
     def _parse_nodes(
         self,
-        node_includes: Iterable[FileInclude | SectionInclude],
+        node_includes: Iterable[NodeInclude],
         default_titles: dict[IncludePath, str] | None,
         base_unresolved_path: UnresolvedPath,
     ) -> list[Node]:
@@ -164,7 +167,7 @@ class DeckBuilder:
             if node_include.title:
                 title = node_include.title
             elif (
-                not node_include.title_unset
+                "title" not in node_include.model_fields_set
                 and default_titles
                 and node_include.path in default_titles
             ):
@@ -179,12 +182,13 @@ class DeckBuilder:
                         title=title,
                     )
                 )
-            else:
+            if isinstance(node_include, SectionInclude):
                 nodes.append(
                     self._parse_section(
                         base_unresolved_path=base_unresolved_path,
                         include_path=node_include.path,
                         title=title,
+                        title_unset="title" not in node_include.model_fields_set,
                         flavor=node_include.flavor,
                     )
                 )

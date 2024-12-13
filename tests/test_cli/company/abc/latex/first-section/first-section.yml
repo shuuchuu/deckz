@@ -4,11 +4,12 @@ default_titles:
   advanced: Advanced
   conclusion: Conclusion
 flavors:
-  standard:
-    - intro
-    - advanced
-    - conclusion
-  light:
-    - intro
-    - conclusion
-version: 3
+  - name: standard
+    includes:
+      - intro
+      - advanced
+      - conclusion
+  - name: light
+    includes:
+      - intro
+      - conclusion

@@ -64,7 +64,7 @@ class Part:
 
 @dataclass
 class Deck:
-    acronym: str
+    name: str
     parts: dict[PartName, Part]
 
     def filter(self, whitelist: Iterable[PartName]) -> None:

@@ -40,7 +40,7 @@ def _build(
     return Builder(
         variables=variables,
         settings=settings,
-        deck_name=deck.acronym,
+        deck_name=deck.name,
         parts_slides=parts_slides,
         dependencies=dependencies,
         build_handout=build_handout,
@@ -58,7 +58,7 @@ def run(
 ) -> None:
     deck = DeckBuilder(
         settings.paths.local_latex_dir, settings.paths.shared_latex_dir
-    ).from_targets(settings.paths.deck_config, settings.paths.targets)
+    ).from_deck_definition(settings.paths.deck_definition)
     if parts_whitelist is not None:
         deck.filter(parts_whitelist)
     _build(
@@ -128,7 +128,7 @@ def run_all(
             deck = DeckBuilder(
                 deck_settings.paths.local_latex_dir,
                 deck_settings.paths.shared_latex_dir,
-            ).from_targets(deck_settings.paths.deck_config, deck_settings.paths.targets)
+            ).from_deck_definition(deck_settings.paths.deck_definition)
             result = _build(
                 deck=deck,
                 settings=deck_settings,

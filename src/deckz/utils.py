@@ -110,10 +110,10 @@ def _build_deck(settings: "DeckSettings") -> tuple[Path, "Deck"]:
     from .deck_building import DeckBuilder
 
     return (
-        settings.paths.targets.parent.relative_to(settings.paths.git_dir),
+        settings.paths.deck_definition.parent.relative_to(settings.paths.git_dir),
         DeckBuilder(
             settings.paths.local_latex_dir, settings.paths.shared_latex_dir
-        ).from_targets(settings.paths.deck_config, settings.paths.targets),
+        ).from_deck_definition(settings.paths.deck_definition),
     )
 
 
@@ -132,7 +132,7 @@ def all_deck_settings(git_dir: Path) -> Iterator["DeckSettings"]:
     """
     from .configuring.settings import DeckSettings
 
-    for targets_path in git_dir.rglob("targets.yml"):
+    for targets_path in git_dir.rglob("deck.yml"):
         yield DeckSettings.from_yaml(targets_path.parent)
 
 

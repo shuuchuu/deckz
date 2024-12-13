@@ -7,74 +7,67 @@ from pydantic.functional_validators import BeforeValidator
 from .scalars import FlavorName, IncludePath, PartName
 
 
-class SectionInclude(BaseModel):
+class NodeInclude(BaseModel):
+    path: IncludePath
+    title: str | None = None
+
+
+class SectionInclude(NodeInclude):
     flavor: FlavorName
-    path: IncludePath
-    title: str | None = None
-    title_unset: bool = False
 
 
-class FileInclude(BaseModel):
-    path: IncludePath
-    title: str | None = None
-    title_unset: bool = False
+class FileInclude(NodeInclude):
+    pass
 
 
-def _normalize_flavor_content(v: str | dict[str, str]) -> FileInclude | SectionInclude:
+def _normalize_include(
+    v: str | dict[str, str] | NodeInclude,
+) -> NodeInclude:
+    if isinstance(v, NodeInclude):
+        return v
     if isinstance(v, str):
-        return FileInclude(path=IncludePath(PurePath(v)))
-    assert len(v) == 1
-    path, flavor_or_title = next(iter(v.items()))
-    if path.startswith("$"):
+        left = v
+        title_unset = True
+    else:
+        assert len(v) == 1
+        left, title = next(iter(v.items()))
+        title_unset = False
+    if left.startswith("$"):
+        path, flavor = left[1:].split("@")
+    else:
+        path = left
+        flavor = None
+    if flavor is None and title_unset:
+        return FileInclude(path=IncludePath(PurePath(path)))
+    if flavor is None:
+        return FileInclude(path=IncludePath(PurePath(path)), title=title)
+    if title_unset:
         return SectionInclude(
-            flavor=FlavorName(flavor_or_title), path=IncludePath(PurePath(path[1:]))
+            path=IncludePath(PurePath(path)), flavor=FlavorName(flavor)
         )
-    if flavor_or_title is None:
-        return FileInclude(path=IncludePath(PurePath(path)), title_unset=True)
-    return FileInclude(path=IncludePath(PurePath(path)), title=flavor_or_title)
+    return SectionInclude(
+        path=IncludePath(PurePath(path)), flavor=FlavorName(flavor), title=title
+    )
+
+
+class FlavorDefinition(BaseModel):
+    name: FlavorName
+    title: str | None = None
+    includes: list[Annotated[NodeInclude, BeforeValidator(_normalize_include)]]
 
 
 class SectionDefinition(BaseModel):
     title: str
     default_titles: dict[IncludePath, str] | None = None
-    flavors: dict[
-        FlavorName,
-        list[
-            Annotated[
-                SectionInclude | FileInclude, BeforeValidator(_normalize_flavor_content)
-            ]
-        ],
-    ]
-    version: int | None = None
-
-
-def _normalize_part_content(v: str | dict[str, str]) -> FileInclude | SectionInclude:
-    if isinstance(v, str):
-        return FileInclude(path=IncludePath(PurePath(v)))
-    if isinstance(v, dict) and "path" not in v:
-        assert len(v) == 1
-        path, flavor = next(iter(v.items()))
-        return SectionInclude(
-            path=IncludePath(PurePath(path)), flavor=FlavorName(flavor), title=None
-        )
-    if "flavor" not in v:
-        return FileInclude(path=IncludePath(PurePath(v["path"])), title=v.get("title"))
-    return SectionInclude(
-        path=IncludePath(PurePath(v["path"])),
-        flavor=FlavorName(v["flavor"]),
-        title=v.get("title"),
-    )
+    flavors: list[FlavorDefinition]
 
 
 class PartDefinition(BaseModel):
     name: PartName
     title: str | None = None
-    sections: list[
-        Annotated[
-            SectionInclude | FileInclude, BeforeValidator(_normalize_part_content)
-        ]
-    ]
+    sections: list[Annotated[NodeInclude, BeforeValidator(_normalize_include)]]
 
 
-class DeckConfig(BaseModel, extra="allow"):
-    deck_acronym: str
+class DeckDefinition(BaseModel):
+    name: str
+    parts: list[PartDefinition]

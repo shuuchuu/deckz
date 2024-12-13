@@ -10,7 +10,6 @@ from pydantic import (
     ConfigDict,
     Field,
     ValidationInfo,
-    model_validator,
 )
 
 from .. import app_name
@@ -65,23 +64,17 @@ class GlobalPaths(BaseModel):
     templates_dir: _Path = "{git_dir}/templates"
     plt_dir: _Path = "{figures_dir}/plots"
     tikz_dir: _Path = "{figures_dir}/tikz"
-    yml_templates_dir: _Path = "{templates_dir}/yml"
-    template_global_config: _Path = "{yml_templates_dir}/global-config.yml"
-    template_user_config: _Path = "{yml_templates_dir}/user-config.yml"
-    template_company_config: _Path = "{yml_templates_dir}/company-config.yml"
-    template_deck_config: _Path = "{yml_templates_dir}/deck-config.yml"
     jinja2_dir: _Path = "{templates_dir}/jinja2"
     jinja2_main_template: _Path = "{jinja2_dir}/main.tex"
-    jinja2_print_template: _Path = "{jinja2_dir}/print.tex"
     user_config_dir: _Path = Field(
         default_factory=lambda: Path(appdirs_user_config_dir(app_name))
     )
-    global_config: _Path = "{git_dir}/global-config.yml"
+    global_variables: _Path = "{git_dir}/global-variables.yml"
     github_issues: _Path = "{user_config_dir}/github-issues.yml"
     mails: _Path = "{user_config_dir}/mails.yml"
     gdrive_secrets: _Path = "{user_config_dir}/gdrive-secrets.json"
     gdrive_credentials: _Path = "{user_config_dir}/gdrive-credentials.pickle"
-    user_config: _Path = "{user_config_dir}/user-config.yml"
+    user_variables: _Path = "{user_config_dir}/user-variables.yml"
 
     def model_post_init(self, __context: Any) -> None:
         for field, value in self.__dict__.items():
@@ -89,7 +82,7 @@ class GlobalPaths(BaseModel):
         self.user_config_dir.mkdir(parents=True, exist_ok=True)
 
 
-def _company_config_factory(data: dict[str, Any]) -> Path:
+def _company_variables_factory(data: dict[str, Any]) -> Path:
     if not data["current_dir"].relative_to(data["git_dir"]).match("*/*"):
         msg = (
             f"not deep enough from root {data['git_dir']}. "
@@ -100,7 +93,7 @@ def _company_config_factory(data: dict[str, Any]) -> Path:
     return (
         data["git_dir"]
         / data["current_dir"].relative_to(data["git_dir"]).parts[0]
-        / "company-config.yml"
+        / "company-variables.yml"
     )
 
 
@@ -108,17 +101,10 @@ class DeckPaths(GlobalPaths):
     build_dir: _Path = "{current_dir}/.build"
     pdf_dir: _Path = "{current_dir}/pdf"
     local_latex_dir: _Path = "{current_dir}/latex"
-    company_config: _Path = Field(default_factory=_company_config_factory)
-    deck_config: _Path = "{current_dir}/deck-config.yml"
-    session_config: _Path = "{current_dir}/session-config.yml"
-    targets: _Path = "{current_dir}/targets.yml"
-
-    @model_validator(mode="after")
-    def _validate(self) -> Self:
-        if not self.targets.is_file():
-            msg = "Could not find targets. Must be in a deck directory"
-            raise ValueError(msg)
-        return self
+    company_variables: _Path = Field(default_factory=_company_variables_factory)
+    deck_variables: _Path = "{current_dir}/deck-variables.yml"
+    session_variables: _Path = "{current_dir}/session-variables.yml"
+    deck_definition: _Path = "{current_dir}/deck.yml"
 
 
 class GlobalSettings(BaseModel):
