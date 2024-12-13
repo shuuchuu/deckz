@@ -104,7 +104,7 @@ class Section(Node):
 
 @dataclass
 class Part:
-    """File in a section or part."""
+    """Part in a deck."""
 
     title: str | None
     """Title of the part."""
@@ -115,7 +115,7 @@ class Part:
 
 @dataclass
 class Deck:
-    """File in a section or part."""
+    """Top of the hierarchy for deck parsing."""
 
     name: str
     """The name of the deck. Will be a part of the output file name."""

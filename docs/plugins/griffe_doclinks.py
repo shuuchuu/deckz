@@ -12,7 +12,7 @@ from pymdownx.slugs import slugify
 
 DOCS_PATH = Path(__file__).parent.parent
 slugifier = slugify(case="lower")
-logger = get_logger("griffe_docklinks")
+logger = get_logger("griffe_doclinks")
 
 
 def find_heading(content: str, slug: str, file_path: Path) -> tuple[str, int]:
