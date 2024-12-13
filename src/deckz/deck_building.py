@@ -24,11 +24,34 @@ from .utils import load_yaml
 
 
 class DeckBuilder:
+    """Build a deck from a definition.
+
+    The definition can be a complete deck definition obtained from a yaml file or a \
+    simpler one obtained from a single section or file.
+    """
+
     def __init__(self, local_latex_dir: Path, shared_latex_dir: Path) -> None:
+        """Initialize an instance with the necessary path information.
+
+        Args:
+            local_latex_dir: Path to the local latex directory. Used during the \
+                includes resolving process
+            shared_latex_dir: Path to the shared latex directory. Used during the \
+                includes resolving process
+        """
         self._local_latex_dir = local_latex_dir
         self._shared_latex_dir = shared_latex_dir
 
     def from_deck_definition(self, deck_definition_path: Path) -> Deck:
+        """Parse a deck from a yaml definition.
+
+        Args:
+            deck_definition_path: Path to the yaml definition. It should be parsable \
+                into a [deckz.models.definitions.DeckDefinition][] by Pydantic
+
+        Returns:
+            The parsed deck
+        """
         deck_definition = DeckDefinition.model_validate(load_yaml(deck_definition_path))
         return Deck(
             name=deck_definition.name, parts=self._parse_parts(deck_definition.parts)
@@ -112,7 +135,7 @@ class DeckBuilder:
             resolved_path=ResolvedPath(Path()),
             parsing_error=None,
             flavor=flavor,
-            children=[],
+            nodes=[],
         )
         definition_logical_path = (unresolved_path / unresolved_path.name).with_suffix(
             ".yml"
@@ -147,7 +170,7 @@ class DeckBuilder:
                 section.title = flavor_definition.title
             else:
                 section.title = section_definition.title
-        section.children.extend(
+        section.nodes.extend(
             self._parse_nodes(
                 flavor_definition.includes,
                 default_titles=section_definition.default_titles,

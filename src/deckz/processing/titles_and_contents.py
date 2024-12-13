@@ -50,5 +50,5 @@ class _SlidesNodeVisitor(NodeVisitor[[MutableSequence[TitleOrContent], int], Non
     ) -> None:
         if section.title:
             sections.append(Title(section.title, level))
-        for node in section.children:
+        for node in section.nodes:
             node.accept(self, sections, level + 1)

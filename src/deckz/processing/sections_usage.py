@@ -57,5 +57,5 @@ class _SectionsUsageNodeVisitor(
             if section.unresolved_path not in section_stats:
                 section_stats[section.unresolved_path] = set()
             section_stats[section.unresolved_path].add(section.flavor)
-        for node in section.children:
+        for node in section.nodes:
             node.accept(self, section_stats)

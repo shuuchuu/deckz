@@ -67,7 +67,7 @@ class _RichTreeVisitor(NodeVisitor[[UnresolvedPath], tuple[Tree | None, bool]]):
     ) -> tuple[Tree | None, bool]:
         error = section.parsing_error is not None
         children_trees = []
-        for child in section.children:
+        for child in section.nodes:
             child_tree, child_error = child.accept(self, section.unresolved_path)
             error = error or child_error
             if child_tree is not None:

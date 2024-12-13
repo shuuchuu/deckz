@@ -29,5 +29,5 @@ class _PartDependenciesNodeVisitor(NodeVisitor[[MutableSet[ResolvedPath]], None]
     def visit_section(
         self, section: Section, dependencies: MutableSet[ResolvedPath]
     ) -> None:
-        for node in section.children:
+        for node in section.nodes:
             node.accept(self, dependencies)

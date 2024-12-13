@@ -1,27 +1,29 @@
 """Model classes for parsed decks.
 
-The main class is `Deck`. It's comprised of `Part`s containing `Section`s and `File`s, \
-both of which are `Node`s and have a `process` method to allow visitors to be defined.
+The main class is [`Deck`][deckz.models.deck.Deck]. It's comprised of \
+[`Part`][deckz.models.deck.Part]s containing [`Section`][deckz.models.deck.Section]s \
+and [`File`][deckz.models.deck.File]s, both of which are \
+[`Node`][deckz.models.deck.Node]s and have an \
+[`accept`][deckz.models.deck.Node.accept] method to allow visitors to be defined.
 """
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TypeVar
-
-from typing_extensions import ParamSpec
 
 from ..processing import NodeVisitor
 from .scalars import FlavorName, PartName, ResolvedPath, UnresolvedPath
 
-__all__ = ["Deck", "File", "Node", "Part", "Section"]
-
-_P = ParamSpec("_P")
-_T = TypeVar("_T", covariant=True)
-
 
 @dataclass
 class Node(ABC):
+    """Node in a section or part.
+
+    A node is anything that can be included in a [`Part`][deckz.models.deck.Part] or a \
+    [`Section`][deckz.models.deck.Section]: it can be either a \
+    [`Section`][deckz.models.deck.Section] or a [`File`][deckz.models.deck.File].
+    """
+
     title: str | None
     unresolved_path: UnresolvedPath
     # resolved_path and parsing_error could benefit from a refactoring using something
@@ -31,43 +33,106 @@ class Node(ABC):
     parsing_error: str | None
 
     @abstractmethod
-    def accept(
-        self, visitor: NodeVisitor[_P, _T], *args: _P.args, **kwargs: _P.kwargs
-    ) -> _T:
+    def accept[**P, T](
+        self, visitor: NodeVisitor[P, T], *args: P.args, **kwargs: P.kwargs
+    ) -> T:
+        """Dispatch method for visitors.
+
+        Args:
+            visitor: The visitor asking for the dispatch
+            args: Arguments to send back to the visitor untouched
+            kwargs: Keyword arguments to send back to the visitor untouched
+
+        Returns:
+            The return type is the same as the return type of the corresponding \
+            [`visit_file`][deckz.processing.NodeVisitor.visit_file] or \
+            [`visit_section`][deckz.processing.NodeVisitor.visit_section] method of \
+            the visitor.
+        """
         raise NotImplementedError
 
 
 @dataclass
 class File(Node):
-    def accept(
-        self, visitor: NodeVisitor[_P, _T], *args: _P.args, **kwargs: _P.kwargs
-    ) -> _T:
+    """File in a section or part."""
+
+    def accept[**P, T](
+        self, visitor: NodeVisitor[P, T], *args: P.args, **kwargs: P.kwargs
+    ) -> T:
+        """Dispatch method for visitors.
+
+        Args:
+            visitor: The visitor asking for the dispatch
+            args: Arguments to send back to the visitor untouched
+            kwargs: Keyword arguments to send back to the visitor untouched
+
+        Returns:
+            The return type is the same as the return type of the \
+            [`visit_file`][deckz.processing.NodeVisitor.visit_file] method of the \
+            visitor.
+        """
         return visitor.visit_file(self, *args, **kwargs)
 
 
 @dataclass
 class Section(Node):
-    flavor: FlavorName
-    children: list[Node]
+    """Section in a section or part."""
 
-    def accept(
-        self, visitor: NodeVisitor[_P, _T], *args: _P.args, **kwargs: _P.kwargs
-    ) -> _T:
+    flavor: FlavorName
+    """Name of the flavor of the section."""
+
+    nodes: list[Node]
+    """Nodes included in the section."""
+
+    def accept[**P, T](
+        self, visitor: NodeVisitor[P, T], *args: P.args, **kwargs: P.kwargs
+    ) -> T:
+        """Dispatch method for visitors.
+
+        Args:
+            visitor: The visitor asking for the dispatch
+            args: Arguments to send back to the visitor untouched
+            kwargs: Keyword arguments to send back to the visitor untouched
+
+        Returns:
+            The return type is the same as the return type of the \
+            [`visit_section`][deckz.processing.NodeVisitor.visit_section] method of \
+            the visitor.
+        """
         return visitor.visit_section(self, *args, **kwargs)
 
 
 @dataclass
 class Part:
+    """File in a section or part."""
+
     title: str | None
+    """Title of the part."""
+
     nodes: list[Node]
+    """Nodes included in the part."""
 
 
 @dataclass
 class Deck:
+    """File in a section or part."""
+
     name: str
+    """The name of the deck. Will be a part of the output file name."""
+
     parts: dict[PartName, Part]
+    """Parts included in the deck."""
 
     def filter(self, whitelist: Iterable[PartName]) -> None:
+        """Filter out the parts that don't have their name listed in `whitelist`.
+
+        Args:
+            whitelist: Parts to keep.
+
+        Raises:
+            ValueError: Raised if an element of `whitelist` matches no part name in \
+                the deck.
+        """
         if frozenset(whitelist).difference(self.parts):
             msg = "provided whitelist has part names not in the deck"
             raise ValueError(msg)

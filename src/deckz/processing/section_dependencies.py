@@ -53,5 +53,5 @@ class _SectionDependenciesNodeVisitor(
         section_dependencies: MutableMapping[UnresolvedPath, MutableSet[ResolvedPath]],
         base_unresolved_path: UnresolvedPath,
     ) -> None:
-        for node in section.children:
+        for node in section.nodes:
             node.accept(self, section_dependencies, section.unresolved_path)

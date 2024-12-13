@@ -142,6 +142,12 @@ def run_all(
 
 
 def run_standalones(directory: Path) -> None:
+    """Build all the project standalones (images, tikz, plots, etc).
+
+    Args:
+        directory: Path to the current directory. Will be used to find the project \
+            directory
+    """
     settings = GlobalSettings.from_yaml(directory)
     standalones_builder = StandalonesBuilder(settings)
     standalones_builder.build()

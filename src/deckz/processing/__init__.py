@@ -1,21 +1,25 @@
-from typing import TYPE_CHECKING, Protocol, TypeVar
+"""Provide protocols to better type-check deck processing code."""
 
-from typing_extensions import ParamSpec
+from typing import TYPE_CHECKING, Protocol
 
 # Necessary to avoid circular imports with ..models.deck
 if TYPE_CHECKING:
     from ..models.deck import Deck, File, Section
 
-_P = ParamSpec("_P")
-_T = TypeVar("_T", covariant=True)
+
+class NodeVisitor[**P, T](Protocol):
+    """Dispatch actions on [`Node`][deckz.models.deck.Node]s."""
+
+    def visit_file(self, file: "File", *args: P.args, **kwargs: P.kwargs) -> T:
+        """Dispatched method for [`File`][deckz.models.deck.File]s."""
+        ...
+
+    def visit_section(self, section: "Section", *args: P.args, **kwargs: P.kwargs) -> T:
+        """Dispatched method for [`Section`][deckz.models.deck.Section]s."""
+        ...
 
 
-class NodeVisitor(Protocol[_P, _T]):
-    def visit_file(self, file: "File", *args: _P.args, **kwargs: _P.kwargs) -> _T: ...
-    def visit_section(
-        self, section: "Section", *args: _P.args, **kwargs: _P.kwargs
-    ) -> _T: ...
-
-
-class Processor(Protocol[_T]):
-    def process(self, deck: "Deck") -> _T: ...
+class Processor[T](Protocol):
+    def process(self, deck: "Deck") -> T:
+        """Process a deck."""
+        ...
