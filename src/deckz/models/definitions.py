@@ -25,7 +25,7 @@ The yaml syntax used is the following:
         $path/relative/to/current/element@flavor
         $/path/relative/to/basedir@flavor
 
-- for a path with a title
+- for a section with a title
 
         $path/relative/to/current/element@flavor: title
         $/path/relative/to/basedir@flavor: title
