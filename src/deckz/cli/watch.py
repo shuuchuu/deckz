@@ -33,9 +33,8 @@ def deck(
     """
     from logging import getLogger
 
-    from ..building.watching import watch as watching_watch
     from ..configuring.settings import DeckSettings
-    from ..running import run
+    from ..pipelines import run, watch
 
     logger = getLogger(__name__)
 
@@ -44,7 +43,7 @@ def deck(
     to_watch = [settings.paths.shared_dir, settings.paths.current_dir]
     if settings.paths.user_config_dir.exists():
         to_watch.append(settings.paths.user_config_dir)
-    watching_watch(
+    watch(
         minimum_delay,
         frozenset(to_watch),
         frozenset(
@@ -93,9 +92,8 @@ def section(
     from typer import launch
 
     from .. import app_name
-    from ..building.watching import watch as watching_watch
     from ..configuring.settings import DeckSettings
-    from ..running import run_section
+    from ..pipelines import run_section, watch
 
     logger = getLogger(__name__)
 
@@ -117,7 +115,7 @@ def section(
         to_watch = [settings.paths.shared_dir, settings.paths.current_dir]
         if settings.paths.user_config_dir.exists():
             to_watch.append(settings.paths.user_config_dir)
-        watching_watch(
+        watch(
             minimum_delay,
             frozenset(to_watch),
             frozenset(
@@ -166,9 +164,8 @@ def file(
     from typer import launch
 
     from .. import app_name
-    from ..building.watching import watch as watching_watch
     from ..configuring.settings import DeckSettings
-    from ..running import run_file
+    from ..pipelines import run_file, watch
 
     logger = getLogger(__name__)
 
@@ -188,7 +185,7 @@ def file(
         to_watch = [settings.paths.shared_dir]
         if settings.paths.user_config_dir.exists():
             to_watch.append(settings.paths.user_config_dir)
-        watching_watch(
+        watch(
             minimum_delay,
             frozenset(to_watch),
             frozenset(
@@ -216,13 +213,12 @@ def standalones(*, minimum_delay: int = 5, workdir: Path = Path()) -> None:
         workdir: Path to move into before running the command
 
     """
-    from ..building.watching import watch as watching_watch
     from ..configuring.settings import GlobalSettings
-    from ..running import run_standalones
+    from ..pipelines import run_standalones, watch
 
     settings = GlobalSettings.from_yaml(workdir)
 
-    watching_watch(
+    watch(
         minimum_delay,
         frozenset([settings.paths.tikz_dir, settings.paths.plt_dir]),
         frozenset(

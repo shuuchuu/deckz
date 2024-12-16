@@ -25,9 +25,9 @@ def run(
 
     """
     from ..configuring.settings import DeckSettings
-    from ..running import run as running_run
+    from ..pipelines import run
 
-    running_run(
+    run(
         settings=DeckSettings.from_yaml(workdir),
         build_handout=handout,
         build_presentation=presentation,

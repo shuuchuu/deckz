@@ -20,9 +20,9 @@ def check_all(
         workdir: Path to move into before running the command
 
     """
-    from ..running import run_all as running_run_all
+    from ..pipelines import run_all
 
-    running_run_all(
+    run_all(
         directory=workdir,
         build_handout=handout,
         build_presentation=presentation,
