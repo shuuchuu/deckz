@@ -24,9 +24,9 @@ def upgrade(*, workdir: Path = Path()) -> None:
     from ..utils import load_yaml
 
     console = Console(file=stderr)
-    old_global_config = Path("global-config.yml")
-    if old_global_config.exists():
-        move(old_global_config, "deckz.yml")
+    old_settings = Path("settings.yml")
+    if old_settings.exists():
+        move(old_settings, "deckz.yml")
 
     settings = GlobalSettings.from_yaml(workdir)
 
