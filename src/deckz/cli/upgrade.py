@@ -9,7 +9,11 @@ def upgrade(*, workdir: Path = Path()) -> None:
     """Transform a deckz repo to match the new conventions.
 
     Args:
-        workdir: Path to move into before running the command
+        workdir: Path to move into before running the command.
+
+    Raises:
+        ValueError: When the format to handle in modified files is non-conform to \
+            expectations.
 
     """
     from itertools import chain
