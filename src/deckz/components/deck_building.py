@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from enum import Enum
 from logging import getLogger
 from multiprocessing import Pool, cpu_count
-from pathlib import Path
+from pathlib import Path, PosixPath
 from shutil import copyfile
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
@@ -232,7 +232,7 @@ class _SlidesNodeVisitor(NodeVisitor[[MutableSequence[TitleOrContent], int], Non
         else:
             raise ValueError
         path = path.with_suffix("")
-        sections.append(str(path))
+        sections.append(str(PosixPath(path)))
 
     def visit_section(
         self, section: Section, sections: MutableSequence[TitleOrContent], level: int
