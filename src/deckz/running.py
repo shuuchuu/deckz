@@ -1,19 +1,15 @@
 from collections.abc import Iterable
 from pathlib import Path
-from sys import stderr
 
-from rich import print as rich_print
 from rich.progress import BarColumn, Progress
 
 from .building.building import Builder
 from .building.standalones import StandalonesBuilder
 from .configuring.settings import DeckSettings, GlobalSettings
 from .configuring.variables import get_variables
-from .exceptions import DeckzError
 from .models.deck import Deck
 from .models.scalars import FlavorName, PartName
 from .processing.part_dependencies import PartDependenciesProcessor
-from .processing.rich_tree import RichTreeProcessor
 from .processing.titles_and_contents import SlidesProcessor
 from .utils import all_deck_settings
 
@@ -26,11 +22,6 @@ def _build(
     build_print: bool,
 ) -> bool:
     variables = get_variables(settings)
-    tree = RichTreeProcessor().process(deck)
-    if tree is not None:
-        rich_print(tree, file=stderr)
-        msg = "deck parsing failed"
-        raise DeckzError(msg)
     dependencies = PartDependenciesProcessor().process(deck)
     parts_slides = SlidesProcessor(
         settings.paths.shared_dir, settings.paths.current_dir
