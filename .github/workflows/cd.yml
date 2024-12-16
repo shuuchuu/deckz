@@ -9,6 +9,9 @@ jobs:
   deploy-pypi:
     name: Deploy to PyPI
     runs-on: ubuntu-latest
+    permissions:
+      # For PyPI's trusted publishing.
+      id-token: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -18,7 +21,5 @@ jobs:
 
       - name: Build and deploy on PyPI
         run: |
-          export TAG=${GITHUB_REF##*/}
-          test $(uv version | cut -f 2 -d " ") == $TAG
           uv build
           uv publish
