@@ -9,7 +9,6 @@ from .building.building import Builder
 from .building.standalones import StandalonesBuilder
 from .configuring.settings import DeckSettings, GlobalSettings
 from .configuring.variables import get_variables
-from .deck_building import DeckBuilder
 from .exceptions import DeckzError
 from .models.deck import Deck
 from .models.scalars import FlavorName, PartName
@@ -56,8 +55,9 @@ def run(
     build_print: bool,
     parts_whitelist: Iterable[PartName] | None = None,
 ) -> None:
-    deck = DeckBuilder(
-        settings.paths.local_latex_dir, settings.paths.shared_latex_dir
+    parser_config = settings.components.parser_config
+    deck = parser_config.get_model_class()(
+        settings.paths.local_latex_dir, settings.paths.shared_latex_dir, parser_config
     ).from_deck_definition(settings.paths.deck_definition)
     if parts_whitelist is not None:
         deck.filter(parts_whitelist)
@@ -77,8 +77,9 @@ def run_file(
     build_presentation: bool,
     build_print: bool,
 ) -> None:
-    deck = DeckBuilder(
-        settings.paths.local_latex_dir, settings.paths.shared_latex_dir
+    parser_config = settings.components.parser_config
+    deck = parser_config.get_model_class()(
+        settings.paths.local_latex_dir, settings.paths.shared_latex_dir, parser_config
     ).from_file(latex)
     _build(
         deck=deck,
@@ -97,8 +98,9 @@ def run_section(
     build_presentation: bool,
     build_print: bool,
 ) -> None:
-    deck = DeckBuilder(
-        settings.paths.local_latex_dir, settings.paths.shared_latex_dir
+    parser_config = settings.components.parser_config
+    deck = parser_config.get_model_class()(
+        settings.paths.local_latex_dir, settings.paths.shared_latex_dir, parser_config
     ).from_section(section, flavor)
     _build(
         deck=deck,
@@ -125,9 +127,11 @@ def run_all(
     ) as progress:
         task_id = progress.add_task("Building decks…", total=len(decks_settings))
         for deck_settings in decks_settings:
-            deck = DeckBuilder(
+            parser_config = deck_settings.components.parser_config
+            deck = parser_config.get_model_class()(
                 deck_settings.paths.local_latex_dir,
                 deck_settings.paths.shared_latex_dir,
+                parser_config,
             ).from_deck_definition(deck_settings.paths.deck_definition)
             result = _build(
                 deck=deck,

@@ -1,11 +1,11 @@
 from collections.abc import Iterable
 from pathlib import Path, PurePath
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import ValidationError
 
-from .models.deck import Deck, File, Node, Part, Section
-from .models.definitions import (
+from ..models.deck import Deck, File, Node, Part, Section
+from ..models.definitions import (
     DeckDefinition,
     FileInclude,
     NodeInclude,
@@ -13,24 +13,30 @@ from .models.definitions import (
     SectionDefinition,
     SectionInclude,
 )
-from .models.scalars import (
+from ..models.scalars import (
     FlavorName,
     IncludePath,
     PartName,
     ResolvedPath,
     UnresolvedPath,
 )
-from .utils import load_yaml
+from ..utils import load_yaml
+from . import Parser, ParserConfig
 
 
-class DeckBuilder:
+class DefaultParser(Parser):
     """Build a deck from a definition.
 
     The definition can be a complete deck definition obtained from a yaml file or a \
     simpler one obtained from a single section or file.
     """
 
-    def __init__(self, local_latex_dir: Path, shared_latex_dir: Path) -> None:
+    def __init__(
+        self,
+        local_latex_dir: Path,
+        shared_latex_dir: Path,
+        config: "DefaultParserConfig",
+    ) -> None:
         """Initialize an instance with the necessary path information.
 
         Args:
@@ -38,9 +44,11 @@ class DeckBuilder:
                 includes resolving process
             shared_latex_dir: Path to the shared latex directory. Used during the \
                 includes resolving process
+            config: Configuration retrieved from configuration files for this component.
         """
         self._local_latex_dir = local_latex_dir
         self._shared_latex_dir = shared_latex_dir
+        self._config = config
 
     def from_deck_definition(self, deck_definition_path: Path) -> Deck:
         """Parse a deck from a yaml definition.
@@ -232,7 +240,9 @@ class DeckBuilder:
             resolved_path=ResolvedPath(Path()),
             parsing_error=None,
         )
-        resolved_path = self._resolve(unresolved_path.with_suffix(".tex"), "file")
+        resolved_path = self._resolve(
+            unresolved_path.with_suffix(self._config.file_extension), "file"
+        )
         if resolved_path:
             file.resolved_path = resolved_path
         else:
@@ -259,3 +269,9 @@ class DeckBuilder:
             if existence_tester(path):
                 return ResolvedPath(path.resolve())
         return None
+
+
+class DefaultParserConfig(ParserConfig, component=DefaultParser):
+    file_extension: str = ".tex"
+
+    config_key: ClassVar[Literal["default_parser"]] = "default_parser"

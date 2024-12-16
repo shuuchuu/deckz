@@ -13,6 +13,7 @@ from pydantic import (
 )
 
 from .. import app_name
+from ..components import ParserConfig
 from ..exceptions import DeckzError
 from ..utils import get_git_dir, intermediate_dirs, load_all_yamls
 
@@ -107,10 +108,20 @@ class DeckPaths(GlobalPaths):
     deck_definition: _Path = "{current_dir}/deck.yml"
 
 
+class GlobalComponents(BaseModel):
+    model_config = ConfigDict(validate_default=True)
+
+
+class DeckComponents(BaseModel):
+    model_config = ConfigDict(validate_default=True)
+    parser_config: ParserConfig = {"config_key": "default_parser"}
+
+
 class GlobalSettings(BaseModel):
     build_command: list[str]
     default_img_values: DefaultImageValues = Field(default_factory=DefaultImageValues)
     paths: GlobalPaths = Field(default_factory=GlobalPaths)
+    components: GlobalComponents = Field(default_factory=GlobalComponents)
 
     @classmethod
     def from_yaml(cls, path: Path) -> Self:
@@ -135,3 +146,4 @@ class GlobalSettings(BaseModel):
 
 class DeckSettings(GlobalSettings):
     paths: DeckPaths = Field(default_factory=DeckPaths)
+    components: DeckComponents = Field(default_factory=DeckComponents)
