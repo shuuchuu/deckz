@@ -2,7 +2,10 @@
 authors = [
   {name = "m09", email = "142691+m09@users.noreply.github.com"},
 ]
-classifiers = ["Topic :: Software Development :: Build Tools"]
+classifiers = [
+  "Topic :: Software Development :: Build Tools",
+  "License :: OSI Approved :: Apache Software License",
+]
 dependencies = [
   "appdirs >= 1, < 2",
   "cyclopts >= 3.1.1, < 4",
@@ -20,7 +23,6 @@ dependencies = [
 ]
 description = "Tool to handle multiple beamer decks."
 homepage = "https://github.com/mlambda/deckz"
-license = "Apache-2.0"
 name = "deckz"
 readme = "README.md"
 requires-python = ">= 3.12"
