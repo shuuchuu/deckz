@@ -9,15 +9,12 @@ from rich.progress import BarColumn, Progress
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-from .building.building import Builder
-from .building.standalones import StandalonesBuilder
+from .components.assets_building import Assets
 from .configuring.settings import DeckSettings, GlobalSettings
 from .configuring.variables import get_variables
 from .exceptions import DeckzError
 from .models.deck import Deck
 from .models.scalars import FlavorName, PartName
-from .processing.part_dependencies import PartDependenciesProcessor
-from .processing.titles_and_contents import SlidesProcessor
 from .utils import all_deck_settings
 
 _logger = getLogger(__name__)
@@ -31,17 +28,12 @@ def _build(
     build_print: bool,
 ) -> bool:
     variables = get_variables(settings)
-    dependencies = PartDependenciesProcessor().process(deck)
-    parts_slides = SlidesProcessor(
-        settings.paths.shared_dir, settings.paths.current_dir
-    ).process(deck)
-    StandalonesBuilder(settings).build()
-    return Builder(
+    Assets(settings).build()
+    builder_config = settings.components.builder_config
+    return builder_config.get_model_class()(
         variables=variables,
         settings=settings,
-        deck_name=deck.name,
-        parts_slides=parts_slides,
-        dependencies=dependencies,
+        deck=deck,
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
@@ -118,7 +110,7 @@ def run_all(
     build_print: bool,
 ) -> None:
     global_settings = GlobalSettings.from_yaml(directory)
-    StandalonesBuilder(global_settings).build()
+    Assets(global_settings).build()
     decks_settings = list(all_deck_settings(global_settings.paths.git_dir))
     with Progress(
         "[progress.description]{task.description}",
@@ -145,7 +137,7 @@ def run_all(
             progress.update(task_id, advance=1)
 
 
-def run_standalones(directory: Path) -> None:
+def run_assets(directory: Path) -> None:
     """Build all the project standalones (images, tikz, plots, etc).
 
     Args:
@@ -153,7 +145,7 @@ def run_standalones(directory: Path) -> None:
             directory
     """
     settings = GlobalSettings.from_yaml(directory)
-    standalones_builder = StandalonesBuilder(settings)
+    standalones_builder = Assets(settings)
     standalones_builder.build()
 
 

@@ -13,7 +13,7 @@ from pydantic import (
 )
 
 from .. import app_name
-from ..components import ParserConfig
+from ..components import BuilderConfig, ParserConfig
 from ..exceptions import DeckzError
 from ..utils import get_git_dir, intermediate_dirs, load_all_yamls
 
@@ -115,6 +115,7 @@ class GlobalComponents(BaseModel):
 class DeckComponents(BaseModel):
     model_config = ConfigDict(validate_default=True)
     parser_config: ParserConfig = {"config_key": "default_parser"}
+    builder_config: BuilderConfig = {"config_key": "default_builder"}
 
 
 class GlobalSettings(BaseModel):

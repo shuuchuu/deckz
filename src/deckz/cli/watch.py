@@ -205,8 +205,8 @@ def file(
 
 
 @watch.command()
-def standalones(*, minimum_delay: int = 5, workdir: Path = Path()) -> None:
-    """Compile standalones on change.
+def assets(*, minimum_delay: int = 5, workdir: Path = Path()) -> None:
+    """Compile assets on change.
 
     Args:
         minimum_delay: Minimum number of seconds before recompiling
@@ -214,7 +214,7 @@ def standalones(*, minimum_delay: int = 5, workdir: Path = Path()) -> None:
 
     """
     from ..configuring.settings import GlobalSettings
-    from ..pipelines import run_standalones, watch
+    from ..pipelines import run_assets, watch
 
     settings = GlobalSettings.from_yaml(workdir)
 
@@ -227,6 +227,6 @@ def standalones(*, minimum_delay: int = 5, workdir: Path = Path()) -> None:
                 settings.paths.shared_plt_pdf_dir,
             ]
         ),
-        run_standalones,
+        run_assets,
         workdir,
     )

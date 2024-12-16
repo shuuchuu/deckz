@@ -7,7 +7,9 @@ from ..configuring.registry import Config, configurable
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from typing import Any
 
+    from ..configuring.settings import DeckSettings
     from ..models.deck import Deck
     from ..models.scalars import FlavorName
 
@@ -49,6 +51,30 @@ class Parser(ABC):
 
 @configurable
 class ParserConfig(BaseModel, Config[Parser]):
+    model_config = ConfigDict(defer_build=True)
+    config_key: ClassVar[str]
+
+
+class Builder(ABC):
+    @abstractmethod
+    def __init__(
+        self,
+        variables: dict[str, "Any"],
+        settings: "DeckSettings",
+        deck: "Deck",
+        build_presentation: bool,
+        build_handout: bool,
+        build_print: bool,
+    ):
+        raise NotImplementedError
+
+    @abstractmethod
+    def build(self) -> bool:
+        raise NotImplementedError
+
+
+@configurable
+class BuilderConfig(BaseModel, Config[Builder]):
     model_config = ConfigDict(defer_build=True)
     config_key: ClassVar[str]
 

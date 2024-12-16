@@ -6,12 +6,14 @@ from os.path import join as path_join
 from pathlib import Path
 from shutil import move
 from tempfile import NamedTemporaryFile
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from jinja2 import BaseLoader, Environment, TemplateNotFound
 
-from ..configuring.settings import DeckSettings
 from ..utils import load_yaml
+
+if TYPE_CHECKING:
+    from ..configuring.settings import DeckSettings
 
 
 class AbsoluteLoader(BaseLoader):
@@ -31,7 +33,7 @@ class AbsoluteLoader(BaseLoader):
 
 
 class Renderer:
-    def __init__(self, settings: DeckSettings):
+    def __init__(self, settings: "DeckSettings"):
         self._settings = settings
 
     def render(

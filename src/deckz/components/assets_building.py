@@ -9,11 +9,14 @@ from multiprocessing import Pool
 from pathlib import Path
 from shutil import copyfile
 from tempfile import TemporaryDirectory
+from typing import TYPE_CHECKING
 
-from ..configuring.settings import GlobalSettings
+from ..building.compiling import compile as compiling_compile
 from ..exceptions import DeckzError
 from ..utils import copy_file_if_newer, import_module_and_submodules
-from .compiling import compile as compiling_compile
+
+if TYPE_CHECKING:
+    from ..configuring.settings import GlobalSettings
 
 
 @dataclass(frozen=True)
@@ -25,8 +28,8 @@ class CompilePaths:
     output_log: Path
 
 
-class StandalonesBuilder:
-    def __init__(self, settings: GlobalSettings):
+class Assets:
+    def __init__(self, settings: "GlobalSettings"):
         self.plt_builder = PltBuilder(settings)
         self.tikz_builder = TikzBuilder(settings)
 
@@ -63,7 +66,7 @@ def register_plot(
 
 
 class PltBuilder:
-    def __init__(self, settings: GlobalSettings):
+    def __init__(self, settings: "GlobalSettings"):
         self._settings = settings
         self._logger = getLogger(__name__)
 
@@ -111,7 +114,7 @@ class PltBuilder:
 
 
 class TikzBuilder:
-    def __init__(self, settings: GlobalSettings):
+    def __init__(self, settings: "GlobalSettings"):
         self._settings = settings
         self._logger = getLogger(__name__)
 
