@@ -24,6 +24,9 @@ def upgrade(*, workdir: Path = Path()) -> None:
     from ..utils import load_yaml
 
     console = Console(file=stderr)
+    old_global_config = Path("global-config.yml")
+    if old_global_config.exists():
+        move(old_global_config, "deckz.yml")
 
     settings = GlobalSettings.from_yaml(workdir)
 
@@ -56,10 +59,8 @@ def upgrade(*, workdir: Path = Path()) -> None:
                 move(old_path, path)
                 console.print(
                     "  :white_check_mark:"
-                    f"{old_path.relative_to(settings.paths.git_dir)}\n"
-                    f"  → [link=file://{path}]"
-                    f"{path.relative_to(settings.paths.git_dir)}"
-                    "[/link]"
+                    f"{old_path}\n"
+                    f"  → [link=file://{path}]{path}[/link]"
                 )
 
     console.print("Changing decks format and transfer deck name inside deck definition")
@@ -86,7 +87,11 @@ def upgrade(*, workdir: Path = Path()) -> None:
     ]
     for deck_settings in decks_settings:
         variables = load_yaml(deck_settings.paths.deck_variables)
-        deck_name = variables["deck_acronym"]
+        try:
+            deck_name = variables["deck_acronym"]
+        except KeyError as e:
+            msg = f"{deck_settings.paths.deck_variables} does not contain deck_acronym"
+            raise ValueError(msg) from e
         del variables["deck_acronym"]
         with deck_settings.paths.deck_variables.open("w", encoding="utf8") as fh:
             safe_dump(
