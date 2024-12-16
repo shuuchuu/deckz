@@ -27,11 +27,9 @@ jobs:
         run: uv run make check
 
       - name: Run the tests
-        run: uv run pytest --cov=./ --cov-report=xml
+        run: uv run pytest --cov --cov-report=xml
 
       - name: Upload coverage report to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
-          fail_ci_if_error: true
-          root_dir: ./
           token: ${{ secrets.CODECOV_TOKEN }}
