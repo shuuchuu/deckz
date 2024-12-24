@@ -2,21 +2,19 @@ import sys
 from collections.abc import Callable
 from contextlib import redirect_stdout
 from dataclasses import dataclass
-from functools import partial
 from itertools import chain
 from logging import getLogger
 from multiprocessing import Pool
 from pathlib import Path
 from shutil import copyfile
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING
 
-from ..building.compiling import compile as compiling_compile
+from pydantic import BaseModel, ConfigDict
+
+from ..configuring.settings import PathFromSettings
 from ..exceptions import DeckzError
 from ..utils import copy_file_if_newer, import_module_and_submodules
-
-if TYPE_CHECKING:
-    from ..configuring.settings import GlobalSettings
+from . import AssetsBuilder, Compiler
 
 
 @dataclass(frozen=True)
@@ -28,14 +26,19 @@ class CompilePaths:
     output_log: Path
 
 
-class Assets:
-    def __init__(self, settings: "GlobalSettings"):
-        self.plt_builder = PltBuilder(settings)
-        self.tikz_builder = TikzBuilder(settings)
+class DefaultAssetsBuilderExtraKwArgs(BaseModel):
+    assets_builder_keys: tuple[str, ...] = ("plt", "tikz")
+
+
+class DefaultAssetsBuilder(
+    AssetsBuilder, key="default", extra_kwargs_class=DefaultAssetsBuilderExtraKwArgs
+):
+    def __init__(self, assets_builder_keys: tuple[str, ...]):
+        self._builders = [self.new_dep(AssetsBuilder, k) for k in assets_builder_keys]
 
     def build(self) -> None:
-        self.plt_builder.build()
-        self.tikz_builder.build()
+        for assets_builder in self._builders:
+            assets_builder.build()
 
 
 _plt_registry: list[tuple[Path, Path, Callable[[], None]]] = []
@@ -65,9 +68,16 @@ def register_plot(
     return worker
 
 
-class PltBuilder:
-    def __init__(self, settings: "GlobalSettings"):
-        self._settings = settings
+class PltAssetsBuilderExtraKwArgs(BaseModel):
+    model_config = ConfigDict(validate_default=True)
+    output_dir: PathFromSettings = "paths.shared_plt_pdf_dir"  # type: ignore[assignment]
+
+
+class PltAssetsBuilder(
+    AssetsBuilder, key="plt", extra_kwargs_class=PltAssetsBuilderExtraKwArgs
+):
+    def __init__(self, output_dir: Path):
+        self._output_dir = output_dir
         self._logger = getLogger(__name__)
 
     def build(self) -> None:
@@ -81,10 +91,7 @@ class PltBuilder:
             import_module_and_submodules("plots")
         except ModuleNotFoundError:
             self._logger.warning("Could not find plots module, will not produce plots.")
-        full_items = [
-            (self._settings.paths.shared_plt_pdf_dir / o, p, f)
-            for o, p, f in _plt_registry
-        ]
+        full_items = [(self._output_dir / o, p, f) for o, p, f in _plt_registry]
         to_build = [(o, p, f) for o, p, f in full_items if self._needs_compile(p, o)]
 
         if not to_build:
@@ -113,9 +120,28 @@ class PltBuilder:
         )
 
 
-class TikzBuilder:
-    def __init__(self, settings: "GlobalSettings"):
-        self._settings = settings
+class TikzAssetsBuilderExtraKwArgs(BaseModel):
+    model_config = ConfigDict(validate_default=True)
+    input_dir: PathFromSettings = "paths.tikz_dir"  # type: ignore[assignment]
+    output_dir: PathFromSettings = "paths.shared_tikz_pdf_dir"  # type: ignore[assignment]
+    assets_dir: PathFromSettings = "paths.shared_dir"  # type: ignore[assignment]
+    compiler_key: str = "default"
+
+
+class TikzAssetsBuilder(
+    AssetsBuilder, key="tikz", extra_kwargs_class=TikzAssetsBuilderExtraKwArgs
+):
+    def __init__(
+        self,
+        input_dir: Path,
+        output_dir: Path,
+        assets_dir: Path,
+        compiler_key: str,
+    ):
+        self._input_dir = input_dir
+        self._output_dir = output_dir
+        self._assets_dir = assets_dir
+        self._compiler = self.new_dep(Compiler, compiler_key)
         self._logger = getLogger(__name__)
 
     def build(self) -> None:
@@ -124,8 +150,8 @@ class TikzBuilder:
             items = [
                 (input_path, paths)
                 for input_path in chain(
-                    self._settings.paths.tikz_dir.rglob("*.py"),
-                    self._settings.paths.tikz_dir.rglob("*.tex"),
+                    self._input_dir.rglob("*.py"),
+                    self._input_dir.rglob("*.tex"),
                 )
                 if self._needs_compile(
                     input_path,
@@ -143,10 +169,7 @@ class TikzBuilder:
 
             with Pool() as pool:
                 results = pool.map(
-                    partial(
-                        compiling_compile, build_command=self._settings.build_command
-                    ),
-                    (item_path.latex for _, item_path in items),
+                    self._compiler.compile, (item_path.latex for _, item_path in items)
                 )
 
             for (_, paths), result in zip(items, results, strict=True):
@@ -171,7 +194,7 @@ class TikzBuilder:
 
             formatted_fails = "\n".join(
                 (
-                    f"- {file_path.relative_to(self._settings.paths.shared_dir)}"
+                    f"- {file_path.relative_to(self._input_dir)}"
                     f' ({linkify(log_path) if log_path.exists() else "no log"})'
                 )
                 for file_path, log_path in failed
@@ -200,13 +223,12 @@ class TikzBuilder:
             exec(compiled)
 
     def _compute_compile_paths(self, input_file: Path, build_dir: Path) -> CompilePaths:
-        latex = (
-            build_dir / input_file.relative_to(self._settings.paths.tikz_dir)
-        ).with_suffix(".tex")
+        latex = (build_dir / input_file.relative_to(self._input_dir)).with_suffix(
+            ".tex"
+        )
         build_pdf = latex.with_suffix(".pdf")
         output_pdf = (
-            self._settings.paths.shared_tikz_pdf_dir
-            / input_file.relative_to(self._settings.paths.tikz_dir)
+            self._output_dir / input_file.relative_to(self._input_dir)
         ).with_suffix(".pdf")
         build_log = latex.with_suffix(".log")
         output_log = output_pdf.with_suffix(".log")
@@ -221,9 +243,7 @@ class TikzBuilder:
     def _prepare(self, input_file: Path, compile_paths: CompilePaths) -> None:
         build_dir = compile_paths.latex.parent
         build_dir.mkdir(parents=True, exist_ok=True)
-        dirs_to_link = [
-            d for d in self._settings.paths.shared_dir.iterdir() if d.is_dir()
-        ]
+        dirs_to_link = [d for d in self._assets_dir.iterdir() if d.is_dir()]
         for d in dirs_to_link:
             build_d = build_dir / d.name
             if not build_d.exists():

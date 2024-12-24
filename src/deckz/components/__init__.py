@@ -1,31 +1,27 @@
-from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, ClassVar
+from abc import abstractmethod
+from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ConfigDict
-
-from ..configuring.registry import Config, configurable
+from ..configuring.registry import DeckComponent, GlobalComponent
 
 if TYPE_CHECKING:
     from pathlib import Path
     from typing import Any
 
     from ..configuring.settings import DeckSettings
+    from ..models.compilation import CompileResult
     from ..models.deck import Deck
     from ..models.scalars import FlavorName
 
 
-class Parser(ABC):
+class Parser(DeckComponent, key="parser"):
     """Build a deck from a definition.
 
     The definition can be a complete deck definition obtained from a yaml file or a \
     simpler one obtained from a single section or file.
     """
 
-    @abstractmethod
-    def __init__(
-        self, local_latex_dir: "Path", shared_latex_dir: "Path", config: "ParserConfig"
-    ) -> None:
-        raise NotImplementedError
+    def __init__(self, local_latex_dir: "Path") -> None:
+        self._local_latex_dir = local_latex_dir
 
     @abstractmethod
     def from_deck_definition(self, deck_definition_path: "Path") -> "Deck":
@@ -49,14 +45,7 @@ class Parser(ABC):
         raise NotImplementedError
 
 
-@configurable
-class ParserConfig(BaseModel, Config[Parser]):
-    model_config = ConfigDict(defer_build=True)
-    config_key: ClassVar[str]
-
-
-class Builder(ABC):
-    @abstractmethod
+class Builder(DeckComponent, key="builder"):
     def __init__(
         self,
         variables: dict[str, "Any"],
@@ -66,17 +55,28 @@ class Builder(ABC):
         build_handout: bool,
         build_print: bool,
     ):
-        raise NotImplementedError
+        self._variables = variables
+        self._settings = settings
+        self._deck = deck
+        self._build_presentation = build_presentation
+        self._build_handout = build_handout
+        self._build_print = build_print
 
     @abstractmethod
     def build(self) -> bool:
         raise NotImplementedError
 
 
-@configurable
-class BuilderConfig(BaseModel, Config[Builder]):
-    model_config = ConfigDict(defer_build=True)
-    config_key: ClassVar[str]
+class AssetsBuilder(GlobalComponent, key="assets_builder"):
+    @abstractmethod
+    def build(self) -> None:
+        raise NotImplementedError
+
+
+class Compiler(GlobalComponent, key="compiler"):
+    @abstractmethod
+    def compile(self, file: "Path") -> "CompileResult":
+        raise NotImplementedError
 
 
 def _load_components() -> None:

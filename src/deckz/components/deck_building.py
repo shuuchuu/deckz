@@ -5,10 +5,10 @@ from logging import getLogger
 from multiprocessing import Pool, cpu_count
 from pathlib import Path, PurePosixPath
 from shutil import copyfile
-from typing import TYPE_CHECKING, Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any
 
-from ..building.compiling import CompileResult
-from ..building.compiling import compile as compiling_compile
+from pydantic import BaseModel
+
 from ..building.rendering import Renderer
 from ..exceptions import DeckzError
 from ..models.deck import Deck, File, Part, Section
@@ -16,7 +16,8 @@ from ..models.scalars import PartName, ResolvedPath
 from ..models.slides import PartSlides, Title, TitleOrContent
 from ..processing import NodeVisitor
 from ..utils import copy_file_if_newer
-from . import Builder, BuilderConfig
+from . import Builder, Compiler
+from .compiling import CompileResult
 
 if TYPE_CHECKING:
     from ..configuring.settings import DeckSettings
@@ -36,7 +37,13 @@ class CompileItem:
     toc: bool
 
 
-class DefaultBuilder(Builder):
+class DefaultBuilderExtraKwArgs(BaseModel):
+    compiler_key: str = "default"
+
+
+class DefaultBuilder(
+    Builder, key="default", extra_kwargs_class=DefaultBuilderExtraKwArgs
+):
     def __init__(
         self,
         variables: dict[str, Any],
@@ -45,17 +52,22 @@ class DefaultBuilder(Builder):
         build_presentation: bool,
         build_handout: bool,
         build_print: bool,
+        compiler_key: str,
     ):
-        self._variables = variables
-        self._settings = settings
+        super().__init__(
+            variables=variables,
+            settings=settings,
+            deck=deck,
+            build_presentation=build_presentation,
+            build_handout=build_handout,
+            build_print=build_print,
+        )
         self._deck_name = deck.name
         self._parts_slides = _SlidesNodeVisitor(
             settings.paths.shared_dir, settings.paths.current_dir
         ).process(deck)
         self._dependencies = _PartDependenciesNodeVisitor().process(deck)
-        self._presentation = build_presentation
-        self._handout = build_handout
-        self._print = build_print
+        self._compiler = self.new_dep(Compiler, compiler_key)
         self._logger = getLogger(__name__)
         self._renderer = Renderer(settings)
 
@@ -84,21 +96,21 @@ class DefaultBuilder(Builder):
         to_compile = {}
         all_slides = list(self._parts_slides.values())
         all_dependencies = frozenset().union(*self._dependencies.values())
-        if self._handout:
+        if self._build_handout:
             to_compile[self._name_compile_item(CompileType.Handout)] = CompileItem(
                 all_slides, all_dependencies, CompileType.Handout, True
             )
-        if self._print:
+        if self._build_print:
             to_compile[self._name_compile_item(CompileType.PrintHandout)] = CompileItem(
                 all_slides, all_dependencies, CompileType.Handout, True
             )
         for name, slides in self._parts_slides.items():
             dependencies = self._dependencies[name]
-            if self._presentation:
+            if self._build_presentation:
                 to_compile[self._name_compile_item(CompileType.Presentation, name)] = (
                     CompileItem([slides], dependencies, CompileType.Presentation, False)
                 )
-            if self._handout:
+            if self._build_handout:
                 to_compile[self._name_compile_item(CompileType.Handout, name)] = (
                     CompileItem([slides], dependencies, CompileType.Handout, False)
                 )
@@ -112,7 +124,7 @@ class DefaultBuilder(Builder):
         self._render_latex(item, latex_path)
         copied = self._copy_dependencies(item.dependencies, build_dir)
         self._render_dependencies(copied)
-        result = compiling_compile(latex_path, self._settings.build_command)
+        result = self._compiler.compile(latex_path)
         if result.ok:
             self._settings.paths.pdf_dir.mkdir(parents=True, exist_ok=True)
             copyfile(build_pdf_path, output_pdf_path)
@@ -195,12 +207,6 @@ class DefaultBuilder(Builder):
             raise DeckzError(msg)
         source.parent.mkdir(parents=True, exist_ok=True)
         source.symlink_to(target)
-
-
-class DefaultParserConfig(BuilderConfig, component=DefaultBuilder):
-    file_extension: str = ".tex"
-
-    config_key: ClassVar[Literal["default_builder"]] = "default_builder"
 
 
 class _SlidesNodeVisitor(NodeVisitor[[MutableSequence[TitleOrContent], int], None]):

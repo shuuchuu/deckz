@@ -9,13 +9,34 @@ from pydantic import (
     BeforeValidator,
     ConfigDict,
     Field,
+    PlainValidator,
     ValidationInfo,
 )
 
 from .. import app_name
-from ..components import BuilderConfig, ParserConfig
 from ..exceptions import DeckzError
 from ..utils import get_git_dir, intermediate_dirs, load_all_yamls
+
+
+def value_from_settings(value: str, info: ValidationInfo) -> Any:
+    if not isinstance(info.context, GlobalSettings):
+        msg = "context should be an instance of Settings"
+        raise ValueError(msg)
+    settings = info.context
+    path = value.split(".")
+    current = settings
+    for item in path:
+        try:
+            current = getattr(current, item)
+        except AttributeError as e:
+            msg = f"impossible to map the setting path {value} to a setting: {e}"
+            raise ValueError(msg) from e
+    return current
+
+
+ValueFromSettingsValidator = PlainValidator(value_from_settings)
+PathFromSettings = Annotated[Path, ValueFromSettingsValidator]
+StrFromSettings = Annotated[str, ValueFromSettingsValidator]
 
 
 class LocalizedValues(BaseModel):
@@ -108,21 +129,14 @@ class DeckPaths(GlobalPaths):
     deck_definition: _Path = "{current_dir}/deck.yml"
 
 
-class GlobalComponents(BaseModel):
-    model_config = ConfigDict(validate_default=True)
-
-
-class DeckComponents(BaseModel):
-    model_config = ConfigDict(validate_default=True)
-    parser_config: ParserConfig = {"config_key": "default_parser"}
-    builder_config: BuilderConfig = {"config_key": "default_builder"}
+class Components(BaseModel):
+    model_config = ConfigDict(extra="allow")
 
 
 class GlobalSettings(BaseModel):
-    build_command: list[str]
     default_img_values: DefaultImageValues = Field(default_factory=DefaultImageValues)
     paths: GlobalPaths = Field(default_factory=GlobalPaths)
-    components: GlobalComponents = Field(default_factory=GlobalComponents)
+    components: Components = Field(default_factory=Components)
 
     @classmethod
     def from_yaml(cls, path: Path) -> Self:
@@ -147,4 +161,3 @@ class GlobalSettings(BaseModel):
 
 class DeckSettings(GlobalSettings):
     paths: DeckPaths = Field(default_factory=DeckPaths)
-    components: DeckComponents = Field(default_factory=DeckComponents)

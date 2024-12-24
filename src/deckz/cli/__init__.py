@@ -1,19 +1,19 @@
-from logging import INFO, basicConfig
+from logging import DEBUG, basicConfig
 
 from cyclopts import App
 from rich.logging import RichHandler
-
-from ..utils import import_module_and_submodules
 
 app = App()
 
 
 def main() -> None:
     basicConfig(
-        level=INFO,
+        level=DEBUG,
         format="%(message)s",
         datefmt="%H:%M:%S",
         handlers=[RichHandler(rich_tracebacks=True, tracebacks_show_locals=False)],
     )
+    from ..utils import import_module_and_submodules
+
     import_module_and_submodules(__name__)
     app()

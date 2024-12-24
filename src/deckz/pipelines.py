@@ -9,7 +9,8 @@ from rich.progress import BarColumn, Progress
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-from .components.assets_building import Assets
+from .components import Builder, Parser
+from .components.assets_building import AssetsBuilder
 from .configuring.settings import DeckSettings, GlobalSettings
 from .configuring.variables import get_variables
 from .exceptions import DeckzError
@@ -28,16 +29,19 @@ def _build(
     build_print: bool,
 ) -> bool:
     variables = get_variables(settings)
-    Assets(settings).build()
-    builder_config = settings.components.builder_config
-    return builder_config.get_model_class()(
+    assets_builder = AssetsBuilder.new("default", settings)
+    assets_builder.build()
+    builder = Builder.new(
+        "default",
+        settings,
         variables=variables,
         settings=settings,
         deck=deck,
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
-    ).build()
+    )
+    return builder.build()
 
 
 def run(
@@ -47,10 +51,12 @@ def run(
     build_print: bool,
     parts_whitelist: Iterable[PartName] | None = None,
 ) -> None:
-    parser_config = settings.components.parser_config
-    deck = parser_config.get_model_class()(
-        settings.paths.local_latex_dir, settings.paths.shared_latex_dir, parser_config
-    ).from_deck_definition(settings.paths.deck_definition)
+    parser = Parser.new(
+        "default",
+        settings,
+        settings.paths.local_latex_dir,
+    )
+    deck = parser.from_deck_definition(settings.paths.deck_definition)
     if parts_whitelist is not None:
         deck.filter(parts_whitelist)
     _build(
@@ -69,10 +75,12 @@ def run_file(
     build_presentation: bool,
     build_print: bool,
 ) -> None:
-    parser_config = settings.components.parser_config
-    deck = parser_config.get_model_class()(
-        settings.paths.local_latex_dir, settings.paths.shared_latex_dir, parser_config
-    ).from_file(latex)
+    parser = Parser.new(
+        "default",
+        settings,
+        settings.paths.local_latex_dir,
+    )
+    deck = parser.from_file(latex)
     _build(
         deck=deck,
         settings=settings,
@@ -90,10 +98,12 @@ def run_section(
     build_presentation: bool,
     build_print: bool,
 ) -> None:
-    parser_config = settings.components.parser_config
-    deck = parser_config.get_model_class()(
-        settings.paths.local_latex_dir, settings.paths.shared_latex_dir, parser_config
-    ).from_section(section, flavor)
+    parser = Parser.new(
+        "default",
+        settings,
+        settings.paths.local_latex_dir,
+    )
+    deck = parser.from_section(section, flavor)
     _build(
         deck=deck,
         settings=settings,
@@ -110,7 +120,7 @@ def run_all(
     build_print: bool,
 ) -> None:
     global_settings = GlobalSettings.from_yaml(directory)
-    Assets(global_settings).build()
+    AssetsBuilder.new("default", global_settings).build()
     decks_settings = list(all_deck_settings(global_settings.paths.git_dir))
     with Progress(
         "[progress.description]{task.description}",
@@ -119,12 +129,12 @@ def run_all(
     ) as progress:
         task_id = progress.add_task("Building decks…", total=len(decks_settings))
         for deck_settings in decks_settings:
-            parser_config = deck_settings.components.parser_config
-            deck = parser_config.get_model_class()(
+            parser = Parser.new(
+                "default",
+                deck_settings,
                 deck_settings.paths.local_latex_dir,
-                deck_settings.paths.shared_latex_dir,
-                parser_config,
-            ).from_deck_definition(deck_settings.paths.deck_definition)
+            )
+            deck = parser.from_deck_definition(deck_settings.paths.deck_definition)
             result = _build(
                 deck=deck,
                 settings=deck_settings,
@@ -145,8 +155,7 @@ def run_assets(directory: Path) -> None:
             directory
     """
     settings = GlobalSettings.from_yaml(directory)
-    standalones_builder = Assets(settings)
-    standalones_builder.build()
+    AssetsBuilder.new("default", settings).build()
 
 
 class _BaseEventHandler(FileSystemEventHandler):

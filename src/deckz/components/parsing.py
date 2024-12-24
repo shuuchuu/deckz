@@ -1,12 +1,13 @@
 from collections.abc import Iterable
 from pathlib import Path, PurePath
 from sys import stderr
-from typing import ClassVar, Literal
+from typing import Literal
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 from rich import print as rich_print
 from rich.tree import Tree
 
+from ..configuring.settings import PathFromSettings
 from ..exceptions import DeckzError
 from ..models.deck import Deck, File, Node, Part, Section
 from ..models.definitions import (
@@ -26,10 +27,16 @@ from ..models.scalars import (
 )
 from ..processing import NodeVisitor
 from ..utils import load_yaml
-from . import Parser, ParserConfig
+from . import Parser
 
 
-class DefaultParser(Parser):
+class DefaultParserExtraKwArgs(BaseModel):
+    model_config = ConfigDict(validate_default=True)
+    file_extension: str = ".tex"
+    shared_latex_dir: PathFromSettings = "paths.shared_latex_dir"  # type: ignore[assignment]
+
+
+class DefaultParser(Parser, key="default", extra_kwargs_class=DefaultParserExtraKwArgs):
     """Build a deck from a definition.
 
     The definition can be a complete deck definition obtained from a yaml file or a \
@@ -37,10 +44,7 @@ class DefaultParser(Parser):
     """
 
     def __init__(
-        self,
-        local_latex_dir: Path,
-        shared_latex_dir: Path,
-        config: "DefaultParserConfig",
+        self, local_latex_dir: Path, file_extension: str, shared_latex_dir: Path
     ) -> None:
         """Initialize an instance with the necessary path information.
 
@@ -49,11 +53,11 @@ class DefaultParser(Parser):
                 includes resolving process
             shared_latex_dir: Path to the shared latex directory. Used during the \
                 includes resolving process
-            config: Configuration retrieved from configuration files for this component.
+            file_extension: Extensions to consider during file resolving.
         """
         self._local_latex_dir = local_latex_dir
         self._shared_latex_dir = shared_latex_dir
-        self._config = config
+        self._file_extension = file_extension
 
     def from_deck_definition(self, deck_definition_path: Path) -> Deck:
         """Parse a deck from a yaml definition.
@@ -246,7 +250,7 @@ class DefaultParser(Parser):
             parsing_error=None,
         )
         resolved_path = self._resolve(
-            unresolved_path.with_suffix(self._config.file_extension), "file"
+            unresolved_path.with_suffix(self._file_extension), "file"
         )
         if resolved_path:
             file.resolved_path = resolved_path
@@ -281,12 +285,6 @@ class DefaultParser(Parser):
             rich_print(tree, file=stderr)
             msg = "deck parsing failed"
             raise DeckzError(msg)
-
-
-class DefaultParserConfig(ParserConfig, component=DefaultParser):
-    file_extension: str = ".tex"
-
-    config_key: ClassVar[Literal["default_parser"]] = "default_parser"
 
 
 class _RichTreeVisitor(NodeVisitor[[UnresolvedPath], tuple[Tree | None, bool]]):

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .configuring.settings import DeckSettings
-    from .parsing import Deck
+    from .models.deck import Deck
 
 
 def copy_file_if_newer(original: Path, copy: Path) -> None:
@@ -107,10 +107,14 @@ def load_all_yamls(paths: Iterable[Path]) -> Iterator[Any]:
 
 
 def _build_deck(settings: "DeckSettings") -> tuple[Path, "Deck"]:
-    parser_config = settings.components.parser_config
-    deck = parser_config.get_model_class()(
-        settings.paths.local_latex_dir, settings.paths.shared_latex_dir, parser_config
-    ).from_deck_definition(settings.paths.deck_definition)
+    from .components import Parser
+
+    parser = Parser.new(
+        "default",
+        settings,
+        settings.paths.local_latex_dir,
+    )
+    deck = parser.from_deck_definition(settings.paths.deck_definition)
 
     return (
         settings.paths.deck_definition.parent.relative_to(settings.paths.git_dir),

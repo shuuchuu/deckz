@@ -1,6 +1,9 @@
-build_command:
-  - latexmk
-  - -pdflatex=xelatex -shell-escape -interaction=nonstopmode %O %S
-  - -dvi-
-  - -ps-
-  - -pdf
+components:
+  compiler:
+    default:
+      build_command:
+        - latexmk
+        - -pdflatex=xelatex -shell-escape -interaction=nonstopmode %O %S
+        - -dvi-
+        - -ps-
+        - -pdf
