@@ -7,6 +7,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt update \
   && apt install -y --no-install-recommends \
   curl \
+  git \
   latexmk \
   make \
   texlive \
@@ -15,7 +16,6 @@ RUN apt update \
   texlive-latex-extra \
   texlive-science \
   texlive-xetex \
-  && apt-get remove -y .*-doc .*-man >/dev/null \
   && apt-get autoremove --purge -y \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
