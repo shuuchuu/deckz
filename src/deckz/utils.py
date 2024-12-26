@@ -106,19 +106,14 @@ def load_all_yamls(paths: Iterable[Path]) -> Iterator[Any]:
             yield load_yaml(path)
 
 
-def _build_deck(settings: "DeckSettings") -> tuple[Path, "Deck"]:
+def _parse_deck(settings: "DeckSettings") -> tuple[Path, "Deck"]:
     from .components import Parser
-
-    parser = Parser.new(
-        "default",
-        settings,
-        settings.paths.local_latex_dir,
-    )
-    deck = parser.from_deck_definition(settings.paths.deck_definition)
 
     return (
         settings.paths.deck_definition.parent.relative_to(settings.paths.git_dir),
-        deck,
+        Parser.new("default", settings).from_deck_definition(
+            settings.paths.deck_definition
+        ),
     )
 
 
@@ -126,7 +121,7 @@ def all_decks(git_dir: Path) -> dict[Path, "Deck"]:
     from multiprocessing import Pool
 
     with Pool() as pool:
-        return dict(pool.map(_build_deck, list(all_deck_settings(git_dir))))
+        return dict(pool.map(_parse_deck, list(all_deck_settings(git_dir))))
 
 
 def all_deck_settings(git_dir: Path) -> Iterator["DeckSettings"]:

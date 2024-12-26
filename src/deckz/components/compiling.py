@@ -8,12 +8,12 @@ from ..models import CompileResult
 from . import Compiler
 
 
-class DefaultCompilerExtraKwArgs(BaseModel):
+class _DefaultCompilerExtraKwArgs(BaseModel):
     build_command: tuple[str, ...]
 
 
 class DefaultCompiler(
-    Compiler, key="default", extra_kwargs_class=DefaultCompilerExtraKwArgs
+    Compiler, key="default", extra_kwargs_class=_DefaultCompilerExtraKwArgs
 ):
     def __init__(self, build_command: Iterable[str]) -> None:
         self._build_command = build_command

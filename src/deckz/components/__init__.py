@@ -18,9 +18,6 @@ class Parser(DeckComponent, key="parser"):
     simpler one obtained from a single section or file.
     """
 
-    def __init__(self, local_latex_dir: "Path") -> None:
-        self._local_latex_dir = local_latex_dir
-
     @abstractmethod
     def from_deck_definition(self, deck_definition_path: "Path") -> "Deck":
         """Parse a deck from a yaml definition.

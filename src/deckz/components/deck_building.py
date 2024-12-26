@@ -45,12 +45,12 @@ class CompileItem:
     toc: bool
 
 
-class DefaultBuilderExtraKwArgs(BaseModel):
+class _DefaultBuilderExtraKwArgs(BaseModel):
     compiler_key: str = "default"
 
 
 class DefaultBuilder(
-    Builder, key="default", extra_kwargs_class=DefaultBuilderExtraKwArgs
+    Builder, key="default", extra_kwargs_class=_DefaultBuilderExtraKwArgs
 ):
     def __init__(
         self,

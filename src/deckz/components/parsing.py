@@ -32,13 +32,17 @@ from ..utils import load_yaml
 from . import Parser
 
 
-class DefaultParserExtraKwArgs(BaseModel):
+class _DefaultParserExtraKwArgs(BaseModel):
     model_config = ConfigDict(validate_default=True)
-    file_extension: str = ".tex"
+
+    local_latex_dir: PathFromSettings = "paths.local_latex_dir"  # type: ignore[assignment]
     shared_latex_dir: PathFromSettings = "paths.shared_latex_dir"  # type: ignore[assignment]
+    file_extension: str = ".tex"
 
 
-class DefaultParser(Parser, key="default", extra_kwargs_class=DefaultParserExtraKwArgs):
+class DefaultParser(
+    Parser, key="default", extra_kwargs_class=_DefaultParserExtraKwArgs
+):
     """Build a deck from a definition.
 
     The definition can be a complete deck definition obtained from a yaml file or a \
@@ -46,7 +50,7 @@ class DefaultParser(Parser, key="default", extra_kwargs_class=DefaultParserExtra
     """
 
     def __init__(
-        self, local_latex_dir: Path, file_extension: str, shared_latex_dir: Path
+        self, local_latex_dir: Path, shared_latex_dir: Path, file_extension: str
     ) -> None:
         """Initialize an instance with the necessary path information.
 

@@ -26,12 +26,12 @@ class CompilePaths:
     output_log: Path
 
 
-class DefaultAssetsBuilderExtraKwArgs(BaseModel):
+class _DefaultAssetsBuilderExtraKwArgs(BaseModel):
     assets_builder_keys: tuple[str, ...] = ("plt", "tikz")
 
 
 class DefaultAssetsBuilder(
-    AssetsBuilder, key="default", extra_kwargs_class=DefaultAssetsBuilderExtraKwArgs
+    AssetsBuilder, key="default", extra_kwargs_class=_DefaultAssetsBuilderExtraKwArgs
 ):
     def __init__(self, assets_builder_keys: tuple[str, ...]):
         self._builders = [self.new_dep(AssetsBuilder, k) for k in assets_builder_keys]
@@ -68,13 +68,14 @@ def register_plot(
     return worker
 
 
-class PltAssetsBuilderExtraKwArgs(BaseModel):
+class _PltAssetsBuilderExtraKwArgs(BaseModel):
     model_config = ConfigDict(validate_default=True)
+
     output_dir: PathFromSettings = "paths.shared_plt_pdf_dir"  # type: ignore[assignment]
 
 
 class PltAssetsBuilder(
-    AssetsBuilder, key="plt", extra_kwargs_class=PltAssetsBuilderExtraKwArgs
+    AssetsBuilder, key="plt", extra_kwargs_class=_PltAssetsBuilderExtraKwArgs
 ):
     def __init__(self, output_dir: Path):
         self._output_dir = output_dir
@@ -120,8 +121,9 @@ class PltAssetsBuilder(
         )
 
 
-class TikzAssetsBuilderExtraKwArgs(BaseModel):
+class _TikzAssetsBuilderExtraKwArgs(BaseModel):
     model_config = ConfigDict(validate_default=True)
+
     input_dir: PathFromSettings = "paths.tikz_dir"  # type: ignore[assignment]
     output_dir: PathFromSettings = "paths.shared_tikz_pdf_dir"  # type: ignore[assignment]
     assets_dir: PathFromSettings = "paths.shared_dir"  # type: ignore[assignment]
@@ -129,7 +131,7 @@ class TikzAssetsBuilderExtraKwArgs(BaseModel):
 
 
 class TikzAssetsBuilder(
-    AssetsBuilder, key="tikz", extra_kwargs_class=TikzAssetsBuilderExtraKwArgs
+    AssetsBuilder, key="tikz", extra_kwargs_class=_TikzAssetsBuilderExtraKwArgs
 ):
     def __init__(
         self,

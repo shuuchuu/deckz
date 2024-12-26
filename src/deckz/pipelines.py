@@ -50,11 +50,7 @@ def run(
     build_print: bool,
     parts_whitelist: Iterable[PartName] | None = None,
 ) -> None:
-    parser = Parser.new(
-        "default",
-        settings,
-        settings.paths.local_latex_dir,
-    )
+    parser = Parser.new("default", settings)
     deck = parser.from_deck_definition(settings.paths.deck_definition)
     if parts_whitelist is not None:
         deck.filter(parts_whitelist)
@@ -74,14 +70,8 @@ def run_file(
     build_presentation: bool,
     build_print: bool,
 ) -> None:
-    parser = Parser.new(
-        "default",
-        settings,
-        settings.paths.local_latex_dir,
-    )
-    deck = parser.from_file(latex)
     _build(
-        deck=deck,
+        deck=Parser.new("default", settings).from_file(latex),
         settings=settings,
         build_handout=build_handout,
         build_presentation=build_presentation,
@@ -97,14 +87,8 @@ def run_section(
     build_presentation: bool,
     build_print: bool,
 ) -> None:
-    parser = Parser.new(
-        "default",
-        settings,
-        settings.paths.local_latex_dir,
-    )
-    deck = parser.from_section(section, flavor)
     _build(
-        deck=deck,
+        deck=Parser.new("default", settings).from_section(section, flavor),
         settings=settings,
         build_handout=build_handout,
         build_presentation=build_presentation,
@@ -128,14 +112,10 @@ def run_all(
     ) as progress:
         task_id = progress.add_task("Building decks…", total=len(decks_settings))
         for deck_settings in decks_settings:
-            parser = Parser.new(
-                "default",
-                deck_settings,
-                deck_settings.paths.local_latex_dir,
-            )
-            deck = parser.from_deck_definition(deck_settings.paths.deck_definition)
             result = _build(
-                deck=deck,
+                deck=Parser.new("default", deck_settings).from_deck_definition(
+                    deck_settings.paths.deck_definition
+                ),
                 settings=deck_settings,
                 build_handout=build_handout,
                 build_presentation=build_presentation,
@@ -153,8 +133,7 @@ def run_assets(directory: Path) -> None:
         directory: Path to the current directory. Will be used to find the project \
             directory
     """
-    settings = GlobalSettings.from_yaml(directory)
-    AssetsBuilder.new("default", settings).build()
+    AssetsBuilder.new("default", GlobalSettings.from_yaml(directory)).build()
 
 
 class _BaseEventHandler(FileSystemEventHandler):
