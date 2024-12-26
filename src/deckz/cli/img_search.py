@@ -4,12 +4,7 @@ from . import app
 
 
 @app.command()
-def img_search(
-    image: str,
-    /,
-    *,
-    workdir: Path = Path(),
-) -> None:
+def img_search(image: str, /, *, workdir: Path = Path()) -> None:
     """Find which latex files use IMAGE.
 
     Args:

@@ -5,19 +5,11 @@ from . import app
 
 @app.command()
 def img_deps(
-    sections: list[str] | None = None,
-    /,
-    *,
-    verbose: bool = True,
-    descending: bool = True,
-    workdir: Path = Path(),
+    *, verbose: bool = True, descending: bool = True, workdir: Path = Path()
 ) -> None:
     """Find unlicensed images with output detailed by section.
 
-    You can display info only about specific SECTIONS, like nn/cnn or tools."
-
     Args:
-        sections: Restrict the output to these sections
         verbose: Detailed output with a listing of used images
         descending: Sort sections by ascending number of unlicensed images
         workdir: Path to move into before running the command
