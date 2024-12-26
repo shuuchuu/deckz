@@ -14,8 +14,7 @@ from .components.assets_building import AssetsBuilder
 from .configuring.settings import DeckSettings, GlobalSettings
 from .configuring.variables import get_variables
 from .exceptions import DeckzError
-from .models.deck import Deck
-from .models.scalars import FlavorName, PartName
+from .models import Deck, FlavorName, PartName
 from .utils import all_deck_settings
 
 _logger = getLogger(__name__)

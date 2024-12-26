@@ -2,7 +2,7 @@ from pathlib import Path
 
 from cyclopts import App
 
-from ..models.scalars import FlavorName, PartName
+from ..models import FlavorName, PartName
 from . import app
 
 watch = App(name="watch")

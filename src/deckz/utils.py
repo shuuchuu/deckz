@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .configuring.settings import DeckSettings
-    from .models.deck import Deck
+    from .models import Deck
 
 
 def copy_file_if_newer(original: Path, copy: Path) -> None:

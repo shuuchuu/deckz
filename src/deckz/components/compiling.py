@@ -4,7 +4,7 @@ from subprocess import run
 
 from pydantic import BaseModel
 
-from ..models.compilation import CompileResult
+from ..models import CompileResult
 from . import Compiler
 
 

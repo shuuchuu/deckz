@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from ..models.scalars import PartName
+from ..models import PartName
 from . import app
 
 

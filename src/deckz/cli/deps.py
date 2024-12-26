@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
     from rich.console import Console
 
-    from ..models.scalars import UnresolvedPath
+    from ..models import UnresolvedPath
 
 
 @app.command()

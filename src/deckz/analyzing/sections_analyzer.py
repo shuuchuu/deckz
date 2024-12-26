@@ -1,10 +1,19 @@
+from collections.abc import MutableMapping, MutableSet
 from functools import cached_property
 from pathlib import Path, PurePath
+from typing import cast
 
-from ..models.deck import Deck
-from ..models.definitions import SectionDefinition
-from ..models.scalars import FlavorName, PartName, UnresolvedPath
-from ..processing.sections_usage import SectionsUsageProcessor
+from ..models import (
+    Deck,
+    File,
+    FlavorName,
+    NodeVisitor,
+    Part,
+    PartName,
+    Section,
+    SectionDefinition,
+    UnresolvedPath,
+)
 from ..utils import all_decks, load_yaml
 
 
@@ -66,8 +75,55 @@ class SectionsAnalyzer:
         Returns:
             Nested dictionaries: deck path -> part name -> section path -> flavor.
         """
-        section_stats_processor = SectionsUsageProcessor(self._shared_latex_dir)
+        section_stats_processor = _SectionsUsageNodeVisitor(self._shared_latex_dir)
         return {
             deck_path: section_stats_processor.process(deck)
             for deck_path, deck in self._decks.items()
         }
+
+
+class _SectionsUsageNodeVisitor(
+    NodeVisitor[[MutableMapping[UnresolvedPath, MutableSet[FlavorName]]], None]
+):
+    def __init__(self, shared_latex_dir: Path) -> None:
+        self._shared_latex_dir = shared_latex_dir
+
+    def process(
+        self, deck: Deck
+    ) -> dict[PartName, dict[UnresolvedPath, set[FlavorName]]]:
+        return {
+            part_name: self._process_part(part)
+            for part_name, part in deck.parts.items()
+        }
+
+    def _process_part(self, part: Part) -> dict[UnresolvedPath, set[FlavorName]]:
+        section_stats: dict[UnresolvedPath, set[FlavorName]] = {}
+        for node in part.nodes:
+            node.accept(
+                self,
+                # Not sure why we need a cast here :/
+                cast(
+                    MutableMapping[UnresolvedPath, MutableSet[FlavorName]],
+                    section_stats,
+                ),
+            )
+        return section_stats
+
+    def visit_file(
+        self,
+        file: File,
+        section_stats: MutableMapping[UnresolvedPath, MutableSet[FlavorName]],
+    ) -> None:
+        pass
+
+    def visit_section(
+        self,
+        section: Section,
+        section_stats: MutableMapping[UnresolvedPath, MutableSet[FlavorName]],
+    ) -> None:
+        if section.resolved_path.is_relative_to(self._shared_latex_dir):
+            if section.unresolved_path not in section_stats:
+                section_stats[section.unresolved_path] = set()
+            section_stats[section.unresolved_path].add(section.flavor)
+        for node in section.nodes:
+            node.accept(self, section_stats)

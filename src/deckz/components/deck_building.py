@@ -11,10 +11,18 @@ from pydantic import BaseModel
 
 from ..building.rendering import Renderer
 from ..exceptions import DeckzError
-from ..models.deck import Deck, File, Part, Section
-from ..models.scalars import PartName, ResolvedPath
-from ..models.slides import PartSlides, Title, TitleOrContent
-from ..processing import NodeVisitor
+from ..models import (
+    Deck,
+    File,
+    NodeVisitor,
+    Part,
+    PartName,
+    PartSlides,
+    ResolvedPath,
+    Section,
+    Title,
+    TitleOrContent,
+)
 from ..utils import copy_file_if_newer
 from . import Builder, Compiler
 from .compiling import CompileResult

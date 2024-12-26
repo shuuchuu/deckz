@@ -30,7 +30,7 @@ def img_deps(
 
     from ..analyzing.images_analyzer import ImagesAnalyzer
     from ..configuring.settings import GlobalSettings
-    from ..models.scalars import UnresolvedPath
+    from ..models import UnresolvedPath
 
     def _display_table(
         unlicensed_images: Mapping[UnresolvedPath, Set[Path]],

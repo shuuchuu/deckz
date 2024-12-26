@@ -1,4 +1,4 @@
-from logging import DEBUG, basicConfig
+from logging import INFO, basicConfig
 
 from cyclopts import App
 from rich.logging import RichHandler
@@ -8,7 +8,7 @@ app = App()
 
 def main() -> None:
     basicConfig(
-        level=DEBUG,
+        level=INFO,
         format="%(message)s",
         datefmt="%H:%M:%S",
         handlers=[RichHandler(rich_tracebacks=True, tracebacks_show_locals=False)],

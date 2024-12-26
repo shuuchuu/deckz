@@ -8,9 +8,7 @@ if TYPE_CHECKING:
     from typing import Any
 
     from ..configuring.settings import DeckSettings
-    from ..models.compilation import CompileResult
-    from ..models.deck import Deck
-    from ..models.scalars import FlavorName
+    from ..models import CompileResult, Deck, FlavorName
 
 
 class Parser(DeckComponent, key="parser"):
@@ -29,10 +27,10 @@ class Parser(DeckComponent, key="parser"):
 
         Args:
             deck_definition_path: Path to the yaml definition. It should be parsable \
-                into a [deckz.models.definitions.DeckDefinition][] by Pydantic
+                into a [`DeckDefinition`][deckz.models.DeckDefinition] by Pydantic.
 
         Returns:
-            The parsed deck
+            The parsed deck.
         """
         raise NotImplementedError
 

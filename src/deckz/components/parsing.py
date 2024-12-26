@@ -9,23 +9,25 @@ from rich.tree import Tree
 
 from ..configuring.settings import PathFromSettings
 from ..exceptions import DeckzError
-from ..models.deck import Deck, File, Node, Part, Section
-from ..models.definitions import (
+from ..models import (
+    Deck,
     DeckDefinition,
+    File,
     FileInclude,
-    NodeInclude,
-    PartDefinition,
-    SectionDefinition,
-    SectionInclude,
-)
-from ..models.scalars import (
     FlavorName,
     IncludePath,
+    Node,
+    NodeInclude,
+    NodeVisitor,
+    Part,
+    PartDefinition,
     PartName,
     ResolvedPath,
+    Section,
+    SectionDefinition,
+    SectionInclude,
     UnresolvedPath,
 )
-from ..processing import NodeVisitor
 from ..utils import load_yaml
 from . import Parser
 
@@ -64,7 +66,7 @@ class DefaultParser(Parser, key="default", extra_kwargs_class=DefaultParserExtra
 
         Args:
             deck_definition_path: Path to the yaml definition. It should be parsable \
-                into a [deckz.models.definitions.DeckDefinition][] by Pydantic
+                into a [`DeckDefinition`][deckz.models.DeckDefinition] by Pydantic
 
         Returns:
             The parsed deck
