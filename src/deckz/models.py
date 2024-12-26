@@ -30,12 +30,12 @@ There are several kinds of types defined in this module:
 
     The yaml syntax used is the following:
 
-    - for a path without a title
+    - for a file without a title
 
             path/relative/to/current/element
             /path/relative/to/basedir
 
-    - for a path with a title
+    - for a file with a title
 
             path/relative/to/current/element: title
             /path/relative/to/basedir: title
