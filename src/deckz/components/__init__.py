@@ -1,13 +1,10 @@
 from abc import abstractmethod
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from ..configuring.registry import DeckComponent, GlobalComponent
 
 if TYPE_CHECKING:
-    from pathlib import Path
-    from typing import Any
-
-    from ..configuring.settings import DeckSettings
     from ..models import CompileResult, Deck, FlavorName
 
 
@@ -19,7 +16,7 @@ class Parser(DeckComponent, key="parser"):
     """
 
     @abstractmethod
-    def from_deck_definition(self, deck_definition_path: "Path") -> "Deck":
+    def from_deck_definition(self, deck_definition_path: Path) -> "Deck":
         """Parse a deck from a yaml definition.
 
         Args:
@@ -43,15 +40,13 @@ class Parser(DeckComponent, key="parser"):
 class Builder(DeckComponent, key="builder"):
     def __init__(
         self,
-        variables: dict[str, "Any"],
-        settings: "DeckSettings",
+        variables: dict[str, Any],
         deck: "Deck",
         build_presentation: bool,
         build_handout: bool,
         build_print: bool,
     ):
         self._variables = variables
-        self._settings = settings
         self._deck = deck
         self._build_presentation = build_presentation
         self._build_handout = build_handout
@@ -70,7 +65,15 @@ class AssetsBuilder(GlobalComponent, key="assets_builder"):
 
 class Compiler(GlobalComponent, key="compiler"):
     @abstractmethod
-    def compile(self, file: "Path") -> "CompileResult":
+    def compile(self, file: Path) -> "CompileResult":
+        raise NotImplementedError
+
+
+class Renderer(GlobalComponent, key="renderer"):
+    @abstractmethod
+    def render(
+        self, template_path: Path, output_path: Path, /, **template_kwargs: Any
+    ) -> None:
         raise NotImplementedError
 
 

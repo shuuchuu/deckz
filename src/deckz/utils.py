@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from .models import Deck
 
 
-def copy_file_if_newer(original: Path, copy: Path) -> None:
+def copy_file_if_newer(original: Path, copy: Path) -> bool:
     """Copy `original` to `copy` if `copy` is older than `original` or does not exist.
 
     Whether `original` is more recent than `copy` or not is determined by the last \
@@ -19,13 +19,17 @@ def copy_file_if_newer(original: Path, copy: Path) -> None:
     Args:
         original: Path of the file that you want to copy.
         copy: Path of the destination.
+
+    Returns:
+        True if the file was copied, False if it wasn't needed.
     """
     from shutil import copyfile
 
     if copy.exists() and copy.stat().st_mtime > original.stat().st_mtime:
-        return
+        return False
     copy.parent.mkdir(parents=True, exist_ok=True)
     copyfile(original, copy)
+    return True
 
 
 def import_module_and_submodules(package_name: str) -> None:

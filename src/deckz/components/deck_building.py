@@ -1,15 +1,15 @@
-from collections.abc import MutableSequence, MutableSet, Sequence, Set
+from collections.abc import Iterable, MutableSequence, MutableSet, Sequence, Set
 from dataclasses import dataclass
 from enum import Enum
 from logging import getLogger
 from multiprocessing import Pool, cpu_count
 from pathlib import Path, PurePosixPath
 from shutil import copyfile
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
-from ..building.rendering import Renderer
+from ..configuring.settings import PathFromSettings
 from ..exceptions import DeckzError
 from ..models import (
     Deck,
@@ -26,9 +26,7 @@ from ..models import (
 from ..utils import copy_file_if_newer
 from . import Builder, Compiler
 from .compiling import CompileResult
-
-if TYPE_CHECKING:
-    from ..configuring.settings import DeckSettings
+from .rendering import Renderer
 
 
 class CompileType(Enum):
@@ -46,6 +44,19 @@ class CompileItem:
 
 
 class _DefaultBuilderExtraKwArgs(BaseModel):
+    model_config = ConfigDict(validate_default=True)
+
+    output_dir: PathFromSettings = "paths.pdf_dir"  # type: ignore[assignment]
+    build_dir: PathFromSettings = "paths.build_dir"  # type: ignore[assignment]
+    dirs_to_link: tuple[PathFromSettings, ...] = (
+        "paths.shared_img_dir",
+        "paths.shared_tikz_pdf_dir",
+        "paths.shared_plt_pdf_dir",
+        "paths.shared_code_dir",
+    )  # type: ignore[assignment]
+    template: PathFromSettings = "paths.jinja2_main_template"  # type: ignore[assignment]
+    basedirs: tuple[PathFromSettings, ...] = ("paths.shared_dir", "paths.current_dir")  # type: ignore[assignment]
+    renderer_key: str = "default"
     compiler_key: str = "default"
 
 
@@ -55,29 +66,36 @@ class DefaultBuilder(
     def __init__(
         self,
         variables: dict[str, Any],
-        settings: "DeckSettings",
         deck: Deck,
         build_presentation: bool,
         build_handout: bool,
         build_print: bool,
+        output_dir: Path,
+        build_dir: Path,
+        dirs_to_link: tuple[Path, ...],
+        template: Path,
+        basedirs: tuple[Path, ...],
         compiler_key: str,
+        renderer_key: str,
     ):
         super().__init__(
             variables=variables,
-            settings=settings,
             deck=deck,
             build_presentation=build_presentation,
             build_handout=build_handout,
             build_print=build_print,
         )
         self._deck_name = deck.name
-        self._parts_slides = _SlidesNodeVisitor(
-            settings.paths.shared_dir, settings.paths.current_dir
-        ).process(deck)
+        self._parts_slides = _SlidesNodeVisitor(basedirs).process(deck)
         self._dependencies = _PartDependenciesNodeVisitor().process(deck)
+        self._output_dir = output_dir
+        self._build_dir = build_dir
+        self._dirs_to_link = dirs_to_link
+        self._template = template
+        self._basedirs = basedirs
         self._compiler = self.new_dep(Compiler, compiler_key)
+        self._renderer = self.new_dep(Renderer, renderer_key)
         self._logger = getLogger(__name__)
-        self._renderer = Renderer(settings)
 
     def _name_compile_item(
         self, compile_type: CompileType, name: PartName | None = None
@@ -128,32 +146,27 @@ class DefaultBuilder(
         build_dir = self._setup_build_dir(name)
         latex_path = build_dir / f"{name}.tex"
         build_pdf_path = latex_path.with_suffix(".pdf")
-        output_pdf_path = self._settings.paths.pdf_dir / f"{name}.pdf"
+        output_pdf_path = self._output_dir / f"{name}.pdf"
         self._render_latex(item, latex_path)
         copied = self._copy_dependencies(item.dependencies, build_dir)
         self._render_dependencies(copied)
         result = self._compiler.compile(latex_path)
         if result.ok:
-            self._settings.paths.pdf_dir.mkdir(parents=True, exist_ok=True)
+            self._output_dir.mkdir(parents=True, exist_ok=True)
             copyfile(build_pdf_path, output_pdf_path)
         return result
 
     def _setup_build_dir(self, name: str) -> Path:
-        target_build_dir = self._settings.paths.build_dir / name
+        target_build_dir = self._build_dir / name
         target_build_dir.mkdir(parents=True, exist_ok=True)
-        for item in [
-            self._settings.paths.shared_img_dir,
-            self._settings.paths.shared_tikz_pdf_dir,
-            self._settings.paths.shared_plt_pdf_dir,
-            self._settings.paths.shared_code_dir,
-        ]:
+        for item in self._dirs_to_link:
             self._setup_link(target_build_dir / item.name, item)
         return target_build_dir
 
     def _render_latex(self, item: CompileItem, output_path: Path) -> None:
         self._renderer.render(
-            template_path=self._settings.paths.jinja2_main_template,
-            output_path=output_path,
+            self._template,
+            output_path,
             variables=self._variables,
             parts=item.parts,
             handout=item.compile_type
@@ -167,29 +180,20 @@ class DefaultBuilder(
     ) -> list[Path]:
         copied = []
         for dependency in dependencies:
-            try:
-                link_dir = (
-                    target_build_dir
-                    / dependency.relative_to(self._settings.paths.shared_dir).parent
-                )
-            except ValueError:
-                link_dir = (
-                    target_build_dir
-                    / dependency.relative_to(self._settings.paths.current_dir).parent
-                )
-            link_dir.mkdir(parents=True, exist_ok=True)
-            destination = (link_dir / dependency.name).with_suffix(".tex.j2")
-            if (
-                not destination.exists()
-                or destination.stat().st_mtime < dependency.stat().st_mtime
-            ):
-                copy_file_if_newer(dependency, destination)
-                copied.append(destination)
+            for basedir in self._basedirs:
+                if dependency.is_relative_to(basedir):
+                    relative_path = dependency.relative_to(basedir)
+                    break
+            else:
+                raise ValueError
+            build_path = (target_build_dir / relative_path).with_suffix(".tex.j2")
+            if copy_file_if_newer(dependency, build_path):
+                copied.append(build_path)
         return copied
 
     def _render_dependencies(self, to_render: list[Path]) -> None:
         for item in to_render:
-            self._renderer.render(template_path=item, output_path=item.with_suffix(""))
+            self._renderer.render(item, item.with_suffix(""))
 
     def _setup_link(self, source: Path, target: Path) -> None:
         if not target.exists():
@@ -218,9 +222,8 @@ class DefaultBuilder(
 
 
 class _SlidesNodeVisitor(NodeVisitor[[MutableSequence[TitleOrContent], int], None]):
-    def __init__(self, shared_dir: Path, current_dir: Path) -> None:
-        self._shared_dir = shared_dir
-        self._current_dir = current_dir
+    def __init__(self, basedirs: Iterable[Path]) -> None:
+        self._basedirs = tuple(basedirs)
 
     def process(self, deck: Deck) -> dict[PartName, PartSlides]:
         return {
@@ -239,10 +242,10 @@ class _SlidesNodeVisitor(NodeVisitor[[MutableSequence[TitleOrContent], int], Non
     ) -> None:
         if file.title:
             sections.append(Title(file.title, level))
-        if file.resolved_path.is_relative_to(self._shared_dir):
-            path = file.resolved_path.relative_to(self._shared_dir)
-        elif file.resolved_path.is_relative_to(self._current_dir):
-            path = file.resolved_path.relative_to(self._current_dir)
+        for basedir in self._basedirs:
+            if file.resolved_path.is_relative_to(basedir):
+                path = file.resolved_path.relative_to(basedir)
+                break
         else:
             raise ValueError
         path = path.with_suffix("")

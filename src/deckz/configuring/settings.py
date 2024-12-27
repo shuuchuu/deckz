@@ -39,25 +39,6 @@ PathFromSettings = Annotated[Path, ValueFromSettingsValidator]
 StrFromSettings = Annotated[str, ValueFromSettingsValidator]
 
 
-class LocalizedValues(BaseModel):
-    fr: dict[str, str] = Field(default_factory=dict)
-    en: dict[str, str] = Field(default_factory=dict)
-    all: dict[str, str] = Field(default_factory=dict)
-
-    def get_default(self, value: str, lang: str) -> str:
-        if lang == "fr" and value in self.fr:
-            return self.fr[value]
-        if lang == "en" and value in self.en:
-            return self.en[value]
-        return self.all.get(value, value)
-
-
-class DefaultImageValues(BaseModel):
-    license: LocalizedValues = Field(default_factory=LocalizedValues)
-    author: LocalizedValues = Field(default_factory=LocalizedValues)
-    title: LocalizedValues = Field(default_factory=LocalizedValues)
-
-
 def _convert(input_value: str | Path, info: ValidationInfo) -> Path:
     if isinstance(input_value, str):
         return Path(input_value.format(**info.data))
@@ -134,7 +115,6 @@ class Components(BaseModel):
 
 
 class GlobalSettings(BaseModel):
-    default_img_values: DefaultImageValues = Field(default_factory=DefaultImageValues)
     paths: GlobalPaths = Field(default_factory=GlobalPaths)
     components: Components = Field(default_factory=Components)
 

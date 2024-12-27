@@ -34,7 +34,6 @@ def _build(
         "default",
         settings,
         variables=variables,
-        settings=settings,
         deck=deck,
         build_handout=build_handout,
         build_presentation=build_presentation,

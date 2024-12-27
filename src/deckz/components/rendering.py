@@ -6,14 +6,14 @@ from os.path import join as path_join
 from pathlib import Path
 from shutil import move
 from tempfile import NamedTemporaryFile
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from jinja2 import BaseLoader, Environment, TemplateNotFound
+from pydantic import BaseModel, ConfigDict, Field
 
+from ..configuring.settings import PathFromSettings
 from ..utils import load_yaml
-
-if TYPE_CHECKING:
-    from ..configuring.settings import DeckSettings
+from . import Renderer
 
 
 class AbsoluteLoader(BaseLoader):
@@ -32,12 +32,43 @@ class AbsoluteLoader(BaseLoader):
         )
 
 
-class Renderer:
-    def __init__(self, settings: "DeckSettings"):
-        self._settings = settings
+class _LocalizedValues(BaseModel):
+    fr: dict[str, str] = Field(default_factory=dict)
+    en: dict[str, str] = Field(default_factory=dict)
+    all: dict[str, str] = Field(default_factory=dict)
+
+    def get_default(self, value: str, lang: str) -> str:
+        if lang == "fr" and value in self.fr:
+            return self.fr[value]
+        if lang == "en" and value in self.en:
+            return self.en[value]
+        return self.all.get(value, value)
+
+
+class _DefaultImageValues(BaseModel):
+    license: _LocalizedValues = Field(default_factory=_LocalizedValues)
+    author: _LocalizedValues = Field(default_factory=_LocalizedValues)
+    title: _LocalizedValues = Field(default_factory=_LocalizedValues)
+
+
+class _DefaultRendererExtraKwArgs(BaseModel):
+    model_config = ConfigDict(validate_default=True)
+
+    default_img_values: _DefaultImageValues = Field(default_factory=_DefaultImageValues)
+    assets_dir: PathFromSettings = "paths.shared_dir"  # type: ignore[assignment]
+
+
+class DefaultRenderer(
+    Renderer, key="default", extra_kwargs_class=_DefaultRendererExtraKwArgs
+):
+    def __init__(
+        self, default_img_values: _DefaultImageValues, assets_dir: Path
+    ) -> None:
+        self._default_img_values = default_img_values
+        self._assets_dir = assets_dir
 
     def render(
-        self, *, template_path: Path, output_path: Path, **template_kwargs: Any
+        self, template_path: Path, output_path: Path, /, **template_kwargs: Any
     ) -> None:
         template = self._env.get_template(str(template_path))
         try:
@@ -76,9 +107,7 @@ class Renderer:
     def _img(
         self, value: str, modifier: str = "", scale: float = 1.0, lang: str = "fr"
     ) -> str:
-        metadata_path = (self._settings.paths.shared_dir / Path(value)).with_suffix(
-            ".yml"
-        )
+        metadata_path = (self._assets_dir / Path(value)).with_suffix(".yml")
         if metadata_path.exists():
             metadata = load_yaml(metadata_path)
 
@@ -88,13 +117,13 @@ class Renderer:
                     return metadata[key_en] if key_en in metadata else metadata[key]
                 return metadata[key]
 
-            title = self._settings.default_img_values.title.get_default(
+            title = self._default_img_values.title.get_default(
                 get_en_or_fr("title"), lang
             )
-            author = self._settings.default_img_values.author.get_default(
+            author = self._default_img_values.author.get_default(
                 get_en_or_fr("author"), lang
             )
-            license_name = self._settings.default_img_values.license.get_default(
+            license_name = self._default_img_values.license.get_default(
                 get_en_or_fr("license"), lang
             )
             info = f"[{title}, {author}, {license_name}.]"
