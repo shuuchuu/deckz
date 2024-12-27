@@ -286,14 +286,14 @@ class DefaultParser(
         return None
 
     def _validate(self, deck: Deck) -> None:
-        tree = _RichTreeVisitor().process(deck)
+        tree = RichTreeVisitor().process(deck)
         if tree is not None:
             rich_print(tree, file=stderr)
             msg = "deck parsing failed"
             raise DeckzError(msg)
 
 
-class _RichTreeVisitor(NodeVisitor[[UnresolvedPath], tuple[Tree | None, bool]]):
+class RichTreeVisitor(NodeVisitor[[UnresolvedPath], tuple[Tree | None, bool]]):
     def __init__(self, only_errors: bool = True) -> None:
         self._only_errors = only_errors
 
