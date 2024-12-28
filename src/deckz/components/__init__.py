@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 from ..configuring.registry import DeckComponent, GlobalComponent
 
 if TYPE_CHECKING:
-    from ..models import CompileResult, Deck, FlavorName
+    from ..models import AssetsUsage, CompileResult, Deck, FlavorName
 
 
 class Parser(DeckComponent, key="parser"):
@@ -71,9 +71,42 @@ class Compiler(GlobalComponent, key="compiler"):
 
 class Renderer(GlobalComponent, key="renderer"):
     @abstractmethod
-    def render(
+    def render_to_str(
+        self, template_path: Path, /, **template_kwargs: Any
+    ) -> tuple[str, "AssetsUsage"]:
+        raise NotImplementedError
+
+    def render_to_path(
         self, template_path: Path, output_path: Path, /, **template_kwargs: Any
-    ) -> None:
+    ) -> "AssetsUsage":
+        from contextlib import suppress
+        from filecmp import cmp
+        from shutil import move
+        from tempfile import NamedTemporaryFile
+
+        try:
+            with NamedTemporaryFile("w", encoding="utf8", delete=False) as fh:
+                rendered, assets_usage = self.render_to_str(
+                    template_path, **template_kwargs
+                )
+                fh.write(rendered)
+                fh.write("\n")
+            if not output_path.exists() or not cmp(fh.name, str(output_path)):
+                move(fh.name, output_path)
+        finally:
+            with suppress(FileNotFoundError):
+                Path(fh.name).unlink()
+        return assets_usage
+
+
+class AssetsMetadataRetriever(GlobalComponent, key="assets_metadata_retriever"):
+    @property
+    @abstractmethod
+    def assets(self) -> "AssetsUsage":
+        raise NotImplementedError
+
+    @abstractmethod
+    def __call__(self, value: str) -> dict[str, Any] | None:
         raise NotImplementedError
 
 

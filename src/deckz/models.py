@@ -70,16 +70,21 @@ There are several kinds of types defined in this module:
     The [`NodeVisitor`][deckz.models.NodeVisitor] protocol can be used to specify the \
     types in play when writing such code.
 
-- Type representing the output of compilation step (output, error, etc):
-
-    - [`CompileResult`][deckz.models.CompileResult]
-
 - Types representing slides that will be used by the rendering component (jinja2 by \
     default):
+
     - [`Title`][deckz.models.Title]
     - [`Content`][deckz.models.Content]
     - [`TitleOrContent`][deckz.models.TitleOrContent]
     - [`PartSlides`][deckz.models.PartSlides]
+
+- Type representing the output of compilation step (output, error, etc):
+
+    - [`CompileResult`][deckz.models.CompileResult]
+
+- Type to collect stats on assets:
+
+    - [`AssetsUsage`][deckz.models.AssetsUsage]
 """
 
 from abc import ABC, abstractmethod
@@ -379,25 +384,6 @@ class Deck:
 
 
 ########################################################################################
-# Compilation reprenstation                                                            #
-########################################################################################
-
-
-@dataclass(frozen=True)
-class CompileResult:
-    """Result of a compilation."""
-
-    ok: bool
-    """True if the compilation finished with a non-error code, False otherwise."""
-
-    stdout: str | None = ""
-    """The complete stdout output during compilation."""
-
-    stderr: str | None = ""
-    """The complete stderr output during compilation."""
-
-
-########################################################################################
 # Slides representation                                                                #
 ########################################################################################
 
@@ -433,3 +419,31 @@ class PartSlides:
 
     sections: list[TitleOrContent] = field(default_factory=list)
     """Slides of the part."""
+
+
+########################################################################################
+# Compilation representation                                                           #
+########################################################################################
+
+
+@dataclass(frozen=True)
+class CompileResult:
+    """Result of a compilation."""
+
+    ok: bool
+    """True if the compilation finished with a non-error code, False otherwise."""
+
+    stdout: str | None = ""
+    """The complete stdout output during compilation."""
+
+    stderr: str | None = ""
+    """The complete stderr output during compilation."""
+
+
+########################################################################################
+# Assets usage stats                                                                   #
+########################################################################################
+
+
+type AssetsUsage = dict[str, int]
+"""Assets and the number of time they appear in a given render."""

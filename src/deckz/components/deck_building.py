@@ -87,7 +87,7 @@ class DefaultBuilder(
         )
         self._deck_name = deck.name
         self._parts_slides = _SlidesNodeVisitor(basedirs).process(deck)
-        self._dependencies = _PartDependenciesNodeVisitor().process(deck)
+        self._dependencies = PartDependenciesNodeVisitor().process(deck)
         self._output_dir = output_dir
         self._build_dir = build_dir
         self._dirs_to_link = dirs_to_link
@@ -164,7 +164,7 @@ class DefaultBuilder(
         return target_build_dir
 
     def _render_latex(self, item: CompileItem, output_path: Path) -> None:
-        self._renderer.render(
+        self._renderer.render_to_path(
             self._template,
             output_path,
             variables=self._variables,
@@ -193,7 +193,7 @@ class DefaultBuilder(
 
     def _render_dependencies(self, to_render: list[Path]) -> None:
         for item in to_render:
-            self._renderer.render(item, item.with_suffix(""))
+            self._renderer.render_to_path(item, item.with_suffix(""))
 
     def _setup_link(self, source: Path, target: Path) -> None:
         if not target.exists():
@@ -219,6 +219,29 @@ class DefaultBuilder(
             raise DeckzError(msg)
         source.parent.mkdir(parents=True, exist_ok=True)
         source.symlink_to(target)
+
+
+class PartDependenciesNodeVisitor(NodeVisitor[[MutableSet[ResolvedPath]], None]):
+    def process(self, deck: Deck) -> dict[PartName, set[ResolvedPath]]:
+        return {
+            part_name: self._process_part(part)
+            for part_name, part in deck.parts.items()
+        }
+
+    def _process_part(self, part: Part) -> set[ResolvedPath]:
+        dependencies: set[ResolvedPath] = set()
+        for node in part.nodes:
+            node.accept(self, dependencies)
+        return dependencies
+
+    def visit_file(self, file: File, dependencies: MutableSet[ResolvedPath]) -> None:
+        dependencies.add(file.resolved_path)
+
+    def visit_section(
+        self, section: Section, dependencies: MutableSet[ResolvedPath]
+    ) -> None:
+        for node in section.nodes:
+            node.accept(self, dependencies)
 
 
 class _SlidesNodeVisitor(NodeVisitor[[MutableSequence[TitleOrContent], int], None]):
@@ -258,26 +281,3 @@ class _SlidesNodeVisitor(NodeVisitor[[MutableSequence[TitleOrContent], int], Non
             sections.append(Title(section.title, level))
         for node in section.nodes:
             node.accept(self, sections, level + 1)
-
-
-class _PartDependenciesNodeVisitor(NodeVisitor[[MutableSet[ResolvedPath]], None]):
-    def process(self, deck: Deck) -> dict[PartName, set[ResolvedPath]]:
-        return {
-            part_name: self._process_part(part)
-            for part_name, part in deck.parts.items()
-        }
-
-    def _process_part(self, part: Part) -> set[ResolvedPath]:
-        dependencies: set[ResolvedPath] = set()
-        for node in part.nodes:
-            node.accept(self, dependencies)
-        return dependencies
-
-    def visit_file(self, file: File, dependencies: MutableSet[ResolvedPath]) -> None:
-        dependencies.add(file.resolved_path)
-
-    def visit_section(
-        self, section: Section, dependencies: MutableSet[ResolvedPath]
-    ) -> None:
-        for node in section.nodes:
-            node.accept(self, dependencies)

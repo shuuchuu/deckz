@@ -1,22 +1,20 @@
 from collections.abc import Callable
-from contextlib import suppress
-from filecmp import cmp
 from functools import cached_property
 from os.path import join as path_join
 from pathlib import Path
-from shutil import move
-from tempfile import NamedTemporaryFile
 from typing import Any
 
-from jinja2 import BaseLoader, Environment, TemplateNotFound
+from jinja2 import BaseLoader, Environment, TemplateNotFound, pass_context
+from jinja2.runtime import Context
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..components import AssetsMetadataRetriever
 from ..configuring.settings import PathFromSettings
-from ..utils import load_yaml
+from ..models import AssetsUsage
 from . import Renderer
 
 
-class AbsoluteLoader(BaseLoader):
+class _AbsoluteLoader(BaseLoader):
     def get_source(
         self, environment: Environment, template: str
     ) -> tuple[str, str, Callable[[], bool]]:
@@ -67,24 +65,23 @@ class DefaultRenderer(
         self._default_img_values = default_img_values
         self._assets_dir = assets_dir
 
-    def render(
-        self, template_path: Path, output_path: Path, /, **template_kwargs: Any
-    ) -> None:
+    def render_to_str(
+        self, template_path: Path, /, **template_kwargs: Any
+    ) -> tuple[str, AssetsUsage]:
         template = self._env.get_template(str(template_path))
-        try:
-            with NamedTemporaryFile("w", encoding="utf8", delete=False) as fh:
-                fh.write(template.render(**template_kwargs))
-                fh.write("\n")
-            if not output_path.exists() or not cmp(fh.name, str(output_path)):
-                move(fh.name, output_path)
-        finally:
-            with suppress(FileNotFoundError):
-                Path(fh.name).unlink()
+        assets_metadata_retriever = self.new_dep(AssetsMetadataRetriever, "default")
+        return (
+            template.render(
+                assets_metadata_retriever=assets_metadata_retriever,
+                **template_kwargs,
+            ),
+            assets_metadata_retriever.assets,
+        )
 
     @cached_property
     def _env(self) -> Environment:
         env = Environment(
-            loader=AbsoluteLoader(),
+            loader=_AbsoluteLoader(),
             block_start_string=r"\BLOCK{",
             block_end_string="}",
             variable_start_string=r"\V{",
@@ -104,12 +101,17 @@ class DefaultRenderer(
     def _to_camel_case(self, string: str) -> str:
         return "".join(substring.capitalize() or "_" for substring in string.split("_"))
 
+    @pass_context
     def _img(
-        self, value: str, modifier: str = "", scale: float = 1.0, lang: str = "fr"
+        self,
+        context: Context,
+        value: str,
+        modifier: str = "",
+        scale: float = 1.0,
+        lang: str = "fr",
     ) -> str:
-        metadata_path = (self._assets_dir / Path(value)).with_suffix(".yml")
-        if metadata_path.exists():
-            metadata = load_yaml(metadata_path)
+        metadata = context["assets_metadata_retriever"](value)
+        if metadata is not None:
 
             def get_en_or_fr(key: str) -> str:
                 if lang != "fr":
