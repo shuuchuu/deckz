@@ -24,6 +24,8 @@ plugins:
         python:
           paths: [.]
           options:
+            docstring_style: google
+            show_symbol_type_heading: true
             members_order: source
             separate_signature: true
             filters: ["!^_"]
