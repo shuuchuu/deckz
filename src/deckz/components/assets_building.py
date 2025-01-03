@@ -51,20 +51,25 @@ def _clear_register() -> None:
     _plotly_registry.clear()
 
 
+def _build_plot_path(f: Callable[[], Figure | None]) -> tuple[Path, Path]:
+    _, *submodules, _ = f.__module__.split(".")
+    name = f.__name__.replace("_", "-")
+    output_path = (
+        Path("/".join(s.replace("_", "-") for s in submodules)) / name
+    ).with_suffix(".pdf")
+    python_path_str = sys.modules[f.__module__].__file__
+    # I don't get why this is needed for mypy. It seems from the definition of
+    # ModuleType that __file__ is always a str and never None
+    assert python_path_str is not None
+    python_path = Path(python_path_str)
+    return output_path, python_path
+
+
 def register_plot(
     name: str | None = None,
 ) -> Callable[[Callable[[], None]], Callable[[], None]]:
     def worker(f: Callable[[], None]) -> Callable[[], None]:
-        _, *submodules, _ = f.__module__.split(".")
-        name = f.__name__.replace("_", "-")
-        output_path = (
-            Path("/".join(s.replace("_", "-") for s in submodules)) / name
-        ).with_suffix(".pdf")
-        python_path_str = sys.modules[f.__module__].__file__
-        # I don't get why this is needed for mypy. It seems from the definition of
-        # ModuleType that __file__ is always a str and never None
-        assert python_path_str is not None
-        python_path = Path(python_path_str)
+        output_path, python_path = _build_plot_path(f)
         _plt_registry.append((output_path, python_path, f))
         return f
 
@@ -75,16 +80,7 @@ def register_plotly(
     name: str | None = None,
 ) -> Callable[[Callable[[], Figure]], Callable[[], Figure]]:
     def worker(f: Callable[[], Figure]) -> Callable[[], Figure]:
-        _, *submodules, _ = f.__module__.split(".")
-        name = f.__name__.replace("_", "-")
-        output_path = (
-            Path("/".join(s.replace("_", "-") for s in submodules)) / name
-        ).with_suffix(".pdf")
-        python_path_str = sys.modules[f.__module__].__file__
-        # I don't get why this is needed for mypy. It seems from the definition of
-        # ModuleType that __file__ is always a str and never None
-        assert python_path_str is not None
-        python_path = Path(python_path_str)
+        output_path, python_path = _build_plot_path(f)
         _plotly_registry.append((output_path, python_path, f))
         return f
 
