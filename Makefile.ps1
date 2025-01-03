@@ -3,7 +3,7 @@
 # . .\Makefile.ps1
 
 function check {
-    ruff check src/deckz tests --fix
+    ruff check src/deckz tests
     mypy src/deckz tests
 }
 function build-and-push-docker-image {
