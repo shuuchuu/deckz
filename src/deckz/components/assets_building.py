@@ -1,4 +1,5 @@
 import sys
+from abc import abstractmethod
 from collections.abc import Callable
 from contextlib import redirect_stdout
 from dataclasses import dataclass
@@ -8,8 +9,9 @@ from multiprocessing import Pool
 from pathlib import Path
 from shutil import copyfile
 from tempfile import TemporaryDirectory
-from plotly.graph_objs import Figure
+from typing import Any, Protocol, override
 
+from plotly.graph_objs import Figure
 from pydantic import BaseModel, ConfigDict
 
 from ..configuring.settings import PathFromSettings
@@ -51,7 +53,13 @@ def _clear_register() -> None:
     _plotly_registry.clear()
 
 
-def _build_plot_path(f: Callable[[], Figure | None]) -> tuple[Path, Path]:
+class _HasModuleAndName(Protocol):
+    __module__: str
+
+    __name__: str
+
+
+def _build_plot_path(f: _HasModuleAndName) -> tuple[Path, Path]:
     _, *submodules, _ = f.__module__.split(".")
     name = f.__name__.replace("_", "-")
     output_path = (
@@ -65,26 +73,73 @@ def _build_plot_path(f: Callable[[], Figure | None]) -> tuple[Path, Path]:
     return output_path, python_path
 
 
-def register_plot(
-    name: str | None = None,
-) -> Callable[[Callable[[], None]], Callable[[], None]]:
-    def worker(f: Callable[[], None]) -> Callable[[], None]:
-        output_path, python_path = _build_plot_path(f)
-        _plt_registry.append((output_path, python_path, f))
-        return f
+def _make_decorator[F: Callable[[], Any]](
+    registry: list[tuple[Path, Path, F]],
+) -> Callable[[str | None], Callable[[F], F]]:
+    def decorator(
+        name: str | None = None,
+    ) -> Callable[[F], F]:
+        def worker(f: F) -> F:
+            output_path, python_path = _build_plot_path(f)
+            registry.append((output_path, python_path, f))
+            return f
 
-    return worker
+        return worker
+
+    return decorator
 
 
-def register_plotly(
-    name: str | None = None,
-) -> Callable[[Callable[[], Figure]], Callable[[], Figure]]:
-    def worker(f: Callable[[], Figure]) -> Callable[[], Figure]:
-        output_path, python_path = _build_plot_path(f)
-        _plotly_registry.append((output_path, python_path, f))
-        return f
+register_plot = _make_decorator(_plt_registry)
+register_plotly = _make_decorator(_plotly_registry)
 
-    return worker
+
+class FunctionAssetsBuilder[T](AssetsBuilder):
+    def __init__(self, output_dir: Path, module_name: str, library_name: str):
+        self._output_dir = output_dir
+        self._module_name = module_name
+        self._library_name = library_name
+        self._logger = getLogger(__name__)
+
+    def build(self) -> None:
+        self._prepare_build()
+
+        sys.dont_write_bytecode = True
+        _clear_register()
+        try:
+            import_module_and_submodules(self._module_name)
+        except ModuleNotFoundError:
+            self._logger.warning(
+                "Could not find %s module, will not produce %s plots.",
+                self._module_name,
+                self._library_name,
+            )
+        full_items = [(self._output_dir / o, p, f) for o, p, f in _plotly_registry]
+        to_build = [(o, f) for o, p, f in full_items if self._needs_compile(p, o)]
+
+        if not to_build:
+            return
+
+        self._logger.info(
+            "Processing %d %s plot(s) that need recompiling",
+            len(to_build),
+            self._library_name,
+        )
+
+        for output_path, function in to_build:
+            self._build_pdf(output_path, function)
+
+    def _prepare_build(self) -> None:
+        pass
+
+    @abstractmethod
+    def _build_pdf(self, output_path: Path, function: Callable[[], T]) -> None:
+        raise NotImplementedError
+
+    def _needs_compile(self, python_path: Path, output_path: Path) -> bool:
+        return (
+            not output_path.exists()
+            or output_path.stat().st_mtime_ns < python_path.stat().st_mtime_ns
+        )
 
 
 class _PltAssetsBuilderExtraKwArgs(BaseModel):
@@ -94,37 +149,22 @@ class _PltAssetsBuilderExtraKwArgs(BaseModel):
 
 
 class PltAssetsBuilder(
-    AssetsBuilder, key="plt", extra_kwargs_class=_PltAssetsBuilderExtraKwArgs
+    FunctionAssetsBuilder[None],
+    key="plt",
+    extra_kwargs_class=_PltAssetsBuilderExtraKwArgs,
 ):
     def __init__(self, output_dir: Path):
-        self._output_dir = output_dir
-        self._logger = getLogger(__name__)
+        super().__init__(
+            output_dir=output_dir, module_name="plots", library_name="matplotlib"
+        )
 
-    def build(self) -> None:
+    @override
+    def _prepare_build(self) -> None:
         import matplotlib
 
         matplotlib.use("PDF")
 
-        sys.dont_write_bytecode = True
-        _clear_register()
-        try:
-            import_module_and_submodules("plots")
-        except ModuleNotFoundError:
-            self._logger.warning("Could not find plots module, will not produce plots.")
-        full_items = [(self._output_dir / o, p, f) for o, p, f in _plt_registry]
-        to_build = [(o, p, f) for o, p, f in full_items if self._needs_compile(p, o)]
-
-        if not to_build:
-            return
-
-        self._logger.info(f"Processing {len(to_build)} plot(s) that need recompiling")
-
-        for output_path, python_path, function in to_build:
-            self._build_pdf(python_path, output_path, function)
-
-    def _build_pdf(
-        self, python_path: Path, output_path: Path, function: Callable[[], None]
-    ) -> None:
+    def _build_pdf(self, output_path: Path, function: Callable[[], None]) -> None:
         import matplotlib.pyplot as plt
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -132,12 +172,6 @@ class PltAssetsBuilder(
 
         plt.savefig(output_path, bbox_inches="tight")
         plt.close()
-
-    def _needs_compile(self, python_path: Path, output_path: Path) -> bool:
-        return (
-            not output_path.exists()
-            or output_path.stat().st_mtime_ns < python_path.stat().st_mtime_ns
-        )
 
 
 class _PlotlyAssetsBuilderExtraKwArgs(BaseModel):
@@ -147,47 +181,19 @@ class _PlotlyAssetsBuilderExtraKwArgs(BaseModel):
 
 
 class PlotlyAssetsBuilder(
-    AssetsBuilder, key="plotly", extra_kwargs_class=_PlotlyAssetsBuilderExtraKwArgs
-    ):
-
+    FunctionAssetsBuilder[Figure],
+    key="plotly",
+    extra_kwargs_class=_PlotlyAssetsBuilderExtraKwArgs,
+):
     def __init__(self, output_dir: Path):
-        self._output_dir = output_dir
-        self._logger = getLogger(__name__)
+        super().__init__(
+            output_dir=output_dir, module_name="pltly", library_name="plotly"
+        )
 
-    def build(self) -> None:
-        sys.dont_write_bytecode = True
-        _clear_register()
-        try:
-            import_module_and_submodules("pltly")
-        except ModuleNotFoundError:
-            self._logger.warning(
-                "Could not find pltly module, will not produce plotly plots."
-                )
-        full_items = [(self._output_dir / o, p, f) for o, p, f in _plotly_registry]
-        to_build = [(o, p, f) for o, p, f in full_items if self._needs_compile(p, o)]
-
-        if not to_build:
-            return
-
-        self._logger.info(
-            f"Processing {len(to_build)} plot(s) that need recompiling"
-            )
-
-        for output_path, python_path, function in to_build:
-            self._build_pdf(python_path, output_path, function)
-
-    def _build_pdf(
-        self, python_path: Path, output_path: Path, function: Callable[[], Figure]
-    ) -> None:
+    def _build_pdf(self, output_path: Path, function: Callable[[], Figure]) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         fig = function()
         fig.write_image(output_path)
-
-    def _needs_compile(self, python_path: Path, output_path: Path) -> bool:
-        return (
-            not output_path.exists()
-            or output_path.stat().st_mtime_ns < python_path.stat().st_mtime_ns
-        )
 
 
 class _TikzAssetsBuilderExtraKwArgs(BaseModel):
