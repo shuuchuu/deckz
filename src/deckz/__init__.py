@@ -32,6 +32,10 @@ def __getattr__(name: str) -> Any:
             from .components.assets_building import register_plot
 
             return register_plot
+        case "register_plotly":
+            from .components.assets_building import register_plotly
+
+            return register_plotly
         case _:
             msg = f"cannot find the attribute {name} in module {__name__}"
             raise ValueError(msg)

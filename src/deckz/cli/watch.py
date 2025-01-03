@@ -220,11 +220,18 @@ def assets(*, minimum_delay: int = 5, workdir: Path = Path()) -> None:
 
     watch(
         minimum_delay,
-        frozenset([settings.paths.tikz_dir, settings.paths.plt_dir]),
+        frozenset(
+            [
+                settings.paths.tikz_dir,
+                settings.paths.plt_dir,
+                settings.paths.plotly_dir
+            ]
+        ),
         frozenset(
             [
                 settings.paths.shared_tikz_pdf_dir,
                 settings.paths.shared_plt_pdf_dir,
+                settings.paths.shared_plotly_pdf_dir,
             ]
         ),
         run_assets,
