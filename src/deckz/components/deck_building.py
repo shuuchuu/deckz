@@ -52,6 +52,7 @@ class _DefaultBuilderExtraKwArgs(BaseModel):
         "paths.shared_img_dir",
         "paths.shared_tikz_pdf_dir",
         "paths.shared_plt_pdf_dir",
+        "paths.shared_plotly_pdf_dir",
         "paths.shared_code_dir",
     )  # type: ignore[assignment]
     template: PathFromSettings = "paths.jinja2_main_template"  # type: ignore[assignment]

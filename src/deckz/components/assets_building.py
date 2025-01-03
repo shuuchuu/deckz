@@ -8,6 +8,7 @@ from multiprocessing import Pool
 from pathlib import Path
 from shutil import copyfile
 from tempfile import TemporaryDirectory
+from plotly.graph_objs import Figure
 
 from pydantic import BaseModel, ConfigDict
 
@@ -27,7 +28,7 @@ class CompilePaths:
 
 
 class _DefaultAssetsBuilderExtraKwArgs(BaseModel):
-    assets_builder_keys: tuple[str, ...] = ("plt", "tikz")
+    assets_builder_keys: tuple[str, ...] = ("plt", "tikz", "plotly")
 
 
 class DefaultAssetsBuilder(
@@ -42,27 +43,45 @@ class DefaultAssetsBuilder(
 
 
 _plt_registry: list[tuple[Path, Path, Callable[[], None]]] = []
+_plotly_registry: list[tuple[Path, Path, Callable[[], Figure]]] = []
 
 
 def _clear_register() -> None:
     _plt_registry.clear()
+    _plotly_registry.clear()
+
+
+def _build_plot_path(f: Callable[[], Figure | None]) -> tuple[Path, Path]:
+    _, *submodules, _ = f.__module__.split(".")
+    name = f.__name__.replace("_", "-")
+    output_path = (
+        Path("/".join(s.replace("_", "-") for s in submodules)) / name
+    ).with_suffix(".pdf")
+    python_path_str = sys.modules[f.__module__].__file__
+    # I don't get why this is needed for mypy. It seems from the definition of
+    # ModuleType that __file__ is always a str and never None
+    assert python_path_str is not None
+    python_path = Path(python_path_str)
+    return output_path, python_path
 
 
 def register_plot(
     name: str | None = None,
 ) -> Callable[[Callable[[], None]], Callable[[], None]]:
     def worker(f: Callable[[], None]) -> Callable[[], None]:
-        _, *submodules, _ = f.__module__.split(".")
-        name = f.__name__.replace("_", "-")
-        output_path = (
-            Path("/".join(s.replace("_", "-") for s in submodules)) / name
-        ).with_suffix(".pdf")
-        python_path_str = sys.modules[f.__module__].__file__
-        # I don't get why this is needed for mypy. It seems from the definition of
-        # ModuleType that __file__ is always a str and never None
-        assert python_path_str is not None
-        python_path = Path(python_path_str)
+        output_path, python_path = _build_plot_path(f)
         _plt_registry.append((output_path, python_path, f))
+        return f
+
+    return worker
+
+
+def register_plotly(
+    name: str | None = None,
+) -> Callable[[Callable[[], Figure]], Callable[[], Figure]]:
+    def worker(f: Callable[[], Figure]) -> Callable[[], Figure]:
+        output_path, python_path = _build_plot_path(f)
+        _plotly_registry.append((output_path, python_path, f))
         return f
 
     return worker
@@ -113,6 +132,56 @@ class PltAssetsBuilder(
 
         plt.savefig(output_path, bbox_inches="tight")
         plt.close()
+
+    def _needs_compile(self, python_path: Path, output_path: Path) -> bool:
+        return (
+            not output_path.exists()
+            or output_path.stat().st_mtime_ns < python_path.stat().st_mtime_ns
+        )
+
+
+class _PlotlyAssetsBuilderExtraKwArgs(BaseModel):
+    model_config = ConfigDict(validate_default=True)
+
+    output_dir: PathFromSettings = "paths.shared_plotly_pdf_dir"  # type: ignore[assignment]
+
+
+class PlotlyAssetsBuilder(
+    AssetsBuilder, key="plotly", extra_kwargs_class=_PlotlyAssetsBuilderExtraKwArgs
+    ):
+
+    def __init__(self, output_dir: Path):
+        self._output_dir = output_dir
+        self._logger = getLogger(__name__)
+
+    def build(self) -> None:
+        sys.dont_write_bytecode = True
+        _clear_register()
+        try:
+            import_module_and_submodules("pltly")
+        except ModuleNotFoundError:
+            self._logger.warning(
+                "Could not find pltly module, will not produce plotly plots."
+                )
+        full_items = [(self._output_dir / o, p, f) for o, p, f in _plotly_registry]
+        to_build = [(o, p, f) for o, p, f in full_items if self._needs_compile(p, o)]
+
+        if not to_build:
+            return
+
+        self._logger.info(
+            f"Processing {len(to_build)} plot(s) that need recompiling"
+            )
+
+        for output_path, python_path, function in to_build:
+            self._build_pdf(python_path, output_path, function)
+
+    def _build_pdf(
+        self, python_path: Path, output_path: Path, function: Callable[[], Figure]
+    ) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fig = function()
+        fig.write_image(output_path)
 
     def _needs_compile(self, python_path: Path, output_path: Path) -> bool:
         return (
