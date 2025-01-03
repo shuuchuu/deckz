@@ -5,7 +5,14 @@ from typing import TYPE_CHECKING, Any
 from ..configuring.registry import DeckComponent, GlobalComponent
 
 if TYPE_CHECKING:
-    from ..models import AssetsUsage, CompileResult, Deck, FlavorName
+    from ..models import (
+        AssetsMetadata,
+        CompileResult,
+        Deck,
+        FlavorName,
+        ResolvedPath,
+        UnresolvedPath,
+    )
 
 
 class Parser(DeckComponent, key="parser"):
@@ -73,12 +80,12 @@ class Renderer(GlobalComponent, key="renderer"):
     @abstractmethod
     def render_to_str(
         self, template_path: Path, /, **template_kwargs: Any
-    ) -> tuple[str, "AssetsUsage"]:
+    ) -> tuple[str, "AssetsMetadata"]:
         raise NotImplementedError
 
     def render_to_path(
         self, template_path: Path, output_path: Path, /, **template_kwargs: Any
-    ) -> "AssetsUsage":
+    ) -> "AssetsMetadata":
         from contextlib import suppress
         from filecmp import cmp
         from shutil import move
@@ -86,7 +93,7 @@ class Renderer(GlobalComponent, key="renderer"):
 
         try:
             with NamedTemporaryFile("w", encoding="utf8", delete=False) as fh:
-                rendered, assets_usage = self.render_to_str(
+                rendered, assets_metadata = self.render_to_str(
                     template_path, **template_kwargs
                 )
                 fh.write(rendered)
@@ -96,17 +103,29 @@ class Renderer(GlobalComponent, key="renderer"):
         finally:
             with suppress(FileNotFoundError):
                 Path(fh.name).unlink()
-        return assets_usage
+        return assets_metadata
 
 
 class AssetsMetadataRetriever(GlobalComponent, key="assets_metadata_retriever"):
     @property
     @abstractmethod
-    def assets(self) -> "AssetsUsage":
+    def assets_metadata(self) -> "AssetsMetadata":
         raise NotImplementedError
 
     @abstractmethod
     def __call__(self, value: str) -> dict[str, Any] | None:
+        raise NotImplementedError
+
+
+class AssetsSearcher(GlobalComponent, key="assets_searcher"):
+    @abstractmethod
+    def search(self, asset: str) -> set["ResolvedPath"]:
+        raise NotImplementedError
+
+
+class AssetsAnalyzer(GlobalComponent, key="assets_analyzer"):
+    @abstractmethod
+    def sections_unlicensed_images(self) -> dict["UnresolvedPath", frozenset[Path]]:
         raise NotImplementedError
 
 

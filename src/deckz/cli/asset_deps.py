@@ -4,14 +4,14 @@ from . import app
 
 
 @app.command()
-def img_deps(
+def asset_deps(
     *, verbose: bool = True, descending: bool = True, workdir: Path = Path()
 ) -> None:
-    """Find unlicensed images with output detailed by section.
+    """Find unlicensed assets with output detailed by section.
 
     Args:
-        verbose: Detailed output with a listing of used images
-        descending: Sort sections by ascending number of unlicensed images
+        verbose: Detailed output with a listing of used assets
+        descending: Sort sections by ascending number of unlicensed assets
         workdir: Path to move into before running the command
 
     """
@@ -20,34 +20,34 @@ def img_deps(
     from rich.console import Console
     from rich.table import Table
 
-    from ..analyzing.images_analyzer import ImagesAnalyzer
+    from ..components import AssetsAnalyzer
     from ..configuring.settings import GlobalSettings
     from ..models import UnresolvedPath
 
     def _display_table(
-        unlicensed_images: Mapping[UnresolvedPath, Set[Path]],
+        unlicensed_assets: Mapping[UnresolvedPath, Set[Path]],
         console: Console,
     ) -> None:
-        if unlicensed_images:
-            table = Table("Section", "Unlicensed images")
-            for section, images in unlicensed_images.items():
+        if unlicensed_assets:
+            table = Table("Section", "Unlicensed assets")
+            for section, images in unlicensed_assets.items():
                 table.add_row(str(section), f"{len(images)}")
             console.print(table)
         else:
-            console.print("No unlicensed image!")
+            console.print("No unlicensed asset!")
 
-    def _display_section_images(
-        unlicensed_images: Mapping[UnresolvedPath, Set[Path]],
+    def _display_section_assets(
+        unlicensed_assets: Mapping[UnresolvedPath, Set[Path]],
         console: Console,
         shared_dir: Path,
     ) -> None:
-        if unlicensed_images:
-            for section, images in unlicensed_images.items():
+        if unlicensed_assets:
+            for section, images in unlicensed_assets.items():
                 console.print()
                 console.rule(
                     f"[bold]{section}[/] — "
                     f"[red]{len(images)}[/] "
-                    f"unlicensed image{'s' * (len(images) > 1)}",
+                    f"unlicensed asset{'s' * (len(images) > 1)}",
                     align="left",
                 )
                 console.print()
@@ -61,29 +61,27 @@ def img_deps(
                         )
                     )
         else:
-            console.print("No unlicensed image!")
+            console.print("No unlicensed asset!")
 
     settings = GlobalSettings.from_yaml(workdir)
     console = Console(highlight=False)
 
-    with console.status("Finding unlicensed images"):
-        images_analyzer = ImagesAnalyzer(
-            settings.paths.shared_dir, settings.paths.git_dir
-        )
-        unlicensed_images = images_analyzer.sections_unlicensed_images()
-        sorted_unlicensed_images = {
+    with console.status("Finding unlicensed assets"):
+        assets_analyzer = AssetsAnalyzer.new("default", settings)
+        unlicensed_assets = assets_analyzer.sections_unlicensed_images()
+        sorted_unlicensed_assets = {
             k: v
             for k, v in sorted(
-                unlicensed_images.items(),
+                unlicensed_assets.items(),
                 key=lambda t: len(t[1]),
                 reverse=descending,
             )
             if v
         }
     if verbose:
-        console.print("[bold]Sections and their unlicensed images[/]")
-        _display_section_images(
-            sorted_unlicensed_images, console, settings.paths.shared_dir
+        console.print("[bold]Sections and their unlicensed assets[/]")
+        _display_section_assets(
+            sorted_unlicensed_assets, console, settings.paths.shared_dir
         )
     else:
-        _display_table(sorted_unlicensed_images, console)
+        _display_table(sorted_unlicensed_assets, console)

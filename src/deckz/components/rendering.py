@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..components import AssetsMetadataRetriever
 from ..configuring.settings import PathFromSettings
-from ..models import AssetsUsage
+from ..models import AssetsMetadata
 from . import Renderer
 
 
@@ -67,7 +67,7 @@ class DefaultRenderer(
 
     def render_to_str(
         self, template_path: Path, /, **template_kwargs: Any
-    ) -> tuple[str, AssetsUsage]:
+    ) -> tuple[str, AssetsMetadata]:
         template = self._env.get_template(str(template_path))
         assets_metadata_retriever = self.new_dep(AssetsMetadataRetriever, "default")
         return (
@@ -75,7 +75,7 @@ class DefaultRenderer(
                 assets_metadata_retriever=assets_metadata_retriever,
                 **template_kwargs,
             ),
-            assets_metadata_retriever.assets,
+            assets_metadata_retriever.assets_metadata,
         )
 
     @cached_property

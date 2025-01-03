@@ -1,10 +1,12 @@
 from collections.abc import Iterable, Iterator, MutableMapping, MutableSet
 from functools import cached_property
 from pathlib import Path, PurePath
-from re import VERBOSE
-from re import compile as re_compile
 from typing import cast
 
+from pydantic import BaseModel, ConfigDict
+
+from ..components import AssetsAnalyzer, Renderer
+from ..configuring.settings import PathFromSettings
 from ..models import (
     Deck,
     File,
@@ -17,15 +19,26 @@ from ..models import (
 from ..utils import all_decks, load_yaml
 
 
-class ImagesAnalyzer:
-    def __init__(self, shared_dir: Path, git_dir: Path) -> None:
-        self._shared_dir = shared_dir
+class _DefaultRendererExtraKwArgs(BaseModel):
+    model_config = ConfigDict(validate_default=True)
+
+    assets_dir: PathFromSettings = "paths.shared_dir"  # type: ignore[assignment]
+    git_dir: PathFromSettings = "paths.git_dir"  # type: ignore[assignment]
+    renderer_key: str = "default"
+
+
+class DefaultAssetsAnalyzer(
+    AssetsAnalyzer, key="default", extra_kwargs_class=_DefaultRendererExtraKwArgs
+):
+    def __init__(self, assets_dir: Path, git_dir: Path, renderer_key: str) -> None:
+        self._assets_dir = assets_dir
         self._git_dir = git_dir
+        self._renderer = self.new_dep(Renderer, renderer_key)
 
     def sections_unlicensed_images(self) -> dict[UnresolvedPath, frozenset[Path]]:
         return {
             s: frozenset(
-                i for i in self._section_images(d) if not self._is_image_licensed(i)
+                i for i in self._section_assets(d) if not self._is_image_licensed(i)
             )
             for s, d in self._section_dependencies.items()
         }
@@ -46,30 +59,10 @@ class ImagesAnalyzer:
                 result[path].update(deps)
         return result
 
-    _pattern = re_compile(
-        r"""
-        \\V{
-            \s*
-            "(.+?)"
-            \s*
-            \|
-            \s*
-            image
-            \s*
-            (?:\([^)]*\))?
-            \s*
-          }
-        """,
-        VERBOSE,
-    )
-
-    def _section_images(self, dependencies: Iterable[Path]) -> Iterator[Path]:
+    def _section_assets(self, dependencies: Iterable[Path]) -> Iterator[Path]:
         for path in dependencies:
-            for match in ImagesAnalyzer._pattern.finditer(
-                path.read_text(encoding="utf8")
-            ):
-                if match is not None:
-                    yield self._shared_dir / match.group(1)
+            for asset in self._renderer.render_to_str(path)[1]:
+                yield self._assets_dir / asset
 
     def _is_image_licensed(self, path: Path) -> bool:
         metadata_path = path.with_suffix(".yml")

@@ -91,7 +91,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePath
-from typing import Annotated, NewType, Protocol
+from typing import Annotated, Any, NewType, Protocol
 
 from pydantic import BaseModel
 from pydantic.functional_validators import BeforeValidator
@@ -445,5 +445,5 @@ class CompileResult:
 ########################################################################################
 
 
-type AssetsUsage = dict[str, int]
+type AssetsMetadata = dict[str, tuple[dict[str, Any] | None, ...]]
 """Assets and the number of time they appear in a given render."""
