@@ -1,6 +1,7 @@
 [project]
 authors = [
   {name = "m09", email = "142691+m09@users.noreply.github.com"},
+  {name = "NyxAether", email = "contact.nyxhemera@gmail.com"},
 ]
 classifiers = [
   "Topic :: Software Development :: Build Tools",
