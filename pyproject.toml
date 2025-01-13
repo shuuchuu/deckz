@@ -25,7 +25,7 @@ dependencies = [
   "watchdog >= 6, < 7",
 ]
 description = "Tool to handle multiple beamer decks."
-homepage = "https://github.com/mlambda/deckz"
+homepage = "https://github.com/shuuchuu/deckz"
 name = "deckz"
 readme = "README.md"
 requires-python = ">= 3.12"
