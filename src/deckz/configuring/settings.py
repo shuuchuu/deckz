@@ -109,16 +109,11 @@ class DeckPaths(GlobalPaths):
     deck_definition: _Path = "{current_dir}/deck.yml"
 
 
-class Components(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-
 class GlobalSettings(BaseModel):
     build_command: tuple[str, ...]
     file_extension: str = ".tex"
     default_img_values: DefaultImageValues = Field(default_factory=DefaultImageValues)
     paths: GlobalPaths = Field(default_factory=GlobalPaths)
-    components: Components = Field(default_factory=Components)
 
     @classmethod
     def from_yaml(cls, path: Path) -> Self:
