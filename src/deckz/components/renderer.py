@@ -13,7 +13,7 @@ from ..models import AssetsMetadata
 from .protocols import GlobalFactoryProtocol, RendererProtocol
 
 
-class BaseRenderer(ABC, RendererProtocol):
+class _BaseRenderer(ABC, RendererProtocol):
     @abstractmethod
     def render_to_str(
         self, template_path: Path, /, **template_kwargs: Any
@@ -59,7 +59,7 @@ class _AbsoluteLoader(BaseLoader):
         )
 
 
-class Renderer(BaseRenderer):
+class Renderer(_BaseRenderer):
     def __init__(
         self,
         default_img_values: DefaultImageValues,
