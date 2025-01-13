@@ -1,25 +1,12 @@
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
-
-from ..components import AssetsMetadataRetriever
-from ..configuring.settings import PathFromSettings
 from ..models import AssetsMetadata
 from ..utils import load_yaml
+from .protocols import AssetsMetadataRetrieverProtocol
 
 
-class _DefaultAssetsMetadataRetrieverExtraKwArgs(BaseModel):
-    model_config = ConfigDict(validate_default=True)
-
-    assets_dir: PathFromSettings = "paths.shared_dir"  # type: ignore[assignment]
-
-
-class DefaultAssetsMetadataRetriever(
-    AssetsMetadataRetriever,
-    key="default",
-    extra_kwargs_class=_DefaultAssetsMetadataRetrieverExtraKwArgs,
-):
+class AssetsMetadataRetriever(AssetsMetadataRetrieverProtocol):
     def __init__(self, assets_dir: Path) -> None:
         self._assets_metadata: AssetsMetadata = {}
         self._assets_dir = assets_dir

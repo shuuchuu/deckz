@@ -29,11 +29,11 @@ def __getattr__(name: str) -> Any:
     """
     match name:
         case "register_plot":
-            from .components.assets_building import register_plot
+            from .components.assets_builder import register_plot
 
             return register_plot
         case "register_plotly":
-            from .components.assets_building import register_plotly
+            from .components.assets_builder import register_plotly
 
             return register_plotly
         case _:

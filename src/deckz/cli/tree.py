@@ -12,13 +12,15 @@ def tree(workdir: Path = Path()) -> None:
     """
     from rich import print as rich_print
 
-    from ..components import Parser
-    from ..components.parsing import RichTreeVisitor
+    from ..components.factory import DeckSettingsFactory
+    from ..components.parser import RichTreeVisitor
     from ..configuring.settings import DeckSettings
 
     settings = DeckSettings.from_yaml(workdir)
-    deck = Parser.new("default", settings).from_deck_definition(
-        settings.paths.deck_definition
+    deck = (
+        DeckSettingsFactory(settings)
+        .parser()
+        .from_deck_definition(settings.paths.deck_definition)
     )
     tree = RichTreeVisitor(only_errors=False).process(deck)
     rich_print(tree)

@@ -3,11 +3,10 @@ from pathlib import Path, PurePath
 from sys import stderr
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import ValidationError
 from rich import print as rich_print
 from rich.tree import Tree
 
-from ..configuring.settings import PathFromSettings
 from ..exceptions import DeckzError
 from ..models import (
     Deck,
@@ -29,20 +28,10 @@ from ..models import (
     UnresolvedPath,
 )
 from ..utils import load_yaml
-from . import Parser
+from .protocols import ParserProtocol
 
 
-class _DefaultParserExtraKwArgs(BaseModel):
-    model_config = ConfigDict(validate_default=True)
-
-    local_latex_dir: PathFromSettings = "paths.local_latex_dir"  # type: ignore[assignment]
-    shared_latex_dir: PathFromSettings = "paths.shared_latex_dir"  # type: ignore[assignment]
-    file_extension: str = ".tex"
-
-
-class DefaultParser(
-    Parser, key="default", extra_kwargs_class=_DefaultParserExtraKwArgs
-):
+class Parser(ParserProtocol):
     """Build a deck from a definition.
 
     The definition can be a complete deck definition obtained from a yaml file or a \

@@ -20,7 +20,7 @@ def asset_deps(
     from rich.console import Console
     from rich.table import Table
 
-    from ..components import AssetsAnalyzer
+    from ..components.factory import GlobalSettingsFactory
     from ..configuring.settings import GlobalSettings
     from ..models import UnresolvedPath
 
@@ -67,7 +67,7 @@ def asset_deps(
     console = Console(highlight=False)
 
     with console.status("Finding unlicensed assets"):
-        assets_analyzer = AssetsAnalyzer.new("default", settings)
+        assets_analyzer = GlobalSettingsFactory(settings).assets_analyzer()
         unlicensed_assets = assets_analyzer.sections_unlicensed_images()
         sorted_unlicensed_assets = {
             k: v

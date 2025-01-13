@@ -1,6 +1,6 @@
 import sys
 from abc import abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from itertools import chain
@@ -12,12 +12,10 @@ from tempfile import TemporaryDirectory
 from typing import Any, Protocol, override
 
 from plotly.graph_objs import Figure
-from pydantic import BaseModel, ConfigDict
 
-from ..configuring.settings import PathFromSettings
 from ..exceptions import DeckzError
 from ..utils import copy_file_if_newer, import_module_and_submodules
-from . import AssetsBuilder, Compiler
+from .protocols import AssetsBuilderProtocol, CompilerProtocol
 
 
 @dataclass(frozen=True)
@@ -29,19 +27,13 @@ class CompilePaths:
     output_log: Path
 
 
-class _DefaultAssetsBuilderExtraKwArgs(BaseModel):
-    assets_builder_keys: tuple[str, ...] = ("plt", "tikz", "plotly")
+class AssetsBuilder(AssetsBuilderProtocol):
+    def __init__(self, assets_builders: Iterable[AssetsBuilderProtocol]):
+        self._builders = list(assets_builders)
 
-
-class DefaultAssetsBuilder(
-    AssetsBuilder, key="default", extra_kwargs_class=_DefaultAssetsBuilderExtraKwArgs
-):
-    def __init__(self, assets_builder_keys: tuple[str, ...]):
-        self._builders = [self.new_dep(AssetsBuilder, k) for k in assets_builder_keys]
-
-    def build(self) -> None:
+    def build_assets(self) -> None:
         for assets_builder in self._builders:
-            assets_builder.build()
+            assets_builder.build_assets()
 
 
 _plt_registry: list[tuple[Path, Path, Callable[[], None]]] = []
@@ -93,14 +85,14 @@ register_plot = _make_decorator(_plt_registry)
 register_plotly = _make_decorator(_plotly_registry)
 
 
-class FunctionAssetsBuilder[T](AssetsBuilder):
+class FunctionAssetsBuilder[T](AssetsBuilderProtocol):
     def __init__(self, output_dir: Path, module_name: str, library_name: str):
         self._output_dir = output_dir
         self._module_name = module_name
         self._library_name = library_name
         self._logger = getLogger(__name__)
 
-    def build(self) -> None:
+    def build_assets(self) -> None:
         self._prepare_build()
 
         sys.dont_write_bytecode = True
@@ -142,17 +134,7 @@ class FunctionAssetsBuilder[T](AssetsBuilder):
         )
 
 
-class _PltAssetsBuilderExtraKwArgs(BaseModel):
-    model_config = ConfigDict(validate_default=True)
-
-    output_dir: PathFromSettings = "paths.shared_plt_pdf_dir"  # type: ignore[assignment]
-
-
-class PltAssetsBuilder(
-    FunctionAssetsBuilder[None],
-    key="plt",
-    extra_kwargs_class=_PltAssetsBuilderExtraKwArgs,
-):
+class PltAssetsBuilder(FunctionAssetsBuilder[None]):
     def __init__(self, output_dir: Path):
         super().__init__(
             output_dir=output_dir, module_name="plots", library_name="matplotlib"
@@ -174,17 +156,7 @@ class PltAssetsBuilder(
         plt.close()
 
 
-class _PlotlyAssetsBuilderExtraKwArgs(BaseModel):
-    model_config = ConfigDict(validate_default=True)
-
-    output_dir: PathFromSettings = "paths.shared_plotly_pdf_dir"  # type: ignore[assignment]
-
-
-class PlotlyAssetsBuilder(
-    FunctionAssetsBuilder[Figure],
-    key="plotly",
-    extra_kwargs_class=_PlotlyAssetsBuilderExtraKwArgs,
-):
+class PlotlyAssetsBuilder(FunctionAssetsBuilder[Figure]):
     def __init__(self, output_dir: Path):
         super().__init__(
             output_dir=output_dir, module_name="pltly", library_name="plotly"
@@ -196,32 +168,21 @@ class PlotlyAssetsBuilder(
         fig.write_image(output_path)
 
 
-class _TikzAssetsBuilderExtraKwArgs(BaseModel):
-    model_config = ConfigDict(validate_default=True)
-
-    input_dir: PathFromSettings = "paths.tikz_dir"  # type: ignore[assignment]
-    output_dir: PathFromSettings = "paths.shared_tikz_pdf_dir"  # type: ignore[assignment]
-    assets_dir: PathFromSettings = "paths.shared_dir"  # type: ignore[assignment]
-    compiler_key: str = "default"
-
-
-class TikzAssetsBuilder(
-    AssetsBuilder, key="tikz", extra_kwargs_class=_TikzAssetsBuilderExtraKwArgs
-):
+class TikzAssetsBuilder(AssetsBuilderProtocol):
     def __init__(
         self,
         input_dir: Path,
         output_dir: Path,
         assets_dir: Path,
-        compiler_key: str,
+        compiler: CompilerProtocol,
     ):
         self._input_dir = input_dir
         self._output_dir = output_dir
         self._assets_dir = assets_dir
-        self._compiler = self.new_dep(Compiler, compiler_key)
+        self._compiler = compiler
         self._logger = getLogger(__name__)
 
-    def build(self) -> None:
+    def build_assets(self) -> None:
         with TemporaryDirectory() as build_dir:
             build_path = Path(build_dir)
             items = [

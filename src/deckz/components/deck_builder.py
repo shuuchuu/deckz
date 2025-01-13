@@ -7,9 +7,6 @@ from pathlib import Path, PurePosixPath
 from shutil import copyfile
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
-
-from ..configuring.settings import PathFromSettings
 from ..exceptions import DeckzError
 from ..models import (
     Deck,
@@ -24,9 +21,8 @@ from ..models import (
     TitleOrContent,
 )
 from ..utils import copy_file_if_newer
-from . import Builder, Compiler
-from .compiling import CompileResult
-from .rendering import Renderer
+from .compiler import CompileResult
+from .protocols import CompilerProtocol, DeckBuilderProtocol, RendererProtocol
 
 
 class CompileType(Enum):
@@ -43,27 +39,7 @@ class CompileItem:
     toc: bool
 
 
-class _DefaultBuilderExtraKwArgs(BaseModel):
-    model_config = ConfigDict(validate_default=True)
-
-    output_dir: PathFromSettings = "paths.pdf_dir"  # type: ignore[assignment]
-    build_dir: PathFromSettings = "paths.build_dir"  # type: ignore[assignment]
-    dirs_to_link: tuple[PathFromSettings, ...] = (
-        "paths.shared_img_dir",
-        "paths.shared_tikz_pdf_dir",
-        "paths.shared_plt_pdf_dir",
-        "paths.shared_plotly_pdf_dir",
-        "paths.shared_code_dir",
-    )  # type: ignore[assignment]
-    template: PathFromSettings = "paths.jinja2_main_template"  # type: ignore[assignment]
-    basedirs: tuple[PathFromSettings, ...] = ("paths.shared_dir", "paths.current_dir")  # type: ignore[assignment]
-    renderer_key: str = "default"
-    compiler_key: str = "default"
-
-
-class DefaultBuilder(
-    Builder, key="default", extra_kwargs_class=_DefaultBuilderExtraKwArgs
-):
+class DeckBuilder(DeckBuilderProtocol):
     def __init__(
         self,
         variables: dict[str, Any],
@@ -76,16 +52,13 @@ class DefaultBuilder(
         dirs_to_link: tuple[Path, ...],
         template: Path,
         basedirs: tuple[Path, ...],
-        compiler_key: str,
-        renderer_key: str,
+        compiler: CompilerProtocol,
+        renderer: RendererProtocol,
     ):
-        super().__init__(
-            variables=variables,
-            deck=deck,
-            build_presentation=build_presentation,
-            build_handout=build_handout,
-            build_print=build_print,
-        )
+        self._variables = variables
+        self._build_presentation = build_presentation
+        self._build_handout = build_handout
+        self._build_print = build_print
         self._deck_name = deck.name
         self._parts_slides = _SlidesNodeVisitor(basedirs).process(deck)
         self._dependencies = PartDependenciesNodeVisitor().process(deck)
@@ -94,20 +67,11 @@ class DefaultBuilder(
         self._dirs_to_link = dirs_to_link
         self._template = template
         self._basedirs = basedirs
-        self._compiler = self.new_dep(Compiler, compiler_key)
-        self._renderer = self.new_dep(Renderer, renderer_key)
+        self._compiler = compiler
+        self._renderer = renderer
         self._logger = getLogger(__name__)
 
-    def _name_compile_item(
-        self, compile_type: CompileType, name: PartName | None = None
-    ) -> str:
-        return (
-            f"{self._deck_name}-{name}-{compile_type.value}"
-            if name
-            else f"{self._deck_name}-{compile_type.value}"
-        ).lower()
-
-    def build(self) -> bool:
+    def build_deck(self) -> bool:
         items = self._list_items()
         self._logger.info(f"Building {len(items)} PDFs.")
         with Pool(min(cpu_count(), len(items))) as pool:
@@ -118,6 +82,15 @@ class DefaultBuilder(
                 self._logger.warning("Captured %s stderr\n%s", item_name, result.stderr)
                 self._logger.warning("Captured %s stdout\n%s", item_name, result.stdout)
         return all(result.ok for result in results)
+
+    def _name_compile_item(
+        self, compile_type: CompileType, name: PartName | None = None
+    ) -> str:
+        return (
+            f"{self._deck_name}-{name}-{compile_type.value}"
+            if name
+            else f"{self._deck_name}-{compile_type.value}"
+        ).lower()
 
     def _list_items(self) -> dict[str, CompileItem]:
         to_compile = {}

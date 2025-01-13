@@ -111,13 +111,13 @@ def load_all_yamls(paths: Iterable[Path]) -> Iterator[Any]:
 
 
 def _parse_deck(settings: "DeckSettings") -> tuple[Path, "Deck"]:
-    from .components import Parser
+    from .components.factory import DeckSettingsFactory
 
     return (
         settings.paths.deck_definition.parent.relative_to(settings.paths.git_dir),
-        Parser.new("default", settings).from_deck_definition(
-            settings.paths.deck_definition
-        ),
+        DeckSettingsFactory(settings)
+        .parser()
+        .from_deck_definition(settings.paths.deck_definition),
     )
 
 

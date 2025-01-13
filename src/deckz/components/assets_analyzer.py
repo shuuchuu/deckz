@@ -3,10 +3,6 @@ from functools import cached_property
 from pathlib import Path, PurePath
 from typing import cast
 
-from pydantic import BaseModel, ConfigDict
-
-from ..components import AssetsAnalyzer, Renderer
-from ..configuring.settings import PathFromSettings
 from ..models import (
     Deck,
     File,
@@ -17,23 +13,16 @@ from ..models import (
     UnresolvedPath,
 )
 from ..utils import all_decks, load_yaml
+from .protocols import AssetsAnalyzerProtocol, RendererProtocol
 
 
-class _DefaultRendererExtraKwArgs(BaseModel):
-    model_config = ConfigDict(validate_default=True)
-
-    assets_dir: PathFromSettings = "paths.shared_dir"  # type: ignore[assignment]
-    git_dir: PathFromSettings = "paths.git_dir"  # type: ignore[assignment]
-    renderer_key: str = "default"
-
-
-class DefaultAssetsAnalyzer(
-    AssetsAnalyzer, key="default", extra_kwargs_class=_DefaultRendererExtraKwArgs
-):
-    def __init__(self, assets_dir: Path, git_dir: Path, renderer_key: str) -> None:
+class AssetsAnalyzer(AssetsAnalyzerProtocol):
+    def __init__(
+        self, assets_dir: Path, git_dir: Path, renderer: RendererProtocol
+    ) -> None:
         self._assets_dir = assets_dir
         self._git_dir = git_dir
-        self._renderer = self.new_dep(Renderer, renderer_key)
+        self._renderer = renderer
 
     def sections_unlicensed_images(self) -> dict[UnresolvedPath, frozenset[Path]]:
         return {

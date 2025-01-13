@@ -9,8 +9,7 @@ from rich.progress import BarColumn, Progress
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-from .components import Builder, Parser
-from .components.assets_building import AssetsBuilder
+from .components.factory import DeckSettingsFactory, GlobalSettingsFactory
 from .configuring.settings import DeckSettings, GlobalSettings
 from .configuring.variables import get_variables
 from .exceptions import DeckzError
@@ -28,18 +27,15 @@ def _build(
     build_print: bool,
 ) -> bool:
     variables = get_variables(settings)
-    assets_builder = AssetsBuilder.new("default", settings)
-    assets_builder.build()
-    builder = Builder.new(
-        "default",
-        settings,
+    factory = DeckSettingsFactory(settings)
+    factory.assets_builder().build_assets()
+    return factory.deck_builder(
         variables=variables,
         deck=deck,
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
-    )
-    return builder.build()
+    ).build_deck()
 
 
 def run(
@@ -49,7 +45,7 @@ def run(
     build_print: bool,
     parts_whitelist: Iterable[PartName] | None = None,
 ) -> None:
-    parser = Parser.new("default", settings)
+    parser = DeckSettingsFactory(settings).parser()
     deck = parser.from_deck_definition(settings.paths.deck_definition)
     if parts_whitelist is not None:
         deck.filter(parts_whitelist)
@@ -70,7 +66,7 @@ def run_file(
     build_print: bool,
 ) -> None:
     _build(
-        deck=Parser.new("default", settings).from_file(latex),
+        deck=DeckSettingsFactory(settings).parser().from_file(latex),
         settings=settings,
         build_handout=build_handout,
         build_presentation=build_presentation,
@@ -87,7 +83,7 @@ def run_section(
     build_print: bool,
 ) -> None:
     _build(
-        deck=Parser.new("default", settings).from_section(section, flavor),
+        deck=DeckSettingsFactory(settings).parser().from_section(section, flavor),
         settings=settings,
         build_handout=build_handout,
         build_presentation=build_presentation,
@@ -102,7 +98,7 @@ def run_all(
     build_print: bool,
 ) -> None:
     global_settings = GlobalSettings.from_yaml(directory)
-    AssetsBuilder.new("default", global_settings).build()
+    GlobalSettingsFactory(global_settings).assets_builder().build_assets()
     decks_settings = list(all_deck_settings(global_settings.paths.git_dir))
     with Progress(
         "[progress.description]{task.description}",
@@ -112,9 +108,9 @@ def run_all(
         task_id = progress.add_task("Building decks…", total=len(decks_settings))
         for deck_settings in decks_settings:
             result = _build(
-                deck=Parser.new("default", deck_settings).from_deck_definition(
-                    deck_settings.paths.deck_definition
-                ),
+                deck=DeckSettingsFactory(deck_settings)
+                .parser()
+                .from_deck_definition(deck_settings.paths.deck_definition),
                 settings=deck_settings,
                 build_handout=build_handout,
                 build_presentation=build_presentation,
@@ -132,7 +128,9 @@ def run_assets(directory: Path) -> None:
         directory: Path to the current directory. Will be used to find the project \
             directory
     """
-    AssetsBuilder.new("default", GlobalSettings.from_yaml(directory)).build()
+    GlobalSettingsFactory(
+        GlobalSettings.from_yaml(directory)
+    ).assets_builder().build_assets()
 
 
 class _BaseEventHandler(FileSystemEventHandler):

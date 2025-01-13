@@ -9,7 +9,6 @@ from pydantic import (
     BeforeValidator,
     ConfigDict,
     Field,
-    PlainValidator,
     ValidationInfo,
 )
 
@@ -18,25 +17,23 @@ from ..exceptions import DeckzError
 from ..utils import get_git_dir, intermediate_dirs, load_all_yamls
 
 
-def value_from_settings(value: str, info: ValidationInfo) -> Any:
-    if not isinstance(info.context, GlobalSettings):
-        msg = "context should be an instance of Settings"
-        raise ValueError(msg)
-    settings = info.context
-    path = value.split(".")
-    current = settings
-    for item in path:
-        try:
-            current = getattr(current, item)
-        except AttributeError as e:
-            msg = f"impossible to map the setting path {value} to a setting: {e}"
-            raise ValueError(msg) from e
-    return current
+class LocalizedValues(BaseModel):
+    fr: dict[str, str] = Field(default_factory=dict)
+    en: dict[str, str] = Field(default_factory=dict)
+    all: dict[str, str] = Field(default_factory=dict)
+
+    def get_default(self, value: str, lang: str) -> str:
+        if lang == "fr" and value in self.fr:
+            return self.fr[value]
+        if lang == "en" and value in self.en:
+            return self.en[value]
+        return self.all.get(value, value)
 
 
-ValueFromSettingsValidator = PlainValidator(value_from_settings)
-PathFromSettings = Annotated[Path, ValueFromSettingsValidator]
-StrFromSettings = Annotated[str, ValueFromSettingsValidator]
+class DefaultImageValues(BaseModel):
+    license: LocalizedValues = Field(default_factory=LocalizedValues)
+    author: LocalizedValues = Field(default_factory=LocalizedValues)
+    title: LocalizedValues = Field(default_factory=LocalizedValues)
 
 
 def _convert(input_value: str | Path, info: ValidationInfo) -> Path:
@@ -117,6 +114,9 @@ class Components(BaseModel):
 
 
 class GlobalSettings(BaseModel):
+    build_command: tuple[str, ...]
+    file_extension: str = ".tex"
+    default_img_values: DefaultImageValues = Field(default_factory=DefaultImageValues)
     paths: GlobalPaths = Field(default_factory=GlobalPaths)
     components: Components = Field(default_factory=Components)
 

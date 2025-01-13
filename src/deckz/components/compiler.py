@@ -2,19 +2,11 @@ from collections.abc import Iterable
 from pathlib import Path
 from subprocess import run
 
-from pydantic import BaseModel
-
 from ..models import CompileResult
-from . import Compiler
+from .protocols import CompilerProtocol
 
 
-class _DefaultCompilerExtraKwArgs(BaseModel):
-    build_command: tuple[str, ...]
-
-
-class DefaultCompiler(
-    Compiler, key="default", extra_kwargs_class=_DefaultCompilerExtraKwArgs
-):
+class Compiler(CompilerProtocol):
     def __init__(self, build_command: Iterable[str]) -> None:
         self._build_command = build_command
 

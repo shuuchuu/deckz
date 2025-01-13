@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from functools import cached_property
 from os.path import join as path_join
@@ -6,12 +7,40 @@ from typing import Any
 
 from jinja2 import BaseLoader, Environment, TemplateNotFound, pass_context
 from jinja2.runtime import Context
-from pydantic import BaseModel, ConfigDict, Field
 
-from ..components import AssetsMetadataRetriever
-from ..configuring.settings import PathFromSettings
+from ..configuring.settings import DefaultImageValues
 from ..models import AssetsMetadata
-from . import Renderer
+from .protocols import GlobalFactoryProtocol, RendererProtocol
+
+
+class BaseRenderer(ABC, RendererProtocol):
+    @abstractmethod
+    def render_to_str(
+        self, template_path: Path, /, **template_kwargs: Any
+    ) -> tuple[str, AssetsMetadata]:
+        raise NotImplementedError
+
+    def render_to_path(
+        self, template_path: Path, output_path: Path, /, **template_kwargs: Any
+    ) -> AssetsMetadata:
+        from contextlib import suppress
+        from filecmp import cmp
+        from shutil import move
+        from tempfile import NamedTemporaryFile
+
+        try:
+            with NamedTemporaryFile("w", encoding="utf8", delete=False) as fh:
+                rendered, assets_metadata = self.render_to_str(
+                    template_path, **template_kwargs
+                )
+                fh.write(rendered)
+                fh.write("\n")
+            if not output_path.exists() or not cmp(fh.name, str(output_path)):
+                move(fh.name, output_path)
+        finally:
+            with suppress(FileNotFoundError):
+                Path(fh.name).unlink()
+        return assets_metadata
 
 
 class _AbsoluteLoader(BaseLoader):
@@ -30,46 +59,22 @@ class _AbsoluteLoader(BaseLoader):
         )
 
 
-class _LocalizedValues(BaseModel):
-    fr: dict[str, str] = Field(default_factory=dict)
-    en: dict[str, str] = Field(default_factory=dict)
-    all: dict[str, str] = Field(default_factory=dict)
-
-    def get_default(self, value: str, lang: str) -> str:
-        if lang == "fr" and value in self.fr:
-            return self.fr[value]
-        if lang == "en" and value in self.en:
-            return self.en[value]
-        return self.all.get(value, value)
-
-
-class _DefaultImageValues(BaseModel):
-    license: _LocalizedValues = Field(default_factory=_LocalizedValues)
-    author: _LocalizedValues = Field(default_factory=_LocalizedValues)
-    title: _LocalizedValues = Field(default_factory=_LocalizedValues)
-
-
-class _DefaultRendererExtraKwArgs(BaseModel):
-    model_config = ConfigDict(validate_default=True)
-
-    default_img_values: _DefaultImageValues = Field(default_factory=_DefaultImageValues)
-    assets_dir: PathFromSettings = "paths.shared_dir"  # type: ignore[assignment]
-
-
-class DefaultRenderer(
-    Renderer, key="default", extra_kwargs_class=_DefaultRendererExtraKwArgs
-):
+class Renderer(BaseRenderer):
     def __init__(
-        self, default_img_values: _DefaultImageValues, assets_dir: Path
+        self,
+        default_img_values: DefaultImageValues,
+        assets_dir: Path,
+        global_factory: GlobalFactoryProtocol,
     ) -> None:
         self._default_img_values = default_img_values
         self._assets_dir = assets_dir
+        self._global_factory = global_factory
 
     def render_to_str(
         self, template_path: Path, /, **template_kwargs: Any
     ) -> tuple[str, AssetsMetadata]:
         template = self._env.get_template(str(template_path))
-        assets_metadata_retriever = self.new_dep(AssetsMetadataRetriever, "default")
+        assets_metadata_retriever = self._global_factory.assets_metadata_retriever()
         return (
             template.render(
                 assets_metadata_retriever=assets_metadata_retriever,

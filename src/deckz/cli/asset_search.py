@@ -15,14 +15,14 @@ def asset_search(asset: str, /, *, workdir: Path = Path()) -> None:
     """
     from rich.console import Console
 
-    from ..components import AssetsSearcher
+    from ..components.factory import GlobalSettingsFactory
     from ..configuring.settings import GlobalSettings
 
     settings = GlobalSettings.from_yaml(workdir)
 
     console = Console(highlight=False)
 
-    assets_searcher = AssetsSearcher.new("default", settings)
+    assets_searcher = GlobalSettingsFactory(settings).assets_searcher()
     with console.status("Processing decks"):
         result = assets_searcher.search(asset)
 
