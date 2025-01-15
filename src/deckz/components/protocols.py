@@ -54,25 +54,7 @@ class RendererProtocol(Protocol):
 
     def render_to_path(
         self, template_path: Path, output_path: Path, /, **template_kwargs: Any
-    ) -> "AssetsMetadata":
-        from contextlib import suppress
-        from filecmp import cmp
-        from shutil import move
-        from tempfile import NamedTemporaryFile
-
-        try:
-            with NamedTemporaryFile("w", encoding="utf8", delete=False) as fh:
-                rendered, assets_metadata = self.render_to_str(
-                    template_path, **template_kwargs
-                )
-                fh.write(rendered)
-                fh.write("\n")
-            if not output_path.exists() or not cmp(fh.name, str(output_path)):
-                move(fh.name, output_path)
-        finally:
-            with suppress(FileNotFoundError):
-                Path(fh.name).unlink()
-        return assets_metadata
+    ) -> "AssetsMetadata": ...
 
 
 class AssetsMetadataRetrieverProtocol(Protocol):
