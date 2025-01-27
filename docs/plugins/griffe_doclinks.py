@@ -1,14 +1,15 @@
-from __future__ import annotations
-
-import ast
 import re
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from griffe import Extension, Inspector, ObjectNode, Visitor, get_logger
 from griffe import Object as GriffeObject
 from pymdownx.slugs import slugify
+
+if TYPE_CHECKING:
+    import ast
+
 
 DOCS_PATH = Path(__file__).parent.parent
 slugifier = slugify(case="lower")
@@ -99,7 +100,7 @@ class UpdateDocstringsExtension(Extension):
     def on_instance(
         self,
         *,
-        node: ast.AST | ObjectNode,
+        node: "ast.AST | ObjectNode",
         obj: GriffeObject,
         agent: Visitor | Inspector,
         **kwargs: Any,

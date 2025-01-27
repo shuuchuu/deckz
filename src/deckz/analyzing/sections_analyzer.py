@@ -103,7 +103,7 @@ class _SectionsUsageNodeVisitor(
                 self,
                 # Not sure why we need a cast here :/
                 cast(
-                    MutableMapping[UnresolvedPath, MutableSet[FlavorName]],
+                    "MutableMapping[UnresolvedPath, MutableSet[FlavorName]]",
                     section_stats,
                 ),
             )

@@ -71,7 +71,7 @@ class _SectionDependenciesNodeVisitor(
             self._process_part(
                 part,
                 cast(
-                    MutableMapping[UnresolvedPath, MutableSet[ResolvedPath]],
+                    "MutableMapping[UnresolvedPath, MutableSet[ResolvedPath]]",
                     dependencies,
                 ),
             )
