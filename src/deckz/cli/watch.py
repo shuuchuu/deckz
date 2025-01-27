@@ -221,11 +221,7 @@ def assets(*, minimum_delay: int = 5, workdir: Path = Path()) -> None:
     watch(
         minimum_delay,
         frozenset(
-            [
-                settings.paths.tikz_dir,
-                settings.paths.plt_dir,
-                settings.paths.plotly_dir
-            ]
+            [settings.paths.tikz_dir, settings.paths.plt_dir, settings.paths.plotly_dir]
         ),
         frozenset(
             [

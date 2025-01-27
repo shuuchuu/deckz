@@ -66,6 +66,19 @@ def import_module_and_submodules(package_name: str) -> None:
         import_module_and_submodules(subpackage)
 
 
+def dirs_hierarchy(
+    git_dir: Path, user_config_dir: Path, current_dir: Path
+) -> Iterator[Path]:
+    from itertools import islice
+
+    yield git_dir
+    yield user_config_dir
+    if current_dir.is_relative_to(git_dir):
+        yield from islice(intermediate_dirs(git_dir, current_dir), 1, None)
+    else:
+        yield current_dir
+
+
 def intermediate_dirs(start: Path, end: Path) -> Iterator[Path]:
     start = start.resolve()
     yield start

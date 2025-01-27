@@ -1,6 +1,6 @@
 import sys  # noqa: F401
 from pathlib import Path
-from shutil import copytree
+from shutil import copytree, move
 from typing import Any
 from unittest.mock import patch
 
@@ -16,7 +16,10 @@ from deckz.cli import main
 def working_dir(tmp_path: Path, monkeypatch: Any) -> Path:
     data_dir = Path(__file__).parent / __name__
     tmp_dir = tmp_path / "data"
+    tmp_user_dir = tmp_path / "user"
+    tmp_user_dir.mkdir()
     copytree(data_dir, tmp_dir)
+    move(tmp_dir / "user-variables.yml", tmp_user_dir / "variables.yml")
     init_repository(str(tmp_dir))
     working_dir = tmp_dir / "company" / "abc"
     monkeypatch.chdir(working_dir)
