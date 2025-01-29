@@ -244,7 +244,8 @@ class _SlidesNodeVisitor(NodeVisitor[[MutableSequence[TitleOrContent], int], Non
                 path = file.resolved_path.relative_to(basedir)
                 break
         else:
-            raise ValueError
+            msg = f"could not find file {file}"
+            raise ValueError(msg)
         path = path.with_suffix("")
         sections.append(str(PurePosixPath(path)))
 
