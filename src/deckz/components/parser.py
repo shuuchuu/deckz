@@ -65,12 +65,14 @@ class Parser(ParserProtocol):
             The parsed deck
         """
         deck_definition = DeckDefinition.model_validate(load_yaml(deck_definition_path))
-        return Deck(
+        deck = Deck(
             name=deck_definition.name, parts=self._parse_parts(deck_definition.parts)
         )
+        self._validate(deck)
+        return deck
 
     def from_section(self, section: str, flavor: FlavorName) -> Deck:
-        return Deck(
+        deck = Deck(
             name="deck",
             parts=self._parse_parts(
                 [
@@ -85,9 +87,11 @@ class Parser(ParserProtocol):
                 ]
             ),
         )
+        self._validate(deck)
+        return deck
 
     def from_file(self, latex: str) -> Deck:
-        return Deck(
+        deck = Deck(
             name="deck",
             parts=self._parse_parts(
                 [
@@ -98,6 +102,8 @@ class Parser(ParserProtocol):
                 ]
             ),
         )
+        self._validate(deck)
+        return deck
 
     def _parse_parts(
         self, part_definitions: list[PartDefinition]
@@ -274,7 +280,8 @@ class Parser(ParserProtocol):
                 return ResolvedPath(path.resolve())
         return None
 
-    def _validate(self, deck: Deck) -> None:
+    @staticmethod
+    def _validate(deck: Deck) -> None:
         tree = RichTreeVisitor().process(deck)
         if tree is not None:
             rich_print(tree, file=stderr)
