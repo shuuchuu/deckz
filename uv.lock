@@ -385,19 +385,19 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "mkdocs" },
-    { name = "mkdocs-gen-files" },
-    { name = "mkdocs-literate-nav" },
-    { name = "mkdocs-material" },
-    { name = "mkdocs-section-index", specifier = ">=0.3.9" },
-    { name = "mkdocstrings", extras = ["python"] },
-    { name = "mypy" },
-    { name = "pdfminer-six" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "types-pyyaml" },
-    { name = "types-requests" },
+    { name = "mkdocs", specifier = ">=1" },
+    { name = "mkdocs-gen-files", specifier = ">=0.5" },
+    { name = "mkdocs-literate-nav", specifier = ">=0.6" },
+    { name = "mkdocs-material", specifier = ">=9" },
+    { name = "mkdocs-section-index", specifier = ">=0.3" },
+    { name = "mkdocstrings", extras = ["python"], specifier = ">=0.29" },
+    { name = "mypy", specifier = ">=1" },
+    { name = "pdfminer-six", specifier = ">=20250327" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "pytest-cov", specifier = ">=6" },
+    { name = "ruff", specifier = ">=0.11" },
+    { name = "types-pyyaml", specifier = ">=6" },
+    { name = "types-requests", specifier = ">=2.32" },
 ]
 
 [[package]]
