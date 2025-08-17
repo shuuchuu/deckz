@@ -3,7 +3,6 @@ from pathlib import Path
 from .. import app
 
 
-# ruff: noqa: A005
 @app.command()
 def random(
     reason: str,

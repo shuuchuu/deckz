@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from os.path import normpath
 from pathlib import Path, PurePath
 from sys import stderr
 from typing import Literal
@@ -266,7 +267,7 @@ class Parser(ParserProtocol):
         return UnresolvedPath(
             include_path.relative_to("/")
             if include_path.root
-            else base_unresolved_path / include_path
+            else PurePath(normpath(base_unresolved_path / include_path))
         )
 
     def _resolve(
