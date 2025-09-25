@@ -86,10 +86,17 @@ register_plotly = _make_decorator(_plotly_registry)
 
 
 class FunctionAssetsBuilder[T](AssetsBuilderProtocol):
-    def __init__(self, output_dir: Path, module_name: str, library_name: str):
+    def __init__(
+        self,
+        output_dir: Path,
+        module_name: str,
+        library_name: str,
+        registry: list[tuple[Path, Path, Callable[[], T]]],
+    ):
         self._output_dir = output_dir
         self._module_name = module_name
         self._library_name = library_name
+        self._registry = registry
         self._logger = getLogger(__name__)
 
     def build_assets(self) -> None:
@@ -105,9 +112,8 @@ class FunctionAssetsBuilder[T](AssetsBuilderProtocol):
                 self._module_name,
                 self._library_name,
             )
-        full_items = [(self._output_dir / o, p, f) for o, p, f in _plotly_registry]
+        full_items = [(self._output_dir / o, p, f) for o, p, f in self._registry]
         to_build = [(o, f) for o, p, f in full_items if self._needs_compile(p, o)]
-
         if not to_build:
             return
 
@@ -137,7 +143,10 @@ class FunctionAssetsBuilder[T](AssetsBuilderProtocol):
 class PltAssetsBuilder(FunctionAssetsBuilder[None]):
     def __init__(self, output_dir: Path):
         super().__init__(
-            output_dir=output_dir, module_name="plots", library_name="matplotlib"
+            output_dir=output_dir,
+            module_name="plots",
+            library_name="matplotlib",
+            registry=_plt_registry,
         )
 
     @override
@@ -159,7 +168,10 @@ class PltAssetsBuilder(FunctionAssetsBuilder[None]):
 class PlotlyAssetsBuilder(FunctionAssetsBuilder[Figure]):
     def __init__(self, output_dir: Path):
         super().__init__(
-            output_dir=output_dir, module_name="pltly", library_name="plotly"
+            output_dir=output_dir,
+            module_name="pltly",
+            library_name="plotly",
+            registry=_plotly_registry,
         )
 
     def _build_pdf(self, output_path: Path, function: Callable[[], Figure]) -> None:
@@ -233,7 +245,7 @@ class TikzAssetsBuilder(AssetsBuilderProtocol):
             formatted_fails = "\n".join(
                 (
                     f"- {file_path.relative_to(self._input_dir)}"
-                    f' ({linkify(log_path) if log_path.exists() else "no log"})'
+                    f" ({linkify(log_path) if log_path.exists() else 'no log'})"
                 )
                 for file_path, log_path in failed
             )
