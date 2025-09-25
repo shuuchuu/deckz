@@ -1,4 +1,4 @@
-FROM python:3.12-slim-bullseye
+FROM python:3.13-slim-trixie
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -8,6 +8,7 @@ RUN apt update \
   && apt install -y --no-install-recommends \
   curl \
   git \
+  gpg \
   latexmk \
   make \
   texlive \
