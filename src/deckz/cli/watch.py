@@ -17,7 +17,6 @@ def deck(
     handout: bool = False,
     presentation: bool = True,
     print: bool = False,  # noqa: A002
-    minimum_delay: int = 5,
     workdir: Path = Path(),
 ) -> None:
     """Compile on change.
@@ -27,7 +26,6 @@ def deck(
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
-        minimum_delay: Minimum number of seconds before recompiling
         workdir: Path to move into before running the command
 
     """
@@ -44,7 +42,6 @@ def deck(
     if settings.paths.user_config_dir.exists():
         to_watch.append(settings.paths.user_config_dir)
     watch(
-        minimum_delay,
         frozenset(to_watch),
         frozenset(
             [
@@ -71,7 +68,6 @@ def section(
     handout: bool = False,
     presentation: bool = True,
     print: bool = False,  # noqa: A002
-    minimum_delay: int = 5,
     workdir: Path = Path(),
 ) -> None:
     """Compile a specific FLAVOR of a given SECTION on change.
@@ -82,7 +78,6 @@ def section(
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
-        minimum_delay: Minimum number of seconds before recompiling
         workdir: Path to move into before running the command
 
     """
@@ -116,7 +111,6 @@ def section(
         if settings.paths.user_config_dir.exists():
             to_watch.append(settings.paths.user_config_dir)
         watch(
-            minimum_delay,
             frozenset(to_watch),
             frozenset(
                 [
@@ -143,7 +137,6 @@ def file(
     handout: bool = False,
     presentation: bool = True,
     print: bool = False,  # noqa: A002
-    minimum_delay: int = 5,
     workdir: Path = Path(),
 ) -> None:
     """Compile a file on change.
@@ -154,7 +147,6 @@ def file(
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
-        minimum_delay: Minimum number of seconds before recompiling
         workdir: Path to move into before running the command
 
     """
@@ -186,7 +178,6 @@ def file(
         if settings.paths.user_config_dir.exists():
             to_watch.append(settings.paths.user_config_dir)
         watch(
-            minimum_delay,
             frozenset(to_watch),
             frozenset(
                 [
@@ -205,11 +196,10 @@ def file(
 
 
 @watch.command()
-def assets(*, minimum_delay: int = 5, workdir: Path = Path()) -> None:
+def assets(*, workdir: Path = Path()) -> None:
     """Compile assets on change.
 
     Args:
-        minimum_delay: Minimum number of seconds before recompiling
         workdir: Path to move into before running the command
 
     """
@@ -219,7 +209,6 @@ def assets(*, minimum_delay: int = 5, workdir: Path = Path()) -> None:
     settings = GlobalSettings.from_yaml(workdir)
 
     watch(
-        minimum_delay,
         frozenset(
             [settings.paths.tikz_dir, settings.paths.plt_dir, settings.paths.plotly_dir]
         ),

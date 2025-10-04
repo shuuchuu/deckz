@@ -2,8 +2,8 @@ from logging import getLogger
 from pathlib import Path
 from typing import Any, Self
 
+from niquests import post
 from pydantic import BaseModel
-from requests import post
 
 from ..utils import load_yaml
 
