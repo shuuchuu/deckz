@@ -205,7 +205,7 @@ class FlavorDefinition(BaseModel):
 class SectionDefinition(BaseModel):
     """Specify the different attributes of a section."""
 
-    title: str
+    title: str | None = None
     """The title of the section. Will be given as input to the rendering code."""
 
     default_titles: dict[IncludePath, str] | None = None
