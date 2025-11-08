@@ -9,7 +9,7 @@ classifiers = [
 ]
 dependencies = [
   "appdirs >= 1, < 2",
-  "cyclopts >= 3.1.1, < 4",
+  "cyclopts >= 4, < 5",
   "email-validator >= 2, < 3",
   "google-api-python-client >= 2, < 3",
   "google-auth-oauthlib >= 1, < 2",

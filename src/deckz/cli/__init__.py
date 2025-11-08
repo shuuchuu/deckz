@@ -4,6 +4,7 @@ from cyclopts import App
 from rich.logging import RichHandler
 
 app = App()
+app.register_install_completion_command()
 
 
 def main() -> None:
