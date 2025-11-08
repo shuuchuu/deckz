@@ -3,7 +3,9 @@ from logging import INFO, basicConfig
 from cyclopts import App
 from rich.logging import RichHandler
 
-app = App()
+from .. import __version__
+
+app = App(version=__version__)
 app.register_install_completion_command()
 
 
