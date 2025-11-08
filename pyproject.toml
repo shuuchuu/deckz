@@ -31,7 +31,7 @@ homepage = "https://github.com/shuuchuu/deckz"
 name = "deckz"
 readme = "README.md"
 requires-python = ">= 3.12"
-version = "24.2.0"
+version = "24.3.0"
 
 [dependency-groups]
 dev = [
@@ -73,7 +73,7 @@ strict_optional = true
 [bumpver]
 commit = true
 commit_message = "Bump version to {new_version}"
-current_version = "24.2.0"
+current_version = "24.3.0"
 tag = true
 tag_message = "{new_version}"
 version_pattern = "MAJOR.MINOR.PATCH"
