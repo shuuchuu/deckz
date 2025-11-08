@@ -35,6 +35,7 @@ version = "24.2.0"
 
 [dependency-groups]
 dev = [
+  "bumpver >= 2025.1131",
   "mkdocs >= 1",
   "mkdocs-gen-files >= 0.5",
   "mkdocs-literate-nav >= 0.6",
@@ -68,6 +69,23 @@ convention = "google"
 disallow_untyped_defs = true
 ignore_missing_imports = true
 strict_optional = true
+
+[bumpver]
+commit = true
+commit_message = "Bump version to {new_version}"
+current_version = "24.2.0"
+tag = true
+tag_message = "{new_version}"
+version_pattern = "MAJOR.MINOR.PATCH"
+
+[bumpver.file_patterns]
+"pyproject.toml" = [
+  '^version = "{version}"$',
+  '^current_version = "{version}"$',
+]
+"src/deckz/__init__.py" = [
+  '^__version__ = "{version}"$',
+]
 
 [build-system]
 build-backend = "uv_build"
