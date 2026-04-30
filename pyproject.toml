@@ -28,7 +28,7 @@ dependencies = [
 description = "Tool to handle multiple beamer decks."
 homepage = "https://github.com/shuuchuu/deckz"
 license = "Apache-2.0"
-license-files = ["LICENSE*"]
+license-files = ["LICENSE"]
 name = "deckz"
 readme = "README.md"
 requires-python = ">= 3.12"
