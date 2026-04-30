@@ -1,6 +1,6 @@
 from functools import reduce
 from pathlib import Path
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, Self, cast
 
 from appdirs import user_config_dir as appdirs_user_config_dir
 from pydantic import (
@@ -46,33 +46,34 @@ _user_config_dir = Path(appdirs_user_config_dir(app_name)).resolve()
 
 
 # ruff: noqa: RUF027
-# mypy: ignore-errors
 class GlobalPaths(BaseModel):
     model_config = ConfigDict(validate_default=True)
     current_dir: _Path
-    user_config_dir: Literal[_user_config_dir] = _user_config_dir
+    user_config_dir: Path = _user_config_dir
     git_dir: _Path = Field(
         default_factory=lambda data: get_git_dir(data["current_dir"])
     )
-    settings: _Path = "{git_dir}/settings.yml"
-    shared_dir: _Path = "{git_dir}/shared"
-    figures_dir: _Path = "{git_dir}/figures"
-    shared_img_dir: _Path = "{shared_dir}/img"
-    shared_code_dir: _Path = "{shared_dir}/code"
-    shared_latex_dir: _Path = "{shared_dir}/latex"
-    shared_tikz_pdf_dir: _Path = "{shared_dir}/tikz"
-    shared_plt_pdf_dir: _Path = "{shared_dir}/plt"
-    shared_plotly_pdf_dir: _Path = "{shared_dir}/pltly"
-    templates_dir: _Path = "{git_dir}/templates"
-    plt_dir: _Path = "{figures_dir}/plots"
-    plotly_dir: _Path = "{figures_dir}/pltly"
-    tikz_dir: _Path = "{figures_dir}/tikz"
-    jinja2_dir: _Path = "{templates_dir}/jinja2"
-    jinja2_main_template: _Path = "{jinja2_dir}/main.tex"
-    github_issues: _Path = "{user_config_dir}/github-issues.yml"
-    mails: _Path = "{user_config_dir}/mails.yml"
-    gdrive_secrets: _Path = "{user_config_dir}/gdrive-secrets.json"
-    gdrive_credentials: _Path = "{user_config_dir}/gdrive-credentials.pickle"
+    settings: _Path = cast("Path", "{git_dir}/settings.yml")
+    shared_dir: _Path = cast("Path", "{git_dir}/shared")
+    figures_dir: _Path = cast("Path", "{git_dir}/figures")
+    shared_img_dir: _Path = cast("Path", "{shared_dir}/img")
+    shared_code_dir: _Path = cast("Path", "{shared_dir}/code")
+    shared_latex_dir: _Path = cast("Path", "{shared_dir}/latex")
+    shared_tikz_pdf_dir: _Path = cast("Path", "{shared_dir}/tikz")
+    shared_plt_pdf_dir: _Path = cast("Path", "{shared_dir}/plt")
+    shared_plotly_pdf_dir: _Path = cast("Path", "{shared_dir}/pltly")
+    templates_dir: _Path = cast("Path", "{git_dir}/templates")
+    plt_dir: _Path = cast("Path", "{figures_dir}/plots")
+    plotly_dir: _Path = cast("Path", "{figures_dir}/pltly")
+    tikz_dir: _Path = cast("Path", "{figures_dir}/tikz")
+    jinja2_dir: _Path = cast("Path", "{templates_dir}/jinja2")
+    jinja2_main_template: _Path = cast("Path", "{jinja2_dir}/main.tex")
+    github_issues: _Path = cast("Path", "{user_config_dir}/github-issues.yml")
+    mails: _Path = cast("Path", "{user_config_dir}/mails.yml")
+    gdrive_secrets: _Path = cast("Path", "{user_config_dir}/gdrive-secrets.json")
+    gdrive_credentials: _Path = cast(
+        "Path", "{user_config_dir}/gdrive-credentials.pickle"
+    )
 
     def model_post_init(self, __context: Any) -> None:
         for field, value in self.__dict__.items():
@@ -81,10 +82,10 @@ class GlobalPaths(BaseModel):
 
 
 class DeckPaths(GlobalPaths):
-    build_dir: _Path = "{current_dir}/.build"
-    pdf_dir: _Path = "{current_dir}/pdf"
-    local_latex_dir: _Path = "{current_dir}/latex"
-    deck_definition: _Path = "{current_dir}/deck.yml"
+    build_dir: _Path = cast("Path", "{current_dir}/.build")
+    pdf_dir: _Path = cast("Path", "{current_dir}/pdf")
+    local_latex_dir: _Path = cast("Path", "{current_dir}/latex")
+    deck_definition: _Path = cast("Path", "{current_dir}/deck.yml")
 
 
 class GlobalSettings(BaseModel):
