@@ -93,12 +93,12 @@ def get_git_dir(path: Path) -> Path:
     Args:
         path: Path contained in the git dir to search for.
 
+    Returns:
+        Resolved path to the git repository containing the path given as argument.
+
     Raises:
         GitRepositoryNotFoundError: Raised if no git repository is found in the path \
             ancestors.
-
-    Returns:
-        Resolved path to the git repository containing the path given as argument.
     """
     from pygit2 import Repository, discover_repository
 

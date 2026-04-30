@@ -24,7 +24,7 @@ jobs:
         run: uv sync
 
       - name: Test the package style conventions
-        run: uv run make check
+        run: uv run doit check
 
       - name: Run the tests
         run: uv run pytest --cov --cov-report=xml
