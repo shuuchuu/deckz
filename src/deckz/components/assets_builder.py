@@ -9,13 +9,16 @@ from multiprocessing import Pool
 from pathlib import Path
 from shutil import copyfile
 from tempfile import TemporaryDirectory
-from typing import Any, Protocol, override
+from typing import TYPE_CHECKING, Any, Protocol, override
 
 from plotly.graph_objs import Figure
 
 from ..exceptions import DeckzError
 from ..utils import copy_file_if_newer, import_module_and_submodules
 from .protocols import AssetsBuilderProtocol, CompilerProtocol
+
+if TYPE_CHECKING:
+    from ty_extensions import Intersection
 
 
 @dataclass(frozen=True)
@@ -36,8 +39,12 @@ class AssetsBuilder(AssetsBuilderProtocol):
             assets_builder.build_assets()
 
 
-_plt_registry: list[tuple[Path, Path, Callable[[], None]]] = []
-_plotly_registry: list[tuple[Path, Path, Callable[[], Figure]]] = []
+type _CallableWithModuleAndName[**A, T] = Intersection[
+    Callable[A, T], _HasModuleAndName
+]
+
+_plt_registry: list[tuple[Path, Path, _CallableWithModuleAndName[[], None]]] = []
+_plotly_registry: list[tuple[Path, Path, _CallableWithModuleAndName[[], Figure]]] = []
 
 
 def _clear_register() -> None:
@@ -65,7 +72,7 @@ def _build_plot_path(f: _HasModuleAndName) -> tuple[Path, Path]:
     return output_path, python_path
 
 
-def _make_decorator[F: Callable[[], Any]](
+def _make_decorator[F: _CallableWithModuleAndName[[], Any]](
     registry: list[tuple[Path, Path, F]],
 ) -> Callable[[str | None], Callable[[F], F]]:
     def decorator(
@@ -91,7 +98,7 @@ class FunctionAssetsBuilder[T](AssetsBuilderProtocol):
         output_dir: Path,
         module_name: str,
         library_name: str,
-        registry: list[tuple[Path, Path, Callable[[], T]]],
+        registry: list[tuple[Path, Path, _CallableWithModuleAndName[[], T]]],
     ):
         self._output_dir = output_dir
         self._module_name = module_name
