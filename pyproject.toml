@@ -5,7 +5,6 @@ authors = [
 ]
 classifiers = [
   "Topic :: Software Development :: Build Tools",
-  "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
   "appdirs >= 1, < 2",
@@ -28,6 +27,8 @@ dependencies = [
 ]
 description = "Tool to handle multiple beamer decks."
 homepage = "https://github.com/shuuchuu/deckz"
+license = "Apache-2.0"
+license-files = ["LICENSE*"]
 name = "deckz"
 readme = "README.md"
 requires-python = ">= 3.12"
@@ -36,6 +37,7 @@ version = "24.3.1"
 [dependency-groups]
 dev = [
   "bumpver >= 2025.1131",
+  "doit >= 0.37",
   "mkdocs >= 1",
   "mkdocs-gen-files >= 0.5",
   "mkdocs-literate-nav >= 0.6",
@@ -58,7 +60,7 @@ deckz = 'deckz.cli:main'
 target-version = "py312"
 
 [tool.ruff.lint]
-ignore = ["D1", "D203", "D213"]
+ignore = ["D1", "D203", "D213", "RUF067"]
 preview = true
 select = ["A", "B", "C", "D", "DOC", "E", "EM", "F", "N", "PIE", "PTH", "RET", "RUF", "SIM", "SLF", "TC", "UP", "W"]
 
