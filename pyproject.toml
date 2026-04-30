@@ -65,11 +65,6 @@ select = ["A", "B", "C", "D", "DOC", "E", "EM", "F", "N", "PIE", "PTH", "RET", "
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-[tool.mypy]
-disallow_untyped_defs = true
-ignore_missing_imports = true
-strict_optional = true
-
 [bumpver]
 commit = true
 commit_message = "Bump version to {new_version}"
