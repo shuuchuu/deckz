@@ -1,5 +1,5 @@
 __pycache__/
-.doit.db.db
+.doit.json
 .pytest_cache/
 .ruff_cache/
 .venv/

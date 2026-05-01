@@ -495,7 +495,7 @@ wheels = [
 
 [[package]]
 name = "deckz"
-version = "24.3.1"
+version = "24.3.3"
 source = { editable = "." }
 dependencies = [
     { name = "appdirs" },
@@ -560,7 +560,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "bumpver", specifier = ">=2025.1131" },
-    { name = "doit", specifier = ">=0.37.0" },
+    { name = "doit", specifier = ">=0.37" },
     { name = "mkdocs", specifier = ">=1" },
     { name = "mkdocs-gen-files", specifier = ">=0.5" },
     { name = "mkdocs-literate-nav", specifier = ">=0.6" },

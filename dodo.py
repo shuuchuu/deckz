@@ -1,4 +1,9 @@
-DOIT_CONFIG = {"default_tasks": ["check"]}
+DOIT_CONFIG = {
+    "backend": "json",
+    "default_tasks": ["check"],
+    "dep_file": ".doit.json",
+    "verbosity": 2,
+}
 
 
 def task_check():
@@ -16,6 +21,17 @@ def task_test():
         "actions": [
             "uv run pytest",
         ],
+    }
+
+
+def task_install_hooks():
+    import os
+
+    actions = ["git config core.hooksPath .githooks"]
+    if os.name == "posix":
+        actions.append("chmod +x .githooks/*")
+    return {
+        "actions": actions,
     }
 
 
