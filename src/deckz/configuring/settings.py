@@ -91,6 +91,7 @@ class DeckPaths(GlobalPaths):
 class GlobalSettings(BaseModel):
     build_command: tuple[str, ...]
     file_extension: str = ".tex"
+    incremental_compilation: bool = False
     default_img_values: DefaultImageValues = Field(default_factory=DefaultImageValues)
     paths: GlobalPaths = Field(default_factory=GlobalPaths)
 

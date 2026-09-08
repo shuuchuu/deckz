@@ -19,6 +19,7 @@ dependencies = [
   "plotly >= 6, < 7",
   "pydantic >= 2, < 3",
   "pygit2 >= 1, < 2",
+  "pypdf >= 6, < 7",
   "pyyaml >= 6, < 7",
   "rich >= 14, < 15",
   "sendgrid >= 6, < 7",

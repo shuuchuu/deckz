@@ -7,6 +7,8 @@ from pathlib import Path, PurePosixPath
 from shutil import copyfile
 from typing import Any
 
+from rich.progress import BarColumn, Progress
+
 from ..exceptions import DeckzError
 from ..models import (
     Deck,
@@ -73,15 +75,32 @@ class DeckBuilder(DeckBuilderProtocol):
 
     def build_deck(self) -> bool:
         items = self._list_items()
-        self._logger.info(f"Building {len(items)} PDFs.")
-        with Pool(min(cpu_count(), len(items))) as pool:
-            results = pool.starmap(self._build_item, items.items())
-        for item_name, result in zip(items, results, strict=True):
+        results = []
+        with (
+            Progress(
+                "[progress.description]{task.description}",
+                BarColumn(),
+                "[progress.percentage]{task.percentage:>3.0f}%",
+            ) as progress,
+            Pool(min(cpu_count(), len(items))) as pool,
+        ):
+            task_id = progress.add_task("Compiling…", total=len(items))
+            for item_name, result in zip(
+                items,
+                pool.imap(self._build_item_pair, items.items()),
+                strict=True,
+            ):
+                results.append((item_name, result))
+                progress.update(task_id, advance=1)
+        for item_name, result in results:
             if not result.ok:
                 self._logger.warning("Compilation %s errored", item_name)
                 self._logger.warning("Captured %s stderr\n%s", item_name, result.stderr)
                 self._logger.warning("Captured %s stdout\n%s", item_name, result.stdout)
-        return all(result.ok for result in results)
+        return all(result.ok for _, result in results)
+
+    def _build_item_pair(self, pair: tuple[str, CompileItem]) -> CompileResult:
+        return self._build_item(*pair)
 
     def _name_compile_item(
         self, compile_type: CompileType, name: PartName | None = None
@@ -117,25 +136,18 @@ class DeckBuilder(DeckBuilderProtocol):
         return to_compile
 
     def _build_item(self, name: str, item: CompileItem) -> CompileResult:
-        build_dir = self._setup_build_dir(name)
+        build_dir = setup_build_dir(self._build_dir, name, self._dirs_to_link)
         latex_path = build_dir / f"{name}.tex"
         build_pdf_path = latex_path.with_suffix(".pdf")
         output_pdf_path = self._output_dir / f"{name}.pdf"
         self._render_latex(item, latex_path)
-        copied = self._copy_dependencies(item.dependencies, build_dir)
-        self._render_dependencies(copied)
+        copied = copy_dependencies(item.dependencies, build_dir, self._basedirs)
+        render_dependencies(self._renderer, copied)
         result = self._compiler.compile(latex_path)
         if result.ok:
             self._output_dir.mkdir(parents=True, exist_ok=True)
             copyfile(build_pdf_path, output_pdf_path)
         return result
-
-    def _setup_build_dir(self, name: str) -> Path:
-        target_build_dir = self._build_dir / name
-        target_build_dir.mkdir(parents=True, exist_ok=True)
-        for item in self._dirs_to_link:
-            self._setup_link(target_build_dir / item.name, item)
-        return target_build_dir
 
     def _render_latex(self, item: CompileItem, output_path: Path) -> None:
         self._renderer.render_to_path(
@@ -149,50 +161,60 @@ class DeckBuilder(DeckBuilderProtocol):
             print=item.compile_type is CompileType.PrintHandout,
         )
 
-    def _copy_dependencies(
-        self, dependencies: Set[Path], target_build_dir: Path
-    ) -> list[Path]:
-        copied = []
-        for dependency in dependencies:
-            for basedir in self._basedirs:
-                if dependency.is_relative_to(basedir):
-                    relative_path = dependency.relative_to(basedir)
-                    break
-            else:
-                raise ValueError
-            build_path = (target_build_dir / relative_path).with_suffix(".tex.j2")
-            if copy_file_if_newer(dependency, build_path):
-                copied.append(build_path)
-        return copied
 
-    def _render_dependencies(self, to_render: list[Path]) -> None:
-        for item in to_render:
-            self._renderer.render_to_path(item, item.with_suffix(""))
+def setup_link(source: Path, target: Path) -> None:
+    if not target.exists():
+        msg = (
+            f"{target} could not be found. Please make sure it exists before proceeding"
+        )
+        raise DeckzError(msg)
+    target = target.resolve()
+    if source.is_symlink():
+        if source.resolve().samefile(target):
+            return
+        msg = (
+            f"{source} already exists in the build directory and does not point to "
+            f"{target}. Please clean the build directory"
+        )
+        raise DeckzError(msg)
+    if source.exists():
+        msg = (
+            f"{source} already exists in the build directory. Please clean the "
+            "build directory"
+        )
+        raise DeckzError(msg)
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.symlink_to(target)
 
-    def _setup_link(self, source: Path, target: Path) -> None:
-        if not target.exists():
-            msg = (
-                f"{target} could not be found. Please make sure it exists before "
-                "proceeding"
-            )
-            raise DeckzError(msg)
-        target = target.resolve()
-        if source.is_symlink():
-            if source.resolve().samefile(target):
-                return
-            msg = (
-                f"{source} already exists in the build directory and does not point to "
-                f"{target}. Please clean the build directory"
-            )
-            raise DeckzError(msg)
-        if source.exists():
-            msg = (
-                f"{source} already exists in the build directory. Please clean the "
-                "build directory"
-            )
-            raise DeckzError(msg)
-        source.parent.mkdir(parents=True, exist_ok=True)
-        source.symlink_to(target)
+
+def setup_build_dir(build_dir: Path, name: str, dirs_to_link: Iterable[Path]) -> Path:
+    target_build_dir = build_dir / name
+    target_build_dir.mkdir(parents=True, exist_ok=True)
+    for item in dirs_to_link:
+        setup_link(target_build_dir / item.name, item)
+    return target_build_dir
+
+
+def copy_dependencies(
+    dependencies: Set[Path], target_build_dir: Path, basedirs: Iterable[Path]
+) -> list[Path]:
+    copied = []
+    for dependency in dependencies:
+        for basedir in basedirs:
+            if dependency.is_relative_to(basedir):
+                relative_path = dependency.relative_to(basedir)
+                break
+        else:
+            raise ValueError
+        build_path = (target_build_dir / relative_path).with_suffix(".tex.j2")
+        if copy_file_if_newer(dependency, build_path):
+            copied.append(build_path)
+    return copied
+
+
+def render_dependencies(renderer: RendererProtocol, to_render: Iterable[Path]) -> None:
+    for item in to_render:
+        renderer.render_to_path(item, item.with_suffix(""))
 
 
 class PartDependenciesNodeVisitor(NodeVisitor[[MutableSet[ResolvedPath]], None]):

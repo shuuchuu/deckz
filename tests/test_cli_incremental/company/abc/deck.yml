@@ -1,0 +1,11 @@
+name: ABC
+parts:
+  - name: p1
+    title: Part 1
+    sections:
+      - $first-section@standard
+      - $first-section@light
+  - name: p2
+    title: Part 2
+    sections:
+      - about
