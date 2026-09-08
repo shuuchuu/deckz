@@ -1,0 +1,15 @@
+title: First section
+default_titles:
+  intro: Introduction
+  advanced: Advanced
+  conclusion: Conclusion
+flavors:
+  - name: standard
+    includes:
+      - intro
+      - advanced
+      - conclusion
+  - name: light
+    includes:
+      - intro
+      - conclusion

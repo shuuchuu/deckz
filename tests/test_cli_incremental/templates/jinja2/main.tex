@@ -1,0 +1,121 @@
+%% for k, v in variables.items()
+\newcommand{\\V{k | camelcase}}{\V{v}}
+%% endfor
+
+
+\documentclass[\PresentationSize\BLOCK{if handout},handout\BLOCK{endif}]{beamer}
+
+\usepackage[export]{adjustbox}
+\usepackage{zref-savepos}
+
+\usetheme[block=fill,sectionpage=progressbar,subsectionpage=progressbar,progressbar=frametitle]{metropolis}
+
+\makeatletter
+\setlength{\metropolis@frametitle@padding}{1.9ex}% <- default 2.2 ex
+\renewcommand{\metropolis@frametitlestrut@start}{%
+  \rule{0pt}{\metropolis@frametitle@padding}%
+}
+\renewcommand{\metropolis@frametitlestrut@end}{%
+  \rule[-\metropolis@frametitle@padding]{0pt}{\metropolis@frametitle@padding}%
+}
+\setbeamertemplate{frametitle}{%
+    \nointerlineskip%
+    \begin{beamercolorbox}[%
+        wd=\paperwidth,%
+        sep=0pt,%
+        leftskip=\metropolis@frametitle@padding,%
+        rightskip=\metropolis@frametitle@padding,%
+        ]{frametitle}%
+        \metropolis@frametitlestrut@start%
+        \ifdefempty{\insertsectionhead}{}{%
+          {%
+            \scriptsize%
+            \insertsectionhead%
+            \ifdefempty{\insertsubsectionhead}{}{ > \insertsubsectionhead}%
+            \newline%
+          }%
+        }%
+        \insertframetitle%
+        \nolinebreak%
+        \metropolis@frametitlestrut@end%
+    \end{beamercolorbox}
+    \usebeamertemplate*{progress bar in head/foot}
+}
+
+\setlength{\metropolis@progressinheadfoot@linewidth}{1pt}
+\setbeamercolor{normal text}{bg=white}
+\setbeamertemplate{bibliography item}{\insertbiblabel}
+\setbeamertemplate{blocks}[rounded]
+
+\author{\vfill\UserName}
+\institute{%
+  \vfill%
+  \includegraphics[height=\CompanyLogoHeight]{\CompanyLogo}%
+  \newline%
+  \url{\CompanyWebsite}%
+}
+\date{}
+
+\title{\DeckTitle}
+
+\begin{document}
+
+%% if start_page is defined
+\setcounter{page}{\V{start_page}}
+\setcounter{framenumber}{\V{start_framenumber}}
+\setbeamertemplate{navigation symbols}{}
+\renewcommand{\hyperlink}[2]{#2}
+%% endif
+
+%% if is_skeleton is not defined or is_skeleton
+\maketitle
+%% endif
+
+%% if toc
+\begin{frame}{Program}
+%% if toc_entries is defined
+%% for entry in toc_entries
+\zsavepos{deckz-toc-\V{entry.index}}\hspace*{\V{entry.level}em}\V{entry.title}\\
+%% endfor
+%% else
+\tableofcontents[subsectionstyle=hide]
+%% endif
+\end{frame}
+%% endif
+
+%% if part_checkpoints is defined
+\newwrite\deckzcheckpoint
+%% endif
+
+%% for part in parts:
+%% if part.title != None and (parts | length > 1 or (multi_part is defined and multi_part))
+\begin{frame}[standout]
+\V{part.title}
+\end{frame}
+%% endif
+%% for section in part.sections:
+%% if section is string
+\input{\V{section}}
+%% elif section.level == 0
+\section{\V{section.title}}
+%% else
+\subsection{\V{section.title}}
+%% endif
+%% endfor
+%% if part_checkpoints is defined
+\immediate\openout\deckzcheckpoint=\V{part_checkpoints[loop.index0]}\relax
+\immediate\write\deckzcheckpoint{page \arabic{page}}
+\immediate\write\deckzcheckpoint{framenumber \arabic{framenumber}}
+\immediate\closeout\deckzcheckpoint
+%% endif
+%% endfor
+
+%% if counters_output_path is defined
+\newwrite\deckzcounters
+\immediate\openout\deckzcounters=\V{counters_output_path}\relax
+\immediate\write\deckzcounters{page \arabic{page}}
+\immediate\write\deckzcounters{framenumber \arabic{framenumber}}
+\immediate\closeout\deckzcounters
+%% endif
+
+\end{document}

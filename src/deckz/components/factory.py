@@ -104,9 +104,16 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
         build_handout: bool,
         build_print: bool,
     ) -> DeckBuilderProtocol:
-        from .deck_builder import DeckBuilder
+        if self._settings.incremental_compilation:
+            from .incremental_deck_builder import IncrementalDeckBuilder
 
-        return DeckBuilder(
+            builder_cls = IncrementalDeckBuilder
+        else:
+            from .deck_builder import DeckBuilder
+
+            builder_cls = DeckBuilder
+
+        return builder_cls(
             variables=variables,
             deck=deck,
             build_presentation=build_presentation,
