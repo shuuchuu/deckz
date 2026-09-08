@@ -33,7 +33,7 @@ license-files = ["LICENSE"]
 name = "deckz"
 readme = "README.md"
 requires-python = ">= 3.12"
-version = "25.0.0"
+version = "25.0.1"
 
 [dependency-groups]
 dev = [
@@ -71,7 +71,7 @@ convention = "google"
 [bumpver]
 commit = true
 commit_message = "Bump version to {new_version}"
-current_version = "25.0.0"
+current_version = "25.0.1"
 tag = true
 tag_message = "{new_version}"
 version_pattern = "MAJOR.MINOR.PATCH"
