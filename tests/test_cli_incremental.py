@@ -1,7 +1,8 @@
 import json
+import os
 import sys  # noqa: F401
 from pathlib import Path
-from shutil import copytree, move
+from shutil import copyfile, copytree, move
 from typing import Any
 from unittest.mock import patch
 
@@ -14,16 +15,76 @@ from pytest import fixture
 
 from deckz.cli import main
 
+# No test here ever looks at a print-handout output, so every `run` below
+# skips it: it's the same cost as the presentation/handout items it would
+# otherwise sit alongside, for zero coverage. Keep this consistent across
+# every run_deckz("run", ...) call in this file (golden build included) —
+# building print in some calls but not others would make the very first
+# print-including call in a given working_dir pay for a full cold build of
+# it right there, defeating the point.
+_RUN_ARGS = ("p1", "p2", "--no-print")
 
-@fixture
-def working_dir(tmp_path: Path, monkeypatch: Any) -> Path:
-    data_dir = Path(__file__).parent / __name__
-    tmp_dir = tmp_path / "data"
-    tmp_user_dir = tmp_path / "user"
+
+def run_deckz(*args: str) -> None:
+    with patch("sys.argv", ["deckz", *args]):
+        try:
+            main()
+        except SystemExit as e:
+            if e.code != 0:
+                raise e
+
+
+@fixture(scope="session")
+def _golden_data_dir(tmp_path_factory: Any) -> Path:
+    # Every test that needs a pristine post-cold-build starting point gets
+    # its own copy of this (see `working_dir`) instead of repeating the same
+    # real LaTeX compilation from scratch in every test: the actual point of
+    # each test is the edit + rebuild it does on top of that starting point,
+    # not re-deriving an identical, deterministic one over and over.
+    golden_root = tmp_path_factory.mktemp("golden")
+    tmp_dir = golden_root / "data"
+    tmp_user_dir = golden_root / "user"
     tmp_user_dir.mkdir()
+    data_dir = Path(__file__).parent / __name__
     copytree(data_dir, tmp_dir)
     move(tmp_dir / "user-variables.yml", tmp_user_dir / "variables.yml")
     init_repository(str(tmp_dir))
+    working_dir = tmp_dir / "company" / "abc"
+
+    # monkeypatch is function-scoped and can't be used from a session-scoped
+    # fixture, so patch and restore appdirs/cwd by hand around this one call.
+    old_cwd = Path.cwd()
+    old_user_config_dir = appdirs.user_config_dir
+    os.chdir(working_dir)
+    setattr(appdirs, "user_config_dir", lambda _=None, **kwargs: str(tmp_dir))  # noqa: B010
+    try:
+        run_deckz("run", *_RUN_ARGS)
+    finally:
+        os.chdir(old_cwd)
+        setattr(appdirs, "user_config_dir", old_user_config_dir)  # noqa: B010
+
+    return tmp_dir
+
+
+@fixture
+def working_dir(_golden_data_dir: Path, tmp_path: Path, monkeypatch: Any) -> Path:
+    tmp_dir = tmp_path / "data"
+    copytree(_golden_data_dir, tmp_dir, symlinks=True)
+    # setup_link builds absolute symlinks from .build/*/ to shared/, pointing
+    # at _golden_data_dir's own copy: strip them here so the next `deckz run`
+    # recreates them pointing at this copy's own shared/ instead of tripping
+    # setup_link's "already exists and doesn't match" safety check.
+    build_dir = tmp_dir / "company" / "abc" / ".build"
+    if build_dir.exists():
+        for path in list(build_dir.rglob("*")):
+            if path.is_symlink():
+                path.unlink()
+
+    tmp_user_dir = tmp_path / "user"
+    tmp_user_dir.mkdir()
+    data_dir = Path(__file__).parent / __name__
+    copyfile(data_dir / "user-variables.yml", tmp_user_dir / "variables.yml")
+
     working_dir = tmp_dir / "company" / "abc"
     monkeypatch.chdir(working_dir)
     monkeypatch.setattr(appdirs, "user_config_dir", lambda _: str(tmp_dir))
@@ -36,15 +97,6 @@ def extract_info(pdf_path: Path) -> tuple[int, str]:
         fh.seek(0)
         text = extract_text(fh)
     return len(pages), text
-
-
-def run_deckz(*args: str) -> None:
-    with patch("sys.argv", ["deckz", *args]):
-        try:
-            main()
-        except SystemExit as e:
-            if e.code != 0:
-                raise e
 
 
 def _manifests(working_dir: Path) -> dict[Path, dict[str, Any]]:
@@ -78,8 +130,8 @@ def _flatten_outline(outline: list[Any]) -> list[Any]:
 
 
 def test_run(working_dir: Path) -> None:
-    run_deckz("run", "p1", "p2")
-
+    # working_dir already reflects a `run p1 p2` (see _golden_data_dir): no
+    # need to repeat it just to check its output.
     n_pages, text = extract_info(working_dir / "pdf" / "abc-handout.pdf")
     assert "John Doe" in text
     assert n_pages > 0
@@ -107,7 +159,6 @@ def test_run(working_dir: Path) -> None:
 def test_incremental_isolated_edit_recompiles_a_single_fragment(
     working_dir: Path,
 ) -> None:
-    run_deckz("run", "p1", "p2")
     before = _manifests(working_dir)
 
     advanced = working_dir / "latex" / "first-section" / "advanced.tex"
@@ -115,7 +166,7 @@ def test_incremental_isolated_edit_recompiles_a_single_fragment(
         advanced.read_text().replace("Don't Panic.", "Don't Panic. Bring a towel.")
     )
 
-    run_deckz("run", "p1", "p2")
+    run_deckz("run", *_RUN_ARGS)
     after = _manifests(working_dir)
 
     # Editing a single slide's text doesn't change its page/frame count, so it
@@ -142,10 +193,9 @@ def test_incremental_isolated_edit_recompiles_a_single_fragment(
 
 
 def test_incremental_noop_rebuild_recompiles_nothing(working_dir: Path) -> None:
-    run_deckz("run", "p1", "p2")
     before = _manifests(working_dir)
 
-    run_deckz("run", "p1", "p2")
+    run_deckz("run", *_RUN_ARGS)
     after = _manifests(working_dir)
 
     assert before == after
@@ -154,15 +204,13 @@ def test_incremental_noop_rebuild_recompiles_nothing(working_dir: Path) -> None:
 def test_incremental_page_count_change_cascades_downstream(
     working_dir: Path,
 ) -> None:
-    run_deckz("run", "p1", "p2")
-
     intro = working_dir / "latex" / "first-section" / "intro.tex"
     intro.write_text(
         intro.read_text()
         + "\n\\begin{frame}\n  \\frametitle{More}\n  More.\n\\end{frame}\n"
     )
 
-    run_deckz("run", "p1", "p2")
+    run_deckz("run", *_RUN_ARGS)
 
     _, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
     assert "More." in text
@@ -188,15 +236,14 @@ def test_incremental_page_count_change_cascades_downstream(
 def test_incremental_batched_fragments_do_not_repeat_section_dividers(
     working_dir: Path,
 ) -> None:
-    # A cold build stales every fragment of an item at once, so p1's fragments
-    # (2 flavors of "first-section", 3 and 2 files respectively) all land in a
-    # single batch. Each batch member replays its own breadcrumb of active
-    # section/subsection titles, and with metropolis' sectionpage=progressbar
-    # (used by the fixture template), replaying an *unchanged* section title
-    # would incorrectly insert an extra divider frame for it before every
-    # file, instead of only where that section actually starts.
-    run_deckz("run", "p1", "p2")
-
+    # The cold build behind working_dir stales every fragment of an item at
+    # once, so p1's fragments (2 flavors of "first-section", 3 and 2 files
+    # respectively) all land in a single batch. Each batch member replays its
+    # own breadcrumb of active section/subsection titles, and with
+    # metropolis' sectionpage=progressbar (used by the fixture template),
+    # replaying an *unchanged* section title would incorrectly insert an
+    # extra divider frame for it before every file, instead of only where
+    # that section actually starts.
     texts = _page_texts(working_dir / "pdf" / "abc-p1-presentation.pdf")
     bare_section_dividers = [text for text in texts if text == "First section"]
     # "First section" is used as two separate flavors in p1's deck.yml, each a
@@ -208,7 +255,6 @@ def test_incremental_batched_fragments_do_not_repeat_section_dividers(
 def test_incremental_toc_links_do_not_accumulate_across_runs(
     working_dir: Path,
 ) -> None:
-    run_deckz("run", "p1", "p2")
     manifest = json.loads(
         (working_dir / ".build" / "abc-handout" / "fragments.json").read_text()
     )
@@ -231,7 +277,7 @@ def test_incremental_toc_links_do_not_accumulate_across_runs(
     advanced.write_text(
         advanced.read_text().replace("Don't Panic.", "Don't Panic. Bring a towel.")
     )
-    run_deckz("run", "p1", "p2")
+    run_deckz("run", *_RUN_ARGS)
 
     assert toc_annotation_count() == before_count
 
@@ -249,7 +295,6 @@ def test_incremental_two_edits_with_untouched_gap_stay_consistent(
     # with that untouched middle stretch (re-sourced from the previous
     # output, see _old_page_starts) without dropping, duplicating, or
     # misplacing any of it.
-    run_deckz("run", "p1", "p2")
     n_pages_before, _ = extract_info(working_dir / "pdf" / "abc-handout.pdf")
 
     advanced = working_dir / "latex" / "first-section" / "advanced.tex"
@@ -259,7 +304,7 @@ def test_incremental_two_edits_with_untouched_gap_stay_consistent(
     about = working_dir / "latex" / "about.tex"
     about.write_text(about.read_text().replace("Your speaker", "Your speaker EDITED"))
 
-    run_deckz("run", "p1", "p2")
+    run_deckz("run", *_RUN_ARGS)
 
     manifest = json.loads(
         (working_dir / ".build" / "abc-handout" / "fragments.json").read_text()
@@ -303,6 +348,9 @@ def test_legacy_mode_still_renders_title_page_and_toc(working_dir: Path) -> None
     # gates \maketitle or the ToC content behind a variable only the
     # incremental renderer passes (e.g. is_skeleton, toc_entries) would
     # silently break legacy mode while every other test here keeps passing.
+    # Legacy mode ignores the incremental artifacts already sitting in
+    # .build/ from working_dir's golden copy (different file naming, no
+    # shared state), so reusing that fixture here is still safe.
     deckz_yml = working_dir.parent.parent / "deckz.yml"
     deckz_yml.write_text(
         deckz_yml.read_text().replace(
@@ -310,7 +358,7 @@ def test_legacy_mode_still_renders_title_page_and_toc(working_dir: Path) -> None
         )
     )
 
-    run_deckz("run", "p1", "p2")
+    run_deckz("run", *_RUN_ARGS)
 
     texts = _page_texts(working_dir / "pdf" / "abc-handout.pdf")
     assert "John Doe" in texts[0]
