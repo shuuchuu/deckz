@@ -1,6 +1,6 @@
 import json
 import os
-import sys  # noqa: F401
+import sys  # ruff: ignore[unused-import]
 from pathlib import Path
 from shutil import copyfile, copytree, move
 from typing import Any
@@ -56,12 +56,12 @@ def _golden_data_dir(tmp_path_factory: Any) -> Path:
     old_cwd = Path.cwd()
     old_user_config_dir = appdirs.user_config_dir
     os.chdir(working_dir)
-    setattr(appdirs, "user_config_dir", lambda _=None, **kwargs: str(tmp_dir))  # noqa: B010
+    setattr(appdirs, "user_config_dir", lambda _=None, **kwargs: str(tmp_dir))  # ruff: ignore[set-attr-with-constant]
     try:
         run_deckz("run", *_RUN_ARGS)
     finally:
         os.chdir(old_cwd)
-        setattr(appdirs, "user_config_dir", old_user_config_dir)  # noqa: B010
+        setattr(appdirs, "user_config_dir", old_user_config_dir)  # ruff: ignore[set-attr-with-constant]
 
     return tmp_dir
 
@@ -127,6 +127,17 @@ def _flatten_outline(outline: list[Any]) -> list[Any]:
         else:
             flat.append(entry)
     return flat
+
+
+def _outline_page_numbers(reader: PdfReader) -> list[int]:
+    pages = []
+    for entry in _flatten_outline(reader.outline):
+        page = reader.get_destination_page_number(entry)
+        # A None here would mean an outline entry pointing nowhere, which
+        # would itself be a bug worth failing loudly on.
+        assert page is not None
+        pages.append(page)
+    return pages
 
 
 def test_run(working_dir: Path) -> None:
@@ -216,10 +227,7 @@ def test_incremental_page_count_change_cascades_downstream(
     assert "More." in text
 
     reader = PdfReader(working_dir / "pdf" / "abc-p1-presentation.pdf")
-    outline_pages = [
-        reader.get_destination_page_number(entry)
-        for entry in _flatten_outline(reader.outline)
-    ]
+    outline_pages = _outline_page_numbers(reader)
     assert outline_pages == sorted(outline_pages)
 
     # The edit cascades into every fragment after it in this item, since their
@@ -335,10 +343,7 @@ def test_incremental_two_edits_with_untouched_gap_stay_consistent(
     assert "The ships hung in the sky" in text  # conclusion (in the gap)
 
     reader = PdfReader(working_dir / "pdf" / "abc-handout.pdf")
-    outline_pages = [
-        reader.get_destination_page_number(entry)
-        for entry in _flatten_outline(reader.outline)
-    ]
+    outline_pages = _outline_page_numbers(reader)
     assert outline_pages == sorted(outline_pages)
 
 

@@ -16,7 +16,7 @@ def deck(
     *,
     handout: bool = False,
     presentation: bool = True,
-    print: bool = False,  # noqa: A002
+    print: bool = False,  # ruff: ignore[builtin-argument-shadowing]
     workdir: Path = Path(),
 ) -> None:
     """Compile on change.
@@ -67,7 +67,7 @@ def section(
     *,
     handout: bool = False,
     presentation: bool = True,
-    print: bool = False,  # noqa: A002
+    print: bool = False,  # ruff: ignore[builtin-argument-shadowing]
     workdir: Path = Path(),
 ) -> None:
     """Compile a specific FLAVOR of a given SECTION on change.
@@ -136,7 +136,7 @@ def file(
     *,
     handout: bool = False,
     presentation: bool = True,
-    print: bool = False,  # noqa: A002
+    print: bool = False,  # ruff: ignore[builtin-argument-shadowing]
     workdir: Path = Path(),
 ) -> None:
     """Compile a file on change.

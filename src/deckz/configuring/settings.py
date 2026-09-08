@@ -45,7 +45,7 @@ _Path = Annotated[Path, BeforeValidator(_convert), AfterValidator(Path.resolve)]
 _user_config_dir = Path(appdirs_user_config_dir(app_name)).resolve()
 
 
-# ruff: noqa: RUF027
+# ruff: file-ignore[missing-f-string-syntax]
 class GlobalPaths(BaseModel):
     model_config = ConfigDict(validate_default=True)
     current_dir: _Path

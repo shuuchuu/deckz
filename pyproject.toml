@@ -61,7 +61,7 @@ deckz = 'deckz.cli:main'
 target-version = "py312"
 
 [tool.ruff.lint]
-ignore = ["D1", "D203", "D213", "RUF067"]
+ignore = ["D1", "incorrect-blank-line-before-class", "multi-line-summary-second-line", "non-empty-init-module"]
 preview = true
 select = ["A", "B", "C", "D", "DOC", "E", "EM", "F", "I", "N", "PIE", "PTH", "RET", "RUF", "SIM", "SLF", "TC", "UP", "W"]
 

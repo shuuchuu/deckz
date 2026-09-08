@@ -1,4 +1,4 @@
-import sys  # noqa: F401
+import sys  # ruff: ignore[unused-import]
 from pathlib import Path
 from shutil import copytree, move
 from typing import Any

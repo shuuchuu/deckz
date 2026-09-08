@@ -99,7 +99,7 @@ class Renderer(_BaseRenderer):
             autoescape=False,
         )
         env.filters["camelcase"] = self._to_camel_case
-        env.filters["path_join"] = lambda paths: path_join(*paths)  # noqa: PTH118
+        env.filters["path_join"] = lambda paths: path_join(*paths)  # ruff: ignore[os-path-join]
         env.filters["image"] = self._img
         return env
 

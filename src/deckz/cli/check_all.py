@@ -8,7 +8,7 @@ def check_all(
     *,
     handout: bool = False,
     presentation: bool = True,
-    print: bool = False,  # noqa: A002
+    print: bool = False,  # ruff: ignore[builtin-argument-shadowing]
     workdir: Path = Path(),
 ) -> None:
     """Compile all shared slides (presentation only by default).

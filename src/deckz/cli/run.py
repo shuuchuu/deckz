@@ -11,7 +11,7 @@ def run(
     *,
     handout: bool = True,
     presentation: bool = True,
-    print: bool = True,  # noqa: A002
+    print: bool = True,  # ruff: ignore[builtin-argument-shadowing]
     workdir: Path = Path(),
 ) -> None:
     """Compile the deck in WORKDIR.
