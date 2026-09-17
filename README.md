@@ -176,10 +176,10 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
 - `deckz search-sections KEYWORDS...`: search shared sections by title or
   frame title.
 - `deckz section-flavors SECTION`: list a section's flavor names.
-- `deckz rename-flavor SECTION OLD NEW`: rename a flavor and rewrite all
+- `deckz flavor rename SECTION OLD NEW`: rename a flavor and rewrite all
   its usages.
-- `deckz merge-flavors`: deduplicate section flavors that are identical up
-  to their name.
+- `deckz flavor deduplicate`: deduplicate section flavors that are identical
+  up to their name.
 - `deckz asset search ASSET` / `deckz asset deps`: find where an asset is
   used, or find assets missing license metadata.
 - `deckz clean` / `deckz clean all` / `deckz clean latex`: remove build

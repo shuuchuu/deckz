@@ -4,7 +4,7 @@ from . import app
 
 
 @app.command()
-def merge_flavors(*, dry_run: bool = False, workdir: Path = Path()) -> None:
+def deduplicate(*, dry_run: bool = False, workdir: Path = Path()) -> None:
     """Merge sections' flavors that are identical up to their name.
 
     For every group of flavors of a section sharing the exact same title and \
@@ -19,8 +19,8 @@ def merge_flavors(*, dry_run: bool = False, workdir: Path = Path()) -> None:
     """
     from rich.console import Console
 
-    from ..analyzing.flavors_merger import FlavorsMerger
-    from ..configuring.settings import GlobalSettings
+    from ...analyzing.flavors_merger import FlavorsMerger
+    from ...configuring.settings import GlobalSettings
 
     console = Console(highlight=False)
     settings = GlobalSettings.from_yaml(workdir)

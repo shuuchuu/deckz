@@ -4,7 +4,7 @@ from . import app
 
 
 @app.command()
-def rename_flavor(
+def rename(
     section: str,
     old: str,
     new: str,
@@ -30,9 +30,9 @@ def rename_flavor(
 
     from rich.console import Console
 
-    from ..analyzing.flavor_renamer import FlavorRenamer
-    from ..configuring.settings import GlobalSettings
-    from ..models import FlavorName, UnresolvedPath
+    from ...analyzing.flavor_renamer import FlavorRenamer
+    from ...configuring.settings import GlobalSettings
+    from ...models import FlavorName, UnresolvedPath
 
     console = Console(highlight=False)
     settings = GlobalSettings.from_yaml(workdir)

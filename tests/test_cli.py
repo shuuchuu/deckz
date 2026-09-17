@@ -92,21 +92,21 @@ def test_clean_latex(working_dir: Path) -> None:
     assert used_path.exists()
 
 
-def test_merge_flavors_dry_run(working_dir: Path) -> None:
+def test_flavor_deduplicate_dry_run(working_dir: Path) -> None:
     section_path = working_dir / "latex" / "first-section" / "first-section.yml"
     deck_path = working_dir / "deck.yml"
 
-    run_deckz("merge-flavors", "--dry-run")
+    run_deckz("flavor", "deduplicate", "--dry-run")
 
     assert "name: light2" in section_path.read_text()
     assert "@light2" in deck_path.read_text()
 
 
-def test_merge_flavors(working_dir: Path) -> None:
+def test_flavor_deduplicate(working_dir: Path) -> None:
     section_path = working_dir / "latex" / "first-section" / "first-section.yml"
     deck_path = working_dir / "deck.yml"
 
-    run_deckz("merge-flavors")
+    run_deckz("flavor", "deduplicate")
 
     assert "name: light2" not in section_path.read_text()
     assert "@light2" not in deck_path.read_text()
@@ -118,21 +118,21 @@ def test_merge_flavors(working_dir: Path) -> None:
     assert "John Doe" in text
 
 
-def test_rename_flavor_dry_run(working_dir: Path) -> None:
+def test_flavor_rename_dry_run(working_dir: Path) -> None:
     section_path = working_dir / "latex" / "first-section" / "first-section.yml"
     deck_path = working_dir / "deck.yml"
 
-    run_deckz("rename-flavor", "first-section", "standard", "extended", "--dry-run")
+    run_deckz("flavor", "rename", "first-section", "standard", "extended", "--dry-run")
 
     assert "name: standard" in section_path.read_text()
     assert "@standard" in deck_path.read_text()
 
 
-def test_rename_flavor(working_dir: Path) -> None:
+def test_flavor_rename(working_dir: Path) -> None:
     section_path = working_dir / "latex" / "first-section" / "first-section.yml"
     deck_path = working_dir / "deck.yml"
 
-    run_deckz("rename-flavor", "first-section", "standard", "extended")
+    run_deckz("flavor", "rename", "first-section", "standard", "extended")
 
     assert "name: standard" not in section_path.read_text()
     assert "name: extended" in section_path.read_text()
@@ -145,11 +145,11 @@ def test_rename_flavor(working_dir: Path) -> None:
     assert "John Doe" in text
 
 
-def test_rename_flavor_unknown_flavor(working_dir: Path) -> None:
+def test_flavor_rename_unknown_flavor(working_dir: Path) -> None:
     with raises(FlavorNotFoundError):
-        run_deckz("rename-flavor", "first-section", "nonexistent", "extended")
+        run_deckz("flavor", "rename", "first-section", "nonexistent", "extended")
 
 
-def test_rename_flavor_name_collision(working_dir: Path) -> None:
+def test_flavor_rename_name_collision(working_dir: Path) -> None:
     with raises(FlavorAlreadyExistsError):
-        run_deckz("rename-flavor", "first-section", "standard", "light")
+        run_deckz("flavor", "rename", "first-section", "standard", "light")

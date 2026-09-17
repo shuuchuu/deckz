@@ -99,8 +99,8 @@ pipeline operates on the model, not on YAML directly.
 `analyzing/` holds repository-wide, read-only analyses that don't fit the
 build pipeline: flavor renaming/merging, section search, i18n
 (fr/en) consistency checks. These back the `deckz deps`,
-`deckz search-sections`, `deckz rename-flavor`, `deckz merge-flavors`, and
-`deckz i18n *` commands.
+`deckz search-sections`, `deckz flavor rename`, `deckz flavor deduplicate`,
+and `deckz i18n *` commands.
 
 ## Conventions
 
