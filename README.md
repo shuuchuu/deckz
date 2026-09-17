@@ -88,14 +88,14 @@ build_command:
 config directory (XDG-compliant, e.g.
 `$HOME/.config/deckz/deckz.yml` on GNU/Linux), and from the current
 directory (and its ancestors up to the git root). Run
-`deckz print settings` to inspect the resolved result.
+`deckz show settings` to inspect the resolved result.
 
 ### `variables.yml`
 
 `variables.yml` files hold the values injected into the Jinja2 templates,
 merged the same way (git root → user config directory → current directory
 and its ancestors), so a value set closer to a deck overrides one set
-higher up. Run `deckz print variables` to inspect the resolved result for
+higher up. Run `deckz show variables` to inspect the resolved result for
 the current deck.
 
 Example:
@@ -167,10 +167,11 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
   errors before they show up in a real deck.
 - `deckz watch deck` / `deckz watch section SECTION FLAVOR`: recompile on
   file changes.
-- `deckz tree`: show the resolved tree of sections and files for the
-  current deck.
-- `deckz print settings` / `deckz print variables`: print the resolved
-  settings/variables for the current directory.
+- `deckz show` (alias for `deckz show tree`): show the resolved tree of
+  sections and files for the current deck.
+- `deckz show settings` / `deckz show variables` / `deckz show paths`:
+  print the resolved settings/variables/file paths for the current
+  directory.
 - `deckz deps [SECTION] [FLAVOR]`: show shared sections/flavors usage
   across the repository, including unused ones.
 - `deckz search-sections KEYWORDS...`: search shared sections by title or

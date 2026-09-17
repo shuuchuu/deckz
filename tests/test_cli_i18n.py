@@ -78,8 +78,8 @@ def working_dir(tmp_path: Path, monkeypatch: Any) -> Iterator[Path]:
     yield deck_dir
 
 
-def test_tree_paths(working_dir: Path, capsys: CaptureFixture[str]) -> None:
-    run_deckz("tree", "--paths")
+def test_show_paths(working_dir: Path, capsys: CaptureFixture[str]) -> None:
+    run_deckz("show", "paths")
 
     out = capsys.readouterr().out.splitlines()
     assert out == [str(working_dir.parent.parent / "shared/latex/i18n-demo/hello.tex")]
