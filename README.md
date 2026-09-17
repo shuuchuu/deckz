@@ -5,7 +5,11 @@
 [![Test Coverage](https://img.shields.io/codecov/c/github/shuuchuu/deckz?style=for-the-badge)](https://codecov.io/gh/shuuchuu/deckz)
 [![PyPI Project](https://img.shields.io/pypi/v/deckz?style=for-the-badge)](https://pypi.org/project/deckz/)
 
-Tool to handle a large number of beamer decks, used by several persons, with shared slides amongst the decks. It is currently not meant to be usable directly by people finding about the package on GitHub. Please open an issue if you want more details or want to discuss this solution.
+`deckz` is a tool to manage a large number of Beamer decks, shared by several
+people, with slides ("sections") shared across decks. It is not meant to be
+usable out of the box by people who stumble upon this repository: it enforces
+strong conventions on the layout of the repository it operates on. Please
+open an issue if you want more details or want to discuss this approach.
 
 ## Installation
 
@@ -15,136 +19,181 @@ With `pip`:
 pip install deckz
 ```
 
-### Shell completion installation
+### Shell completion
 
-See the `--show-completion` or `--install-completion` options of the `deckz` CLI.
+Run `deckz --help` and look for the `--install-completion` /
+`--show-completion` flags to set up completion for your shell.
 
-## Directory Structure
+## Repository layout
 
-`deckz` works with big assumptions on the directory structure of your presentation repository. Among those assumptions:
-
-- your directory should be a git repository
-- it should contain a `shared` folder for everything that will be shared by all decks during compilation (images, code snippets, etc)
-- it should contain jinja2 LaTeX templates in the `templates/jinja2` directory, with a specific name (listed below)
-- it should contain YAML templates in the `templates/yml` directory, with specific names (listed below)
-- your deck folders should be contained in an organization/company folder. This is meant to avoid repeating the company details all over the place
-- several configuration should be present to customize the decks efficiently (more on that later)
+`deckz` expects to run inside a git repository organized like this:
 
 ```text
 root (git repository)
-├── global-config.yml
+├── deckz.yml
+├── variables.yml
 ├── templates
-│   ├── jinja2
-│   │   ├── main.tex
-│   └── yml
-│       ├── company-config.yml
-│       ├── deck-config.yml
-│       ├── global-config.yml
-│       └── user-config.yml
+│   └── jinja2
+│       └── main.tex
 ├── shared
-│   ├── img
-│   │   ├── image1.png
-│   │   └── image2.jpg
-│   ├── code
-│   │   ├── snippet1.py
-│   │   └── snippet2.js
-│   └── latex
-│       ├── module1.tex
-│       └── module2.tex
+│   ├── img
+│   ├── code
+│   ├── latex
+│   │   └── some-section
+│   │       ├── some-section.yml
+│   │       ├── intro.tex
+│   │       └── advanced.tex
+│   ├── tikz
+│   ├── plt
+│   └── pltly
 ├── company1
-│   ├── company-config.yml
-│   └── deck1
-│       ├── session-config.yml
-│       ├── deck-config.yml
-│       └── targets.yml
+│   ├── variables.yml
+│   └── deck1
+│       ├── deck.yml
+│       ├── variables.yml
+│       └── latex
 └── company2
-    ├── company-config.yml
-    └── deck2
-        ├── target1
-        │   └── custom-module.tex
-        ├── deck-config.yml
-        └── targets.yml
+    └── deck2
+        ├── deck.yml
+        └── latex
 ```
+
+- `shared`: everything shared across decks: images and code snippets
+  (`img`, `code`), reusable LaTeX sections (`latex`), and generated
+  standalone figures (`tikz`, `plt` for matplotlib, `pltly` for plotly).
+- `templates/jinja2/main.tex`: the Jinja2 template used to render every
+  deck's main `.tex` file.
+- Each deck is a directory containing a `deck.yml` (its definition) and
+  optionally a `latex` directory for files local to that deck.
+- `variables.yml` files can be placed at any level of the directory
+  hierarchy between the git root and a deck to avoid repeating values
+  (e.g. one per client/company, shared by all of that client's decks).
 
 ## Configuration
 
-`deckz` uses small configuration files in several places to avoid repetition.
+### `deckz.yml`
 
-### Configuration merging
+At the root of the repository, `deckz.yml` holds settings, not content, e.g.:
 
-The configuration are merged in this order (a value from a configuration on the bottom overrides a value from a configuration on the top):
+```yaml
+build_command:
+  - latexmk
+  - -pdflatex=xelatex -shell-escape -interaction=nonstopmode %O %S
+  - -dvi-
+  - -ps-
+  - -pdf
+```
 
-- `global-config.yml`
-- `user-config.yml`
-- `company-config.yml`
-- `deck-config.yml`
-- `session-config.yml`
+`deckz.yml` files are merged, in order, from the git root, from the user's
+config directory (XDG-compliant, e.g.
+`$HOME/.config/deckz/deckz.yml` on GNU/Linux), and from the current
+directory (and its ancestors up to the git root). Run
+`deckz print-settings` to inspect the resolved result.
 
-### Using the configuration values in LaTeX files
+### `variables.yml`
 
-The values obtained from the merged configurations can be used in LaTeX after a conversion from snake case to camel case: if the configuration contains the key `trainer_email`, it will be defined as the `\TrainerEmail` command in LaTeX.
-
-### Details about specific configurations
-
-#### Global configuration
-
-The global configuration contains the default values that don't fit at a more specific level.
+`variables.yml` files hold the values injected into the Jinja2 templates,
+merged the same way (git root → user config directory → current directory
+and its ancestors), so a value set closer to a deck overrides one set
+higher up. Run `deckz print-variables` to inspect the resolved result for
+the current deck.
 
 Example:
 
-```yml
+```yaml
+company_name: Company
+company_logo: img/logo.png
+company_logo_height: 1cm
+deck_title: Machine Learning and COVID-19
 presentation_size: 10pt
 ```
 
-#### User configuration
+Each `snake_case` key becomes a `\CamelCase` LaTeX command (e.g.
+`company_name` → `\CompanyName`) usable from `templates/jinja2/main.tex`
+and from any included file.
 
-The user configuration contains the values that change when the speaker changes. It is located in the XDG compliant config location. It is `$HOME/.config/deckz/user-config.yml` on GNU/Linux for example.
+### `deck.yml`
 
-Example:
+Defines a deck's parts and, for each part, the sections and files it
+includes:
 
-```yml
-trainer_activity: Data Scientist
-trainer_email: john@doe.me
-trainer_name: John Doe
-trainer_specialization: NLP, NLU
-trainer_training: MSc at UCL
+```yaml
+name: ABC
+parts:
+  - name: p1
+    title: Part 1
+    sections:
+      - $first-section@standard
+      - about
+  - name: p2
+    title: Part 2
+    sections:
+      - $first-section@light
 ```
 
-#### Company configuration
+Includes can point to a file (`path/to/file`) or to a shared section with a
+given flavor (`$path/to/section@flavor`); either form can be given a custom
+title with `path: My title` / `$path@flavor: My title`.
 
-The company configuration contains everything required to brand the presentations according to the represented company.
+### Shared sections
 
-Example:
+A shared section lives under `shared/latex` (or a deck's local `latex`
+directory) and has a sibling `.yml` file describing its flavors, e.g.
+`shared/latex/first-section/first-section.yml`:
 
-```yml
-company_logo: logo_company
-company_logo_height: 1cm
-company_name: Company
-company_website: https://www.company.com
-```
-
-#### Deck configuration
-
-The deck configuration contains the title and acronym of the talk.
-
-Example:
-
-```yml
-deck_acronym: COV19
-deck_title: Machine Learning and COVID-19
-```
-
-#### Session configuration
-
-The session configuration is optional and contains everything that will change from one session of a specific talk to another one.
-
-Example:
-
-```yml
-session_end: 30/04/2020
-session_start: 27/04/2020
+```yaml
+title: First section
+default_titles:
+  intro: Introduction
+  advanced: Advanced
+flavors:
+  - name: standard
+    includes:
+      - intro
+      - advanced
+  - name: light
+    includes:
+      - intro
 ```
 
 ## Usage
 
-See the `--help` flag of the `deckz` command line tool.
+Run `deckz --help` for the full list of commands, or `deckz <command>
+--help` for a specific command. The main ones:
+
+- `deckz run [PARTS]...`: compile the deck in the current directory
+  (optionally restricted to some parts).
+- `deckz check-all`: compile every shared section standalone, to catch
+  errors before they show up in a real deck.
+- `deckz watch deck` / `deckz watch section SECTION FLAVOR`: recompile on
+  file changes.
+- `deckz tree`: show the resolved tree of sections and files for the
+  current deck.
+- `deckz print-settings` / `deckz print-variables`: print the resolved
+  settings/variables for the current directory.
+- `deckz deps [SECTION] [FLAVOR]`: show shared sections/flavors usage
+  across the repository, including unused ones.
+- `deckz search-sections KEYWORDS...`: search shared sections by title or
+  frame title.
+- `deckz section-flavors SECTION`: list a section's flavor names.
+- `deckz rename-flavor SECTION OLD NEW`: rename a flavor and rewrite all
+  its usages.
+- `deckz merge-flavors`: deduplicate section flavors that are identical up
+  to their name.
+- `deckz asset-search ASSET` / `deckz asset-deps`: find where an asset is
+  used, or find assets missing license metadata.
+- `deckz clean` / `deckz clean-all` / `deckz clean-latex`: remove build
+  directories, or unused shared/local LaTeX files.
+- `deckz upgrade`: migrate a repository from older `deckz` conventions.
+- `deckz section-en-leak` / `deckz section-flavor-diff` / `deckz
+  section-pair` / `deckz deck-pair`: help keep fr/en translations of
+  decks and shared sections in sync.
+- `deckz upload`: upload built PDFs to Google Drive.
+- `deckz issue TITLE [BODY]`: create a GitHub issue.
+- `deckz random REASON`: roll a dice and email the result (handy for
+  arbitrary decision-making, e.g. picking who does a task).
+
+## Documentation
+
+A partial code reference, generated from the docstrings, is published via
+`mkdocs` (see `mkdocs.yml` and the `docs` directory).
