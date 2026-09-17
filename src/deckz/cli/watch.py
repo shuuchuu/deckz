@@ -5,7 +5,7 @@ from cyclopts import App
 from ..models import FlavorName, PartName
 from . import app
 
-watch = App(name="watch")
+watch = App(name="watch", help="Recompile on file changes.")
 app.command(watch)
 
 
