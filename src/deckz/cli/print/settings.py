@@ -4,7 +4,7 @@ from . import app
 
 
 @app.command()
-def print_settings(*, workdir: Path = Path()) -> None:
+def settings(*, workdir: Path = Path()) -> None:
     """Print the resolved settings.
 
     Args:
@@ -13,10 +13,10 @@ def print_settings(*, workdir: Path = Path()) -> None:
     from pydantic import ValidationError
     from rich import print as rich_print
 
-    from ..configuring.settings import DeckSettings, GlobalSettings
+    from ...configuring.settings import DeckSettings, GlobalSettings
 
     try:
-        settings: GlobalSettings = DeckSettings.from_yaml(workdir)
+        resolved: GlobalSettings = DeckSettings.from_yaml(workdir)
     except ValidationError:
-        settings = GlobalSettings.from_yaml(workdir)
-    rich_print(settings)
+        resolved = GlobalSettings.from_yaml(workdir)
+    rich_print(resolved)

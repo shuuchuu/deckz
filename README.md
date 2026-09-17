@@ -88,14 +88,14 @@ build_command:
 config directory (XDG-compliant, e.g.
 `$HOME/.config/deckz/deckz.yml` on GNU/Linux), and from the current
 directory (and its ancestors up to the git root). Run
-`deckz print-settings` to inspect the resolved result.
+`deckz print settings` to inspect the resolved result.
 
 ### `variables.yml`
 
 `variables.yml` files hold the values injected into the Jinja2 templates,
 merged the same way (git root → user config directory → current directory
 and its ancestors), so a value set closer to a deck overrides one set
-higher up. Run `deckz print-variables` to inspect the resolved result for
+higher up. Run `deckz print variables` to inspect the resolved result for
 the current deck.
 
 Example:
@@ -169,7 +169,7 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
   file changes.
 - `deckz tree`: show the resolved tree of sections and files for the
   current deck.
-- `deckz print-settings` / `deckz print-variables`: print the resolved
+- `deckz print settings` / `deckz print variables`: print the resolved
   settings/variables for the current directory.
 - `deckz deps [SECTION] [FLAVOR]`: show shared sections/flavors usage
   across the repository, including unused ones.
@@ -180,9 +180,9 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
   its usages.
 - `deckz merge-flavors`: deduplicate section flavors that are identical up
   to their name.
-- `deckz asset-search ASSET` / `deckz asset-deps`: find where an asset is
+- `deckz asset search ASSET` / `deckz asset deps`: find where an asset is
   used, or find assets missing license metadata.
-- `deckz clean` / `deckz clean-all` / `deckz clean-latex`: remove build
+- `deckz clean` / `deckz clean all` / `deckz clean latex`: remove build
   directories, or unused shared/local LaTeX files.
 - `deckz upgrade`: migrate a repository from older `deckz` conventions.
 - `deckz i18n section-en-leak` / `deckz i18n section-flavor-diff` / `deckz

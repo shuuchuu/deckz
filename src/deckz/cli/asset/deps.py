@@ -4,7 +4,7 @@ from . import app
 
 
 @app.command()
-def asset_deps(
+def deps(
     *, verbose: bool = True, descending: bool = True, workdir: Path = Path()
 ) -> None:
     """Find unlicensed assets with output detailed by section.
@@ -20,9 +20,9 @@ def asset_deps(
     from rich.console import Console
     from rich.table import Table
 
-    from ..components.factory import GlobalSettingsFactory
-    from ..configuring.settings import GlobalSettings
-    from ..models import UnresolvedPath
+    from ...components.factory import GlobalSettingsFactory
+    from ...configuring.settings import GlobalSettings
+    from ...models import UnresolvedPath
 
     def _display_table(
         unlicensed_assets: Mapping[UnresolvedPath, Set[Path]],

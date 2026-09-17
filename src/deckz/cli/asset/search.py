@@ -4,7 +4,7 @@ from . import app
 
 
 @app.command()
-def asset_search(asset: str, /, *, workdir: Path = Path()) -> None:
+def search(asset: str, /, *, workdir: Path = Path()) -> None:
     """Find which files use ASSET.
 
     Args:
@@ -15,8 +15,8 @@ def asset_search(asset: str, /, *, workdir: Path = Path()) -> None:
     """
     from rich.console import Console
 
-    from ..components.factory import GlobalSettingsFactory
-    from ..configuring.settings import GlobalSettings
+    from ...components.factory import GlobalSettingsFactory
+    from ...configuring.settings import GlobalSettings
 
     settings = GlobalSettings.from_yaml(workdir)
 

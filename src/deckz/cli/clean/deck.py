@@ -3,7 +3,7 @@ from pathlib import Path
 from . import app
 
 
-@app.command()
+@app.default
 def clean(*, workdir: Path = Path()) -> None:
     """Wipe the build directory.
 
@@ -14,7 +14,7 @@ def clean(*, workdir: Path = Path()) -> None:
     from logging import getLogger
     from shutil import rmtree
 
-    from ..configuring.settings import DeckSettings
+    from ...configuring.settings import DeckSettings
 
     logger = getLogger(__name__)
     settings = DeckSettings.from_yaml(workdir)

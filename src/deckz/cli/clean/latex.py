@@ -4,7 +4,7 @@ from . import app
 
 
 @app.command()
-def clean_latex(*, dry_run: bool = False, workdir: Path = Path()) -> None:
+def latex(*, dry_run: bool = False, workdir: Path = Path()) -> None:
     """Delete unused LaTeX files, shared or local to a deck.
 
     Args:
@@ -16,8 +16,8 @@ def clean_latex(*, dry_run: bool = False, workdir: Path = Path()) -> None:
 
     from rich.console import Console
 
-    from ..analyzing.sections_analyzer import SectionsAnalyzer
-    from ..configuring.settings import GlobalSettings
+    from ...analyzing.sections_analyzer import SectionsAnalyzer
+    from ...configuring.settings import GlobalSettings
 
     logger = getLogger(__name__)
     console = Console(highlight=False)

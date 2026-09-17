@@ -4,7 +4,7 @@ from . import app
 
 
 @app.command()
-def clean_all(*, workdir: Path = Path()) -> None:
+def all(*, workdir: Path = Path()) -> None:  # ruff: ignore[builtin-variable-shadowing]
     """Wipe all build directories.
 
     Args:
@@ -14,7 +14,7 @@ def clean_all(*, workdir: Path = Path()) -> None:
     from logging import getLogger
     from shutil import rmtree
 
-    from ..utils import all_deck_settings, get_git_dir
+    from ...utils import all_deck_settings, get_git_dir
 
     logger = getLogger(__name__)
     for settings in all_deck_settings(get_git_dir(workdir).resolve()):

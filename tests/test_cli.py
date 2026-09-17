@@ -69,7 +69,7 @@ def test_clean_latex_dry_run(working_dir: Path) -> None:
     assert shared_unused_path.exists()
     assert local_unused_path.exists()
 
-    run_deckz("clean-latex", "--dry-run")
+    run_deckz("clean", "latex", "--dry-run")
 
     assert shared_unused_path.exists()
     assert local_unused_path.exists()
@@ -85,7 +85,7 @@ def test_clean_latex(working_dir: Path) -> None:
     assert local_unused_path.exists()
     assert used_path.exists()
 
-    run_deckz("clean-latex")
+    run_deckz("clean", "latex")
 
     assert not shared_unused_path.exists()
     assert not local_unused_path.exists()
