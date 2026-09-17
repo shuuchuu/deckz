@@ -12,3 +12,15 @@ class UnresolvableSectionError(DeckzError):
 
 class GitRepositoryNotFoundError(DeckzError):
     pass
+
+
+class SectionNotFoundError(DeckzError):
+    pass
+
+
+class FlavorNotFoundError(DeckzError):
+    pass
+
+
+class FlavorAlreadyExistsError(DeckzError):
+    pass

@@ -7,9 +7,10 @@ from unittest.mock import patch
 import appdirs
 from pdfminer.high_level import extract_pages, extract_text
 from pygit2 import init_repository
-from pytest import fixture
+from pytest import fixture, raises
 
 from deckz.cli import main
+from deckz.exceptions import FlavorAlreadyExistsError, FlavorNotFoundError
 
 
 @fixture
@@ -115,3 +116,40 @@ def test_merge_flavors(working_dir: Path) -> None:
     n_pages, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
     assert n_pages == 14
     assert "John Doe" in text
+
+
+def test_rename_flavor_dry_run(working_dir: Path) -> None:
+    section_path = working_dir / "latex" / "first-section" / "first-section.yml"
+    deck_path = working_dir / "deck.yml"
+
+    run_deckz("rename-flavor", "first-section", "standard", "extended", "--dry-run")
+
+    assert "name: standard" in section_path.read_text()
+    assert "@standard" in deck_path.read_text()
+
+
+def test_rename_flavor(working_dir: Path) -> None:
+    section_path = working_dir / "latex" / "first-section" / "first-section.yml"
+    deck_path = working_dir / "deck.yml"
+
+    run_deckz("rename-flavor", "first-section", "standard", "extended")
+
+    assert "name: standard" not in section_path.read_text()
+    assert "name: extended" in section_path.read_text()
+    assert "@standard" not in deck_path.read_text()
+    assert "$first-section@extended" in deck_path.read_text()
+
+    run_deckz("run", "p1", "p2")
+    n_pages, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
+    assert n_pages == 14
+    assert "John Doe" in text
+
+
+def test_rename_flavor_unknown_flavor(working_dir: Path) -> None:
+    with raises(FlavorNotFoundError):
+        run_deckz("rename-flavor", "first-section", "nonexistent", "extended")
+
+
+def test_rename_flavor_name_collision(working_dir: Path) -> None:
+    with raises(FlavorAlreadyExistsError):
+        run_deckz("rename-flavor", "first-section", "standard", "light")
