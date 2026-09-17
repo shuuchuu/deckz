@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from ...models import FlavorName
-from .. import app
+from . import app
 
 
 @app.command()

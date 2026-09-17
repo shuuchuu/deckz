@@ -185,12 +185,12 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
 - `deckz clean` / `deckz clean-all` / `deckz clean-latex`: remove build
   directories, or unused shared/local LaTeX files.
 - `deckz upgrade`: migrate a repository from older `deckz` conventions.
-- `deckz section-en-leak` / `deckz section-flavor-diff` / `deckz
-  section-pair` / `deckz deck-pair`: help keep fr/en translations of
-  decks and shared sections in sync.
+- `deckz i18n section-en-leak` / `deckz i18n section-flavor-diff` / `deckz
+  i18n section-pair` / `deckz i18n deck-pair`: help keep fr/en translations
+  of decks and shared sections in sync.
 - `deckz upload`: upload built PDFs to Google Drive.
-- `deckz issue TITLE [BODY]`: create a GitHub issue.
-- `deckz random REASON`: roll a dice and email the result (handy for
+- `deckz extras issue TITLE [BODY]`: create a GitHub issue.
+- `deckz extras random REASON`: roll a dice and email the result (handy for
   arbitrary decision-making, e.g. picking who does a task).
 
 ## Documentation

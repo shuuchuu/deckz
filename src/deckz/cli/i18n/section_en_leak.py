@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from .. import app
+from . import app
 
 
 @app.command()

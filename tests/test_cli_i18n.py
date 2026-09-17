@@ -86,7 +86,7 @@ def test_tree_paths(working_dir: Path, capsys: CaptureFixture[str]) -> None:
 
 
 def test_deck_pair(working_dir: Path, capsys: CaptureFixture[str]) -> None:
-    run_deckz("deck-pair")
+    run_deckz("i18n", "deck-pair")
 
     (line,) = capsys.readouterr().out.splitlines()
     fr_path, en_path, exists, included = line.split("\t")
@@ -103,7 +103,7 @@ def test_section_flavors(working_dir: Path, capsys: CaptureFixture[str]) -> None
 
 
 def test_section_files(working_dir: Path, capsys: CaptureFixture[str]) -> None:
-    run_deckz("section-files", "i18n-demo", "hello")
+    run_deckz("i18n", "section-files", "i18n-demo", "hello")
 
     (line,) = capsys.readouterr().out.splitlines()
     assert line.endswith("i18n-demo/hello.tex")
@@ -112,13 +112,13 @@ def test_section_files(working_dir: Path, capsys: CaptureFixture[str]) -> None:
 def test_section_flavor_diff_clean(
     working_dir: Path, capsys: CaptureFixture[str]
 ) -> None:
-    run_deckz("section-flavor-diff", "i18n-demo")
+    run_deckz("i18n", "section-flavor-diff", "i18n-demo")
 
     assert capsys.readouterr().out == ""
 
 
 def test_section_pair(working_dir: Path, capsys: CaptureFixture[str]) -> None:
-    run_deckz("section-pair", "i18n-demo", "hello")
+    run_deckz("i18n", "section-pair", "i18n-demo", "hello")
 
     (line,) = capsys.readouterr().out.splitlines()
     fr_path, en_path, exists, included = line.split("\t")
@@ -129,7 +129,7 @@ def test_section_pair(working_dir: Path, capsys: CaptureFixture[str]) -> None:
 
 
 def test_section_en_leak_clean(working_dir: Path, capsys: CaptureFixture[str]) -> None:
-    run_deckz("section-en-leak", "i18n-demo")
+    run_deckz("i18n", "section-en-leak", "i18n-demo")
 
     assert capsys.readouterr().out == ""
 
