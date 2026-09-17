@@ -185,7 +185,6 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
   used, or find assets missing license metadata.
 - `deckz clean` / `deckz clean all` / `deckz clean latex`: remove build
   directories, or unused shared/local LaTeX files.
-- `deckz upgrade`: migrate a repository from older `deckz` conventions.
 - `deckz i18n section-en-leak` / `deckz i18n section-flavor-diff` / `deckz
   i18n section-pair` / `deckz i18n deck-pair`: help keep fr/en translations
   of decks and shared sections in sync.
