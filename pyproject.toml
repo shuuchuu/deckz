@@ -68,6 +68,9 @@ select = ["A", "B", "C", "D", "DOC", "E", "EM", "F", "I", "N", "PIE", "PTH", "RE
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["private-member-access"]
+
 [bumpver]
 commit = true
 commit_message = "Bump version to {new_version}"

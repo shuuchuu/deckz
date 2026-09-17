@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+from hashlib import md5
 from logging import getLogger
 from pathlib import Path
 from pickle import dump as pickle_dump
@@ -23,17 +25,20 @@ from ..configuring.settings import DeckSettings
 from ..exceptions import DeckzError
 
 
+@dataclass
+class _RemoteFile:
+    id: str
+    web_view_link: str
+    md5_checksum: str | None
+
+
 class Uploader:
     def __init__(self, settings: DeckSettings):
         self._logger = getLogger(__name__)
         self._settings = settings
         self._service = self._build_service()
         folder_id, folder_link = self._check_folders()
-        backup_id = self._create_backup(folder_id)
         self._upload(folder_id)
-        if backup_id:
-            self._logger.info("Deleting backup of old files")
-            self._service.files().delete(fileId=backup_id).execute()
         print(f"Online folder: {folder_link}")
 
     @staticmethod
@@ -102,47 +107,68 @@ class Uploader:
         ).execute()
         return folder_id, folder_link
 
-    def _create_backup(self, folder_id: str) -> str | None:
-        file_ids = self._list(folder=False, parents=[folder_id], name=None)
-        backup_id = None
-        if file_ids:
-            self._logger.info("Creating backup of current files")
-            old_backup_info = self._get(folder=True, parents=[folder_id], name="backup")
-            if old_backup_info is not None:
-                old_backup_id = old_backup_info.get("id")
-                self._service.files().update(
-                    fileId=old_backup_id, body={"name": "backup-old"}
-                ).execute()
-            backup_id, _ = self._create_folder(parent=folder_id, name="backup")
-            for file_id in file_ids:
-                self._service.files().update(
-                    fileId=file_id, addParents=backup_id, removeParents=folder_id
-                ).execute()
-            if old_backup_info is not None:
-                old_backup_id = old_backup_info.get("id")
-                self._service.files().delete(fileId=old_backup_id).execute()
-        return backup_id
+    def _existing_files_by_name(self, folder_id: str) -> dict[str, _RemoteFile]:
+        existing: dict[str, _RemoteFile] = {}
+        for item in self._query(folder=False, parents=[folder_id], name=None):
+            name = item.get("name")
+            if name in existing:
+                self._logger.warning(
+                    f"Found several files named “{name}”, only the first one will "
+                    "be considered for updates"
+                )
+            else:
+                existing[name] = _RemoteFile(
+                    id=item.get("id"),
+                    web_view_link=item.get("webViewLink"),
+                    md5_checksum=item.get("md5Checksum"),
+                )
+        return existing
+
+    @staticmethod
+    def _local_md5(pdf: Path) -> str:
+        hasher = md5()
+        with pdf.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                hasher.update(chunk)
+        return hasher.hexdigest()
 
     def _upload(self, folder_id: str) -> dict[Path, str]:
         self._logger.info("Uploading pdfs")
         pdfs = sorted(
             (self._settings.paths.pdf_dir).glob("*.pdf"), key=lambda p: p.name
         )
+        existing_by_name = self._existing_files_by_name(folder_id)
+        remaining_remote_names = set(existing_by_name)
         links: dict[Path, str] = {}
         progress = self._build_progress()
         with progress:
             for pdf in pdfs:
+                remaining_remote_names.discard(pdf.name)
+                existing = existing_by_name.get(pdf.name)
+                if existing is not None and existing.md5_checksum == self._local_md5(
+                    pdf
+                ):
+                    self._logger.info(f"“{pdf.name}” is unchanged, skipping upload")
+                    links[pdf] = existing.web_view_link
+                    continue
                 pdf_size = pdf.stat().st_size
-                file_metadata = {"name": pdf.name, "parents": [folder_id]}
                 media = MediaFileUpload(
                     str(pdf),
                     chunksize=256 * 1024,
                     mimetype="application/pdf",
                     resumable=True,
                 )
-                request = self._service.files().create(
-                    body=file_metadata, media_body=media, fields="id,webViewLink"
-                )
+                if existing is not None:
+                    self._logger.debug(f"Updating existing file “{pdf.name}”")
+                    request = self._service.files().update(
+                        fileId=existing.id, media_body=media, fields="id,webViewLink"
+                    )
+                else:
+                    self._logger.debug(f"Creating new file “{pdf.name}”")
+                    file_metadata = {"name": pdf.name, "parents": [folder_id]}
+                    request = self._service.files().create(
+                        body=file_metadata, media_body=media, fields="id,webViewLink"
+                    )
                 response = None
                 task = self._build_task(progress, pdf.name, pdf_size)
                 previous_progress = 0
@@ -158,6 +184,15 @@ class Uploader:
                         previous_progress = status.progress()
                 progress.update(task, completed=pdf_size)
                 links[pdf] = response.get("webViewLink")
+        if not pdfs:
+            self._logger.warning(
+                "No local pdfs found, skipping deletion of remote files to avoid "
+                "wiping the whole remote folder"
+            )
+        else:
+            for name in remaining_remote_names:
+                self._logger.info(f"Deleting orphaned remote file “{name}”")
+                self._service.files().delete(fileId=existing_by_name[name].id).execute()
         return links
 
     def _create_folder(self, parent: str, name: str) -> tuple[str, str]:
@@ -172,14 +207,6 @@ class Uploader:
             .execute()
         )
         return file.get("id"), file.get("webViewLink")
-
-    def _list(
-        self,
-        folder: bool | None,
-        parents: list[str],
-        name: str | None,
-    ) -> list[str]:
-        return [item.get("id") for item in self._query(folder, parents, name)]
 
     def _get(
         self, folder: bool | None, parents: list[str], name: str | None
@@ -210,7 +237,7 @@ class Uploader:
                 .list(
                     q=query,
                     spaces="drive",
-                    fields="nextPageToken, files(id,webViewLink)",
+                    fields="nextPageToken, files(id,name,webViewLink,md5Checksum)",
                     pageToken=page_token,
                 )
                 .execute()
