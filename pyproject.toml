@@ -75,6 +75,7 @@ convention = "google"
 commit = true
 commit_message = "Bump version to {new_version}"
 current_version = "25.0.1"
+pre_commit_hook = "scripts/bumpver_pre_commit.sh"
 tag = true
 tag_message = "{new_version}"
 version_pattern = "MAJOR.MINOR.PATCH"
