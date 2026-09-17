@@ -1,0 +1,16 @@
+# Changes here will be overwritten by Copier
+_commit: 0.1.4
+_src_path: template
+project_authors:
+- '  {name = "m09", email = "142691+m09@users.noreply.github.com"},'
+- '  {name = "NyxAether", email = "contact.nyxhemera@gmail.com"},'
+project_description: Tool to handle multiple beamer decks.
+project_homepage: https://github.com/shuuchuu/deckz
+project_id: deckz
+project_license: Apache-2.0
+project_name: deckz
+tools:
+- bumpver
+- doit
+- githooks
+- pytest
