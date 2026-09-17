@@ -58,3 +58,34 @@ def test_check_all(working_dir: Path) -> None:
     n_pages, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
     assert n_pages == 14
     assert "John Doe" in text
+
+
+def test_clean_latex_dry_run(working_dir: Path) -> None:
+    shared_unused_path = (
+        working_dir.parent.parent / "shared" / "latex" / "questions.tex"
+    )
+    local_unused_path = working_dir / "latex" / "orphan.tex"
+    assert shared_unused_path.exists()
+    assert local_unused_path.exists()
+
+    run_deckz("clean-latex", "--dry-run")
+
+    assert shared_unused_path.exists()
+    assert local_unused_path.exists()
+
+
+def test_clean_latex(working_dir: Path) -> None:
+    shared_unused_path = (
+        working_dir.parent.parent / "shared" / "latex" / "questions.tex"
+    )
+    local_unused_path = working_dir / "latex" / "orphan.tex"
+    used_path = working_dir / "latex" / "about.tex"
+    assert shared_unused_path.exists()
+    assert local_unused_path.exists()
+    assert used_path.exists()
+
+    run_deckz("clean-latex")
+
+    assert not shared_unused_path.exists()
+    assert not local_unused_path.exists()
+    assert used_path.exists()

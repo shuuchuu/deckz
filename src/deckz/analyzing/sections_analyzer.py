@@ -10,17 +10,21 @@ from ..models import (
     NodeVisitor,
     Part,
     PartName,
+    ResolvedPath,
     Section,
     SectionDefinition,
     UnresolvedPath,
 )
-from ..utils import all_decks, load_yaml
+from ..utils import all_decks, latex_dirs, load_yaml
 
 
 class SectionsAnalyzer:
-    def __init__(self, shared_latex_dir: Path, git_dir: Path) -> None:
+    def __init__(
+        self, shared_latex_dir: Path, git_dir: Path, file_extension: str
+    ) -> None:
         self._shared_latex_dir = shared_latex_dir
         self._git_dir = git_dir
+        self._file_extension = file_extension
 
     def unused_flavors(self) -> dict[UnresolvedPath, set[FlavorName]]:
         unused_flavors = {
@@ -35,6 +39,14 @@ class SectionsAnalyzer:
                             if not unused_flavors[path]:
                                 del unused_flavors[path]
         return unused_flavors
+
+    def unused_files(self) -> frozenset[Path]:
+        return frozenset(
+            path
+            for latex_dir in latex_dirs(self._git_dir, self._shared_latex_dir)
+            for path in latex_dir.rglob(f"*{self._file_extension}")
+            if ResolvedPath(path.resolve()) not in self._used_files
+        )
 
     def parts_using_flavor(
         self,
@@ -80,6 +92,14 @@ class SectionsAnalyzer:
             deck_path: section_stats_processor.process(deck)
             for deck_path, deck in self._decks.items()
         }
+
+    @cached_property
+    def _used_files(self) -> frozenset[ResolvedPath]:
+        files_usage_processor = _FilesUsageNodeVisitor()
+        used: set[ResolvedPath] = set()
+        for deck in self._decks.values():
+            used.update(files_usage_processor.process(deck))
+        return frozenset(used)
 
 
 class _SectionsUsageNodeVisitor(
@@ -127,3 +147,19 @@ class _SectionsUsageNodeVisitor(
             section_stats[section.unresolved_path].add(section.flavor)
         for node in section.nodes:
             node.accept(self, section_stats)
+
+
+class _FilesUsageNodeVisitor(NodeVisitor[[MutableSet[ResolvedPath]], None]):
+    def process(self, deck: Deck) -> set[ResolvedPath]:
+        used: set[ResolvedPath] = set()
+        for part in deck.parts.values():
+            for node in part.nodes:
+                node.accept(self, cast("MutableSet[ResolvedPath]", used))
+        return used
+
+    def visit_file(self, file: File, used: MutableSet[ResolvedPath]) -> None:
+        used.add(file.resolved_path)
+
+    def visit_section(self, section: Section, used: MutableSet[ResolvedPath]) -> None:
+        for node in section.nodes:
+            node.accept(self, used)
