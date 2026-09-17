@@ -9,3 +9,4 @@ parts:
     title: Part 2
     sections:
       - about
+      - $first-section@light2

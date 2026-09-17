@@ -13,3 +13,7 @@ flavors:
     includes:
       - intro
       - conclusion
+  - name: light2
+    includes:
+      - intro
+      - conclusion

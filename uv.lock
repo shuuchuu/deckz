@@ -622,6 +622,7 @@ dependencies = [
     { name = "pypdf" },
     { name = "pyyaml" },
     { name = "rich" },
+    { name = "ruamel-yaml" },
     { name = "sendgrid" },
     { name = "typer" },
     { name = "watchfiles" },
@@ -663,6 +664,7 @@ requires-dist = [
     { name = "pypdf", specifier = ">=6,<7" },
     { name = "pyyaml", specifier = ">=6,<7" },
     { name = "rich", specifier = ">=14,<15" },
+    { name = "ruamel-yaml", specifier = ">=0.18,<1" },
     { name = "sendgrid", specifier = ">=6,<7" },
     { name = "typer", specifier = ">=0.13,<1" },
     { name = "watchfiles", specifier = ">=1,<2" },
@@ -2258,6 +2260,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e2/d6/d0b9fafc73b65767200da027acab1db1bdb1048f4fea5ebf659df01c700e/rich_rst-2.1.0.tar.gz", hash = "sha256:f4d117b49697f338769759fa5cacf5197da4888b347b9fda2e50aef5cd8d93bd", size = 302732, upload-time = "2026-07-05T02:59:44.308Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2a/68/1fc93dd759605b5d00fc98b50200739e41ed32bd22d6ba35ca6c3932371b/rich_rst-2.1.0-py3-none-any.whl", hash = "sha256:7ecd1343ee12c879d0e7ae74c3eb6d263b023d2929c6d114212eb1fd91057255", size = 272987, upload-time = "2026-07-05T02:59:42.792Z" },
+]
+
+[[package]]
+name = "ruamel-yaml"
+version = "0.19.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c7/3b/ebda527b56beb90cb7652cb1c7e4f91f48649fbcd8d2eb2fb6e77cd3329b/ruamel_yaml-0.19.1.tar.gz", hash = "sha256:53eb66cd27849eff968ebf8f0bf61f46cdac2da1d1f3576dd4ccee9b25c31993", size = 142709, upload-time = "2026-01-02T16:50:31.84Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b8/0c/51f6841f1d84f404f92463fc2b1ba0da357ca1e3db6b7fbda26956c3b82a/ruamel_yaml-0.19.1-py3-none-any.whl", hash = "sha256:27592957fedf6e0b62f281e96effd28043345e0e66001f97683aa9a40c667c93", size = 118102, upload-time = "2026-01-02T16:50:29.201Z" },
 ]
 
 [[package]]

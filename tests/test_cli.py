@@ -89,3 +89,29 @@ def test_clean_latex(working_dir: Path) -> None:
     assert not shared_unused_path.exists()
     assert not local_unused_path.exists()
     assert used_path.exists()
+
+
+def test_merge_flavors_dry_run(working_dir: Path) -> None:
+    section_path = working_dir / "latex" / "first-section" / "first-section.yml"
+    deck_path = working_dir / "deck.yml"
+
+    run_deckz("merge-flavors", "--dry-run")
+
+    assert "name: light2" in section_path.read_text()
+    assert "@light2" in deck_path.read_text()
+
+
+def test_merge_flavors(working_dir: Path) -> None:
+    section_path = working_dir / "latex" / "first-section" / "first-section.yml"
+    deck_path = working_dir / "deck.yml"
+
+    run_deckz("merge-flavors")
+
+    assert "name: light2" not in section_path.read_text()
+    assert "@light2" not in deck_path.read_text()
+    assert "$first-section@light" in deck_path.read_text()
+
+    run_deckz("run", "p1", "p2")
+    n_pages, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
+    assert n_pages == 14
+    assert "John Doe" in text
