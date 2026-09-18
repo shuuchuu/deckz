@@ -40,7 +40,10 @@ class Parser(ParserProtocol):
     """
 
     def __init__(
-        self, local_latex_dir: Path, shared_latex_dir: Path, file_extension: str
+        self,
+        local_latex_dir: Path,
+        shared_latex_dir: Path,
+        file_extensions: Iterable[str],
     ) -> None:
         """Initialize an instance with the necessary path information.
 
@@ -49,11 +52,13 @@ class Parser(ParserProtocol):
                 includes resolving process
             shared_latex_dir: Path to the shared latex directory. Used during the \
                 includes resolving process
-            file_extension: Extensions to consider during file resolving.
+            file_extensions: Extensions to try, in order, when resolving a file \
+                include (e.g. `(".md", ".tex")` to prefer a migrated Markdown \
+                file and fall back to a legacy LaTeX one).
         """
         self._local_latex_dir = local_latex_dir
         self._shared_latex_dir = shared_latex_dir
-        self._file_extension = file_extension
+        self._file_extensions = tuple(file_extensions)
 
     def from_deck_definition(self, deck_definition_path: Path) -> Deck:
         """Parse a deck from a yaml definition.
@@ -251,9 +256,13 @@ class Parser(ParserProtocol):
             resolved_path=ResolvedPath(Path()),
             parsing_error=None,
         )
-        resolved_path = self._resolve(
-            unresolved_path.with_suffix(self._file_extension), "file"
-        )
+        resolved_path = None
+        for file_extension in self._file_extensions:
+            resolved_path = self._resolve(
+                unresolved_path.with_suffix(file_extension), "file"
+            )
+            if resolved_path:
+                break
         if resolved_path:
             file.resolved_path = resolved_path
         else:

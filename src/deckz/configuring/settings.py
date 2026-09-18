@@ -16,25 +16,6 @@ from .. import app_name
 from ..utils import dirs_hierarchy, get_git_dir, load_all_yamls
 
 
-class LocalizedValues(BaseModel):
-    fr: dict[str, str] = Field(default_factory=dict)
-    en: dict[str, str] = Field(default_factory=dict)
-    all: dict[str, str] = Field(default_factory=dict)
-
-    def get_default(self, value: str, lang: str) -> str:
-        if lang == "fr" and value in self.fr:
-            return self.fr[value]
-        if lang == "en" and value in self.en:
-            return self.en[value]
-        return self.all.get(value, value)
-
-
-class DefaultImageValues(BaseModel):
-    license: LocalizedValues = Field(default_factory=LocalizedValues)
-    author: LocalizedValues = Field(default_factory=LocalizedValues)
-    title: LocalizedValues = Field(default_factory=LocalizedValues)
-
-
 def _convert(input_value: str | Path, info: ValidationInfo) -> Path:
     if isinstance(input_value, str):
         return Path(input_value.format(**info.data))
@@ -68,6 +49,7 @@ class GlobalPaths(BaseModel):
     tikz_dir: _Path = cast("Path", "{figures_dir}/tikz")
     jinja2_dir: _Path = cast("Path", "{templates_dir}/jinja2")
     jinja2_main_template: _Path = cast("Path", "{jinja2_dir}/main.tex")
+    jinja2_env_module: _Path = cast("Path", "{jinja2_dir}/env.py")
     github_issues: _Path = cast("Path", "{user_config_dir}/github-issues.yml")
     mails: _Path = cast("Path", "{user_config_dir}/mails.yml")
     gdrive_secrets: _Path = cast("Path", "{user_config_dir}/gdrive-secrets.json")
@@ -90,9 +72,9 @@ class DeckPaths(GlobalPaths):
 
 class GlobalSettings(BaseModel):
     build_command: tuple[str, ...]
-    file_extension: str = ".tex"
+    pandoc_command: tuple[str, ...] = ()
+    file_extensions: tuple[str, ...] = (".tex",)
     incremental_compilation: bool = False
-    default_img_values: DefaultImageValues = Field(default_factory=DefaultImageValues)
     paths: GlobalPaths = Field(default_factory=GlobalPaths)
 
     @classmethod

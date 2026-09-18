@@ -34,7 +34,8 @@ root (git repository)
 ├── variables.yml
 ├── templates
 │   └── jinja2
-│       └── main.tex
+│       ├── main.tex
+│       └── env.py
 ├── shared
 │   ├── img
 │   ├── code
@@ -63,6 +64,9 @@ root (git repository)
   standalone figures (`tikz`, `plt` for matplotlib, `pltly` for plotly).
 - `templates/jinja2/main.tex`: the Jinja2 template used to render every
   deck's main `.tex` file.
+- `templates/jinja2/env.py`: the Python module that configures the Jinja2
+  environment(s) used to render content files -- see [Content files and
+  the Jinja2 environment](#content-files-and-the-jinja2-environment).
 - Each deck is a directory containing a `deck.yml` (its definition) and
   optionally a `latex` directory for files local to that deck.
 - `variables.yml` files can be placed at any level of the directory
@@ -82,7 +86,34 @@ build_command:
   - -dvi-
   - -ps-
   - -pdf
+pandoc_command:
+  - pandoc
+  - -f
+  - markdown
+  - -t
+  - beamer
+  - --slide-level=1
+  - --lua-filter={git_dir}/templates/pandoc/filters/boxes.lua
+file_extensions:
+  - .md
+  - .tex
 ```
+
+- `pandoc_command`: how `deckz` invokes `pandoc` to convert a rendered
+  Markdown content file to the `.tex` fragment that gets `\input`, including
+  any `--lua-filter=...` your own Beamer conventions need (fenced divs for
+  admonition boxes, external code-file inclusion, etc.) -- entirely up to
+  you, `deckz` has no opinion here. Only needed if any content is authored
+  in Markdown. `pandoc` is invoked with a working directory matching the
+  content fragment's own (possibly nested) position under the build
+  directory, so any path an argument needs (e.g. a `--lua-filter`) should be
+  written as `{git_dir}` or `{templates_dir}`, substituted with the resolved
+  absolute path -- a bare relative path would not resolve consistently.
+- `file_extensions`: the extensions tried, in order, when resolving a file
+  include. Defaults to `[".tex"]`; a repository migrating content to
+  Markdown sets `[".md", ".tex"]` so a file is picked up as Markdown if
+  present, falling back to a legacy `.tex` sibling otherwise -- letting the
+  two coexist during a section-by-section migration.
 
 `deckz.yml` files are merged, in order, from the git root, from the user's
 config directory (XDG-compliant, e.g.
@@ -108,9 +139,11 @@ deck_title: Machine Learning and COVID-19
 presentation_size: 10pt
 ```
 
-Each `snake_case` key becomes a `\CamelCase` LaTeX command (e.g.
-`company_name` → `\CompanyName`) usable from `templates/jinja2/main.tex`
-and from any included file.
+These variables are passed to `templates/jinja2/main.tex` as a `variables`
+mapping; what `main.tex` does with them (e.g. turning each `snake_case` key
+into a `\CamelCase` LaTeX command usable from any included file) is up to
+your own template and Jinja2 environment, not something `deckz` imposes --
+see [Content files and the Jinja2 environment](#content-files-and-the-jinja2-environment).
 
 ### `deck.yml`
 
@@ -155,6 +188,64 @@ flavors:
     includes:
       - intro
 ```
+
+### Content files and the Jinja2 environment
+
+Content files (a section's or a deck's included files) are plain text,
+templated with Jinja2, using whatever delimiters and filters
+`templates/jinja2/env.py` configures -- `deckz` itself has no opinion on
+this beyond providing the mechanism. That module must expose:
+
+```python
+from jinja2 import Environment
+
+
+def environment_for(suffix: str) -> Environment:
+    ...
+```
+
+called once per content-file suffix `deckz` renders (typically once for
+`.tex`, once for `.md` if you author some content in Markdown), so
+different sources can use different delimiters/filters -- e.g. the
+LaTeX-escaped delimiters `\V{...}`/`\BLOCK{...}`/`%%` traditionally used
+for `.tex` (to avoid clashing with LaTeX's own `{`/`}`/`%`) don't need to
+carry over to `.md`, where plain `{{ ... }}`/`{% ... %}` read just as well.
+This is also where you define any macro/filter your content relies on, e.g.
+an `image` filter emitting `\includegraphics{...}` (for `.tex`) or
+`![](...)` (for `.md`).
+
+Whatever filter you use to reference an asset file (an image, a tikz/plot
+standalone, ...) should call the `assets_metadata_retriever` context
+variable `deckz` injects into every render, e.g. from a filter function:
+
+```python
+from jinja2 import pass_context
+from jinja2.runtime import Context
+
+
+@pass_context
+def image(context: Context, path: str) -> str:
+    metadata = context["assets_metadata_retriever"](path)
+    ...
+```
+
+This is the hook that keeps `deckz asset search`/`deckz asset deps` (and
+the i18n tooling) accurate: skip it, and asset usage/licensing detection
+silently misses whatever your filter references.
+
+### Markdown content and `pandoc`
+
+A content file can be authored in Markdown instead of LaTeX: with
+`.md` listed in `file_extensions` (see `deckz.yml` above), `deckz` renders
+it through its own Jinja2 environment (see above) and then converts the
+result to the `.tex` fragment that gets `\input`ed, by shelling out to
+`pandoc_command`. Beamer-specific conventions your content relies on
+(admonition boxes, external code-file inclusion, columns, math, ...) are
+entirely up to how you write your Markdown and configure `pandoc_command`
+(typically pandoc's own built-ins plus one or more `--lua-filter=...`
+pointing at Lua filters you maintain in this repository, e.g. under
+`templates/pandoc/`) -- `deckz` only orchestrates the conversion, the same
+way it only orchestrates LaTeX compilation via `build_command`.
 
 ## Usage
 

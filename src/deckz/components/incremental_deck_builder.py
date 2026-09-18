@@ -32,7 +32,12 @@ from .deck_builder import (
     render_dependencies,
     setup_build_dir,
 )
-from .protocols import CompilerProtocol, DeckBuilderProtocol, RendererProtocol
+from .protocols import (
+    CompilerProtocol,
+    DeckBuilderProtocol,
+    MarkdownConverterProtocol,
+    RendererProtocol,
+)
 
 _INITIAL_COUNTERS: dict[str, int] = {"page": 1, "framenumber": 0}
 _COUNTERS_LINE_RE = re.compile(r"^(\w+)\s+(-?\d+)\s*$")
@@ -332,6 +337,7 @@ class _ItemManifest:
     template_hash: str = ""
     variables_hash: str = ""
     toc_entries_hash: str = ""
+    markdown_fingerprint: str = ""
     skeleton: _FragmentState = field(default_factory=_FragmentState)
     fragments: dict[str, _FragmentState] = field(default_factory=dict)
 
@@ -343,6 +349,7 @@ class _ItemManifest:
                 template_hash=data.get("template_hash", ""),
                 variables_hash=data.get("variables_hash", ""),
                 toc_entries_hash=data.get("toc_entries_hash", ""),
+                markdown_fingerprint=data.get("markdown_fingerprint", ""),
                 skeleton=_FragmentState(**data.get("skeleton", {})),
                 fragments={
                     key: _FragmentState(**value)
@@ -359,6 +366,7 @@ class _ItemManifest:
             "template_hash": self.template_hash,
             "variables_hash": self.variables_hash,
             "toc_entries_hash": self.toc_entries_hash,
+            "markdown_fingerprint": self.markdown_fingerprint,
             "skeleton": vars(self.skeleton),
             "fragments": {key: vars(value) for key, value in self.fragments.items()},
         }
@@ -454,6 +462,7 @@ class IncrementalDeckBuilder(DeckBuilderProtocol):
         basedirs: tuple[Path, ...],
         compiler: CompilerProtocol,
         renderer: RendererProtocol,
+        markdown_converter: MarkdownConverterProtocol,
     ) -> None:
         self._variables = variables
         self._build_presentation = build_presentation
@@ -467,6 +476,7 @@ class IncrementalDeckBuilder(DeckBuilderProtocol):
         self._basedirs = basedirs
         self._compiler = compiler
         self._renderer = renderer
+        self._markdown_converter = markdown_converter
         self._logger = getLogger(__name__)
 
         timelines = _TimelineNodeVisitor(basedirs).process(deck)
@@ -519,9 +529,12 @@ class IncrementalDeckBuilder(DeckBuilderProtocol):
     def build_deck(self) -> bool:
         template_hash = _hash_bytes(self._template.read_bytes())
         variables_hash = _hash_text(dumps(self._variables, sort_keys=True, default=str))
+        markdown_fingerprint = self._markdown_converter.fingerprint()
 
         works = {
-            name: self._prepare_item(name, spec, template_hash, variables_hash)
+            name: self._prepare_item(
+                name, spec, template_hash, variables_hash, markdown_fingerprint
+            )
             for name, spec in self._items.items()
         }
 
@@ -548,21 +561,34 @@ class IncrementalDeckBuilder(DeckBuilderProtocol):
         spec: _ItemSpec,
         template_hash: str,
         variables_hash: str,
+        markdown_fingerprint: str,
     ) -> _ItemWork:
         build_dir = setup_build_dir(self._build_dir, name, self._dirs_to_link)
+        old_manifest = _ItemManifest.load(build_dir / "fragments.json")
+        # A changed pandoc command/filter doesn't touch any `.md` source
+        # file's mtime, so `copy_dependencies`'s usual newer-than check would
+        # never re-copy (and therefore `render_dependencies` never
+        # re-converts) a fragment whose only actual change is in a filter
+        # `deckz.yml` points at. Force a full re-copy/re-render/re-convert
+        # pass whenever the fingerprint moved, so filter edits always take
+        # effect on the next build.
+        markdown_stale = old_manifest.markdown_fingerprint != markdown_fingerprint
         copied = copy_dependencies(
             {fragment.resolved_path for fragment in spec.fragments},
             build_dir,
             self._basedirs,
+            force=markdown_stale,
         )
-        render_dependencies(self._renderer, copied)
-        old_manifest = _ItemManifest.load(build_dir / "fragments.json")
+        render_dependencies(
+            self._renderer, self._markdown_converter, copied, self._variables
+        )
         toc_entries_hash = _hash_text(
             dumps([[entry.title, entry.level] for entry in spec.toc_entries])
         )
         globally_stale = (
             old_manifest.template_hash != template_hash
             or old_manifest.variables_hash != variables_hash
+            or markdown_stale
         )
         content_hashes = {
             item.key: (
@@ -580,6 +606,7 @@ class IncrementalDeckBuilder(DeckBuilderProtocol):
                 template_hash=template_hash,
                 variables_hash=variables_hash,
                 toc_entries_hash=toc_entries_hash,
+                markdown_fingerprint=markdown_fingerprint,
             ),
             globally_stale=globally_stale,
             content_hashes=content_hashes,

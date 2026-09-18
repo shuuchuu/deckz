@@ -1,14 +1,14 @@
+import importlib.util
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from functools import cached_property
-from os.path import join as path_join
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
-from jinja2 import BaseLoader, Environment, TemplateNotFound, pass_context
-from jinja2.runtime import Context
+from jinja2 import BaseLoader, Environment, TemplateNotFound
 
-from ..configuring.settings import DefaultImageValues
+from ..exceptions import DeckzError
 from ..models import AssetsMetadata
 from .protocols import GlobalFactoryProtocol, RendererProtocol
 
@@ -59,21 +59,44 @@ class _AbsoluteLoader(BaseLoader):
         )
 
 
+def _content_suffix(path: Path) -> str:
+    # E.g. ".tex" for "foo.tex" (a main template) or "foo.tex.j2" (a
+    # dependency about to be rendered in place), ".md" for "foo.md.j2".
+    return path.with_suffix("").suffix if path.suffix == ".j2" else path.suffix
+
+
 class Renderer(_BaseRenderer):
+    """Render Jinja2 templates using a Jinja environment the target repo owns.
+
+    `deckz` itself has no opinion on delimiters or filters -- including the \
+    `image` macro or any other LaTeX/Markdown vocabulary -- since none of \
+    that is generic. The target repo supplies a Python module (by \
+    convention `templates/jinja2/env.py`, see \
+    `GlobalPaths.jinja2_env_module`) exposing `environment_for(suffix: str) \
+    -> jinja2.Environment`, called once per content-file suffix being \
+    rendered (e.g. once for `.tex`, once for `.md`), so different sources \
+    can use different delimiters/filters.
+
+    The one thing `deckz` still injects into every render, regardless of \
+    environment: an `assets_metadata_retriever` context variable (see \
+    `AssetsMetadataRetrieverProtocol`). Any target-repo-defined filter that \
+    references an asset file must call it to register that usage -- this is \
+    what keeps `deckz asset search`/`deckz asset deps` and the i18n tooling \
+    accurate.
+    """
+
     def __init__(
-        self,
-        default_img_values: DefaultImageValues,
-        assets_dir: Path,
-        global_factory: GlobalFactoryProtocol,
+        self, jinja_env_module: Path, global_factory: GlobalFactoryProtocol
     ) -> None:
-        self._default_img_values = default_img_values
-        self._assets_dir = assets_dir
+        self._jinja_env_module_path = jinja_env_module
         self._global_factory = global_factory
+        self._environments: dict[str, Environment] = {}
 
     def render_to_str(
         self, template_path: Path, /, **template_kwargs: Any
     ) -> tuple[str, AssetsMetadata]:
-        template = self._env.get_template(str(template_path))
+        env = self._environment_for(_content_suffix(template_path))
+        template = env.get_template(str(template_path))
         assets_metadata_retriever = self._global_factory.assets_metadata_retriever()
         return (
             template.render(
@@ -83,58 +106,27 @@ class Renderer(_BaseRenderer):
             assets_metadata_retriever.assets_metadata,
         )
 
+    def _environment_for(self, suffix: str) -> Environment:
+        if suffix not in self._environments:
+            env = self._module.environment_for(suffix)
+            env.loader = _AbsoluteLoader()
+            self._environments[suffix] = env
+        return self._environments[suffix]
+
     @cached_property
-    def _env(self) -> Environment:
-        env = Environment(
-            loader=_AbsoluteLoader(),
-            block_start_string=r"\BLOCK{",
-            block_end_string="}",
-            variable_start_string=r"\V{",
-            variable_end_string="}",
-            comment_start_string=r"\#{",
-            comment_end_string="}",
-            line_statement_prefix="%%",
-            line_comment_prefix="%#",
-            trim_blocks=True,
-            autoescape=False,
+    def _module(self) -> ModuleType:
+        if not self._jinja_env_module_path.is_file():
+            msg = (
+                "could not find a Jinja environment module at "
+                f"{self._jinja_env_module_path}"
+            )
+            raise DeckzError(msg)
+        spec = importlib.util.spec_from_file_location(
+            "deckz._jinja_env", self._jinja_env_module_path
         )
-        env.filters["camelcase"] = self._to_camel_case
-        env.filters["path_join"] = lambda paths: path_join(*paths)  # ruff: ignore[os-path-join]
-        env.filters["image"] = self._img
-        return env
-
-    def _to_camel_case(self, string: str) -> str:
-        return "".join(substring.capitalize() or "_" for substring in string.split("_"))
-
-    @pass_context
-    def _img(
-        self,
-        context: Context,
-        value: str,
-        modifier: str = "",
-        scale: float = 1.0,
-        lang: str = "fr",
-    ) -> str:
-        metadata = context["assets_metadata_retriever"](value)
-        if metadata is not None:
-
-            def get_en_or_fr(key: str) -> str:
-                if lang != "fr":
-                    key_en = f"{key}_en"
-                    return metadata[key_en] if key_en in metadata else metadata[key]
-                return metadata[key]
-
-            title = self._default_img_values.title.get_default(
-                get_en_or_fr("title"), lang
-            )
-            author = self._default_img_values.author.get_default(
-                get_en_or_fr("author"), lang
-            )
-            license_name = self._default_img_values.license.get_default(
-                get_en_or_fr("license"), lang
-            )
-            info = f"[{title}, {author}, {license_name}.]"
-        else:
-            info = ""
-
-        return f"\\img{modifier}{info}{{{value}}}{{{scale:.2f}}}"
+        if spec is None or spec.loader is None:
+            msg = f"could not load {self._jinja_env_module_path} as a module"
+            raise DeckzError(msg)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module

@@ -23,7 +23,9 @@ def latex(*, dry_run: bool = False, workdir: Path = Path()) -> None:
     console = Console(highlight=False)
     settings = GlobalSettings.from_yaml(workdir)
     sections_analyzer = SectionsAnalyzer(
-        settings.paths.shared_latex_dir, settings.paths.git_dir, settings.file_extension
+        settings.paths.shared_latex_dir,
+        settings.paths.git_dir,
+        settings.file_extensions,
     )
 
     with console.status("Finding unused LaTeX files"):

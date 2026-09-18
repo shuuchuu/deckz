@@ -33,6 +33,6 @@ def section_en_leak(section: str, /, *, workdir: Path = Path()) -> None:
 
     settings = GlobalSettings.from_yaml(workdir)
     for finding in compute(
-        settings.paths.shared_latex_dir, settings.file_extension, section
+        settings.paths.shared_latex_dir, settings.file_extensions, section
     ):
         print(finding)

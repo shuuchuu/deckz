@@ -24,7 +24,12 @@ from ..models import (
 )
 from ..utils import copy_file_if_newer
 from .compiler import CompileResult
-from .protocols import CompilerProtocol, DeckBuilderProtocol, RendererProtocol
+from .protocols import (
+    CompilerProtocol,
+    DeckBuilderProtocol,
+    MarkdownConverterProtocol,
+    RendererProtocol,
+)
 
 
 class CompileType(Enum):
@@ -56,6 +61,7 @@ class DeckBuilder(DeckBuilderProtocol):
         basedirs: tuple[Path, ...],
         compiler: CompilerProtocol,
         renderer: RendererProtocol,
+        markdown_converter: MarkdownConverterProtocol,
     ):
         self._variables = variables
         self._build_presentation = build_presentation
@@ -71,6 +77,7 @@ class DeckBuilder(DeckBuilderProtocol):
         self._basedirs = basedirs
         self._compiler = compiler
         self._renderer = renderer
+        self._markdown_converter = markdown_converter
         self._logger = getLogger(__name__)
 
     def build_deck(self) -> bool:
@@ -142,7 +149,9 @@ class DeckBuilder(DeckBuilderProtocol):
         output_pdf_path = self._output_dir / f"{name}.pdf"
         self._render_latex(item, latex_path)
         copied = copy_dependencies(item.dependencies, build_dir, self._basedirs)
-        render_dependencies(self._renderer, copied)
+        render_dependencies(
+            self._renderer, self._markdown_converter, copied, self._variables
+        )
         result = self._compiler.compile(latex_path)
         if result.ok:
             self._output_dir.mkdir(parents=True, exist_ok=True)
@@ -196,7 +205,11 @@ def setup_build_dir(build_dir: Path, name: str, dirs_to_link: Iterable[Path]) ->
 
 
 def copy_dependencies(
-    dependencies: Set[Path], target_build_dir: Path, basedirs: Iterable[Path]
+    dependencies: Set[Path],
+    target_build_dir: Path,
+    basedirs: Iterable[Path],
+    *,
+    force: bool = False,
 ) -> list[Path]:
     copied = []
     for dependency in dependencies:
@@ -206,15 +219,29 @@ def copy_dependencies(
                 break
         else:
             raise ValueError
-        build_path = (target_build_dir / relative_path).with_suffix(".tex.j2")
-        if copy_file_if_newer(dependency, build_path):
+        build_path = (target_build_dir / relative_path).with_name(
+            f"{relative_path.name}.j2"
+        )
+        if force:
+            build_path.parent.mkdir(parents=True, exist_ok=True)
+            copyfile(dependency, build_path)
+            copied.append(build_path)
+        elif copy_file_if_newer(dependency, build_path):
             copied.append(build_path)
     return copied
 
 
-def render_dependencies(renderer: RendererProtocol, to_render: Iterable[Path]) -> None:
+def render_dependencies(
+    renderer: RendererProtocol,
+    markdown_converter: MarkdownConverterProtocol,
+    to_render: Iterable[Path],
+    variables: dict[str, Any],
+) -> None:
     for item in to_render:
-        renderer.render_to_path(item, item.with_suffix(""))
+        rendered_path = item.with_suffix("")
+        renderer.render_to_path(item, rendered_path, variables=variables)
+        if rendered_path.suffix == ".md":
+            markdown_converter.convert(rendered_path, rendered_path.with_suffix(".tex"))
 
 
 class PartDependenciesNodeVisitor(NodeVisitor[[MutableSet[ResolvedPath]], None]):

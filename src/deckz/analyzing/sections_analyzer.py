@@ -1,4 +1,4 @@
-from collections.abc import MutableMapping, MutableSet
+from collections.abc import Iterable, MutableMapping, MutableSet
 from functools import cached_property
 from pathlib import Path, PurePath
 from typing import cast
@@ -20,11 +20,11 @@ from ..utils import all_decks, latex_dirs, load_yaml
 
 class SectionsAnalyzer:
     def __init__(
-        self, shared_latex_dir: Path, git_dir: Path, file_extension: str
+        self, shared_latex_dir: Path, git_dir: Path, file_extensions: Iterable[str]
     ) -> None:
         self._shared_latex_dir = shared_latex_dir
         self._git_dir = git_dir
-        self._file_extension = file_extension
+        self._file_extensions = tuple(file_extensions)
 
     def unused_flavors(self) -> dict[UnresolvedPath, set[FlavorName]]:
         unused_flavors = {
@@ -44,7 +44,8 @@ class SectionsAnalyzer:
         return frozenset(
             path
             for latex_dir in latex_dirs(self._git_dir, self._shared_latex_dir)
-            for path in latex_dir.rglob(f"*{self._file_extension}")
+            for file_extension in self._file_extensions
+            for path in latex_dir.rglob(f"*{file_extension}")
             if ResolvedPath(path.resolve()) not in self._used_files
         )
 

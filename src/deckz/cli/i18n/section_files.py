@@ -25,7 +25,7 @@ def section_files(section: str, flavor: str, /, *, workdir: Path = Path()) -> No
     for path in sorted(
         compute(
             settings.paths.shared_latex_dir,
-            settings.file_extension,
+            settings.file_extensions,
             section,
             FlavorName(flavor),
         )

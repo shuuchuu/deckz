@@ -86,3 +86,13 @@ def test_search_sections_no_match(shared_latex_dir: Path) -> None:
 
 def test_flavor_names(shared_latex_dir: Path) -> None:
     assert flavor_names(shared_latex_dir / "greetings" / "greetings.yml") == ["fr"]
+
+
+def test_search_sections_markdown_heading_match(shared_latex_dir: Path) -> None:
+    _write(
+        shared_latex_dir / "greetings" / "goodbye.md",
+        "# Goodbye\n\nSee you soon!\n",
+    )
+    _, frame_matches = search_sections(shared_latex_dir, ["goodbye"])
+    assert [m.frame_title for m in frame_matches] == ["Goodbye"]
+    assert frame_matches[0].file.suffix == ".md"

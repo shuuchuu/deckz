@@ -9,6 +9,7 @@ from .protocols import (
     DeckBuilderProtocol,
     DeckFactoryProtocol,
     GlobalFactoryProtocol,
+    MarkdownConverterProtocol,
     ParserProtocol,
     RendererProtocol,
 )
@@ -26,8 +27,7 @@ class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
         from .renderer import Renderer
 
         return Renderer(
-            default_img_values=self._settings.default_img_values,
-            assets_dir=self._settings.paths.shared_dir,
+            jinja_env_module=self._settings.paths.jinja2_env_module,
             global_factory=self,
         )
 
@@ -35,6 +35,22 @@ class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
         from .compiler import Compiler
 
         return Compiler(build_command=self._settings.build_command)
+
+    def markdown_converter(self) -> MarkdownConverterProtocol:
+        from .markdown_converter import PandocConverter
+
+        # PandocConverter runs pandoc with a cwd matching the content
+        # fragment's own (possibly deeply nested) position within the build
+        # directory, so a bare relative path (e.g. in a --lua-filter=...
+        # argument) couldn't resolve consistently: format it against the
+        # resolved absolute paths instead, mirroring how GlobalPaths itself
+        # resolves "{git_dir}/..."-style fields.
+        paths = self._settings.paths
+        pandoc_command = tuple(
+            arg.format(git_dir=paths.git_dir, templates_dir=paths.templates_dir)
+            for arg in self._settings.pandoc_command
+        )
+        return PandocConverter(pandoc_command=pandoc_command)
 
     def assets_builder(self) -> AssetsBuilderProtocol:
         from .assets_builder import (
@@ -93,7 +109,7 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
         return Parser(
             local_latex_dir=self._settings.paths.local_latex_dir,
             shared_latex_dir=self._settings.paths.shared_latex_dir,
-            file_extension=self._settings.file_extension,
+            file_extensions=self._settings.file_extensions,
         )
 
     def deck_builder(
@@ -135,4 +151,5 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
             ),
             renderer=self.renderer(),
             compiler=self.compiler(),
+            markdown_converter=self.markdown_converter(),
         )

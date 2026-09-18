@@ -1,0 +1,17 @@
+\documentclass{beamer}
+
+\begin{document}
+
+%% for part in parts:
+%% for section in part.sections:
+%% if section is string
+\input{\V{section}}
+%% elif section.level == 0
+\section{\V{section.title}}
+%% else
+\subsection{\V{section.title}}
+%% endif
+%% endfor
+%% endfor
+
+\end{document}

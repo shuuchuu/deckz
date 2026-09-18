@@ -180,7 +180,7 @@ def test_section_files(repo: Path) -> None:
     settings = GlobalSettings.from_yaml(repo)
     files = section_files(
         settings.paths.shared_latex_dir,
-        settings.file_extension,
+        settings.file_extensions,
         "i18n-demo",
         FlavorName("hello"),
     )
@@ -191,7 +191,7 @@ def test_section_pair_clean(repo: Path) -> None:
     settings = GlobalSettings.from_yaml(repo)
     pairings = section_pair(
         settings.paths.shared_latex_dir,
-        settings.file_extension,
+        settings.file_extensions,
         "i18n-demo",
         FlavorName("hello"),
     )
@@ -204,7 +204,7 @@ def test_section_pair_no_en_yml(repo: Path) -> None:
     settings = GlobalSettings.from_yaml(repo)
     pairings = section_pair(
         settings.paths.shared_latex_dir,
-        settings.file_extension,
+        settings.file_extensions,
         "i18n-demo-fr-only",
         FlavorName("solo"),
     )
@@ -217,7 +217,7 @@ def test_section_en_leak_clean(repo: Path) -> None:
     settings = GlobalSettings.from_yaml(repo)
     assert (
         section_en_leak(
-            settings.paths.shared_latex_dir, settings.file_extension, "i18n-demo"
+            settings.paths.shared_latex_dir, settings.file_extensions, "i18n-demo"
         )
         == []
     )
@@ -226,7 +226,7 @@ def test_section_en_leak_clean(repo: Path) -> None:
 def test_section_en_leak_no_en_yml(repo: Path) -> None:
     settings = GlobalSettings.from_yaml(repo)
     findings = section_en_leak(
-        settings.paths.shared_latex_dir, settings.file_extension, "i18n-demo-fr-only"
+        settings.paths.shared_latex_dir, settings.file_extensions, "i18n-demo-fr-only"
     )
     assert len(findings) == 1
     assert findings[0].startswith("NO_EN_YML")
@@ -235,7 +235,7 @@ def test_section_en_leak_no_en_yml(repo: Path) -> None:
 def test_section_en_leak_detects_leak(repo: Path) -> None:
     settings = GlobalSettings.from_yaml(repo)
     findings = section_en_leak(
-        settings.paths.shared_latex_dir, settings.file_extension, "i18n-leaky"
+        settings.paths.shared_latex_dir, settings.file_extensions, "i18n-leaky"
     )
     assert len(findings) == 1
     assert findings[0].startswith("FLAVOR leaky LEAK")

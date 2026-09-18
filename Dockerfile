@@ -11,6 +11,7 @@ RUN apt update \
   gpg \
   latexmk \
   make \
+  pandoc \
   texlive \
   texlive-lang-english \
   texlive-lang-french \

@@ -47,6 +47,25 @@ class CompilerProtocol(Protocol):
     def compile(self, file: Path) -> "CompileResult": ...
 
 
+class MarkdownConverterProtocol(Protocol):
+    """Convert a rendered Markdown file to LaTeX (or another output format).
+
+    Implementations shell out to `pandoc`; the actual command (binary, \
+    `--slide-level`, `--lua-filter=...`, etc.) is entirely configured by the \
+    target repo via `deckz.yml`'s `pandoc_command`.
+    """
+
+    def convert(self, source: Path, destination: Path) -> None: ...
+
+    def fingerprint(self) -> str:
+        """A stable fingerprint of this converter's configuration.
+
+        Used by the incremental deck builder to invalidate cached fragments \
+        when the pandoc command or a referenced filter file changes, even \
+        though the Markdown source itself didn't.
+        """
+
+
 class RendererProtocol(Protocol):
     def render_to_str(
         self, template_path: Path, /, **template_kwargs: Any
@@ -76,6 +95,8 @@ class GlobalFactoryProtocol(Protocol):
     def renderer(self) -> RendererProtocol: ...
 
     def compiler(self) -> CompilerProtocol: ...
+
+    def markdown_converter(self) -> MarkdownConverterProtocol: ...
 
     def assets_builder(self) -> AssetsBuilderProtocol: ...
 

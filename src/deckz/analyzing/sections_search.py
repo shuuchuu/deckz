@@ -7,12 +7,14 @@ content.
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from re import MULTILINE, Pattern
 from re import compile as re_compile
 
 from ..models import FlavorName
 from ..utils import load_yaml
 
 _FRAME_TITLE = re_compile(r"\\begin\{frame\}(?:\[[^]]*\])?\{([^}]*)\}")
+_MARKDOWN_HEADING = re_compile(r"^#+[ \t]+(.+?)[ \t]*$", MULTILINE)
 
 
 def flavor_names(yml_path: Path) -> list[FlavorName]:
@@ -45,7 +47,7 @@ class FrameTitleMatch:
     "python/basics". Check its yml for the flavor(s) that include `file`."""
 
     file: Path
-    """Absolute path of the `.tex` file containing the frame."""
+    """Absolute path of the `.tex` or `.md` file containing the frame."""
 
     frame_title: str
     """The matching frame title."""
@@ -56,15 +58,33 @@ def _matches(text: str, keywords: Sequence[str]) -> bool:
     return any(keyword.lower() in lowered for keyword in keywords)
 
 
+def _frame_title_matches(
+    section_dir: Path,
+    glob: str,
+    title_re: Pattern[str],
+    section: str,
+    keywords: Sequence[str],
+) -> list[FrameTitleMatch]:
+    matches = []
+    for path in sorted(section_dir.glob(glob)):
+        text = path.read_text(encoding="utf8")
+        for match in title_re.finditer(text):
+            frame_title = match.group(1)
+            if frame_title and _matches(frame_title, keywords):
+                matches.append(FrameTitleMatch(section, path, frame_title))
+    return matches
+
+
 def search_sections(
     shared_latex_dir: Path, keywords: Sequence[str]
 ) -> tuple[list[SectionTitleMatch], list[FrameTitleMatch]]:
     r"""Search fr shared sections for KEYWORDS (OR'd, case-insensitive substring).
 
-    Looks only at each section's `.yml` `title`/`default_titles` values and \
-    each of its own `.tex` files' frame titles (`\begin{frame}{...}`) -- never \
-    at frame bodies, code or comments. Skips `en/` sections and files: this is \
-    meant to find fr content to reuse or extend.
+    Looks only at each section's `.yml` `title`/`default_titles` values, each \
+    of its own `.tex` files' frame titles (`\begin{frame}{...}`), and each of \
+    its own `.md` files' headings (`#`/`##`/...) -- never at frame bodies, \
+    code or comments. Skips `en/` sections and files: this is meant to find \
+    fr content to reuse or extend.
 
     Args:
         shared_latex_dir: Path to the shared latex directory.
@@ -91,12 +111,12 @@ def search_sections(
             if _matches(title, keywords):
                 section_matches.append(SectionTitleMatch(section, title))
 
-        for tex_path in sorted(section_dir.glob("*.tex")):
-            text = tex_path.read_text(encoding="utf8")
-            for match in _FRAME_TITLE.finditer(text):
-                frame_title = match.group(1)
-                if frame_title and _matches(frame_title, keywords):
-                    frame_matches.append(
-                        FrameTitleMatch(section, tex_path, frame_title)
-                    )
+        frame_matches.extend(
+            _frame_title_matches(section_dir, "*.tex", _FRAME_TITLE, section, keywords)
+        )
+        frame_matches.extend(
+            _frame_title_matches(
+                section_dir, "*.md", _MARKDOWN_HEADING, section, keywords
+            )
+        )
     return section_matches, frame_matches

@@ -1,0 +1,8 @@
+name: ABC
+parts:
+  - name: p1
+    title: Part 1
+    sections:
+      - about
+      - legacy
+      - $greeting@standard

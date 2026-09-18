@@ -7,7 +7,7 @@ filesystem or grep-based comparison.
 """
 
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from posixpath import normpath as posix_normpath
@@ -56,7 +56,12 @@ def resolved_files(deck: Deck) -> set[ResolvedPath]:
     return paths
 
 
-def en_counterpart(path: Path, fr_root: Path, en_root: Path) -> Path:
+def en_counterpart(
+    path: Path,
+    fr_root: Path,
+    en_root: Path,
+    file_extensions: Iterable[str] = (".tex",),
+) -> Path:
     """Compute the expected en counterpart of a resolved fr path.
 
     Every section directory (shared or local to a deck) that has been \
@@ -78,7 +83,12 @@ def en_counterpart(path: Path, fr_root: Path, en_root: Path) -> Path:
 
     This is a heuristic, not a guarantee: an absolute include (rooted at a \
     latex root instead of the current section) can legitimately land on a \
-    different file than this rule predicts.
+    different file than this rule predicts. The fr and en sides of a pair \
+    also don't have to share the same extension (one may already be \
+    migrated to Markdown while the other hasn't): each extension in \
+    `file_extensions` is tried, in order, and the first one that exists on \
+    disk is returned; if none do, the fr side's own extension is used as the \
+    reported "expected" path.
 
     Returns:
         The expected en counterpart path.
@@ -90,7 +100,12 @@ def en_counterpart(path: Path, fr_root: Path, en_root: Path) -> Path:
         new_rel = Path("en") / rel.name
     else:
         new_rel = rel
-    return en_root / new_rel
+    default = en_root / new_rel
+    for file_extension in file_extensions:
+        candidate = default.with_suffix(file_extension)
+        if candidate.exists():
+            return candidate
+    return default
 
 
 def deck_pair(fr_settings: "DeckSettings") -> list[FilePairing]:
@@ -131,9 +146,13 @@ def deck_pair(fr_settings: "DeckSettings") -> list[FilePairing]:
     for fr_path in sorted(resolved_files(fr_deck)):
         en_path: Path | None
         if fr_path.is_relative_to(fr_shared):
-            en_path = en_counterpart(fr_path, fr_shared, fr_shared)
+            en_path = en_counterpart(
+                fr_path, fr_shared, fr_shared, fr_settings.file_extensions
+            )
         elif fr_path.is_relative_to(fr_local):
-            en_path = en_counterpart(fr_path, fr_local, en_workdir / "latex")
+            en_path = en_counterpart(
+                fr_path, fr_local, en_workdir / "latex", fr_settings.file_extensions
+            )
         else:
             en_path = None
         if en_path is None:
@@ -240,20 +259,26 @@ def section_flavor_diff(shared_latex_dir: Path, section: str) -> list[str]:
 
 
 def _section_flavor_deck(
-    shared_latex_dir: Path, file_extension: str, section: str, flavor: FlavorName
+    shared_latex_dir: Path,
+    file_extensions: Iterable[str],
+    section: str,
+    flavor: FlavorName,
 ) -> Deck:
     from ..components.parser import Parser
 
     parser = Parser(
         local_latex_dir=shared_latex_dir,
         shared_latex_dir=shared_latex_dir,
-        file_extension=file_extension,
+        file_extensions=file_extensions,
     )
     return parser.from_section(section, flavor)
 
 
 def section_files(
-    shared_latex_dir: Path, file_extension: str, section: str, flavor: FlavorName
+    shared_latex_dir: Path,
+    file_extensions: Iterable[str],
+    section: str,
+    flavor: FlavorName,
 ) -> set[ResolvedPath]:
     """Resolved absolute file paths a shared section+flavor includes.
 
@@ -262,7 +287,7 @@ def section_files(
 
     Args:
         shared_latex_dir: Path to the shared latex directory.
-        file_extension: Extension to consider when resolving files.
+        file_extensions: Extensions to try, in order, when resolving files.
         section: Shared/latex-relative section id, e.g. "python/basics".
         flavor: Flavor to resolve.
 
@@ -270,12 +295,15 @@ def section_files(
         The set of resolved file paths.
     """
     return resolved_files(
-        _section_flavor_deck(shared_latex_dir, file_extension, section, flavor)
+        _section_flavor_deck(shared_latex_dir, file_extensions, section, flavor)
     )
 
 
 def section_pair(
-    shared_latex_dir: Path, file_extension: str, section: str, flavor: FlavorName
+    shared_latex_dir: Path,
+    file_extensions: Iterable[str],
+    section: str,
+    flavor: FlavorName,
 ) -> list[FilePairing]:
     """Pair a shared section+flavor's resolved files with their en counterpart.
 
@@ -283,7 +311,7 @@ def section_pair(
 
     Args:
         shared_latex_dir: Path to the shared latex directory.
-        file_extension: Extension to consider when resolving files.
+        file_extensions: Extensions to try, in order, when resolving files.
         section: Shared/latex-relative section id, e.g. "python/basics".
         flavor: Flavor to resolve.
 
@@ -295,14 +323,14 @@ def section_pair(
     """
     section_dir = shared_latex_dir / section
     en_yml = section_dir / "en" / "en.yml"
-    fr_deck = _section_flavor_deck(shared_latex_dir, file_extension, section, flavor)
+    fr_deck = _section_flavor_deck(shared_latex_dir, file_extensions, section, flavor)
 
     en_available = en_yml.is_file()
     en_files: set[ResolvedPath] | None = None
     if en_available:
         try:
             en_deck = _section_flavor_deck(
-                shared_latex_dir, file_extension, f"{section}/en", flavor
+                shared_latex_dir, file_extensions, f"{section}/en", flavor
             )
         except Exception:
             en_files = None
@@ -311,7 +339,9 @@ def section_pair(
 
     pairings = []
     for fr_path in sorted(resolved_files(fr_deck)):
-        en_path = en_counterpart(fr_path, shared_latex_dir, shared_latex_dir)
+        en_path = en_counterpart(
+            fr_path, shared_latex_dir, shared_latex_dir, file_extensions
+        )
         if not en_available:
             included = "no-en-yml"
         elif en_files is None:
@@ -323,7 +353,7 @@ def section_pair(
 
 
 def section_en_leak(
-    shared_latex_dir: Path, file_extension: str, section: str
+    shared_latex_dir: Path, file_extensions: Iterable[str], section: str
 ) -> list[str]:
     """Flag any file an en section flavor resolves to that isn't itself under en/.
 
@@ -338,7 +368,7 @@ def section_en_leak(
 
     Args:
         shared_latex_dir: Path to the shared latex directory.
-        file_extension: Extension to consider when resolving files.
+        file_extensions: Extensions to try, in order, when resolving files.
         section: Shared/latex-relative section id, e.g. "python/basics".
 
     Returns:
@@ -358,7 +388,7 @@ def section_en_leak(
     for name in sorted(flavor_names(en_yml)):
         try:
             deck = _section_flavor_deck(
-                shared_latex_dir, file_extension, f"{section}/en", name
+                shared_latex_dir, file_extensions, f"{section}/en", name
             )
             paths = resolved_files(deck)
         except Exception as exc:

@@ -29,7 +29,7 @@ def section_pair(section: str, flavor: str, /, *, workdir: Path = Path()) -> Non
     settings = GlobalSettings.from_yaml(workdir)
     for pairing in compute(
         settings.paths.shared_latex_dir,
-        settings.file_extension,
+        settings.file_extensions,
         section,
         FlavorName(flavor),
     ):
