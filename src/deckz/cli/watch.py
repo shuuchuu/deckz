@@ -17,6 +17,7 @@ def deck(
     handout: bool = False,
     presentation: bool = True,
     print: bool = False,  # ruff: ignore[builtin-argument-shadowing]
+    en: bool = False,
     workdir: Path = Path(),
 ) -> None:
     """Compile on change.
@@ -26,6 +27,7 @@ def deck(
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
+        en: Compile the English variant
         workdir: Path to move into before running the command
 
     """
@@ -52,6 +54,7 @@ def deck(
         ),
         run,
         settings=settings,
+        lang="en" if en else "fr",
         build_handout=handout,
         build_presentation=presentation,
         build_print=print,
@@ -68,6 +71,7 @@ def section(
     handout: bool = False,
     presentation: bool = True,
     print: bool = False,  # ruff: ignore[builtin-argument-shadowing]
+    en: bool = False,
     workdir: Path = Path(),
 ) -> None:
     """Compile a specific FLAVOR of a given SECTION on change.
@@ -78,6 +82,7 @@ def section(
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
+        en: Compile the English variant
         workdir: Path to move into before running the command
 
     """
@@ -123,6 +128,7 @@ def section(
             section=section,
             flavor=flavor,
             settings=settings,
+            lang="en" if en else "fr",
             build_handout=handout,
             build_presentation=presentation,
             build_print=print,
@@ -137,6 +143,7 @@ def file(
     handout: bool = False,
     presentation: bool = True,
     print: bool = False,  # ruff: ignore[builtin-argument-shadowing]
+    en: bool = False,
     workdir: Path = Path(),
 ) -> None:
     """Compile a file on change.
@@ -147,6 +154,7 @@ def file(
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
+        en: Compile the English variant
         workdir: Path to move into before running the command
 
     """
@@ -189,6 +197,7 @@ def file(
             run_file,
             latex=latex,
             settings=settings,
+            lang="en" if en else "fr",
             build_handout=handout,
             build_presentation=presentation,
             build_print=print,

@@ -91,9 +91,9 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePath
-from typing import Annotated, Any, NewType, Protocol
+from typing import Annotated, Any, Literal, NewType, Protocol, TypeGuard
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationInfo
 from pydantic.functional_validators import BeforeValidator
 
 ########################################################################################
@@ -123,6 +123,73 @@ PartName = NewType("PartName", str)
 FlavorName = NewType("FlavorName", str)
 """Derived from str to represent specifically a flavor name."""
 
+Lang = Literal["fr", "en"]
+"""The two languages deckz currently understands."""
+
+LangMap = dict[Lang, str]
+"""A translation map, e.g. `{"fr": "Bonjour", "en": "Hello"}`."""
+
+
+def is_lang_map(value: object) -> TypeGuard[LangMap]:
+    """Whether `value` is shaped like a [`LangMap`][deckz.models.LangMap].
+
+    Returns:
+        True if `value` is a non-empty dict with only `"fr"`/`"en"` string keys \
+        and string values.
+    """
+    return (
+        isinstance(value, dict)
+        and bool(value)
+        and set(value) <= {"fr", "en"}
+        and all(isinstance(v, str) for v in value.values())
+    )
+
+
+def resolve_lang(value: "str | LangMap", lang: Lang, *, lenient: bool = False) -> str:
+    """Resolve a plain string or a [`LangMap`][deckz.models.LangMap] to `lang`.
+
+    A plain string is always accepted as-is, regardless of `lang`: it means
+    the value is deliberately the same in every language (a proper noun, a
+    code snippet, anything not worth the ceremony of a translation map for).
+    Only an explicit map that's missing the requested language is a gap.
+
+    Args:
+        value: A plain string, used as-is regardless of language, or a \
+            translation map.
+        lang: The language to resolve a translation map to.
+        lenient: If True, a map missing `lang` falls back to its `fr` entry \
+            (or any entry) instead of raising. Used only for tree-walking \
+            introspection (e.g. the i18n coverage check) that must not abort \
+            partway through just because of the gap it's trying to report.
+
+    Returns:
+        The resolved string.
+
+    Raises:
+        ValueError: If `value` is a translation map missing the `lang` key \
+            and `lenient` is False.
+    """
+    if isinstance(value, str):
+        return value
+    if lang in value:
+        return value[lang]
+    if lenient:
+        return value.get("fr") or next(iter(value.values()))
+    msg = f"missing {lang!r} translation in {value!r}"
+    raise ValueError(msg)
+
+
+def _resolve_title(value: "str | LangMap", info: ValidationInfo) -> str:
+    ctx = info.context or {}
+    return resolve_lang(value, ctx.get("lang", "fr"), lenient=ctx.get("lenient", False))
+
+
+LocalizedStr = Annotated[str, BeforeValidator(_resolve_title)]
+"""A title-like string, accepting either a plain string (used as-is in every \
+language) or a [`LangMap`][deckz.models.LangMap], resolved against the \
+`lang`/`lenient` keys of the enclosing `model_validate(..., context=...)` \
+call."""
+
 
 ########################################################################################
 # Deck definition types                                                                #
@@ -135,7 +202,7 @@ class NodeInclude(BaseModel):
     path: IncludePath
     """Path of the file or section to include."""
 
-    title: str | None = None
+    title: LocalizedStr | None = None
     """The title of the node. Will override the ones defined in the section \
     definition and the flavor definition.
     """
@@ -159,13 +226,14 @@ class FileInclude(NodeInclude):
 
 
 def _normalize_include(
-    v: str | dict[str, str] | NodeInclude,
+    v: "str | dict[str, str | LangMap] | NodeInclude", info: ValidationInfo
 ) -> NodeInclude:
     if isinstance(v, NodeInclude):
         return v
     if isinstance(v, str):
         left = v
         title_unset = True
+        title = None
     else:
         assert len(v) == 1
         left, title = next(iter(v.items()))
@@ -175,17 +243,18 @@ def _normalize_include(
     else:
         path = left
         flavor = None
-    if flavor is None and title_unset:
-        return FileInclude(path=IncludePath(PurePath(path)))
+    # A raw dict is validated (not directly constructed) so the enclosing
+    # model_validate(..., context=...) call's lang/lenient context correctly
+    # reaches `title` -- constructing FileInclude/SectionInclude directly
+    # here would hand back an already-validated instance pydantic accepts
+    # as-is, silently dropping that context.
+    data: dict[str, Any] = {"path": path}
+    if not title_unset:
+        data["title"] = title
     if flavor is None:
-        return FileInclude(path=IncludePath(PurePath(path)), title=title)
-    if title_unset:
-        return SectionInclude(
-            path=IncludePath(PurePath(path)), flavor=FlavorName(flavor)
-        )
-    return SectionInclude(
-        path=IncludePath(PurePath(path)), flavor=FlavorName(flavor), title=title
-    )
+        return FileInclude.model_validate(data, context=info.context)
+    data["flavor"] = flavor
+    return SectionInclude.model_validate(data, context=info.context)
 
 
 class FlavorDefinition(BaseModel):
@@ -194,7 +263,7 @@ class FlavorDefinition(BaseModel):
     name: FlavorName
     """The name of the flavor. Used in parts and sections definitions."""
 
-    title: str | None = None
+    title: LocalizedStr | None = None
     """The title of the section. Will override the one defined in the section \
     definition."""
 
@@ -205,10 +274,10 @@ class FlavorDefinition(BaseModel):
 class SectionDefinition(BaseModel):
     """Specify the different attributes of a section."""
 
-    title: str | None = None
+    title: LocalizedStr | None = None
     """The title of the section. Will be given as input to the rendering code."""
 
-    default_titles: dict[IncludePath, str] | None = None
+    default_titles: dict[IncludePath, LocalizedStr] | None = None
     """Default titles to use for the includes of the section."""
 
     flavors: list[FlavorDefinition]
@@ -223,7 +292,7 @@ class PartDefinition(BaseModel):
     """The name of the part. Will be a part of the output file name if partial \
     outputs are built."""
 
-    title: str | None = None
+    title: LocalizedStr | None = None
     """The title of the part. Will be given as input to the rendering code."""
 
     sections: list[Annotated[NodeInclude, BeforeValidator(_normalize_include)]]

@@ -9,7 +9,7 @@ from watchfiles import watch as watchfiles_watch
 from .components.factory import DeckSettingsFactory, GlobalSettingsFactory
 from .configuring.settings import DeckSettings, GlobalSettings
 from .configuring.variables import get_variables
-from .models import Deck, FlavorName, PartName
+from .models import Deck, FlavorName, Lang, PartName
 from .utils import all_deck_settings
 
 _logger = getLogger(__name__)
@@ -18,12 +18,13 @@ _logger = getLogger(__name__)
 def _build(
     deck: Deck,
     settings: DeckSettings,
+    lang: Lang,
     build_handout: bool,
     build_presentation: bool,
     build_print: bool,
 ) -> bool:
-    variables = get_variables(settings)
-    factory = DeckSettingsFactory(settings)
+    variables = {**get_variables(settings, lang=lang), "lang": lang}
+    factory = DeckSettingsFactory(settings, lang=lang)
     factory.assets_builder().build_assets()
     return factory.deck_builder(
         variables=variables,
@@ -36,18 +37,20 @@ def _build(
 
 def run(
     settings: DeckSettings,
+    lang: Lang,
     build_handout: bool,
     build_presentation: bool,
     build_print: bool,
     parts_whitelist: Iterable[PartName] | None = None,
 ) -> None:
-    parser = DeckSettingsFactory(settings).parser()
+    parser = DeckSettingsFactory(settings, lang=lang).parser()
     deck = parser.from_deck_definition(settings.paths.deck_definition)
     if parts_whitelist is not None:
         deck.filter(parts_whitelist)
     _build(
         deck=deck,
         settings=settings,
+        lang=lang,
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
@@ -57,13 +60,15 @@ def run(
 def run_file(
     latex: str,
     settings: DeckSettings,
+    lang: Lang,
     build_handout: bool,
     build_presentation: bool,
     build_print: bool,
 ) -> None:
     _build(
-        deck=DeckSettingsFactory(settings).parser().from_file(latex),
+        deck=DeckSettingsFactory(settings, lang=lang).parser().from_file(latex),
         settings=settings,
+        lang=lang,
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
@@ -74,13 +79,17 @@ def run_section(
     section: str,
     flavor: FlavorName,
     settings: DeckSettings,
+    lang: Lang,
     build_handout: bool,
     build_presentation: bool,
     build_print: bool,
 ) -> None:
     _build(
-        deck=DeckSettingsFactory(settings).parser().from_section(section, flavor),
+        deck=DeckSettingsFactory(settings, lang=lang)
+        .parser()
+        .from_section(section, flavor),
         settings=settings,
+        lang=lang,
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
@@ -89,6 +98,7 @@ def run_section(
 
 def run_all(
     directory: Path,
+    lang: Lang,
     build_handout: bool,
     build_presentation: bool,
     build_print: bool,
@@ -104,10 +114,11 @@ def run_all(
         task_id = progress.add_task("Building decks…", total=len(decks_settings))
         for deck_settings in decks_settings:
             result = _build(
-                deck=DeckSettingsFactory(deck_settings)
+                deck=DeckSettingsFactory(deck_settings, lang=lang)
                 .parser()
                 .from_deck_definition(deck_settings.paths.deck_definition),
                 settings=deck_settings,
+                lang=lang,
                 build_handout=build_handout,
                 build_presentation=build_presentation,
                 build_print=build_print,

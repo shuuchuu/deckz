@@ -16,7 +16,7 @@ from .protocols import (
 
 if TYPE_CHECKING:
     from ..configuring.settings import DeckSettings, GlobalSettings
-    from ..models import Deck
+    from ..models import Deck, Lang
 
 
 class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
@@ -100,8 +100,9 @@ class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
 
 
 class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProtocol):
-    def __init__(self, settings: "DeckSettings") -> None:
+    def __init__(self, settings: "DeckSettings", *, lang: "Lang" = "fr") -> None:
         super().__init__(settings)
+        self._lang = lang
 
     def parser(self) -> ParserProtocol:
         from .parser import Parser
@@ -110,6 +111,7 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
             local_latex_dir=self._settings.paths.local_latex_dir,
             shared_latex_dir=self._settings.paths.shared_latex_dir,
             file_extensions=self._settings.file_extensions,
+            lang=self._lang,
         )
 
     def deck_builder(
@@ -129,14 +131,20 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
 
             builder_cls = DeckBuilder
 
+        output_dir = self._settings.paths.pdf_dir
+        build_dir = self._settings.paths.build_dir
+        if self._lang == "en":
+            output_dir = output_dir / "en"
+            build_dir = build_dir / "en"
+
         return builder_cls(
             variables=variables,
             deck=deck,
             build_presentation=build_presentation,
             build_handout=build_handout,
             build_print=build_print,
-            output_dir=self._settings.paths.pdf_dir,
-            build_dir=self._settings.paths.build_dir,
+            output_dir=output_dir,
+            build_dir=build_dir,
             dirs_to_link=(
                 self._settings.paths.shared_img_dir,
                 self._settings.paths.shared_tikz_pdf_dir,

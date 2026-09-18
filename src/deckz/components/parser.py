@@ -16,6 +16,7 @@ from ..models import (
     FileInclude,
     FlavorName,
     IncludePath,
+    Lang,
     Node,
     NodeInclude,
     NodeVisitor,
@@ -44,6 +45,9 @@ class Parser(ParserProtocol):
         local_latex_dir: Path,
         shared_latex_dir: Path,
         file_extensions: Iterable[str],
+        lang: Lang = "fr",
+        *,
+        lenient: bool = False,
     ) -> None:
         """Initialize an instance with the necessary path information.
 
@@ -55,10 +59,21 @@ class Parser(ParserProtocol):
             file_extensions: Extensions to try, in order, when resolving a file \
                 include (e.g. `(".md", ".tex")` to prefer a migrated Markdown \
                 file and fall back to a legacy LaTeX one).
+            lang: Language to resolve the deck/sections in. Affects which \
+                physical body file is picked for each leaf file node (an "en" \
+                sibling is required, with no fallback to fr) and which string a \
+                title/translation map resolves to.
+            lenient: If True, a title/translation map missing `lang` falls \
+                back instead of raising. Used only by the i18n coverage \
+                check, which must be able to walk a deck's whole tree \
+                precisely to report the translation gaps that would \
+                otherwise make a real build fail.
         """
         self._local_latex_dir = local_latex_dir
         self._shared_latex_dir = shared_latex_dir
         self._file_extensions = tuple(file_extensions)
+        self._lang = lang
+        self._lenient = lenient
 
     def from_deck_definition(self, deck_definition_path: Path) -> Deck:
         """Parse a deck from a yaml definition.
@@ -70,7 +85,10 @@ class Parser(ParserProtocol):
         Returns:
             The parsed deck
         """
-        deck_definition = DeckDefinition.model_validate(load_yaml(deck_definition_path))
+        deck_definition = DeckDefinition.model_validate(
+            load_yaml(deck_definition_path),
+            context={"lang": self._lang, "lenient": self._lenient},
+        )
         deck = Deck(
             name=deck_definition.name, parts=self._parse_parts(deck_definition.parts)
         )
@@ -165,7 +183,7 @@ class Parser(ParserProtocol):
             ".yml"
         )
         definition_resolved_path = self._resolve(
-            definition_logical_path.with_suffix(".yml"), "file"
+            definition_logical_path.with_suffix(".yml"), "file", lang_aware=False
         )
         if definition_resolved_path is None:
             section.parsing_error = (
@@ -179,7 +197,9 @@ class Parser(ParserProtocol):
             section.parsing_error = f"{e}"
             return section
         try:
-            section_definition = SectionDefinition.model_validate(content)
+            section_definition = SectionDefinition.model_validate(
+                content, context={"lang": self._lang, "lenient": self._lenient}
+            )
         except ValidationError as e:
             section.parsing_error = f"{e}"
             return section
@@ -280,12 +300,25 @@ class Parser(ParserProtocol):
         )
 
     def _resolve(
-        self, unresolved_path: UnresolvedPath, resolve_target: Literal["file", "dir"]
+        self,
+        unresolved_path: UnresolvedPath,
+        resolve_target: Literal["file", "dir"],
+        *,
+        lang_aware: bool = True,
     ) -> ResolvedPath | None:
         local_path = self._local_latex_dir / unresolved_path
         shared_path = self._shared_latex_dir / unresolved_path
         existence_tester = Path.is_file if resolve_target == "file" else Path.is_dir
-        for path in [local_path, shared_path]:
+        if lang_aware and resolve_target == "file" and self._lang == "en":
+            # No fr fallback: a missing en/ sibling under --en must fail loudly
+            # rather than silently compiling fr content under an English label.
+            candidates = [
+                local_path.parent / "en" / local_path.name,
+                shared_path.parent / "en" / shared_path.name,
+            ]
+        else:
+            candidates = [local_path, shared_path]
+        for path in candidates:
             if existence_tester(path):
                 return ResolvedPath(path.resolve())
         return None

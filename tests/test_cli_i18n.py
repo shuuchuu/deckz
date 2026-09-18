@@ -36,23 +36,19 @@ def working_dir(tmp_path: Path, monkeypatch: Any) -> Iterator[Path]:
     _write(tmp_path / "deckz.yml", 'build_command: ["true"]\n')
 
     shared = tmp_path / "shared" / "latex"
+    # A single section definition, never duplicated for English: only the
+    # translated body file lives under a sibling en/ directory.
     _write(
         shared / "i18n-demo" / "i18n-demo.yml",
-        "title: I18n demo section\n"
+        "title:\n"
+        "  fr: Section de démo\n"
+        "  en: Demo section\n"
         "flavors:\n"
         "  - name: hello\n"
         "    includes:\n"
         "      - hello\n",
     )
     _write(shared / "i18n-demo" / "hello.tex", _frame("Bonjour"))
-    _write(
-        shared / "i18n-demo" / "en" / "en.yml",
-        "title: I18n demo section (en)\n"
-        "flavors:\n"
-        "  - name: hello\n"
-        "    includes:\n"
-        "      - hello\n",
-    )
     _write(shared / "i18n-demo" / "en" / "hello.tex", _frame("Hello"))
 
     deck_dir = tmp_path / "company" / "xyz"
@@ -61,18 +57,11 @@ def working_dir(tmp_path: Path, monkeypatch: Any) -> Iterator[Path]:
         "name: XYZ\n"
         "parts:\n"
         "  - name: p1\n"
-        "    title: Part 1\n"
+        "    title:\n"
+        "      fr: Partie 1\n"
+        "      en: Part 1\n"
         "    sections:\n"
         "      - $i18n-demo@hello\n",
-    )
-    _write(
-        deck_dir / "en" / "deck.yml",
-        "name: XYZ\n"
-        "parts:\n"
-        "  - name: p1\n"
-        "    title: Part 1\n"
-        "    sections:\n"
-        "      - $i18n-demo/en@hello\n",
     )
     monkeypatch.chdir(deck_dir)
     yield deck_dir
@@ -85,17 +74,6 @@ def test_show_paths(working_dir: Path, capsys: CaptureFixture[str]) -> None:
     assert out == [str(working_dir.parent.parent / "shared/latex/i18n-demo/hello.tex")]
 
 
-def test_deck_pair(working_dir: Path, capsys: CaptureFixture[str]) -> None:
-    run_deckz("i18n", "deck-pair")
-
-    (line,) = capsys.readouterr().out.splitlines()
-    fr_path, en_path, exists, included = line.split("\t")
-    assert fr_path.endswith("i18n-demo/hello.tex")
-    assert en_path.endswith("i18n-demo/en/hello.tex")
-    assert exists == "yes"
-    assert included == "yes"
-
-
 def test_section_flavors(working_dir: Path, capsys: CaptureFixture[str]) -> None:
     run_deckz("section-flavors", "i18n-demo")
 
@@ -103,35 +81,67 @@ def test_section_flavors(working_dir: Path, capsys: CaptureFixture[str]) -> None
 
 
 def test_section_files(working_dir: Path, capsys: CaptureFixture[str]) -> None:
-    run_deckz("i18n", "section-files", "i18n-demo", "hello")
+    run_deckz("section-files", "i18n-demo", "hello")
 
     (line,) = capsys.readouterr().out.splitlines()
     assert line.endswith("i18n-demo/hello.tex")
 
 
-def test_section_flavor_diff_clean(
+def test_missing_en_clean(working_dir: Path, capsys: CaptureFixture[str]) -> None:
+    run_deckz("i18n", "missing-en")
+
+    assert capsys.readouterr().out == ""
+
+
+def test_missing_en_reports_missing_file(
     working_dir: Path, capsys: CaptureFixture[str]
 ) -> None:
-    run_deckz("i18n", "section-flavor-diff", "i18n-demo")
+    (working_dir.parent.parent / "shared/latex/i18n-demo/en/hello.tex").unlink()
 
-    assert capsys.readouterr().out == ""
-
-
-def test_section_pair(working_dir: Path, capsys: CaptureFixture[str]) -> None:
-    run_deckz("i18n", "section-pair", "i18n-demo", "hello")
+    run_deckz("i18n", "missing-en")
 
     (line,) = capsys.readouterr().out.splitlines()
-    fr_path, en_path, exists, included = line.split("\t")
-    assert fr_path.endswith("i18n-demo/hello.tex")
-    assert en_path.endswith("i18n-demo/en/hello.tex")
-    assert exists == "yes"
-    assert included == "yes"
+    assert line.startswith("FILE\t")
+    assert line.endswith("i18n-demo/en/hello.tex")
 
 
-def test_section_en_leak_clean(working_dir: Path, capsys: CaptureFixture[str]) -> None:
-    run_deckz("i18n", "section-en-leak", "i18n-demo")
+def test_missing_en_reports_missing_translation_key(
+    working_dir: Path, capsys: CaptureFixture[str]
+) -> None:
+    deck_path = working_dir / "deck.yml"
+    deck_path.write_text(
+        deck_path.read_text(encoding="utf8").replace("      en: Part 1\n", ""),
+        encoding="utf8",
+    )
 
-    assert capsys.readouterr().out == ""
+    run_deckz("i18n", "missing-en")
+
+    lines = capsys.readouterr().out.splitlines()
+    assert any(
+        line.startswith("TITLE\tmissing-en") and line.endswith("parts[p1].title")
+        for line in lines
+    )
+
+
+def test_missing_en_reports_untranslated_plain_string(
+    working_dir: Path, capsys: CaptureFixture[str]
+) -> None:
+    section_path = working_dir.parent.parent / "shared/latex/i18n-demo/i18n-demo.yml"
+    section_path.write_text(
+        section_path.read_text(encoding="utf8").replace(
+            "title:\n  fr: Section de démo\n  en: Demo section\n",
+            "title: Section de démo\n",
+        ),
+        encoding="utf8",
+    )
+
+    run_deckz("i18n", "missing-en")
+
+    lines = capsys.readouterr().out.splitlines()
+    assert any(
+        line.startswith("TITLE\tuntranslated") and line.endswith("\ttitle")
+        for line in lines
+    )
 
 
 def test_search_sections(working_dir: Path, capsys: CaptureFixture[str]) -> None:

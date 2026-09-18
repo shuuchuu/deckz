@@ -12,6 +12,7 @@ def run(
     handout: bool = True,
     presentation: bool = True,
     print: bool = True,  # ruff: ignore[builtin-argument-shadowing]
+    en: bool = False,
     workdir: Path = Path(),
 ) -> None:
     """Compile the deck in WORKDIR.
@@ -21,6 +22,9 @@ def run(
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
+        en: Compile the English variant. Every resolved file, title and \
+            variable must have a complete English translation, or the build \
+            fails immediately
         workdir: Path to move into before running the command
 
     """
@@ -29,6 +33,7 @@ def run(
 
     run(
         settings=DeckSettings.from_yaml(workdir),
+        lang="en" if en else "fr",
         build_handout=handout,
         build_presentation=presentation,
         build_print=print,

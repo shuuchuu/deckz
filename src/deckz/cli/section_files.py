@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from ...models import FlavorName
+from ..models import FlavorName
 from . import app
 
 
@@ -18,8 +18,8 @@ def section_files(section: str, flavor: str, /, *, workdir: Path = Path()) -> No
         workdir: Path to move into before running the command
 
     """
-    from ...analyzing.i18n_analyzer import section_files as compute
-    from ...configuring.settings import GlobalSettings
+    from ..analyzing.sections_search import section_files as compute
+    from ..configuring.settings import GlobalSettings
 
     settings = GlobalSettings.from_yaml(workdir)
     for path in sorted(

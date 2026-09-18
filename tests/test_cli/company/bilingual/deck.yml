@@ -1,0 +1,10 @@
+name: BILINGUAL
+parts:
+  - name: p1
+    title:
+      fr: Partie 1
+      en: Part 1
+    sections:
+      - hello:
+          fr: Bonjour
+          en: Hello

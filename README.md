@@ -159,14 +159,19 @@ parts:
       - $first-section@standard
       - about
   - name: p2
-    title: Part 2
+    title:
+      fr: Partie 2
+      en: Part 2
     sections:
       - $first-section@light
 ```
 
 Includes can point to a file (`path/to/file`) or to a shared section with a
 given flavor (`$path/to/section@flavor`); either form can be given a custom
-title with `path: My title` / `$path@flavor: My title`.
+title with `path: My title` / `$path@flavor: My title` (or, as with `p2`'s
+title above, a `{fr: ..., en: ...}` map instead of a plain string, when the
+text actually differs by language -- see [Titles, variables and
+`--en`](#titles-variables-and---en)).
 
 ### Shared sections
 
@@ -178,7 +183,9 @@ directory) and has a sibling `.yml` file describing its flavors, e.g.
 title: First section
 default_titles:
   intro: Introduction
-  advanced: Advanced
+  advanced:
+    fr: Approfondissement
+    en: Advanced
 flavors:
   - name: standard
     includes:
@@ -188,6 +195,33 @@ flavors:
     includes:
       - intro
 ```
+
+### Titles, variables and `--en`
+
+There is only ever one `deck.yml`/section `.yml` -- English is never a
+separate deck or a duplicated section, only a `--en` flag on `deckz run` (and
+`deckz check-all`/`deckz watch`):
+
+- Any title (`deck.yml` part/include titles, a section's `title`,
+  `default_titles` values, a flavor's title) and any `variables.yml` value
+  can be a plain string, used as-is in every language -- the right choice
+  whenever the text is language-neutral (a proper noun, a number, code, or
+  simply not translated yet) -- or an explicit `{fr: ..., en: ...}` map when
+  it actually needs to differ by language, as in `intro`/`advanced` above.
+- A translated body file lives at `<parent-dir>/en/<filename>`, a sibling of
+  the French file, whatever `parent-dir` is -- a shared section directory, a
+  deck's local `latex` directory, or any nested subdirectory of either.
+  Section/flavor structure itself is never duplicated for English.
+- `--en` never silently falls back to French for a `{fr: ..., en: ...}` map
+  that's missing its `en` key, or for a resolved file with no `en/` sibling:
+  both fail the build immediately, so a translation that was started but
+  left incomplete can't accidentally ship untranslated. A plain string, on
+  the other hand, is never a gap -- it means "the same in every language" by
+  design. `deckz i18n missing-en` audits a deck for both kinds of gap
+  (blocking and merely informational) without needing to actually compile it.
+- fr and `--en` builds write to separate output paths (an `en/` subdirectory
+  under `.build`/`pdf`), so both can be built from the same checkout without
+  clobbering each other.
 
 ### Content files and the Jinja2 environment
 
@@ -253,11 +287,14 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
 --help` for a specific command. The main ones:
 
 - `deckz run [PARTS]...`: compile the deck in the current directory
-  (optionally restricted to some parts).
+  (optionally restricted to some parts). Add `--en` to compile the English
+  variant (see [Titles, variables and `--en`](#titles-variables-and---en)).
 - `deckz check-all`: compile every shared section standalone, to catch
-  errors before they show up in a real deck.
+  errors before they show up in a real deck. `--en` here is strict across
+  the whole repository: the first deck missing any translation aborts the
+  run.
 - `deckz watch deck` / `deckz watch section SECTION FLAVOR`: recompile on
-  file changes.
+  file changes. Both also accept `--en`.
 - `deckz show` (alias for `deckz show tree`): show the resolved tree of
   sections and files for the current deck.
 - `deckz show settings` / `deckz show variables` / `deckz show paths`:
@@ -268,6 +305,8 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
 - `deckz search-sections KEYWORDS...`: search shared sections by title or
   frame title.
 - `deckz section-flavors SECTION`: list a section's flavor names.
+- `deckz section-files SECTION FLAVOR`: list the files a section+flavor
+  resolves to.
 - `deckz flavor rename SECTION OLD NEW`: rename a flavor and rewrite all
   its usages.
 - `deckz flavor deduplicate`: deduplicate section flavors that are identical
@@ -276,9 +315,8 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
   used, or find assets missing license metadata.
 - `deckz clean` / `deckz clean all` / `deckz clean latex`: remove build
   directories, or unused shared/local LaTeX files.
-- `deckz i18n section-en-leak` / `deckz i18n section-flavor-diff` / `deckz
-  i18n section-pair` / `deckz i18n deck-pair`: help keep fr/en translations
-  of decks and shared sections in sync.
+- `deckz i18n missing-en [--all]`: report fr content/titles/variables with no
+  English counterpart, i.e. what a `deckz run --en` would currently fail on.
 - `deckz upload`: upload built PDFs to Google Drive.
 - `deckz extras issue TITLE [BODY]`: create a GitHub issue.
 - `deckz extras random REASON`: roll a dice and email the result (handy for

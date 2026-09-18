@@ -4,13 +4,13 @@ Understands each section's title/frame structure instead of grepping raw file \
 content.
 """
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from re import MULTILINE, Pattern
 from re import compile as re_compile
 
-from ..models import FlavorName
+from ..models import Deck, FlavorName, ResolvedPath, is_lang_map
 from ..utils import load_yaml
 
 _FRAME_TITLE = re_compile(r"\\begin\{frame\}(?:\[[^]]*\])?\{([^}]*)\}")
@@ -25,6 +25,62 @@ def flavor_names(yml_path: Path) -> list[FlavorName]:
     """
     data = load_yaml(yml_path) or {}
     return [FlavorName(flavor["name"]) for flavor in data.get("flavors", [])]
+
+
+def resolved_files(deck: Deck) -> set[ResolvedPath]:
+    """Resolved absolute file paths a deck includes, flattened across parts.
+
+    Returns:
+        The set of resolved file paths.
+    """
+    from ..components.deck_builder import PartDependenciesNodeVisitor
+
+    deps = PartDependenciesNodeVisitor().process(deck)
+    paths: set[ResolvedPath] = set()
+    for part_paths in deps.values():
+        paths.update(part_paths)
+    return paths
+
+
+def _section_flavor_deck(
+    shared_latex_dir: Path,
+    file_extensions: Iterable[str],
+    section: str,
+    flavor: FlavorName,
+) -> Deck:
+    from ..components.parser import Parser
+
+    parser = Parser(
+        local_latex_dir=shared_latex_dir,
+        shared_latex_dir=shared_latex_dir,
+        file_extensions=file_extensions,
+    )
+    return parser.from_section(section, flavor)
+
+
+def section_files(
+    shared_latex_dir: Path,
+    file_extensions: Iterable[str],
+    section: str,
+    flavor: FlavorName,
+) -> set[ResolvedPath]:
+    """Resolved absolute file paths a shared section+flavor includes.
+
+    Recurses into subsections, exactly like deckz would when building a deck \
+    that includes `$<section>@<flavor>`.
+
+    Args:
+        shared_latex_dir: Path to the shared latex directory.
+        file_extensions: Extensions to try, in order, when resolving files.
+        section: Shared/latex-relative section id, e.g. "python/basics".
+        flavor: Flavor to resolve.
+
+    Returns:
+        The set of resolved file paths.
+    """
+    return resolved_files(
+        _section_flavor_deck(shared_latex_dir, file_extensions, section, flavor)
+    )
 
 
 @dataclass(frozen=True)
@@ -58,6 +114,19 @@ def _matches(text: str, keywords: Sequence[str]) -> bool:
     return any(keyword.lower() in lowered for keyword in keywords)
 
 
+def _display_text(value: object) -> str | None:
+    """The fr text of a raw (unresolved) title value, a plain string or a lang-map.
+
+    Returns:
+        The extracted text, or None if `value` isn't title-shaped.
+    """
+    if isinstance(value, str):
+        return value
+    if is_lang_map(value):
+        return value.get("fr") or next(iter(value.values()), None)
+    return None
+
+
 def _frame_title_matches(
     section_dir: Path,
     glob: str,
@@ -83,8 +152,7 @@ def search_sections(
     Looks only at each section's `.yml` `title`/`default_titles` values, each \
     of its own `.tex` files' frame titles (`\begin{frame}{...}`), and each of \
     its own `.md` files' headings (`#`/`##`/...) -- never at frame bodies, \
-    code or comments. Skips `en/` sections and files: this is meant to find \
-    fr content to reuse or extend.
+    code or comments.
 
     Args:
         shared_latex_dir: Path to the shared latex directory.
@@ -101,12 +169,10 @@ def search_sections(
         if section_dir.name != yml_path.stem:
             continue
         section = section_dir.relative_to(shared_latex_dir).as_posix()
-        if "en" in section_dir.relative_to(shared_latex_dir).parts:
-            continue
 
         data = load_yaml(yml_path) or {}
-        titles = [t for t in (data.get("title"),) if t]
-        titles.extend((data.get("default_titles") or {}).values())
+        raw_titles = [data.get("title"), *(data.get("default_titles") or {}).values()]
+        titles = [t for raw in raw_titles if (t := _display_text(raw))]
         for title in titles:
             if _matches(title, keywords):
                 section_matches.append(SectionTitleMatch(section, title))

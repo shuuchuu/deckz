@@ -1,12 +1,13 @@
 from functools import reduce
 from typing import Any
 
+from ..models import Lang, is_lang_map, resolve_lang
 from ..utils import dirs_hierarchy, load_all_yamls
 from .settings import GlobalSettings
 
 
-def get_variables(settings: GlobalSettings) -> dict[str, Any]:
-    return reduce(
+def get_variables(settings: GlobalSettings, lang: Lang = "fr") -> dict[str, Any]:
+    merged = reduce(
         lambda a, b: {**a, **b},
         load_all_yamls(
             d
@@ -19,3 +20,7 @@ def get_variables(settings: GlobalSettings) -> dict[str, Any]:
         ),
         {},
     )
+    return {
+        key: resolve_lang(value, lang) if is_lang_map(value) else value
+        for key, value in merged.items()
+    }
