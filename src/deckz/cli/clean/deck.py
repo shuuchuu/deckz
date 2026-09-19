@@ -3,9 +3,10 @@ from pathlib import Path
 from . import app
 
 
+@app.command(name="deck")
 @app.default
 def clean(*, workdir: Path = Path()) -> None:
-    """Wipe the build directory.
+    """Wipe the build directory (default).
 
     Args:
         workdir: Path to move into before running the command

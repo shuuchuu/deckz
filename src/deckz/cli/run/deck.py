@@ -1,21 +1,21 @@
 from pathlib import Path
 
-from ..models import PartName
+from ...models import PartName
 from . import app
 
 
-@app.command()
+@app.command(name="deck")
+@app.default
 def run(
-    parts: list[PartName] | None = None,
-    /,
     *,
+    parts: list[PartName] | None = None,
     handout: bool = True,
     presentation: bool = True,
     print: bool = True,  # ruff: ignore[builtin-argument-shadowing]
     en: bool = False,
     workdir: Path = Path(),
 ) -> None:
-    """Compile the deck in WORKDIR.
+    """Compile the deck in WORKDIR (default).
 
     Args:
         parts: Restrict deck compilation to these parts
@@ -28,8 +28,8 @@ def run(
         workdir: Path to move into before running the command
 
     """
-    from ..configuring.settings import DeckSettings
-    from ..pipelines import run
+    from ...configuring.settings import DeckSettings
+    from ...pipelines import run
 
     run(
         settings=DeckSettings.from_yaml(workdir),

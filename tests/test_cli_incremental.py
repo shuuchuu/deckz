@@ -22,7 +22,7 @@ from deckz.cli import main
 # building print in some calls but not others would make the very first
 # print-including call in a given working_dir pay for a full cold build of
 # it right there, defeating the point.
-_RUN_ARGS = ("p1", "p2", "--no-print")
+_RUN_ARGS = ("--parts", "p1", "--parts", "p2", "--no-print")
 
 
 def run_deckz(*args: str) -> None:

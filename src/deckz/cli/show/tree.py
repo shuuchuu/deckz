@@ -6,7 +6,7 @@ from . import app
 @app.command()
 @app.default
 def tree(workdir: Path = Path()) -> None:
-    """Show the WORKDIR's deck tree.
+    """Show the WORKDIR's deck tree (default).
 
     Args:
         workdir: Path to move into before running the command.

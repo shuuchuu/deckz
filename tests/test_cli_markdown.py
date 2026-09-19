@@ -43,7 +43,7 @@ def run_deckz(*args: str) -> None:
 
 
 def test_run_mixed_markdown_and_latex(working_dir: Path) -> None:
-    run_deckz("run", "p1")
+    run_deckz("run", "--parts", "p1")
 
     _, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
     assert "Hello from Markdown, the answer is 42!" in text
