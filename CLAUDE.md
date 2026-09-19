@@ -24,9 +24,12 @@ Dependency management and running: this project uses `uv`; run tools via
 - Tests: `uv run doit test` or `uv run pytest`
   - Single test: `uv run pytest tests/test_cli.py::test_name`
 - Default doit task (`uv run doit`) runs `check` only, not `test`.
-- Install git hooks (runs `doit check test` on `pre-commit`, and a bumpver
-  hook on `pre-commit` too via `scripts/bumpver_pre_commit.sh`):
-  `uv run doit install_hooks`
+- Install the git pre-commit hook (runs `uv run doit check test` before
+  every commit): `uv run doit install_hooks`. `bumpver`'s own, unrelated
+  `pre_commit_hook` setting (`[bumpver]` in `pyproject.toml`) runs
+  `scripts/bumpver_pre_commit.sh` during `bumpver update` itself (to keep
+  `uv.lock` in the same commit as the version bump) — it's not a git hook
+  and isn't affected by `install_hooks`.
 - Docs: built with `mkdocs` from docstrings (see `mkdocs.yml`, `docs/`).
 - Version bumps: `bumpver` (see `[bumpver]` in `pyproject.toml`); do not hand-edit
   the version strings it manages in `pyproject.toml` / `src/deckz/__init__.py`.
@@ -62,7 +65,7 @@ already-computed sibling fields via a custom `BeforeValidator`
 merged from three locations, in order: the target repo's git root, the
 user's XDG config dir, and the current directory up to the git root (see
 `utils.dirs_hierarchy` / `load_all_yamls`). `GlobalSettings` covers
-repo-wide operations (e.g. `run-all`, asset building); `DeckSettings`
+repo-wide operations (e.g. `check decks`, asset building); `DeckSettings`
 extends it for operations scoped to a single deck (the current working
 directory must be inside a deck).
 
@@ -123,8 +126,18 @@ pipeline operates on the model, not on YAML directly.
 `analyzing/` holds repository-wide, read-only analyses that don't fit the
 build pipeline: flavor renaming/merging, section search, i18n
 (fr/en) consistency checks. These back the `deckz deps`,
-`deckz search-sections`, `deckz flavor rename`, `deckz flavor deduplicate`,
-and `deckz i18n *` commands.
+`deckz search-sections`, `deckz section-flavors`, `deckz section-files`,
+`deckz flavor rename`, `deckz flavor deduplicate`, and `deckz i18n *`
+commands.
+
+### Extras
+
+`src/deckz/extras/` holds the business logic for `deckz extras`'s
+subcommands (`github_querying.py` for `issue`, `mailing.py` for `random`,
+`labs.py` for `labs`) plus `uploading.py` for the top-level `deckz upload`
+— side commands unrelated to the build pipeline, each with its own thin
+`cli/extras/*.py` (or `cli/upload.py`) wrapper, same split as everywhere
+else in `cli/`.
 
 ## Conventions
 
