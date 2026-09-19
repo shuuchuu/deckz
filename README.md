@@ -198,6 +198,40 @@ flavors:
       - intro
 ```
 
+### Flavor-level variables
+
+A flavor can also set its own `variables`, merged into the rendering
+context of its content (and, cascading down, of every section it includes)
+on top of `variables.yml` -- the way to give two flavors of the same
+section genuinely different content instead of duplicating the section
+itself:
+
+```yaml
+title: Keras
+variables_to_define:
+  - depth: [shallow, deep]
+flavors:
+  - name: light
+    variables: { depth: shallow }
+    includes:
+      - body
+  - name: full
+    variables: { depth: deep }
+    includes:
+      - body
+```
+
+`body.tex` then reads `\V{variables.depth}` the same way it would read any
+deck-wide variable. `variables_to_define` is a contract, not a default: it
+never supplies a value itself, it just declares that every flavor below
+must set that key itself (optionally restricted to the given list of
+values) -- a flavor missing one, or setting one out of range, fails to
+parse. `deckz check variables` statically surveys every shared flavor and
+every real deck for two kinds of drift this contract doesn't catch by
+itself: a fragment reading a `variables.xxx` name nothing resolved at that
+point ever sets, and a declared name no fragment anywhere under its section
+ever reads.
+
 ### Titles, variables and `--en`
 
 There is only ever one `deck.yml`/section `.yml` -- English is never a
@@ -307,6 +341,15 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
   of its files. `--en` is strict: the first gap in translation coverage
   aborts the run. `check shared`/`check all` write their throwaway output
   under `<git_dir>/.check/`.
+- `deckz check variables`: statically survey every shared section's every
+  named flavor (not just the ones some deck currently uses) plus every real
+  deck, resolving `variables` the same way a real build would. Reports a
+  fragment reading a `variables.xxx`/`variables['xxx']` name nothing
+  resolved at that point sets (`UNDEFINED`), a `variables_to_define` name no
+  fragment under its section ever reads (`UNUSED`), a fragment that fails to
+  parse (`UNPARSABLE`), and a flavor/deck that fails to parse at all, e.g. a
+  `variables_to_define` contract violation (`STRUCTURAL`). No LaTeX
+  toolchain needed.
 - `deckz watch deck` / `deckz watch section SECTION FLAVOR`: recompile on
   file changes. Both also accept `--en`.
 - `deckz show` (alias for `deckz show tree`): show the resolved tree of

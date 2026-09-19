@@ -95,7 +95,7 @@ class Renderer(_BaseRenderer):
     def render_to_str(
         self, template_path: Path, /, **template_kwargs: Any
     ) -> tuple[str, AssetsMetadata]:
-        env = self._environment_for(_content_suffix(template_path))
+        env = self.environment_for(_content_suffix(template_path))
         template = env.get_template(str(template_path))
         assets_metadata_retriever = self._global_factory.assets_metadata_retriever()
         return (
@@ -106,7 +106,17 @@ class Renderer(_BaseRenderer):
             assets_metadata_retriever.assets_metadata,
         )
 
-    def _environment_for(self, suffix: str) -> Environment:
+    def environment_for(self, suffix: str) -> Environment:
+        """The target repo's Jinja environment for a content suffix (e.g. `.tex`).
+
+        Exposed beyond `render_to_str`'s own use so other code (e.g. the \
+        `deckz check variables` static analyzer) can parse a fragment with \
+        the exact same delimiters/filters a real render would use, without \
+        duplicating `templates/jinja2/env.py`'s loading.
+
+        Returns:
+            The environment, memoized per suffix.
+        """
         if suffix not in self._environments:
             env = self._module.environment_for(suffix)
             env.loader = _AbsoluteLoader()

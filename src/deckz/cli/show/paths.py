@@ -26,7 +26,7 @@ def paths(*, workdir: Path = Path()) -> None:
 
     deps = PartDependenciesNodeVisitor().process(deck)
     resolved: set[Path] = set()
-    for part_paths in deps.values():
-        resolved.update(part_paths)
+    for part_deps in deps.values():
+        resolved.update(dependency.resolved_path for dependency in part_deps)
     for path in sorted(resolved):
         print(path)

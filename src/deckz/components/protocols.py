@@ -2,6 +2,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
+    from jinja2 import Environment
+
     from ..models import (
         AssetsMetadata,
         CompileResult,
@@ -91,6 +93,8 @@ class RendererProtocol(Protocol):
     def render_to_path(
         self, template_path: Path, output_path: Path, /, **template_kwargs: Any
     ) -> "AssetsMetadata": ...
+
+    def environment_for(self, suffix: str) -> "Environment": ...
 
 
 class AssetsMetadataRetrieverProtocol(Protocol):

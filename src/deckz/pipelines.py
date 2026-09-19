@@ -9,7 +9,7 @@ from watchfiles import watch as watchfiles_watch
 from .checking import build_all_deck, build_shared_deck, check_scratch_dir
 from .components.factory import DeckSettingsFactory, GlobalSettingsFactory
 from .configuring.settings import DeckSettings, GlobalSettings
-from .configuring.variables import get_variables
+from .configuring.variables import get_variables, resolve_variables
 from .models import Deck, FlavorName, Lang, PartName
 from .utils import all_deck_settings
 
@@ -26,6 +26,7 @@ def _build(
     basedirs: tuple[Path, ...] | None = None,
 ) -> bool:
     variables = {**get_variables(settings, lang=lang), "lang": lang}
+    resolve_variables(deck, variables)
     factory = DeckSettingsFactory(settings, lang=lang)
     factory.assets_builder().build_assets()
     return factory.deck_builder(

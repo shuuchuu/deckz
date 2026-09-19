@@ -5,7 +5,7 @@ from hashlib import sha256
 from json import dumps, loads
 from logging import ERROR, getLogger
 from multiprocessing import Pool, cpu_count
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any
 
 from pypdf import PdfReader, PdfWriter
@@ -28,9 +28,12 @@ from ..models import (
 from .compiler import CompileResult
 from .deck_builder import (
     CompileType,
+    DependencyRef,
     copy_dependencies,
+    dependency_relative_path,
     render_dependencies,
     setup_build_dir,
+    variables_fingerprint,
 )
 from .protocols import (
     CompilerProtocol,
@@ -78,6 +81,8 @@ def _fragment_key(relative_path: str) -> str:
 class _FileRef:
     relative_path: str
     resolved_path: ResolvedPath
+    variables_fingerprint: str
+    variables: dict[str, Any] = field(compare=False)
 
 
 _TitleOrFile = Title | _FileRef
@@ -102,14 +107,15 @@ class _TimelineNodeVisitor(NodeVisitor[[list[_TitleOrFile], int], None]):
     def visit_file(self, file: File, items: list[_TitleOrFile], level: int) -> None:
         if file.title:
             items.append(Title(file.title, level))
-        for basedir in self._basedirs:
-            if file.resolved_path.is_relative_to(basedir):
-                relative_path = file.resolved_path.relative_to(basedir).with_suffix("")
-                break
-        else:
-            msg = f"could not find file {file}"
-            raise ValueError(msg)
-        items.append(_FileRef(str(PurePosixPath(relative_path)), file.resolved_path))
+        fingerprint = variables_fingerprint(file.variables)
+        relative_path = dependency_relative_path(
+            file.resolved_path, self._basedirs, fingerprint
+        )
+        items.append(
+            _FileRef(
+                str(relative_path), file.resolved_path, fingerprint, file.variables
+            )
+        )
 
     def visit_section(
         self, section: Section, items: list[_TitleOrFile], level: int
@@ -143,6 +149,8 @@ class _Fragment:
     # would try to issue e.g. \subsection without a preceding \section, which
     # beamer/LaTeX rejects outright.
     self_contained: bool
+    variables_fingerprint: str
+    variables: dict[str, Any] = field(compare=False)
 
 
 @dataclass(frozen=True)
@@ -219,6 +227,8 @@ def _build_timeline(flat_items: list[_TitleOrFile]) -> list[_TimelineItem]:
                     resolved_path=item.resolved_path,
                     new_titles=new_titles,
                     self_contained=new_titles == current_breadcrumb,
+                    variables_fingerprint=item.variables_fingerprint,
+                    variables=item.variables,
                 )
             )
             previous_fragment_breadcrumb = current_breadcrumb
@@ -573,15 +583,18 @@ class IncrementalDeckBuilder(DeckBuilderProtocol):
         # pass whenever the fingerprint moved, so filter edits always take
         # effect on the next build.
         markdown_stale = old_manifest.markdown_fingerprint != markdown_fingerprint
+        dependencies = {
+            DependencyRef(
+                fragment.resolved_path,
+                fragment.variables_fingerprint,
+                fragment.variables,
+            )
+            for fragment in spec.fragments
+        }
         copied = copy_dependencies(
-            {fragment.resolved_path for fragment in spec.fragments},
-            build_dir,
-            self._basedirs,
-            force=markdown_stale,
+            dependencies, build_dir, self._basedirs, force=markdown_stale
         )
-        render_dependencies(
-            self._renderer, self._markdown_converter, copied, self._variables
-        )
+        render_dependencies(self._renderer, self._markdown_converter, copied)
         toc_entries_hash = _hash_text(
             dumps([[entry.title, entry.level] for entry in spec.toc_entries])
         )

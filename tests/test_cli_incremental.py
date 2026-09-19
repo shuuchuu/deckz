@@ -25,6 +25,14 @@ from deckz.cli import main
 _RUN_ARGS = ("--parts", "p1", "--parts", "p2", "--no-print")
 
 
+def _strip_variables_fingerprint(relative_path: str) -> str:
+    # Every fragment's `relative_path` has its resolved variables' fingerprint
+    # appended to the stem (see dependency_relative_path); none of this
+    # fixture's sections declare their own variables, so it's constant across
+    # every fragment here and safe to strip for assertions on the base path.
+    return relative_path.rsplit("-", 1)[0]
+
+
 def run_deckz(*args: str) -> None:
     with patch("sys.argv", ["deckz", *args]):
         try:
@@ -189,7 +197,9 @@ def test_incremental_isolated_edit_recompiles_a_single_fragment(
         for key, before_state in before_manifest["fragments"].items():
             after_state = after_manifest["fragments"][key]
             if before_state != after_state:
-                changed_relative_paths.add(after_state["relative_path"])
+                changed_relative_paths.add(
+                    _strip_variables_fingerprint(after_state["relative_path"])
+                )
 
     # "advanced" is a subsection of "First section", established by "intro"
     # (the first file of that section): recompiling "advanced" alone, without
@@ -321,14 +331,15 @@ def test_incremental_two_edits_with_untouched_gap_stay_consistent(
         next(
             key
             for key, state in manifest["fragments"].items()
-            if state["relative_path"] == "latex/first-section/advanced"
+            if _strip_variables_fingerprint(state["relative_path"])
+            == "latex/first-section/advanced"
         )
     ]["pdf_file"]
     about_pdf = manifest["fragments"][
         next(
             key
             for key, state in manifest["fragments"].items()
-            if state["relative_path"] == "latex/about"
+            if _strip_variables_fingerprint(state["relative_path"]) == "latex/about"
         )
     ]["pdf_file"]
     assert advanced_pdf != about_pdf

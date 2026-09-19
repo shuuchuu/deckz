@@ -90,13 +90,28 @@ factory. `DeckSettingsFactory.deck_builder()` picks between
 `pipelines.py` holds the orchestration functions the CLI commands call
 (`run`, `run_file`, `run_section`, `run_all`, `check_shared`, `check_all`,
 `run_assets`, `watch`). The common path (`_build`) is: resolve variables →
-build assets (tikz/plotly/plt standalones) via the assets builder → build
-the deck (render Jinja2 → compile LaTeX) via the deck builder; `_build` also
-takes an optional `basedirs` override, used only by `check_shared`/
-`check_all` since their synthetic decks can include files living under any
-deck's directory, not just one `current_dir`/`shared_dir` pair. `watch()` is
-a generic file-watch-and-rerun wrapper (used by `deckz watch deck` /
-`deckz watch section`), not build-specific.
+cascade them through the parsed `Deck` (`configuring/variables.py::resolve_variables`:
+deck-wide `variables.yml`, overridden by each section's own matched-flavor
+`variables`, deepest section wins, mutating every `Section`/`File`'s own
+`variables` attribute in place) → build assets (tikz/plotly/plt standalones)
+via the assets builder → build the deck (render Jinja2 → compile LaTeX) via
+the deck builder; `_build` also takes an optional `basedirs` override, used
+only by `check_shared`/`check_all` since their synthetic decks can include
+files living under any deck's directory, not just one
+`current_dir`/`shared_dir` pair. `watch()` is a generic file-watch-and-rerun
+wrapper (used by `deckz watch deck` / `deckz watch section`), not
+build-specific.
+
+Because a section's resolved `variables` can differ by which flavor
+included it, the same physical file can need two different renders within
+one build (e.g. two flavors of the same section, each setting a different
+value, both pulled into one deck): `components/deck_builder.py` dedupes
+build-time dependencies by `DependencyRef` (resolved path + a short hash of
+its effective `variables`, from `variables_fingerprint`), not by path alone,
+and `dependency_relative_path` is the single place that naming scheme is
+decided so the main template's `\input` reference and the on-disk rendered
+copy always agree. `components/incremental_deck_builder.py` mirrors this in
+its own parallel `_FileRef`/`_Fragment` structures.
 
 `check_shared`/`check_all` (backing `deckz check shared`/`deckz check all`)
 build their `Deck` purely in memory via `src/deckz/checking.py` — no yaml is
@@ -121,14 +136,35 @@ local LaTeX file/section references. `Parser` (`components/parser.py`)
 turns YAML deck/section definitions into this model; the rest of the
 pipeline operates on the model, not on YAML directly.
 
+A `SectionDefinition` can declare `variables_to_define` (names every flavor
+below it must itself set in its own `variables`, optionally restricted to a
+fixed `allowed_values` list) -- a contract, not a default: `Parser` sets a
+`parsing_error` if a matched flavor is missing one or sets one out of range.
+`Section`/`File` each carry a `variables` attribute: at parse time it's just
+that section's own declared delta, and `resolve_variables` (see "Build
+pipeline" below) later overwrites it in place with the fully cascaded dict
+effective at that point in the tree.
+
 ### Analyzing
 
 `analyzing/` holds repository-wide, read-only analyses that don't fit the
 build pipeline: flavor renaming/merging, section search, i18n
-(fr/en) consistency checks. These back the `deckz deps`,
-`deckz search-sections`, `deckz section-flavors`, `deckz section-files`,
-`deckz flavor rename`, `deckz flavor deduplicate`, and `deckz i18n *`
-commands.
+(fr/en) consistency checks, and variable-usage checks. These back the
+`deckz deps`, `deckz search-sections`, `deckz section-flavors`,
+`deckz section-files`, `deckz flavor rename`, `deckz flavor deduplicate`,
+`deckz i18n *`, and `deckz check variables` commands.
+
+`variables_usage.py` (backing `deckz check variables`) surveys every shared
+section's every named flavor -- via `Parser.from_section`, not the
+synthetic "all files" flavor `checking.py` uses, since that one bypasses
+real flavors' `variables` entirely -- plus every real deck's own tree, and
+reports a fragment reading a `variables.xxx`/`variables['xxx']` name that
+isn't resolved at that point (`undefined`), a `variables_to_define` name
+nothing under its section ever reads (`unused`), a fragment that fails to
+parse with the target repo's own Jinja environment (`unparsable`), and a
+flavor/deck that fails to parse at all, typically a `variables_to_define`
+contract violation (`structural`, caught per-context so one bad flavor
+doesn't abort the whole survey).
 
 ### Extras
 

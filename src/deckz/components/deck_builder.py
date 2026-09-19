@@ -1,6 +1,15 @@
-from collections.abc import Iterable, MutableSequence, MutableSet, Sequence, Set
-from dataclasses import dataclass
+from collections.abc import (
+    Iterable,
+    Mapping,
+    MutableSequence,
+    MutableSet,
+    Sequence,
+    Set,
+)
+from dataclasses import dataclass, field
 from enum import Enum
+from hashlib import sha256
+from json import dumps
 from logging import getLogger
 from multiprocessing import Pool, cpu_count
 from pathlib import Path, PurePosixPath
@@ -38,10 +47,74 @@ class CompileType(Enum):
     PrintHandout = "print-handout"
 
 
+def variables_fingerprint(variables: Mapping[str, Any]) -> str:
+    """A short, stable hash of `variables`'s content.
+
+    Used to disambiguate the same physical file included more than once in \
+    the same build with different effective variables (e.g. two flavors of \
+    the same section merged into one deck): each distinct fingerprint gets \
+    its own rendered copy instead of colliding on one shared build artifact.
+
+    Returns:
+        A 16-character hex digest of `variables`'s content.
+    """
+    return sha256(
+        dumps(variables, sort_keys=True, default=str).encode("utf8")
+    ).hexdigest()[:16]
+
+
+def dependency_relative_path(
+    resolved_path: Path, basedirs: Iterable[Path], fingerprint: str
+) -> PurePosixPath:
+    r"""The extensionless path used both to `\input` a fragment and to name it.
+
+    Relative to whichever of `basedirs` contains `resolved_path`, with \
+    `fingerprint` appended to the stem -- the single place this naming \
+    scheme is decided, so the main template's content reference (built by \
+    `_SlidesNodeVisitor`/the incremental builder's `_TimelineNodeVisitor`) \
+    and the on-disk rendered copy (built by \
+    [`copy_dependencies`][deckz.components.deck_builder.copy_dependencies]) \
+    always agree.
+
+    Returns:
+        `resolved_path`, relative to its `basedirs` entry, without its \
+        suffix, with `fingerprint` appended to the stem.
+
+    Raises:
+        ValueError: If `resolved_path` isn't relative to any of `basedirs`.
+    """
+    for basedir in basedirs:
+        if resolved_path.is_relative_to(basedir):
+            relative_path = resolved_path.relative_to(basedir)
+            break
+    else:
+        msg = f"could not find file {resolved_path}"
+        raise ValueError(msg)
+    stem_path = relative_path.with_suffix("")
+    return PurePosixPath(stem_path.parent / f"{stem_path.name}-{fingerprint}")
+
+
+@dataclass(frozen=True)
+class DependencyRef:
+    """A file to render into a build dir, identified by content, not just path.
+
+    Two occurrences of the same `resolved_path` with different effective \
+    `variables` (see [`File.variables`][deckz.models.File.variables]) are \
+    two distinct `DependencyRef`s: `variables` is excluded from equality/hash \
+    (dicts aren't hashable, and it's a pure function of `variables_fingerprint` \
+    anyway), so a `set[DependencyRef]` naturally dedupes same-path-same-variables \
+    occurrences while keeping same-path-different-variables ones apart.
+    """
+
+    resolved_path: ResolvedPath
+    variables_fingerprint: str
+    variables: dict[str, Any] = field(compare=False)
+
+
 @dataclass(frozen=True)
 class CompileItem:
     parts: Sequence[PartSlides]
-    dependencies: Set[Path]
+    dependencies: Set[DependencyRef]
     compile_type: CompileType
     toc: bool
 
@@ -149,9 +222,7 @@ class DeckBuilder(DeckBuilderProtocol):
         output_pdf_path = self._output_dir / f"{name}.pdf"
         self._render_latex(item, latex_path)
         copied = copy_dependencies(item.dependencies, build_dir, self._basedirs)
-        render_dependencies(
-            self._renderer, self._markdown_converter, copied, self._variables
-        )
+        render_dependencies(self._renderer, self._markdown_converter, copied)
         result = self._compiler.compile(latex_path)
         if result.ok:
             self._output_dir.mkdir(parents=True, exist_ok=True)
@@ -205,63 +276,65 @@ def setup_build_dir(build_dir: Path, name: str, dirs_to_link: Iterable[Path]) ->
 
 
 def copy_dependencies(
-    dependencies: Set[Path],
+    dependencies: Iterable[DependencyRef],
     target_build_dir: Path,
     basedirs: Iterable[Path],
     *,
     force: bool = False,
-) -> list[Path]:
+) -> list[tuple[Path, dict[str, Any]]]:
     copied = []
     for dependency in dependencies:
-        for basedir in basedirs:
-            if dependency.is_relative_to(basedir):
-                relative_path = dependency.relative_to(basedir)
-                break
-        else:
-            raise ValueError
+        relative_path = dependency_relative_path(
+            dependency.resolved_path, basedirs, dependency.variables_fingerprint
+        )
         build_path = (target_build_dir / relative_path).with_name(
-            f"{relative_path.name}.j2"
+            f"{relative_path.name}{dependency.resolved_path.suffix}.j2"
         )
         if force:
             build_path.parent.mkdir(parents=True, exist_ok=True)
-            copyfile(dependency, build_path)
-            copied.append(build_path)
-        elif copy_file_if_newer(dependency, build_path):
-            copied.append(build_path)
+            copyfile(dependency.resolved_path, build_path)
+            copied.append((build_path, dependency.variables))
+        elif copy_file_if_newer(dependency.resolved_path, build_path):
+            copied.append((build_path, dependency.variables))
     return copied
 
 
 def render_dependencies(
     renderer: RendererProtocol,
     markdown_converter: MarkdownConverterProtocol,
-    to_render: Iterable[Path],
-    variables: dict[str, Any],
+    to_render: Iterable[tuple[Path, dict[str, Any]]],
 ) -> None:
-    for item in to_render:
-        rendered_path = item.with_suffix("")
-        renderer.render_to_path(item, rendered_path, variables=variables)
+    for item_path, variables in to_render:
+        rendered_path = item_path.with_suffix("")
+        renderer.render_to_path(item_path, rendered_path, variables=variables)
         if rendered_path.suffix == ".md":
             markdown_converter.convert(rendered_path, rendered_path.with_suffix(".tex"))
 
 
-class PartDependenciesNodeVisitor(NodeVisitor[[MutableSet[ResolvedPath]], None]):
-    def process(self, deck: Deck) -> dict[PartName, set[ResolvedPath]]:
+class PartDependenciesNodeVisitor(NodeVisitor[[MutableSet[DependencyRef]], None]):
+    def process(self, deck: Deck) -> dict[PartName, set[DependencyRef]]:
         return {
             part_name: self._process_part(part)
             for part_name, part in deck.parts.items()
         }
 
-    def _process_part(self, part: Part) -> set[ResolvedPath]:
-        dependencies: set[ResolvedPath] = set()
+    def _process_part(self, part: Part) -> set[DependencyRef]:
+        dependencies: set[DependencyRef] = set()
         for node in part.nodes:
             node.accept(self, dependencies)
         return dependencies
 
-    def visit_file(self, file: File, dependencies: MutableSet[ResolvedPath]) -> None:
-        dependencies.add(file.resolved_path)
+    def visit_file(self, file: File, dependencies: MutableSet[DependencyRef]) -> None:
+        dependencies.add(
+            DependencyRef(
+                file.resolved_path,
+                variables_fingerprint(file.variables),
+                file.variables,
+            )
+        )
 
     def visit_section(
-        self, section: Section, dependencies: MutableSet[ResolvedPath]
+        self, section: Section, dependencies: MutableSet[DependencyRef]
     ) -> None:
         for node in section.nodes:
             node.accept(self, dependencies)
@@ -288,15 +361,11 @@ class _SlidesNodeVisitor(NodeVisitor[[MutableSequence[TitleOrContent], int], Non
     ) -> None:
         if file.title:
             sections.append(Title(file.title, level))
-        for basedir in self._basedirs:
-            if file.resolved_path.is_relative_to(basedir):
-                path = file.resolved_path.relative_to(basedir)
-                break
-        else:
-            msg = f"could not find file {file}"
-            raise ValueError(msg)
-        path = path.with_suffix("")
-        sections.append(str(PurePosixPath(path)))
+        fingerprint = variables_fingerprint(file.variables)
+        reference = dependency_relative_path(
+            file.resolved_path, self._basedirs, fingerprint
+        )
+        sections.append(str(reference))
 
     def visit_section(
         self, section: Section, sections: MutableSequence[TitleOrContent], level: int

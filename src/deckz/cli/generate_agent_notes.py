@@ -33,6 +33,15 @@ section without forking the whole section: if
 `shared/latex/<section>/<file>.tex` for that deck only -- a local file
 always wins over a shared one at the same relative path.
 
+A flavor can set its own `variables`, merged into `variables.yml` on top
+(cascading down into every section it includes) -- the way to give two
+flavors of the same section different content without duplicating the
+section. A section's `variables_to_define` is a contract, not a default:
+it declares names every flavor below must itself set (optionally
+restricted to a fixed list of values), it never supplies a value. Run
+`deckz check variables` to find a `variables.xxx` reference nothing sets,
+or a declared variable nothing ever reads.
+
 ## Commands you'll actually reach for while iterating
 
 - `deckz run` -- compile the current deck (`--parts` to restrict).
@@ -48,6 +57,9 @@ always wins over a shared one at the same relative path.
   section that some deck locally overrides.
 - `deckz check decks` -- compile every real deck end to end. By far the
   slowest option on a repo with many decks.
+- `deckz check variables` -- statically survey every shared flavor and
+  every real deck for `variables.xxx` usage gaps, no LaTeX toolchain
+  needed.
 - `deckz watch deck` / `deckz watch section SECTION FLAVOR` -- recompile
   on file changes.
 - `deckz clean all` -- wipe every deck's build dir, plus the `.check`/

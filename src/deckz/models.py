@@ -257,6 +257,35 @@ def _normalize_include(
     return SectionInclude.model_validate(data, context=info.context)
 
 
+class VariableDeclaration(BaseModel):
+    """Declare a variable that every flavor of the enclosing section must define.
+
+    This never supplies a value itself -- see \
+    [`FlavorDefinition.variables`][deckz.models.FlavorDefinition.variables] \
+    for that. It is purely a contract (and, with `allowed_values`, a \
+    constraint) checked at parse time and used by `deckz check variables` to \
+    flag a declared variable no flavor's content ever reads.
+    """
+
+    name: str
+    """The variable name every flavor must set in its own `variables`."""
+
+    allowed_values: list[Any] | None = None
+    """If set, the only values a flavor's `variables[name]` may take."""
+
+
+def _normalize_variable_declaration(
+    v: "str | dict[str, list[Any]] | VariableDeclaration",
+) -> VariableDeclaration:
+    if isinstance(v, VariableDeclaration):
+        return v
+    if isinstance(v, str):
+        return VariableDeclaration(name=v)
+    assert len(v) == 1
+    name, allowed_values = next(iter(v.items()))
+    return VariableDeclaration(name=name, allowed_values=allowed_values)
+
+
 class FlavorDefinition(BaseModel):
     """Specify the different attributes of a flavor."""
 
@@ -266,6 +295,12 @@ class FlavorDefinition(BaseModel):
     title: LocalizedStr | None = None
     """The title of the section. Will override the one defined in the section \
     definition."""
+
+    variables: dict[str, Any] | None = None
+    """Variables merged into the rendering context of this flavor's content \
+    (and, cascading down, of every section it includes), on top of the \
+    deck-wide `variables.yml`. See also \
+    [`SectionDefinition.variables_to_define`][deckz.models.SectionDefinition.variables_to_define]."""
 
     includes: list[Annotated[NodeInclude, BeforeValidator(_normalize_include)]]
     """The includes pointing to the sections and files in this section."""
@@ -279,6 +314,14 @@ class SectionDefinition(BaseModel):
 
     default_titles: dict[IncludePath, LocalizedStr] | None = None
     """Default titles to use for the includes of the section."""
+
+    variables_to_define: list[
+        Annotated[VariableDeclaration, BeforeValidator(_normalize_variable_declaration)]
+    ] = []
+    """Variables every flavor below must itself set in its own `variables` \
+    (no default value is supplied here -- see \
+    [`VariableDeclaration`][deckz.models.VariableDeclaration]). A flavor \
+    missing one, or setting one outside its `allowed_values`, fails to parse."""
 
     flavors: list[FlavorDefinition]
     """Different flavors of the section (each flavor can define a different \
@@ -367,6 +410,13 @@ class Node(ABC):
 class File(Node):
     """File in a section or part."""
 
+    variables: dict[str, Any] = field(default_factory=dict)
+    """Variables effective when rendering this file: the deck-wide \
+    `variables.yml`, cascaded down through every enclosing \
+    [`Section`][deckz.models.Section]'s own `variables`, deepest wins. Left \
+    at `{}` until [`resolve_variables`][deckz.configuring.variables.resolve_variables] \
+    walks the parsed [`Deck`][deckz.models.Deck]."""
+
     def accept[**P, T](
         self, visitor: NodeVisitor[P, T], *args: P.args, **kwargs: P.kwargs
     ) -> T:
@@ -394,6 +444,13 @@ class Section(Node):
 
     nodes: list[Node]
     """Nodes included in the section."""
+
+    variables: dict[str, Any] = field(default_factory=dict)
+    """This flavor's own declared `variables`, until \
+    [`resolve_variables`][deckz.configuring.variables.resolve_variables] \
+    cascades ancestors into it in place, after which it holds the full \
+    effective dict at this point in the tree (also then propagated to every \
+    descendant [`File`][deckz.models.File]/[`Section`][deckz.models.Section])."""
 
     def accept[**P, T](
         self, visitor: NodeVisitor[P, T], *args: P.args, **kwargs: P.kwargs

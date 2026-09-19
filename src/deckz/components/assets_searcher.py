@@ -30,7 +30,7 @@ class AssetsSearcher(AssetsSearcherProtocol):
         deps = PartDependenciesNodeVisitor().process(deck)
         for part_deps in deps.values():
             for part_dep in part_deps:
-                _, assets_usage = self._renderer.render_to_str(part_dep)
+                _, assets_usage = self._renderer.render_to_str(part_dep.resolved_path)
                 if asset in assets_usage:
-                    result.add(part_dep)
+                    result.add(part_dep.resolved_path)
         return result
