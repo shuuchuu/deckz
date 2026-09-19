@@ -1,3 +1,4 @@
+import json
 import sys  # ruff: ignore[unused-import]
 from pathlib import Path
 from shutil import copytree, move
@@ -57,20 +58,131 @@ def run_deckz(*args: str) -> None:
                 raise e
 
 
+def test_generate_agent_notes(capsys: Any) -> None:
+    run_deckz("generate-agent-notes")
+
+    output = capsys.readouterr().out
+    assert "deckz run file LATEX" in output
+    assert "deckz check shared" in output
+
+
+def test_extras_labs(tmp_path: Path) -> None:
+    notebook_path = tmp_path / "demo.ipynb"
+    notebook = {
+        "cells": [
+            {"cell_type": "markdown", "metadata": {}, "source": ["# Solution\n"]}
+        ],
+        "metadata": {},
+        "nbformat": 4,
+        "nbformat_minor": 5,
+    }
+    notebook_path.write_text(json.dumps(notebook))
+
+    run_deckz("extras", "labs", str(notebook_path))
+
+    written = json.loads(notebook_path.read_text())
+    colab = written["metadata"]["colab"]
+    assert colab["generative_ai_disabled"] is True
+    assert len(colab["collapsed_sections"]) == 1
+
+
 def test_run(working_dir: Path) -> None:
-    run_deckz("run", "p1", "p2")
+    run_deckz("run", "--parts", "p1", "--parts", "p2")
 
     n_pages, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
     assert n_pages == 14
     assert "John Doe" in text
+
+
+def test_run_file(working_dir: Path) -> None:
+    run_deckz("run", "file", "about", "--no-open")
+
+    git_dir = working_dir.parent.parent
+    pdf_path = (
+        git_dir / ".run" / "file" / "about" / "pdf" / "deck-part_name-presentation.pdf"
+    )
+    n_pages, text = extract_info(pdf_path)
+    assert n_pages == 3
+    assert "John Doe" in text
+
+
+def test_run_section(working_dir: Path) -> None:
+    run_deckz("run", "section", "first-section", "standard", "--no-open")
+
+    git_dir = working_dir.parent.parent
+    pdf_path = (
+        git_dir
+        / ".run"
+        / "section"
+        / "first-section"
+        / "standard"
+        / "pdf"
+        / "deck-part_name-presentation.pdf"
+    )
+    n_pages, text = extract_info(pdf_path)
+    assert n_pages > 1
+    assert "First section" in text
+
+
+def test_check_decks(working_dir: Path) -> None:
+    run_deckz("check", "decks")
+
+    n_pages, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
+    assert n_pages == 14
+    assert "John Doe" in text
+
+
+def test_check_shared(working_dir: Path) -> None:
+    run_deckz("check", "shared")
+
+    git_dir = working_dir.parent.parent
+    pdf_path = (
+        git_dir / ".check" / "shared" / "pdf" / "shared-sections-presentation.pdf"
+    )
+    _, text = extract_info(pdf_path)
+    assert "Shared description content" in text
+    assert "Extra shared content" in text
 
 
 def test_check_all(working_dir: Path) -> None:
-    run_deckz("check-all")
+    run_deckz("check", "all")
 
-    n_pages, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
-    assert n_pages == 14
-    assert "John Doe" in text
+    git_dir = working_dir.parent.parent
+    pdf_path = (
+        git_dir / ".check" / "all" / "pdf" / "check-all-sections-presentation.pdf"
+    )
+    _, text = extract_info(pdf_path)
+    assert "Shared description content" in text
+    assert "ABC-local override of the shared description" in text
+    assert text.count("Extra shared content") == 2
+
+
+def test_clean_all_removes_check_scratch_dirs(working_dir: Path) -> None:
+    run_deckz("check", "shared")
+    run_deckz("check", "all")
+
+    git_dir = working_dir.parent.parent
+    shared_scratch_dir = git_dir / ".check" / "shared"
+    all_scratch_dir = git_dir / ".check" / "all"
+    assert shared_scratch_dir.is_dir()
+    assert all_scratch_dir.is_dir()
+
+    run_deckz("clean", "all")
+
+    assert not shared_scratch_dir.exists()
+    assert not all_scratch_dir.exists()
+
+
+def test_clean_all_removes_run_scratch_dir(working_dir: Path) -> None:
+    run_deckz("run", "file", "about", "--no-open")
+
+    git_dir = working_dir.parent.parent
+    run_scratch_dir = git_dir / ".run"
+    assert run_scratch_dir.is_dir()
+
+    run_deckz("clean", "all")
+
+    assert not run_scratch_dir.exists()
 
 
 def test_clean_latex_dry_run(working_dir: Path) -> None:
@@ -124,7 +236,7 @@ def test_flavor_deduplicate(working_dir: Path) -> None:
     assert "@light2" not in deck_path.read_text()
     assert "$first-section@light" in deck_path.read_text()
 
-    run_deckz("run", "p1", "p2")
+    run_deckz("run", "--parts", "p1", "--parts", "p2")
     n_pages, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
     assert n_pages == 14
     assert "John Doe" in text
@@ -151,7 +263,7 @@ def test_flavor_rename(working_dir: Path) -> None:
     assert "@standard" not in deck_path.read_text()
     assert "$first-section@extended" in deck_path.read_text()
 
-    run_deckz("run", "p1", "p2")
+    run_deckz("run", "--parts", "p1", "--parts", "p2")
     n_pages, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
     assert n_pages == 14
     assert "John Doe" in text
