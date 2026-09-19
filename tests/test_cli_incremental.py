@@ -4,7 +4,6 @@ import sys  # ruff: ignore[unused-import]
 from pathlib import Path
 from shutil import copyfile, copytree, move
 from typing import Any
-from unittest.mock import patch
 
 import appdirs
 from pdfminer.high_level import extract_pages, extract_text
@@ -33,15 +32,6 @@ def _strip_variables_fingerprint(relative_path: str) -> str:
     return relative_path.rsplit("-", 1)[0]
 
 
-def run_deckz(*args: str) -> None:
-    with patch("sys.argv", ["deckz", *args]):
-        try:
-            main()
-        except SystemExit as e:
-            if e.code != 0:
-                raise e
-
-
 @fixture(scope="session")
 def _golden_data_dir(tmp_path_factory: Any) -> Path:
     # Every test that needs a pristine post-cold-build starting point gets
@@ -66,7 +56,7 @@ def _golden_data_dir(tmp_path_factory: Any) -> Path:
     os.chdir(working_dir)
     setattr(appdirs, "user_config_dir", lambda _=None, **kwargs: str(tmp_dir))  # ruff: ignore[set-attr-with-constant]
     try:
-        run_deckz("run", *_RUN_ARGS)
+        main(("run", *_RUN_ARGS))
     finally:
         os.chdir(old_cwd)
         setattr(appdirs, "user_config_dir", old_user_config_dir)  # ruff: ignore[set-attr-with-constant]
@@ -185,7 +175,7 @@ def test_incremental_isolated_edit_recompiles_a_single_fragment(
         advanced.read_text().replace("Don't Panic.", "Don't Panic. Bring a towel.")
     )
 
-    run_deckz("run", *_RUN_ARGS)
+    main(("run", *_RUN_ARGS))
     after = _manifests(working_dir)
 
     # Editing a single slide's text doesn't change its page/frame count, so it
@@ -216,7 +206,7 @@ def test_incremental_isolated_edit_recompiles_a_single_fragment(
 def test_incremental_noop_rebuild_recompiles_nothing(working_dir: Path) -> None:
     before = _manifests(working_dir)
 
-    run_deckz("run", *_RUN_ARGS)
+    main(("run", *_RUN_ARGS))
     after = _manifests(working_dir)
 
     assert before == after
@@ -231,7 +221,7 @@ def test_incremental_page_count_change_cascades_downstream(
         + "\n\\begin{frame}\n  \\frametitle{More}\n  More.\n\\end{frame}\n"
     )
 
-    run_deckz("run", *_RUN_ARGS)
+    main(("run", *_RUN_ARGS))
 
     _, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
     assert "More." in text
@@ -295,7 +285,7 @@ def test_incremental_toc_links_do_not_accumulate_across_runs(
     advanced.write_text(
         advanced.read_text().replace("Don't Panic.", "Don't Panic. Bring a towel.")
     )
-    run_deckz("run", *_RUN_ARGS)
+    main(("run", *_RUN_ARGS))
 
     assert toc_annotation_count() == before_count
 
@@ -322,7 +312,7 @@ def test_incremental_two_edits_with_untouched_gap_stay_consistent(
     about = working_dir / "latex" / "about.tex"
     about.write_text(about.read_text().replace("Your speaker", "Your speaker EDITED"))
 
-    run_deckz("run", *_RUN_ARGS)
+    main(("run", *_RUN_ARGS))
 
     manifest = json.loads(
         (working_dir / ".build" / "abc-handout" / "fragments.json").read_text()
@@ -374,7 +364,7 @@ def test_legacy_mode_still_renders_title_page_and_toc(working_dir: Path) -> None
         )
     )
 
-    run_deckz("run", *_RUN_ARGS)
+    main(("run", *_RUN_ARGS))
 
     texts = _page_texts(working_dir / "pdf" / "abc-handout.pdf")
     assert "John Doe" in texts[0]

@@ -1,6 +1,5 @@
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
 
 from pytest import fixture
 
@@ -11,15 +10,6 @@ from deckz.utils import load_yaml
 def _write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf8")
-
-
-def run_deckz(*args: str) -> None:
-    with patch("sys.argv", ["deckz", *args]):
-        try:
-            main()
-        except SystemExit as e:
-            if e.code != 0:
-                raise e
 
 
 @fixture
@@ -64,7 +54,7 @@ def repo(tmp_path: Path, monkeypatch: Any) -> Path:
 def test_flavor_deduplicate_merges_identical_flavors_with_markdown_content(
     repo: Path,
 ) -> None:
-    run_deckz("flavor", "deduplicate")
+    main(("flavor", "deduplicate"))
 
     section_data = load_yaml(repo / "shared" / "latex" / "greeting" / "greeting.yml")
     flavor_names = [flavor["name"] for flavor in section_data["flavors"]]
@@ -81,7 +71,7 @@ def test_flavor_deduplicate_merges_identical_flavors_with_markdown_content(
 
 
 def test_flavor_rename_rewrites_usages_with_markdown_content(repo: Path) -> None:
-    run_deckz("flavor", "rename", "greeting", "casual", "friendly")
+    main(("flavor", "rename", "greeting", "casual", "friendly"))
 
     section_data = load_yaml(repo / "shared" / "latex" / "greeting" / "greeting.yml")
     flavor_names = [flavor["name"] for flavor in section_data["flavors"]]

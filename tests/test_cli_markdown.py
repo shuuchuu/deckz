@@ -1,7 +1,6 @@
 from pathlib import Path
 from shutil import copytree
 from typing import Any
-from unittest.mock import patch
 
 import appdirs
 from pdfminer.high_level import extract_pages, extract_text
@@ -33,17 +32,8 @@ def extract_info(pdf_path: Path) -> tuple[int, str]:
     return len(pages), text
 
 
-def run_deckz(*args: str) -> None:
-    with patch("sys.argv", ["deckz", *args]):
-        try:
-            main()
-        except SystemExit as e:
-            if e.code != 0:
-                raise e
-
-
 def test_run_mixed_markdown_and_latex(working_dir: Path) -> None:
-    run_deckz("run", "--parts", "p1")
+    main(("run", "--parts", "p1"))
 
     _, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
     assert "Hello from Markdown, the answer is 42!" in text
@@ -53,7 +43,7 @@ def test_run_mixed_markdown_and_latex(working_dir: Path) -> None:
 
 
 def test_deps_reports_no_unused(working_dir: Path, capsys: Any) -> None:
-    run_deckz("deps")
+    main(("deps",))
 
     out = capsys.readouterr().out
     assert "None." in out
@@ -66,6 +56,6 @@ def test_clean_latex_dry_run_keeps_used_markdown_section(working_dir: Path) -> N
     )
     assert shared_section.exists()
 
-    run_deckz("clean", "latex", "--dry-run")
+    main(("clean", "latex", "--dry-run"))
 
     assert shared_section.exists()

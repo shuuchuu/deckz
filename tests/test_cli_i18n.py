@@ -1,7 +1,6 @@
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
 
 from pytest import CaptureFixture, fixture
 
@@ -15,15 +14,6 @@ def _write(path: Path, content: str) -> None:
 
 def _frame(title: str) -> str:
     return f"\\begin{{frame}}{{{title}}}\n  {title}!\n\\end{{frame}}\n"
-
-
-def run_deckz(*args: str) -> None:
-    with patch("sys.argv", ["deckz", *args]):
-        try:
-            main()
-        except SystemExit as e:
-            if e.code != 0:
-                raise e
 
 
 @fixture
@@ -68,27 +58,27 @@ def working_dir(tmp_path: Path, monkeypatch: Any) -> Iterator[Path]:
 
 
 def test_show_paths(working_dir: Path, capsys: CaptureFixture[str]) -> None:
-    run_deckz("show", "paths")
+    main(("show", "paths"))
 
     out = capsys.readouterr().out.splitlines()
     assert out == [str(working_dir.parent.parent / "shared/latex/i18n-demo/hello.tex")]
 
 
 def test_section_flavors(working_dir: Path, capsys: CaptureFixture[str]) -> None:
-    run_deckz("section-flavors", "i18n-demo")
+    main(("section-flavors", "i18n-demo"))
 
     assert capsys.readouterr().out.splitlines() == ["hello"]
 
 
 def test_section_files(working_dir: Path, capsys: CaptureFixture[str]) -> None:
-    run_deckz("section-files", "i18n-demo", "hello")
+    main(("section-files", "i18n-demo", "hello"))
 
     (line,) = capsys.readouterr().out.splitlines()
     assert line.endswith("i18n-demo/hello.tex")
 
 
 def test_missing_en_clean(working_dir: Path, capsys: CaptureFixture[str]) -> None:
-    run_deckz("i18n", "missing-en")
+    main(("i18n", "missing-en"))
 
     assert capsys.readouterr().out == ""
 
@@ -98,7 +88,7 @@ def test_missing_en_reports_missing_file(
 ) -> None:
     (working_dir.parent.parent / "shared/latex/i18n-demo/en/hello.tex").unlink()
 
-    run_deckz("i18n", "missing-en")
+    main(("i18n", "missing-en"))
 
     (line,) = capsys.readouterr().out.splitlines()
     assert line.startswith("FILE\t")
@@ -114,7 +104,7 @@ def test_missing_en_reports_missing_translation_key(
         encoding="utf8",
     )
 
-    run_deckz("i18n", "missing-en")
+    main(("i18n", "missing-en"))
 
     lines = capsys.readouterr().out.splitlines()
     assert any(
@@ -135,7 +125,7 @@ def test_missing_en_reports_untranslated_plain_string(
         encoding="utf8",
     )
 
-    run_deckz("i18n", "missing-en")
+    main(("i18n", "missing-en"))
 
     lines = capsys.readouterr().out.splitlines()
     assert any(
@@ -145,7 +135,7 @@ def test_missing_en_reports_untranslated_plain_string(
 
 
 def test_search_sections(working_dir: Path, capsys: CaptureFixture[str]) -> None:
-    run_deckz("search-sections", "bonjour")
+    main(("search-sections", "bonjour"))
 
     (line,) = capsys.readouterr().out.splitlines()
     assert line.startswith("FRAME i18n-demo\t")

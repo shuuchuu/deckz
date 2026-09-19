@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from logging import INFO, basicConfig
 
 from cyclopts import App
@@ -9,7 +10,7 @@ app = App(version=__version__)
 app.register_install_completion_command()
 
 
-def main() -> None:
+def main(args: Iterable[str] | None = None) -> None:
     basicConfig(
         level=INFO,
         format="%(message)s",
@@ -19,4 +20,4 @@ def main() -> None:
     from ..utils import import_module_and_submodules
 
     import_module_and_submodules(__name__)
-    app()
+    app(args, result_action="return_none")

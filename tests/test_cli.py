@@ -3,7 +3,6 @@ import sys  # ruff: ignore[unused-import]
 from pathlib import Path
 from shutil import copytree, move
 from typing import Any
-from unittest.mock import patch
 
 import appdirs
 from pdfminer.high_level import extract_pages, extract_text
@@ -49,17 +48,8 @@ def extract_info(pdf_path: Path) -> tuple[int, str]:
     return len(pages), text
 
 
-def run_deckz(*args: str) -> None:
-    with patch("sys.argv", ["deckz", *args]):
-        try:
-            main()
-        except SystemExit as e:
-            if e.code != 0:
-                raise e
-
-
 def test_generate_agent_notes(capsys: Any) -> None:
-    run_deckz("generate-agent-notes")
+    main("generate-agent-notes")
 
     output = capsys.readouterr().out
     assert "deckz run file LATEX" in output
@@ -78,7 +68,7 @@ def test_extras_labs(tmp_path: Path) -> None:
     }
     notebook_path.write_text(json.dumps(notebook))
 
-    run_deckz("extras", "labs", str(notebook_path))
+    main(("extras", "labs", str(notebook_path)))
 
     written = json.loads(notebook_path.read_text())
     colab = written["metadata"]["colab"]
@@ -87,7 +77,7 @@ def test_extras_labs(tmp_path: Path) -> None:
 
 
 def test_run(working_dir: Path) -> None:
-    run_deckz("run", "--parts", "p1", "--parts", "p2")
+    main(("run", "--parts", "p1", "--parts", "p2"))
 
     n_pages, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
     assert n_pages == 14
@@ -95,7 +85,7 @@ def test_run(working_dir: Path) -> None:
 
 
 def test_run_file(working_dir: Path) -> None:
-    run_deckz("run", "file", "about", "--no-open")
+    main(("run", "file", "about", "--no-open"))
 
     git_dir = working_dir.parent.parent
     pdf_path = (
@@ -107,7 +97,7 @@ def test_run_file(working_dir: Path) -> None:
 
 
 def test_run_section(working_dir: Path) -> None:
-    run_deckz("run", "section", "first-section", "standard", "--no-open")
+    main(("run", "section", "first-section", "standard", "--no-open"))
 
     git_dir = working_dir.parent.parent
     pdf_path = (
@@ -125,7 +115,7 @@ def test_run_section(working_dir: Path) -> None:
 
 
 def test_check_decks(working_dir: Path) -> None:
-    run_deckz("check", "decks")
+    main(("check", "decks"))
 
     n_pages, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
     assert n_pages == 14
@@ -133,7 +123,7 @@ def test_check_decks(working_dir: Path) -> None:
 
 
 def test_check_shared(working_dir: Path) -> None:
-    run_deckz("check", "shared")
+    main(("check", "shared"))
 
     git_dir = working_dir.parent.parent
     pdf_path = (
@@ -145,7 +135,7 @@ def test_check_shared(working_dir: Path) -> None:
 
 
 def test_check_all(working_dir: Path) -> None:
-    run_deckz("check", "all")
+    main(("check", "all"))
 
     git_dir = working_dir.parent.parent
     pdf_path = (
@@ -158,8 +148,8 @@ def test_check_all(working_dir: Path) -> None:
 
 
 def test_clean_all_removes_check_scratch_dirs(working_dir: Path) -> None:
-    run_deckz("check", "shared")
-    run_deckz("check", "all")
+    main(("check", "shared"))
+    main(("check", "all"))
 
     git_dir = working_dir.parent.parent
     shared_scratch_dir = git_dir / ".check" / "shared"
@@ -167,20 +157,20 @@ def test_clean_all_removes_check_scratch_dirs(working_dir: Path) -> None:
     assert shared_scratch_dir.is_dir()
     assert all_scratch_dir.is_dir()
 
-    run_deckz("clean", "all")
+    main(("clean", "all"))
 
     assert not shared_scratch_dir.exists()
     assert not all_scratch_dir.exists()
 
 
 def test_clean_all_removes_run_scratch_dir(working_dir: Path) -> None:
-    run_deckz("run", "file", "about", "--no-open")
+    main(("run", "file", "about", "--no-open"))
 
     git_dir = working_dir.parent.parent
     run_scratch_dir = git_dir / ".run"
     assert run_scratch_dir.is_dir()
 
-    run_deckz("clean", "all")
+    main(("clean", "all"))
 
     assert not run_scratch_dir.exists()
 
@@ -193,7 +183,7 @@ def test_clean_latex_dry_run(working_dir: Path) -> None:
     assert shared_unused_path.exists()
     assert local_unused_path.exists()
 
-    run_deckz("clean", "latex", "--dry-run")
+    main(("clean", "latex", "--dry-run"))
 
     assert shared_unused_path.exists()
     assert local_unused_path.exists()
@@ -209,7 +199,7 @@ def test_clean_latex(working_dir: Path) -> None:
     assert local_unused_path.exists()
     assert used_path.exists()
 
-    run_deckz("clean", "latex")
+    main(("clean", "latex"))
 
     assert not shared_unused_path.exists()
     assert not local_unused_path.exists()
@@ -220,7 +210,7 @@ def test_flavor_deduplicate_dry_run(working_dir: Path) -> None:
     section_path = working_dir / "latex" / "first-section" / "first-section.yml"
     deck_path = working_dir / "deck.yml"
 
-    run_deckz("flavor", "deduplicate", "--dry-run")
+    main(("flavor", "deduplicate", "--dry-run"))
 
     assert "name: light2" in section_path.read_text()
     assert "@light2" in deck_path.read_text()
@@ -230,13 +220,13 @@ def test_flavor_deduplicate(working_dir: Path) -> None:
     section_path = working_dir / "latex" / "first-section" / "first-section.yml"
     deck_path = working_dir / "deck.yml"
 
-    run_deckz("flavor", "deduplicate")
+    main(("flavor", "deduplicate"))
 
     assert "name: light2" not in section_path.read_text()
     assert "@light2" not in deck_path.read_text()
     assert "$first-section@light" in deck_path.read_text()
 
-    run_deckz("run", "--parts", "p1", "--parts", "p2")
+    main(("run", "--parts", "p1", "--parts", "p2"))
     n_pages, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
     assert n_pages == 14
     assert "John Doe" in text
@@ -246,7 +236,7 @@ def test_flavor_rename_dry_run(working_dir: Path) -> None:
     section_path = working_dir / "latex" / "first-section" / "first-section.yml"
     deck_path = working_dir / "deck.yml"
 
-    run_deckz("flavor", "rename", "first-section", "standard", "extended", "--dry-run")
+    main(("flavor", "rename", "first-section", "standard", "extended", "--dry-run"))
 
     assert "name: standard" in section_path.read_text()
     assert "@standard" in deck_path.read_text()
@@ -256,14 +246,14 @@ def test_flavor_rename(working_dir: Path) -> None:
     section_path = working_dir / "latex" / "first-section" / "first-section.yml"
     deck_path = working_dir / "deck.yml"
 
-    run_deckz("flavor", "rename", "first-section", "standard", "extended")
+    main(("flavor", "rename", "first-section", "standard", "extended"))
 
     assert "name: standard" not in section_path.read_text()
     assert "name: extended" in section_path.read_text()
     assert "@standard" not in deck_path.read_text()
     assert "$first-section@extended" in deck_path.read_text()
 
-    run_deckz("run", "--parts", "p1", "--parts", "p2")
+    main(("run", "--parts", "p1", "--parts", "p2"))
     n_pages, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
     assert n_pages == 14
     assert "John Doe" in text
@@ -271,16 +261,16 @@ def test_flavor_rename(working_dir: Path) -> None:
 
 def test_flavor_rename_unknown_flavor(working_dir: Path) -> None:
     with raises(FlavorNotFoundError):
-        run_deckz("flavor", "rename", "first-section", "nonexistent", "extended")
+        main(("flavor", "rename", "first-section", "nonexistent", "extended"))
 
 
 def test_flavor_rename_name_collision(working_dir: Path) -> None:
     with raises(FlavorAlreadyExistsError):
-        run_deckz("flavor", "rename", "first-section", "standard", "light")
+        main(("flavor", "rename", "first-section", "standard", "light"))
 
 
 def test_run_fr_default(bilingual_dir: Path) -> None:
-    run_deckz("run")
+    main(("run",))
 
     # The template fixture's \input loop doesn't actually pull frame bodies
     # in (a pre-existing quirk of this minimal test template, unrelated to
@@ -296,7 +286,7 @@ def test_run_fr_default(bilingual_dir: Path) -> None:
 
 
 def test_run_en(bilingual_dir: Path) -> None:
-    run_deckz("run", "--en")
+    main(("run", "--en"))
 
     _, text = extract_info(
         bilingual_dir / "pdf" / "en" / "bilingual-p1-presentation.pdf"
@@ -313,7 +303,7 @@ def test_run_en_missing_file_fails_loudly(bilingual_dir: Path) -> None:
     (bilingual_dir / "latex" / "en" / "hello.tex").unlink()
 
     with raises(DeckzError):
-        run_deckz("run", "--en")
+        main(("run", "--en"))
 
 
 def test_run_en_missing_title_translation_fails_loudly(bilingual_dir: Path) -> None:
@@ -324,7 +314,7 @@ def test_run_en_missing_title_translation_fails_loudly(bilingual_dir: Path) -> N
     )
 
     with raises(ValidationError):
-        run_deckz("run", "--en")
+        main(("run", "--en"))
 
 
 def test_run_en_plain_string_title_used_as_is(bilingual_dir: Path) -> None:
@@ -337,7 +327,7 @@ def test_run_en_plain_string_title_used_as_is(bilingual_dir: Path) -> None:
         encoding="utf8",
     )
 
-    run_deckz("run", "--en")
+    main(("run", "--en"))
 
     _, text = extract_info(
         bilingual_dir / "pdf" / "en" / "bilingual-p1-presentation.pdf"
