@@ -253,7 +253,7 @@ def merge_section_titles(fr_data: Any, en_data: Any, section_id: str) -> None:
 ########################################################################################
 
 
-def merge_variables(fr_path: Path, en_path: Path) -> list[str]:
+def merge_variables(fr_path: Path, en_path: Path, *, apply: bool) -> list[str]:
     """Merge en/variables.yml into fr's variables.yml; returns FATAL messages."""
     if not en_path.is_file():
         return []
@@ -269,37 +269,117 @@ def merge_variables(fr_path: Path, en_path: Path) -> list[str]:
         if merged is not None:
             fr_data[key] = merged
             changed = True
-    if changed:
+    if changed and apply:
         dump_raw(fr_data, fr_path)
     return issues
 
 
 ########################################################################################
-# File relocation                                                                      #
+# Local content migration                                                              #
 ########################################################################################
 
 
+def _move(src: Path, dst: Path, *, use_git_mv: bool, cwd: Path) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if use_git_mv:
+        subprocess.run(["git", "mv", str(src), str(dst)], cwd=cwd, check=True)
+    else:
+        shutil.move(str(src), str(dst))
+
+
+def _local_section_en_counterpart(
+    fr_yml: Path, en_latex_dir: Path, local_latex_dir: Path
+) -> Path | None:
+    """The mirrored en counterpart of a local section's own yml, if any.
+
+    A deck-local section that was translated only inside the old separate
+    `en/latex` tree (never in-place next to the fr yml) shows up there in one
+    of two shapes: sibling-style (`<rel>/en/en.yml`, matching the shared-
+    section convention) or duplicate-style (`<rel>/<name>.yml`, a fully
+    independent copy referenced by the *same* unprefixed `$name@flavor`, since
+    the old en-deck's own separate local_latex_dir made that resolve to its
+    own copy without needing an "/en" suffix anywhere).
+    """
+    rel_dir = fr_yml.parent.relative_to(local_latex_dir)
+    for candidate in (
+        en_latex_dir / rel_dir / "en" / "en.yml",
+        en_latex_dir / rel_dir / fr_yml.name,
+    ):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def migrate_local_sections(
+    deck_dir: Path, report: Report, *, apply: bool
+) -> set[Path]:
+    """Merge deck-local section pairs; returns the en ymls consumed this way.
+
+    Mirrors `migrate_sections`, but scoped to a deck's own local latex tree
+    -- a local override of a shared section can be translated the exact same
+    way a shared section is, in-place (`<section>/en/en.yml`) or, in a
+    deck that predates this script, only inside the separate `en/latex` tree
+    (see `_local_section_en_counterpart`).
+    """
+    local_latex_dir = deck_dir / "latex"
+    en_latex_dir = deck_dir / "en" / "latex"
+    consumed: set[Path] = set()
+    for fr_yml in discover_section_ymls(local_latex_dir):
+        section_id = fr_yml.parent.relative_to(local_latex_dir).as_posix()
+        in_place_en_yml = fr_yml.parent / "en" / "en.yml"
+        en_yml = (
+            in_place_en_yml
+            if in_place_en_yml.is_file()
+            else _local_section_en_counterpart(fr_yml, en_latex_dir, local_latex_dir)
+        )
+        if en_yml is None:
+            continue
+        fr_data = load_raw(fr_yml)
+        en_data = load_raw(en_yml)
+        issues = check_section_parity(fr_data, en_data, section_id)
+        if issues:
+            report.fatal.append((fr_yml, issues))
+            continue
+        merge_section_titles(fr_data, en_data, section_id)
+        report.migrated_sections.append(fr_yml)
+        consumed.add(en_yml)
+        if apply:
+            dump_raw(fr_data, fr_yml)
+            if en_yml.is_relative_to(en_latex_dir):
+                en_yml.unlink()
+    return consumed
+
+
 def relocate_local_en_files(
-    deck_dir: Path, *, apply: bool, use_git_mv: bool
+    deck_dir: Path, consumed: set[Path], *, apply: bool, use_git_mv: bool
 ) -> list[tuple[Path, Path]]:
-    """Move `<deck>/en/latex/**` to `<deck>/latex/<reldir>/en/<filename>`."""
+    """Move whatever's left of `<deck>/en/latex/**` into `<deck>/latex/`.
+
+    A file whose path already ends in `.../en/<filename>` (e.g. a shared- or
+    local-section-style translated body already living in an in-tree `en/`
+    sibling of the old separate en-deck) is mirrored verbatim -- inserting
+    *another* "en" segment would double it up. Only a genuinely unprefixed
+    path (the common case for deck-root files, which the old convention
+    relied on the separate `en/latex` root itself to make "English", with no
+    "en" segment anywhere in the include path) gets one inserted.
+    """
     en_latex_dir = deck_dir / "en" / "latex"
     local_latex_dir = deck_dir / "latex"
     moves = []
     if not en_latex_dir.is_dir():
         return moves
     for src in sorted(p for p in en_latex_dir.rglob("*") if p.is_file()):
+        if src in consumed:
+            continue
         rel = src.relative_to(en_latex_dir)
-        dst = local_latex_dir / rel.parent / "en" / rel.name
+        dst = (
+            local_latex_dir / rel
+            if rel.parent.name == "en"
+            else local_latex_dir / rel.parent / "en" / rel.name
+        )
         moves.append((src, dst))
         if apply:
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            if use_git_mv:
-                subprocess.run(
-                    ["git", "mv", str(src), str(dst)], cwd=deck_dir, check=True
-                )
-            else:
-                shutil.move(str(src), str(dst))
+            _move(src, dst, use_git_mv=use_git_mv, cwd=deck_dir)
     return moves
 
 
@@ -375,12 +455,15 @@ def migrate_decks(
         merge_deck_titles(fr_data, en_data)
         report.migrated_decks.append(fr_path)
 
-        moves = relocate_local_en_files(deck_dir, apply=apply, use_git_mv=git_mv)
+        consumed = migrate_local_sections(deck_dir, report, apply=apply)
+        moves = relocate_local_en_files(
+            deck_dir, consumed, apply=apply, use_git_mv=git_mv
+        )
         report.moved_files.extend(moves)
 
         en_vars = deck_dir / "en" / "variables.yml"
         fr_vars = deck_dir / "variables.yml"
-        report.variable_issues.extend(merge_variables(fr_vars, en_vars))
+        report.variable_issues.extend(merge_variables(fr_vars, en_vars, apply=apply))
 
         if apply:
             dump_raw(fr_data, fr_path)

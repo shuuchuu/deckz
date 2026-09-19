@@ -77,7 +77,9 @@ def repo(tmp_path: Path, monkeypatch: Any) -> Path:
         "    title: Partie 1\n"
         "    sections:\n"
         "      - $i18n-demo@hello\n"
-        "      - about: A propos\n",
+        "      - about: A propos\n"
+        "      - $greeting@only\n"
+        "      - $dup@only\n",
     )
     _write(
         deck_dir / "en" / "deck.yml",
@@ -87,12 +89,43 @@ def repo(tmp_path: Path, monkeypatch: Any) -> Path:
         "    title: Part 1\n"
         "    sections:\n"
         "      - $i18n-demo/en@hello\n"
-        "      - en/about: About\n",
+        "      - en/about: About\n"
+        "      - $greeting/en@only\n"
+        "      - $dup@only\n",
     )
     _write(deck_dir / "latex" / "about.tex", _frame("A propos"))
     _write(deck_dir / "en" / "latex" / "about.tex", _frame("About"))
     _write(deck_dir / "variables.yml", "deck_title: Cas Bilingue\n")
     _write(deck_dir / "en" / "variables.yml", "deck_title: Bilingual Case\n")
+
+    # A local override of a shared-style section, translated only inside the
+    # old separate en/latex tree, sibling-style (mirrors a real repo's
+    # "mlops"-under-a-deck case): no in-place latex/greeting/en/ at all.
+    _write(
+        deck_dir / "latex" / "greeting" / "greeting.yml",
+        "title: Salutation\nflavors:\n  - name: only\n    includes:\n      - hello\n",
+    )
+    _write(deck_dir / "latex" / "greeting" / "hello.tex", _frame("Bonjour"))
+    _write(
+        deck_dir / "en" / "latex" / "greeting" / "en" / "en.yml",
+        "title: Greeting\nflavors:\n  - name: only\n    includes:\n      - hello\n",
+    )
+    _write(deck_dir / "en" / "latex" / "greeting" / "en" / "hello.tex", _frame("Hello"))
+
+    # A local override translated as a fully independent duplicate directory
+    # (mirrors a real repo's "seaborn"-under-a-deck case): the en deck.yml
+    # references it unprefixed, since its own separate local_latex_dir makes
+    # that resolve to this very copy.
+    _write(
+        deck_dir / "latex" / "dup" / "dup.yml",
+        "title: Doublon\nflavors:\n  - name: only\n    includes:\n      - dup\n",
+    )
+    _write(deck_dir / "latex" / "dup" / "dup.tex", _frame("Bonjour dup"))
+    _write(
+        deck_dir / "en" / "latex" / "dup" / "dup.yml",
+        "title: Duplicate\nflavors:\n  - name: only\n    includes:\n      - dup\n",
+    )
+    _write(deck_dir / "en" / "latex" / "dup" / "dup.tex", _frame("Hello dup"))
 
     # A deck with no en/ counterpart at all: nothing to merge, and its plain
     # title is a valid permanent state -- left untouched, never wrapped.
@@ -107,6 +140,17 @@ def repo(tmp_path: Path, monkeypatch: Any) -> Path:
 
 
 def test_dry_run_reports_no_fatal_and_does_not_write(repo: Path) -> None:
+    # Snapshot every file's exact bytes before the dry run, so any write at
+    # all -- not just the ones we think to assert on individually -- shows up
+    # as a diff. This is a regression test: an earlier version of the script
+    # had merge_variables() write unconditionally, ignoring apply=False, and
+    # it silently rewrote real variables.yml files during a "dry run".
+    before = {
+        p: p.read_bytes()
+        for p in repo.rglob("*")
+        if p.is_file() and ".git" not in p.parts
+    }
+
     report = migrate_en_decks.migrate_decks(repo, None, apply=False, git_mv=False)
     migrate_en_decks.migrate_sections(repo / "shared" / "latex", report, apply=False)
 
@@ -115,6 +159,13 @@ def test_dry_run_reports_no_fatal_and_does_not_write(repo: Path) -> None:
     assert (repo / "shared" / "latex" / "i18n-demo" / "en" / "en.yml").is_file()
     deck_data = _read_yaml(repo / "company" / "xyz" / "deck.yml")
     assert deck_data["parts"][0]["title"] == "Partie 1"
+
+    after = {
+        p: p.read_bytes()
+        for p in repo.rglob("*")
+        if p.is_file() and ".git" not in p.parts
+    }
+    assert after == before
 
 
 def test_apply_merges_titles_and_cleans_up(repo: Path) -> None:
@@ -150,6 +201,60 @@ def test_apply_merges_titles_and_cleans_up(repo: Path) -> None:
     # sibling-file convention.
     assert (repo / "company" / "xyz" / "latex" / "en" / "about.tex").is_file()
     assert not (repo / "company" / "xyz" / "en" / "latex").exists()
+
+
+def test_apply_merges_local_section_translated_only_in_en_deck_tree(
+    repo: Path,
+) -> None:
+    """A local section translated only inside the old en/latex tree, sibling-style.
+
+    Regression test: naively relocating every file under en/latex with an
+    inserted "/en/" segment would turn .../greeting/en/hello.tex into
+    .../greeting/en/en/hello.tex (doubled). A section's own yml must also be
+    merged and discarded, never relocated as if it were ordinary content.
+    """
+    report = migrate_en_decks.migrate_decks(repo, None, apply=True, git_mv=False)
+    migrate_en_decks.migrate_sections(repo / "shared" / "latex", report, apply=True)
+
+    assert not report.fatal
+
+    section_path = repo / "company" / "xyz" / "latex" / "greeting" / "greeting.yml"
+    assert section_path in report.migrated_sections
+    section_data = _read_yaml(section_path)
+    assert section_data["title"] == {"fr": "Salutation", "en": "Greeting"}
+
+    # No doubled "en" segment, and the mirrored en.yml was consumed, not moved.
+    assert (
+        repo / "company" / "xyz" / "latex" / "greeting" / "en" / "hello.tex"
+    ).is_file()
+    assert not (
+        repo / "company" / "xyz" / "latex" / "greeting" / "en" / "en" / "hello.tex"
+    ).exists()
+    assert not (
+        repo / "company" / "xyz" / "latex" / "greeting" / "en" / "en.yml"
+    ).exists()
+
+
+def test_apply_merges_local_section_translated_as_independent_duplicate(
+    repo: Path,
+) -> None:
+    """A local section translated as a fully independent duplicate directory.
+
+    Regression test: its own yml must be merged into the fr side and
+    discarded, not relocated to a nonsensical dup/en/dup.yml content path.
+    """
+    report = migrate_en_decks.migrate_decks(repo, None, apply=True, git_mv=False)
+    migrate_en_decks.migrate_sections(repo / "shared" / "latex", report, apply=True)
+
+    assert not report.fatal
+
+    section_path = repo / "company" / "xyz" / "latex" / "dup" / "dup.yml"
+    assert section_path in report.migrated_sections
+    section_data = _read_yaml(section_path)
+    assert section_data["title"] == {"fr": "Doublon", "en": "Duplicate"}
+
+    assert (repo / "company" / "xyz" / "latex" / "dup" / "en" / "dup.tex").is_file()
+    assert not (repo / "company" / "xyz" / "latex" / "dup" / "en" / "dup.yml").exists()
 
 
 def test_apply_leaves_untranslated_plain_titles_alone(repo: Path) -> None:
