@@ -38,12 +38,19 @@ Dependency management and running: this project uses `uv`; run tools via
 `src/deckz/cli/__init__.py` creates the single `cyclopts` `App` and, in
 `main()`, calls `import_module_and_submodules` to import every module under
 `deckz.cli` — each command module registers itself onto the shared `app` via
-`@app.command()` as an import side effect (e.g. `src/deckz/cli/run.py`).
-Related commands are grouped under sub-apps (see `i18n` and `extras`
-packages under `src/deckz/cli/`). Command functions themselves stay thin:
-they parse CLI args, build a `DeckSettings`/`GlobalSettings`, and delegate to
-`src/deckz/pipelines.py` or an `analyzing/*` module — no business logic lives
-in the `cli/` layer.
+`@app.command()` as an import side effect (e.g. `src/deckz/cli/upload.py`).
+Related commands are grouped under sub-apps: most are their own package
+under `src/deckz/cli/` with one module per subcommand (`run`, `check`,
+`clean`, `show`, `flavor`, `asset`, `i18n`, `extras` — see `run/__init__.py`
+for the pattern: an `App(name=...)` registered onto the parent app);
+`watch.py` instead defines its subcommands directly in a single module. A
+sub-app may declare a default subcommand via `@app.default`
+(`run`/`show`/`clean` do; `check` deliberately doesn't, since its
+subcommands' costs differ too much to pick one safely). Command functions
+themselves stay thin: they parse CLI args, build a `DeckSettings`/
+`GlobalSettings`, and delegate to `src/deckz/pipelines.py`,
+`src/deckz/checking.py`, or an `analyzing/*` module — no business logic
+lives in the `cli/` layer.
 
 ### Settings resolution
 
@@ -78,12 +85,29 @@ factory. `DeckSettingsFactory.deck_builder()` picks between
 ### Build pipeline
 
 `pipelines.py` holds the orchestration functions the CLI commands call
-(`run`, `run_file`, `run_section`, `run_all`, `run_assets`, `watch`). The
-common path (`_build`) is: resolve variables → build assets (tikz/plotly/plt
-standalones) via the assets builder → build the deck (render Jinja2 →
-compile LaTeX) via the deck builder. `watch()` is a generic
-file-watch-and-rerun wrapper (used by `deckz watch deck` /
+(`run`, `run_file`, `run_section`, `run_all`, `check_shared`, `check_all`,
+`run_assets`, `watch`). The common path (`_build`) is: resolve variables →
+build assets (tikz/plotly/plt standalones) via the assets builder → build
+the deck (render Jinja2 → compile LaTeX) via the deck builder; `_build` also
+takes an optional `basedirs` override, used only by `check_shared`/
+`check_all` since their synthetic decks can include files living under any
+deck's directory, not just one `current_dir`/`shared_dir` pair. `watch()` is
+a generic file-watch-and-rerun wrapper (used by `deckz watch deck` /
 `deckz watch section`), not build-specific.
+
+`check_shared`/`check_all` (backing `deckz check shared`/`deckz check all`)
+build their `Deck` purely in memory via `src/deckz/checking.py` — no yaml is
+ever written to disk. They use `Parser.all_files_section()`
+(`components/parser.py`) to expand a shared section to every file in its
+own directory rather than a named flavor's `includes` list; `check_all`
+additionally builds one extra copy of a section per deck that locally
+overrides one of its files (detected by re-resolving with that deck's own
+`local_latex_dir`). Both write their output to a persistent
+`<git_dir>/.check/{shared,all}/` scratch directory (`checking.check_scratch_dir`),
+since these decks have no real deck directory of their own; `deckz run
+file`/`deckz run section` use the same convention under `<git_dir>/.run/`,
+to avoid polluting a real deck's own `pdf`/`.build`. `deckz clean all`
+sweeps both.
 
 ### Data model
 
