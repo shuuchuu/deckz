@@ -114,6 +114,68 @@ class Parser(ParserProtocol):
         self._validate(deck)
         return deck
 
+    def all_files_section(self, section: str) -> Section:
+        """Build a section from every file physically present in its directory.
+
+        Args:
+            section: Shared/latex-relative section id, e.g. "python/basics".
+
+        Returns:
+            The built section.
+        """
+        return self._all_files_section(UnresolvedPath(PurePath(section)))
+
+    def _all_files_section(self, unresolved_path: UnresolvedPath) -> Section:
+        section_dir = self._shared_latex_dir / unresolved_path
+        section = Section(
+            title=None,
+            unresolved_path=unresolved_path,
+            resolved_path=ResolvedPath(section_dir),
+            parsing_error=None,
+            flavor=FlavorName("all"),
+            nodes=[],
+        )
+        definition_path = section_dir / f"{unresolved_path.name}.yml"
+        if not definition_path.is_file():
+            section.parsing_error = (
+                f"unresolvable section definition path {definition_path}"
+            )
+            return section
+        try:
+            content = load_yaml(definition_path)
+        except Exception as e:
+            section.parsing_error = f"{e}"
+            return section
+        try:
+            section_definition = SectionDefinition.model_validate(
+                content, context={"lang": self._lang, "lenient": self._lenient}
+            )
+        except ValidationError as e:
+            section.parsing_error = f"{e}"
+            return section
+        section.title = section_definition.title
+        default_titles = section_definition.default_titles
+        stems = sorted(
+            {
+                path.stem
+                for path in section_dir.iterdir()
+                if path.is_file() and path.suffix in self._file_extensions
+            }
+        )
+        section.nodes = [
+            self._parse_file(
+                base_unresolved_path=unresolved_path,
+                include_path=IncludePath(PurePath(stem)),
+                title=(
+                    default_titles.get(IncludePath(PurePath(stem)))
+                    if default_titles
+                    else None
+                ),
+            )
+            for stem in stems
+        ]
+        return section
+
     def from_file(self, latex: str) -> Deck:
         deck = Deck(
             name="deck",

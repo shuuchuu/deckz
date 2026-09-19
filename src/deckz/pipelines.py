@@ -6,6 +6,7 @@ from typing import Any
 from rich.progress import BarColumn, Progress
 from watchfiles import watch as watchfiles_watch
 
+from .checking import build_all_deck, build_shared_deck, check_scratch_dir
 from .components.factory import DeckSettingsFactory, GlobalSettingsFactory
 from .configuring.settings import DeckSettings, GlobalSettings
 from .configuring.variables import get_variables
@@ -22,6 +23,7 @@ def _build(
     build_handout: bool,
     build_presentation: bool,
     build_print: bool,
+    basedirs: tuple[Path, ...] | None = None,
 ) -> bool:
     variables = {**get_variables(settings, lang=lang), "lang": lang}
     factory = DeckSettingsFactory(settings, lang=lang)
@@ -32,6 +34,7 @@ def _build(
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
+        basedirs=basedirs,
     ).build_deck()
 
 
@@ -126,6 +129,56 @@ def run_all(
             if not result:
                 break
             progress.update(task_id, advance=1)
+
+
+def check_shared(
+    directory: Path,
+    lang: Lang,
+    build_handout: bool,
+    build_presentation: bool,
+    build_print: bool,
+) -> None:
+    global_settings = GlobalSettings.from_yaml(directory)
+    git_dir = global_settings.paths.git_dir
+    GlobalSettingsFactory(global_settings).assets_builder().build_assets()
+    settings = DeckSettings.from_yaml(check_scratch_dir(git_dir, "shared"))
+    deck = build_shared_deck(
+        settings.paths.shared_latex_dir, settings.file_extensions, lang
+    )
+    _build(
+        deck=deck,
+        settings=settings,
+        lang=lang,
+        build_handout=build_handout,
+        build_presentation=build_presentation,
+        build_print=build_print,
+        basedirs=(git_dir,),
+    )
+
+
+def check_all(
+    directory: Path,
+    lang: Lang,
+    build_handout: bool,
+    build_presentation: bool,
+    build_print: bool,
+) -> None:
+    global_settings = GlobalSettings.from_yaml(directory)
+    git_dir = global_settings.paths.git_dir
+    GlobalSettingsFactory(global_settings).assets_builder().build_assets()
+    settings = DeckSettings.from_yaml(check_scratch_dir(git_dir, "all"))
+    deck = build_all_deck(
+        git_dir, settings.paths.shared_latex_dir, settings.file_extensions, lang
+    )
+    _build(
+        deck=deck,
+        settings=settings,
+        lang=lang,
+        build_handout=build_handout,
+        build_presentation=build_presentation,
+        build_print=build_print,
+        basedirs=(git_dir,),
+    )
 
 
 def run_assets(directory: Path) -> None:

@@ -3,8 +3,8 @@ from pathlib import Path
 from . import app
 
 
-@app.command()
-def check_all(
+@app.command(name="decks")
+def check_decks(
     *,
     handout: bool = False,
     presentation: bool = True,
@@ -12,7 +12,12 @@ def check_all(
     en: bool = False,
     workdir: Path = Path(),
 ) -> None:
-    """Compile all shared slides (presentation only by default).
+    """Compile every deck in the repository, end to end.
+
+    By far the slowest of the three `check` subcommands on a repo with many \
+    decks: every shared section gets recompiled once per deck that includes \
+    it, rather than once. Prefer `check shared` or `check all` while \
+    iterating on shared content.
 
     Args:
         handout: Produce PDFs without animations
@@ -24,7 +29,7 @@ def check_all(
         workdir: Path to move into before running the command
 
     """
-    from ..pipelines import run_all
+    from ...pipelines import run_all
 
     run_all(
         directory=workdir,

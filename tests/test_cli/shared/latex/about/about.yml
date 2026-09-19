@@ -1,0 +1,7 @@
+title: About us
+default_titles:
+  description: Who we are
+flavors:
+  - name: standard
+    includes:
+      - description

@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .protocols import (
@@ -121,6 +122,7 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
         build_presentation: bool,
         build_handout: bool,
         build_print: bool,
+        basedirs: tuple[Path, ...] | None = None,
     ) -> DeckBuilderProtocol:
         if self._settings.incremental_compilation:
             from .incremental_deck_builder import IncrementalDeckBuilder
@@ -153,7 +155,9 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
                 self._settings.paths.shared_code_dir,
             ),
             template=self._settings.paths.jinja2_main_template,
-            basedirs=(
+            basedirs=basedirs
+            if basedirs is not None
+            else (
                 self._settings.paths.shared_dir,
                 self._settings.paths.current_dir,
             ),

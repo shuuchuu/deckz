@@ -1,8 +1,14 @@
 from jinja2 import Environment
 
+from deckz.models import Title
+
 
 def _to_camel_case(string: str) -> str:
     return "".join(substring.capitalize() or "_" for substring in string.split("_"))
+
+
+def _is_title(value: object) -> bool:
+    return isinstance(value, Title)
 
 
 def environment_for(suffix: str) -> Environment:
@@ -19,4 +25,5 @@ def environment_for(suffix: str) -> Environment:
         autoescape=False,
     )
     env.filters["camelcase"] = _to_camel_case
+    env.tests["title"] = _is_title
     return env

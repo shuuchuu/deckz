@@ -11,7 +11,7 @@ from re import MULTILINE, Pattern
 from re import compile as re_compile
 
 from ..models import Deck, FlavorName, ResolvedPath, is_lang_map
-from ..utils import load_yaml
+from ..utils import load_yaml, shared_section_ids
 
 _FRAME_TITLE = re_compile(r"\\begin\{frame\}(?:\[[^]]*\])?\{([^}]*)\}")
 _MARKDOWN_HEADING = re_compile(r"^#+[ \t]+(.+?)[ \t]*$", MULTILINE)
@@ -164,11 +164,9 @@ def search_sections(
     """
     section_matches: list[SectionTitleMatch] = []
     frame_matches: list[FrameTitleMatch] = []
-    for yml_path in sorted(shared_latex_dir.rglob("*.yml")):
-        section_dir = yml_path.parent
-        if section_dir.name != yml_path.stem:
-            continue
-        section = section_dir.relative_to(shared_latex_dir).as_posix()
+    for section in shared_section_ids(shared_latex_dir):
+        section_dir = shared_latex_dir / section
+        yml_path = section_dir / f"{section_dir.name}.yml"
 
         data = load_yaml(yml_path) or {}
         raw_titles = [data.get("title"), *(data.get("default_titles") or {}).values()]

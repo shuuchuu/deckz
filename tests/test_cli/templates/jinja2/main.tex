@@ -66,14 +66,16 @@
 \end{frame}
 
 %% for part in parts:
-%% for section in part.sections:
-\section{\V{section.title}}
-%% for section_input in section.inputs:
-%% if section_input.title != None:
-\subsection{\V{subsection}}
+%% for item in part.sections:
+%% if item is title
+%% if item.level == 0
+\section{\V{item.title}}
+%% else
+\subsection{\V{item.title}}
 %% endif
-\input{\V{section_input.path}}
-%% endfor
+%% else
+\input{\V{item}}
+%% endif
 %% endfor
 %% endfor
 

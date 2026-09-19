@@ -8,6 +8,7 @@ if TYPE_CHECKING:
         Deck,
         FlavorName,
         ResolvedPath,
+        Section,
         UnresolvedPath,
     )
 
@@ -33,6 +34,22 @@ class ParserProtocol(Protocol):
     def from_section(self, section: str, flavor: "FlavorName") -> "Deck": ...
 
     def from_file(self, latex: str) -> "Deck": ...
+
+    def all_files_section(self, section: str) -> "Section":
+        """Build a section from every file physically present in its directory.
+
+        Unlike \
+        [`from_section`][deckz.components.protocols.ParserProtocol.from_section], \
+        this ignores named flavors entirely: the section is expanded to every \
+        file in its own directory, resolved through the same local-before-shared \
+        lookup as any other file.
+
+        Args:
+            section: Shared/latex-relative section id, e.g. "python/basics".
+
+        Returns:
+            The built section.
+        """
 
 
 class DeckBuilderProtocol(Protocol):
@@ -115,6 +132,7 @@ class DeckFactoryProtocol(GlobalFactoryProtocol, Protocol):
         build_presentation: bool,
         build_handout: bool,
         build_print: bool,
+        basedirs: tuple[Path, ...] | None = None,
     ) -> DeckBuilderProtocol: ...
 
     def parser(self) -> ParserProtocol: ...

@@ -165,3 +165,23 @@ def latex_dirs(git_dir: Path, shared_latex_dir: Path) -> Iterator[Path]:
         [shared_latex_dir],
         (settings.paths.local_latex_dir for settings in all_deck_settings(git_dir)),
     )
+
+
+def shared_section_ids(shared_latex_dir: Path) -> list[str]:
+    """List every shared section, as ids usable with `Parser`/`from_section`.
+
+    A directory counts as a section when its own name matches the stem of a \
+    `.yml` file directly inside it (e.g. `about/about.yml`).
+
+    Args:
+        shared_latex_dir: Path to the shared latex directory.
+
+    Returns:
+        The sorted list of shared/latex-relative section ids, e.g. "about" \
+        or "python/basics".
+    """
+    return sorted(
+        yml_path.parent.relative_to(shared_latex_dir).as_posix()
+        for yml_path in shared_latex_dir.rglob("*.yml")
+        if yml_path.parent.name == yml_path.stem
+    )
