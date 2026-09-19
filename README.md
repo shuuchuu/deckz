@@ -22,7 +22,9 @@ pip install deckz
 ### Shell completion
 
 Run `deckz --help` and look for the `--install-completion` /
-`--show-completion` flags to set up completion for your shell.
+`--show-completion` flags to set up completion for your shell
+interactively, or run `deckz generate-completion {bash,zsh,fish}` to print
+the completion script yourself (e.g. to source from your own dotfiles).
 
 ## Repository layout
 
@@ -200,7 +202,7 @@ flavors:
 
 There is only ever one `deck.yml`/section `.yml` -- English is never a
 separate deck or a duplicated section, only a `--en` flag on `deckz run` (and
-`deckz check-all`/`deckz watch`):
+`deckz check`/`deckz watch`):
 
 - Any title (`deck.yml` part/include titles, a section's `title`,
   `default_titles` values, a flavor's title) and any `variables.yml` value
@@ -286,13 +288,25 @@ way it only orchestrates LaTeX compilation via `build_command`.
 Run `deckz --help` for the full list of commands, or `deckz <command>
 --help` for a specific command. The main ones:
 
-- `deckz run [PARTS]...`: compile the deck in the current directory
-  (optionally restricted to some parts). Add `--en` to compile the English
-  variant (see [Titles, variables and `--en`](#titles-variables-and---en)).
-- `deckz check-all`: compile every shared section standalone, to catch
-  errors before they show up in a real deck. `--en` here is strict across
-  the whole repository: the first deck missing any translation aborts the
-  run.
+- `deckz run` (alias for `deckz run deck`, optionally restricted with
+  `--parts`) / `deckz run file LATEX` / `deckz run section SECTION FLAVOR`:
+  compile the deck in the current directory, a single LaTeX file, or a
+  specific section flavor. Add `--en` to compile the English variant (see
+  [Titles, variables and `--en`](#titles-variables-and---en)). `run file`/
+  `run section` write their output under `<git_dir>/.run/`, not the current
+  deck's own `pdf`/`.build`, and open it once done (add `--no-open` for
+  agentic/headless use, where only the printed path matters).
+- `deckz check decks` / `deckz check shared` / `deckz check all`: validate
+  the repository by compiling. `check decks` compiles every real deck end to
+  end (by far the slowest for a repo with many decks, since every shared
+  section gets recompiled once per deck that includes it). `check shared`
+  compiles one throwaway deck containing every shared section expanded to
+  every file in its directory (not just the ones some named flavor lists) --
+  fast enough to run while editing shared content. `check all` does the same
+  plus one extra copy of a section for every deck that locally overrides one
+  of its files. `--en` is strict: the first gap in translation coverage
+  aborts the run. `check shared`/`check all` write their throwaway output
+  under `<git_dir>/.check/`.
 - `deckz watch deck` / `deckz watch section SECTION FLAVOR`: recompile on
   file changes. Both also accept `--en`.
 - `deckz show` (alias for `deckz show tree`): show the resolved tree of
@@ -314,13 +328,27 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
 - `deckz asset search ASSET` / `deckz asset deps`: find where an asset is
   used, or find assets missing license metadata.
 - `deckz clean` / `deckz clean all` / `deckz clean latex`: remove build
-  directories, or unused shared/local LaTeX files.
+  directories, or unused shared/local LaTeX files. `deckz clean all` also
+  removes any `check shared`/`check all` scratch directory under
+  `<git_dir>/.check/`, and the `run file`/`run section` scratch directory
+  under `<git_dir>/.run/`.
 - `deckz i18n missing-en [--all]`: report fr content/titles/variables with no
   English counterpart, i.e. what a `deckz run --en` would currently fail on.
+- `deckz generate-agent-notes`: print onboarding notes for an AI coding
+  agent working in the repo (conventions not already covered by `--help`,
+  e.g. the section/flavor syntax and local-override resolution). Prints to
+  stdout, e.g. `deckz generate-agent-notes > CLAUDE.md`.
+- `deckz generate-completion {bash,zsh,fish}`: print a shell completion
+  script (see [Shell completion](#shell-completion)).
 - `deckz upload`: upload built PDFs to Google Drive.
 - `deckz extras issue TITLE [BODY]`: create a GitHub issue.
 - `deckz extras random REASON`: roll a dice and email the result (handy for
   arbitrary decision-making, e.g. picking who does a task).
+- `deckz extras labs NOTEBOOKS...`: normalize Jupyter notebooks (files, or
+  directories searched recursively for `*.ipynb`) to this project's Colab
+  conventions -- collapse every "Solution" markdown heading cell by
+  default, and disable Colab's generative AI features. `--dry-run` lists
+  what would change without writing.
 
 ## Documentation
 
