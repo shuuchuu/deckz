@@ -87,7 +87,9 @@ def build_shared_deck(
         parser.all_files_section(section_id)
         for section_id in shared_section_ids(shared_latex_dir)
     ]
-    return Deck(name=name, parts={_PART_NAME: Part(title=None, nodes=nodes)})
+    deck = Deck(name=name, parts={_PART_NAME: Part(title=None, nodes=nodes)})
+    parser.validate(deck)
+    return deck
 
 
 def build_all_deck(

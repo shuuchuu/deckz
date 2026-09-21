@@ -92,7 +92,7 @@ class Parser(ParserProtocol):
         deck = Deck(
             name=deck_definition.name, parts=self._parse_parts(deck_definition.parts)
         )
-        self._validate(deck)
+        self.validate(deck)
         return deck
 
     def from_section(self, section: str, flavor: FlavorName) -> Deck:
@@ -111,7 +111,7 @@ class Parser(ParserProtocol):
                 ]
             ),
         )
-        self._validate(deck)
+        self.validate(deck)
         return deck
 
     def all_files_section(self, section: str) -> Section:
@@ -188,7 +188,7 @@ class Parser(ParserProtocol):
                 ]
             ),
         )
-        self._validate(deck)
+        self.validate(deck)
         return deck
 
     def _parse_parts(
@@ -410,7 +410,7 @@ class Parser(ParserProtocol):
         return None
 
     @staticmethod
-    def _validate(deck: Deck) -> None:
+    def validate(deck: Deck) -> None:
         tree = RichTreeVisitor().process(deck)
         if tree is not None:
             rich_print(tree, file=stderr)
