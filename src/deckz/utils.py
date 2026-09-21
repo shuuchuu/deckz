@@ -1,7 +1,9 @@
 """Provide general utility functions that would not fit in other modules."""
 
 from collections.abc import Iterable, Iterator
-from contextlib import suppress
+from contextlib import contextmanager, suppress
+from multiprocessing import get_context
+from multiprocessing.pool import Pool
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -185,3 +187,9 @@ def shared_section_ids(shared_latex_dir: Path) -> list[str]:
         for yml_path in shared_latex_dir.rglob("*.yml")
         if yml_path.parent.name == yml_path.stem
     )
+
+
+@contextmanager
+def create_pool(processes: int | None = None) -> Iterator[Pool]:
+    with get_context("spawn").Pool(processes=processes) as pool:
+        yield pool

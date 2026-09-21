@@ -11,7 +11,7 @@ from enum import Enum
 from hashlib import sha256
 from json import dumps
 from logging import getLogger
-from multiprocessing import Pool, cpu_count
+from multiprocessing import cpu_count
 from pathlib import Path, PurePosixPath
 from shutil import copyfile
 from typing import Any
@@ -31,7 +31,7 @@ from ..models import (
     Title,
     TitleOrContent,
 )
-from ..utils import copy_file_if_newer
+from ..utils import copy_file_if_newer, create_pool
 from .compiler import CompileResult
 from .protocols import (
     CompilerProtocol,
@@ -162,7 +162,7 @@ class DeckBuilder(DeckBuilderProtocol):
                 BarColumn(),
                 "[progress.percentage]{task.percentage:>3.0f}%",
             ) as progress,
-            Pool(min(cpu_count(), len(items))) as pool,
+            create_pool(min(cpu_count(), len(items))) as pool,
         ):
             task_id = progress.add_task("Compiling…", total=len(items))
             for item_name, result in zip(

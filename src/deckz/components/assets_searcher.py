@@ -1,9 +1,8 @@
 from functools import partial, reduce
-from multiprocessing import Pool
 from pathlib import Path
 
 from ..models import Deck, ResolvedPath
-from ..utils import all_decks
+from ..utils import all_decks, create_pool
 from .deck_builder import PartDependenciesNodeVisitor
 from .protocols import AssetsSearcherProtocol, RendererProtocol
 
@@ -18,7 +17,7 @@ class AssetsSearcher(AssetsSearcherProtocol):
 
     def search(self, asset: str) -> set[ResolvedPath]:
         f = partial(self._deck_asset_dependencies, asset=asset)
-        with Pool() as pool:
+        with create_pool() as pool:
             return reduce(
                 set.union,
                 pool.map(f, all_decks(self._git_dir).values()),

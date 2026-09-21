@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from hashlib import sha256
 from json import dumps, loads
 from logging import ERROR, getLogger
-from multiprocessing import Pool, cpu_count
+from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +25,7 @@ from ..models import (
     Section,
     Title,
 )
+from ..utils import create_pool
 from .compiler import CompileResult
 from .deck_builder import (
     CompileType,
@@ -824,7 +825,7 @@ class IncrementalDeckBuilder(DeckBuilderProtocol):
         if not jobs:
             return True
         ok = True
-        with Pool(min(cpu_count(), len(jobs))) as pool:
+        with create_pool(min(cpu_count(), len(jobs))) as pool:
             job_results = zip(
                 jobs,
                 pool.imap(

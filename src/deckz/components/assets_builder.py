@@ -5,7 +5,6 @@ from contextlib import redirect_stdout
 from dataclasses import dataclass
 from itertools import chain
 from logging import getLogger
-from multiprocessing import Pool
 from pathlib import Path
 from shutil import copyfile
 from tempfile import TemporaryDirectory
@@ -14,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Protocol, override
 from plotly.graph_objs import Figure
 
 from ..exceptions import DeckzError
-from ..utils import copy_file_if_newer, import_module_and_submodules
+from ..utils import copy_file_if_newer, create_pool, import_module_and_submodules
 from .protocols import AssetsBuilderProtocol, CompilerProtocol
 
 if TYPE_CHECKING:
@@ -224,7 +223,7 @@ class TikzAssetsBuilder(AssetsBuilderProtocol):
             for item in items:
                 self._prepare(*item)
 
-            with Pool() as pool:
+            with create_pool() as pool:
                 results = pool.map(
                     self._compiler.compile, (item_path.latex for _, item_path in items)
                 )
