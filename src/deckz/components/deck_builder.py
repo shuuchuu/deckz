@@ -217,19 +217,24 @@ class DeckBuilder(DeckBuilderProtocol):
 
     def _build_item(self, name: str, item: CompileItem) -> CompileResult:
         build_dir = setup_build_dir(self._build_dir, name, self._dirs_to_link)
-        latex_path = build_dir / f"{name}.tex"
-        build_pdf_path = latex_path.with_suffix(".pdf")
+        main_path = build_dir / f"{name}{self._template.suffix}"
+        build_pdf_path = main_path.with_suffix(".pdf")
         output_pdf_path = self._output_dir / f"{name}.pdf"
-        self._render_latex(item, latex_path)
+        self._render_main(item, main_path)
         copied = copy_dependencies(item.dependencies, build_dir, self._basedirs)
-        render_dependencies(self._renderer, self._markdown_converter, copied)
-        result = self._compiler.compile(latex_path)
+        render_dependencies(
+            self._renderer,
+            self._markdown_converter,
+            copied,
+            target_suffix=self._template.suffix,
+        )
+        result = self._compiler.compile(main_path)
         if result.ok:
             self._output_dir.mkdir(parents=True, exist_ok=True)
             copyfile(build_pdf_path, output_pdf_path)
         return result
 
-    def _render_latex(self, item: CompileItem, output_path: Path) -> None:
+    def _render_main(self, item: CompileItem, output_path: Path) -> None:
         self._renderer.render_to_path(
             self._template,
             output_path,
@@ -303,12 +308,16 @@ def render_dependencies(
     renderer: RendererProtocol,
     markdown_converter: MarkdownConverterProtocol,
     to_render: Iterable[tuple[Path, dict[str, Any]]],
+    *,
+    target_suffix: str = ".tex",
 ) -> None:
     for item_path, variables in to_render:
         rendered_path = item_path.with_suffix("")
         renderer.render_to_path(item_path, rendered_path, variables=variables)
         if rendered_path.suffix == ".md":
-            markdown_converter.convert(rendered_path, rendered_path.with_suffix(".tex"))
+            markdown_converter.convert(
+                rendered_path, rendered_path.with_suffix(target_suffix)
+            )
 
 
 class PartDependenciesNodeVisitor(NodeVisitor[[MutableSet[DependencyRef]], None]):
