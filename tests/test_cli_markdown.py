@@ -51,9 +51,7 @@ def test_deps_reports_no_unused(working_dir: Path, capsys: Any) -> None:
 
 
 def test_clean_latex_dry_run_keeps_used_markdown_section(working_dir: Path) -> None:
-    shared_section = (
-        working_dir.parent.parent / "shared" / "latex" / "greeting" / "hello.md"
-    )
+    shared_section = working_dir.parent.parent / "latex" / "greeting" / "hello.md"
     assert shared_section.exists()
 
     main(("clean", "latex", "--dry-run"))

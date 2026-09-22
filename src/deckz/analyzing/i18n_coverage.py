@@ -36,7 +36,7 @@ def _audit_deck(settings: "DeckSettings") -> Deck:
 
     parser = Parser(
         local_latex_dir=settings.paths.local_latex_dir,
-        shared_latex_dir=settings.paths.shared_latex_dir,
+        shared_latex_dir=settings.paths.latex_dir,
         file_extensions=settings.file_extensions,
         lang="fr",
         lenient=True,

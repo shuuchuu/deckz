@@ -24,7 +24,7 @@ def section_files(section: str, flavor: str, /, *, workdir: Path = Path()) -> No
     settings = GlobalSettings.from_yaml(workdir)
     for path in sorted(
         compute(
-            settings.paths.shared_latex_dir,
+            settings.paths.latex_dir,
             settings.file_extensions,
             section,
             FlavorName(flavor),

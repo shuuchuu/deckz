@@ -39,7 +39,7 @@ def deps(
     def _display_section_assets(
         unlicensed_assets: Mapping[UnresolvedPath, Set[Path]],
         console: Console,
-        shared_dir: Path,
+        assets_dir: Path,
     ) -> None:
         if unlicensed_assets:
             for section, images in unlicensed_assets.items():
@@ -55,7 +55,7 @@ def deps(
                     matches = image.parent.glob(f"{image.name}.*")
                     console.print(
                         " or ".join(
-                            f"[link=file://{m}]{m.relative_to(shared_dir)}[/link]"
+                            f"[link=file://{m}]{m.relative_to(assets_dir)}[/link]"
                             for m in matches
                             if m.suffix != ".yml"
                         )
@@ -81,7 +81,7 @@ def deps(
     if verbose:
         console.print("[bold]Sections and their unlicensed assets[/]")
         _display_section_assets(
-            sorted_unlicensed_assets, console, settings.paths.shared_dir
+            sorted_unlicensed_assets, console, settings.paths.assets_dir
         )
     else:
         _display_table(sorted_unlicensed_assets, console)

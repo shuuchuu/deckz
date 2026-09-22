@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -60,6 +61,9 @@ class DeckBuilderProtocol(Protocol):
 
 class AssetsBuilderProtocol(Protocol):
     def build_assets(self) -> None: ...
+
+    def watched_dirs(self) -> Iterable[Path]:
+        """Directories whose changes should trigger a rebuild (`deckz watch assets`)."""
 
 
 class CompilerProtocol(Protocol):

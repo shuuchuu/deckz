@@ -165,7 +165,7 @@ def _shared_flavor_contexts(
 ) -> list[tuple[str, FlavorName, str]]:
     from .sections_search import flavor_names
 
-    shared_latex_dir = settings.paths.shared_latex_dir
+    shared_latex_dir = settings.paths.latex_dir
     contexts: list[tuple[str, FlavorName, str]] = []
     for section_id in shared_section_ids(shared_latex_dir):
         yml_path = shared_latex_dir / section_id / f"{Path(section_id).name}.yml"
@@ -193,7 +193,7 @@ def check_variables(settings: "GlobalSettings", lang: Lang = "fr") -> VariablesR
     acc = _Accumulator()
     renderer = GlobalSettingsFactory(settings).renderer()
     git_dir = settings.paths.git_dir
-    shared_latex_dir = settings.paths.shared_latex_dir
+    shared_latex_dir = settings.paths.latex_dir
 
     scratch_settings = DeckSettings.from_yaml(check_scratch_dir(git_dir, "variables"))
     shared_base_variables = {**get_variables(scratch_settings, lang), "lang": lang}
@@ -218,7 +218,7 @@ def check_variables(settings: "GlobalSettings", lang: Lang = "fr") -> VariablesR
         )
         deck_parser = Parser(
             local_latex_dir=deck_settings.paths.local_latex_dir,
-            shared_latex_dir=deck_settings.paths.shared_latex_dir,
+            shared_latex_dir=deck_settings.paths.latex_dir,
             file_extensions=deck_settings.file_extensions,
             lang=lang,
             lenient=True,

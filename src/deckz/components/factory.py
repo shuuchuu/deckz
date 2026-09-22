@@ -54,38 +54,24 @@ class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
         return PandocConverter(pandoc_command=pandoc_command)
 
     def assets_builder(self) -> AssetsBuilderProtocol:
-        from .assets_builder import (
-            AssetsBuilder,
-            PlotlyAssetsBuilder,
-            PltAssetsBuilder,
-            TikzAssetsBuilder,
-        )
+        from .assets_builder import AssetsBuilder
 
         return AssetsBuilder(
-            assets_builders=(
-                PltAssetsBuilder(output_dir=self._settings.paths.shared_plt_pdf_dir),
-                PlotlyAssetsBuilder(
-                    output_dir=self._settings.paths.shared_plotly_pdf_dir
-                ),
-                TikzAssetsBuilder(
-                    input_dir=self._settings.paths.tikz_dir,
-                    output_dir=self._settings.paths.shared_tikz_pdf_dir,
-                    assets_dir=self._settings.paths.shared_dir,
-                    compiler=self.compiler(),
-                ),
-            )
+            assets_builders_module=self._settings.paths.assets_builders_module,
+            assets_dir=self._settings.paths.assets_dir,
+            compiler=self.compiler(),
         )
 
     def assets_metadata_retriever(self) -> AssetsMetadataRetrieverProtocol:
         from .assets_metadata_retriever import AssetsMetadataRetriever
 
-        return AssetsMetadataRetriever(assets_dir=self._settings.paths.shared_dir)
+        return AssetsMetadataRetriever(assets_dir=self._settings.paths.assets_dir)
 
     def assets_searcher(self) -> AssetsSearcherProtocol:
         from .assets_searcher import AssetsSearcher
 
         return AssetsSearcher(
-            assets_dir=self._settings.paths.shared_dir,
+            assets_dir=self._settings.paths.assets_dir,
             git_dir=self._settings.paths.git_dir,
             renderer=self.renderer(),
         )
@@ -94,7 +80,7 @@ class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
         from .assets_analyzer import AssetsAnalyzer
 
         return AssetsAnalyzer(
-            assets_dir=self._settings.paths.shared_dir,
+            assets_dir=self._settings.paths.assets_dir,
             git_dir=self._settings.paths.git_dir,
             renderer=self.renderer(),
         )
@@ -110,7 +96,7 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
 
         return Parser(
             local_latex_dir=self._settings.paths.local_latex_dir,
-            shared_latex_dir=self._settings.paths.shared_latex_dir,
+            shared_latex_dir=self._settings.paths.latex_dir,
             file_extensions=self._settings.file_extensions,
             lang=self._lang,
         )
@@ -139,6 +125,13 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
             output_dir = output_dir / "en"
             build_dir = build_dir / "en"
 
+        assets_dir = self._settings.paths.assets_dir
+        dirs_to_link = (
+            tuple(d for d in assets_dir.iterdir() if d.is_dir())
+            if assets_dir.is_dir()
+            else ()
+        )
+
         return builder_cls(
             variables=variables,
             deck=deck,
@@ -147,18 +140,13 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
             build_print=build_print,
             output_dir=output_dir,
             build_dir=build_dir,
-            dirs_to_link=(
-                self._settings.paths.shared_img_dir,
-                self._settings.paths.shared_tikz_pdf_dir,
-                self._settings.paths.shared_plt_pdf_dir,
-                self._settings.paths.shared_plotly_pdf_dir,
-                self._settings.paths.shared_code_dir,
-            ),
+            dirs_to_link=dirs_to_link,
             template=self._settings.paths.jinja2_main_template,
             basedirs=basedirs
             if basedirs is not None
             else (
-                self._settings.paths.shared_dir,
+                self._settings.paths.latex_dir,
+                assets_dir,
                 self._settings.paths.current_dir,
             ),
             renderer=self.renderer(),

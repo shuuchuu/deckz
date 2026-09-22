@@ -60,7 +60,7 @@ def check_scratch_dirs(git_dir: Path) -> Iterator[Path]:
 
 
 def build_shared_deck(
-    shared_latex_dir: Path,
+    latex_dir: Path,
     file_extensions: Iterable[str],
     lang: Lang,
     *,
@@ -69,7 +69,7 @@ def build_shared_deck(
     """Build a deck containing every shared section, expanded to all its files.
 
     Args:
-        shared_latex_dir: Path to the shared latex directory.
+        latex_dir: Path to the shared latex directory.
         file_extensions: Extensions to try, in order, when resolving files.
         lang: Language to build the deck in.
         name: Name given to the built deck.
@@ -78,14 +78,14 @@ def build_shared_deck(
         The built deck.
     """
     parser = Parser(
-        local_latex_dir=shared_latex_dir,
-        shared_latex_dir=shared_latex_dir,
+        local_latex_dir=latex_dir,
+        shared_latex_dir=latex_dir,
         file_extensions=file_extensions,
         lang=lang,
     )
     nodes: list[Node] = [
         parser.all_files_section(section_id)
-        for section_id in shared_section_ids(shared_latex_dir)
+        for section_id in shared_section_ids(latex_dir)
     ]
     deck = Deck(name=name, parts={_PART_NAME: Part(title=None, nodes=nodes)})
     parser.validate(deck)
@@ -94,7 +94,7 @@ def build_shared_deck(
 
 def build_all_deck(
     git_dir: Path,
-    shared_latex_dir: Path,
+    latex_dir: Path,
     file_extensions: Iterable[str],
     lang: Lang,
 ) -> Deck:
@@ -106,14 +106,14 @@ def build_all_deck(
 
     Args:
         git_dir: Root of the deckz-managed repository.
-        shared_latex_dir: Path to the shared latex directory.
+        latex_dir: Path to the shared latex directory.
         file_extensions: Extensions to try, in order, when resolving files.
         lang: Language to build the deck in.
 
     Returns:
         The built deck.
     """
-    deck = build_shared_deck(shared_latex_dir, file_extensions, lang, name="check-all")
+    deck = build_shared_deck(latex_dir, file_extensions, lang, name="check-all")
     part = deck.parts[_PART_NAME]
     plain_sections = {node.unresolved_path.as_posix(): node for node in part.nodes}
     deck_settings = sorted(
@@ -128,7 +128,7 @@ def build_all_deck(
             candidate = parser.all_files_section(section_id)
             overridden = any(
                 node.parsing_error is None
-                and not node.resolved_path.is_relative_to(shared_latex_dir)
+                and not node.resolved_path.is_relative_to(latex_dir)
                 for node in candidate.nodes
             )
             if not overridden:

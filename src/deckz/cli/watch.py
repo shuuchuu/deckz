@@ -38,20 +38,18 @@ def deck(
 
     logger = getLogger(__name__)
 
-    logger.info("Watching the shared, current and user directories")
+    logger.info("Watching the latex, assets, current and user directories")
     settings = DeckSettings.from_yaml(workdir)
-    to_watch = [settings.paths.shared_dir, settings.paths.current_dir]
+    to_watch = [
+        settings.paths.latex_dir,
+        settings.paths.assets_dir,
+        settings.paths.current_dir,
+    ]
     if settings.paths.user_config_dir.exists():
         to_watch.append(settings.paths.user_config_dir)
     watch(
         frozenset(to_watch),
-        frozenset(
-            [
-                settings.paths.shared_tikz_pdf_dir,
-                settings.paths.pdf_dir,
-                settings.paths.build_dir,
-            ]
-        ),
+        frozenset([settings.paths.pdf_dir, settings.paths.build_dir]),
         run,
         settings=settings,
         lang="en" if en else "fr",
@@ -97,7 +95,7 @@ def section(
 
     logger = getLogger(__name__)
 
-    logger.info("Watching the shared, current and user directories")
+    logger.info("Watching the latex, assets, current and user directories")
     with (
         TemporaryDirectory(prefix=f"{app_name}-") as build_dir,
         TemporaryDirectory(prefix=f"{app_name}-") as pdf_dir,
@@ -112,18 +110,16 @@ def section(
 
         launch(str(pdf_dir))
 
-        to_watch = [settings.paths.shared_dir, settings.paths.current_dir]
+        to_watch = [
+            settings.paths.latex_dir,
+            settings.paths.assets_dir,
+            settings.paths.current_dir,
+        ]
         if settings.paths.user_config_dir.exists():
             to_watch.append(settings.paths.user_config_dir)
         watch(
             frozenset(to_watch),
-            frozenset(
-                [
-                    settings.paths.shared_tikz_pdf_dir,
-                    settings.paths.pdf_dir,
-                    settings.paths.build_dir,
-                ]
-            ),
+            frozenset([settings.paths.pdf_dir, settings.paths.build_dir]),
             run_section,
             section=section,
             flavor=flavor,
@@ -150,7 +146,7 @@ def file(
 
     Args:
         latex: File to compile on change. Its path should be specified relative to \
-            shared/latex
+            latex/
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
@@ -169,7 +165,7 @@ def file(
 
     logger = getLogger(__name__)
 
-    logger.info(f"Watching {latex}, the shared and user directories")
+    logger.info(f"Watching {latex}, the latex, assets and user directories")
     with (
         TemporaryDirectory(prefix=f"{app_name}-") as build_dir,
         TemporaryDirectory(prefix=f"{app_name}-") as pdf_dir,
@@ -182,18 +178,12 @@ def file(
         settings.paths.build_dir = Path(build_dir)
         settings.paths.pdf_dir = Path(pdf_dir)
         launch(str(pdf_dir))
-        to_watch = [settings.paths.shared_dir]
+        to_watch = [settings.paths.latex_dir, settings.paths.assets_dir]
         if settings.paths.user_config_dir.exists():
             to_watch.append(settings.paths.user_config_dir)
         watch(
             frozenset(to_watch),
-            frozenset(
-                [
-                    settings.paths.shared_tikz_pdf_dir,
-                    settings.paths.pdf_dir,
-                    settings.paths.build_dir,
-                ]
-            ),
+            frozenset([settings.paths.pdf_dir, settings.paths.build_dir]),
             run_file,
             latex=latex,
             settings=settings,
@@ -212,22 +202,16 @@ def assets(*, workdir: Path = Path()) -> None:
         workdir: Path to move into before running the command
 
     """
+    from ..components.factory import GlobalSettingsFactory
     from ..configuring.settings import GlobalSettings
     from ..pipelines import run_assets, watch
 
     settings = GlobalSettings.from_yaml(workdir)
+    assets_builder = GlobalSettingsFactory(settings).assets_builder()
 
     watch(
-        frozenset(
-            [settings.paths.tikz_dir, settings.paths.plt_dir, settings.paths.plotly_dir]
-        ),
-        frozenset(
-            [
-                settings.paths.shared_tikz_pdf_dir,
-                settings.paths.shared_plt_pdf_dir,
-                settings.paths.shared_plotly_pdf_dir,
-            ]
-        ),
+        frozenset(assets_builder.watched_dirs()),
+        frozenset([settings.paths.assets_dir]),
         run_assets,
         workdir,
     )

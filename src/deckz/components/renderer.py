@@ -1,4 +1,3 @@
-import importlib.util
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from functools import cached_property
@@ -8,8 +7,8 @@ from typing import Any
 
 from jinja2 import BaseLoader, Environment, TemplateNotFound
 
-from ..exceptions import DeckzError
 from ..models import AssetsMetadata
+from ..utils import import_module_from_path
 from .protocols import GlobalFactoryProtocol, RendererProtocol
 
 
@@ -125,18 +124,4 @@ class Renderer(_BaseRenderer):
 
     @cached_property
     def _module(self) -> ModuleType:
-        if not self._jinja_env_module_path.is_file():
-            msg = (
-                "could not find a Jinja environment module at "
-                f"{self._jinja_env_module_path}"
-            )
-            raise DeckzError(msg)
-        spec = importlib.util.spec_from_file_location(
-            "deckz._jinja_env", self._jinja_env_module_path
-        )
-        if spec is None or spec.loader is None:
-            msg = f"could not load {self._jinja_env_module_path} as a module"
-            raise DeckzError(msg)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module
+        return import_module_from_path(self._jinja_env_module_path, "deckz._jinja_env")

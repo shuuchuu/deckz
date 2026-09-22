@@ -48,7 +48,7 @@ def repo(tmp_path: Path, monkeypatch: Any) -> Path:
     monkeypatch.setattr(appdirs, "user_config_dir", lambda _: str(tmp_path))
     _write(tmp_path / "deckz.yml", 'build_command: ["true"]\n')
 
-    shared = tmp_path / "shared" / "latex"
+    shared = tmp_path / "latex"
     _write(
         shared / "i18n-demo" / "i18n-demo.yml",
         "title: Section de démo\n"
@@ -152,11 +152,11 @@ def test_dry_run_reports_no_fatal_and_does_not_write(repo: Path) -> None:
     }
 
     report = migrate_en_decks.migrate_decks(repo, None, apply=False, git_mv=False)
-    migrate_en_decks.migrate_sections(repo / "shared" / "latex", report, apply=False)
+    migrate_en_decks.migrate_sections(repo / "latex", report, apply=False)
 
     assert not report.fatal
     assert (repo / "company" / "xyz" / "en" / "deck.yml").is_file()
-    assert (repo / "shared" / "latex" / "i18n-demo" / "en" / "en.yml").is_file()
+    assert (repo / "latex" / "i18n-demo" / "en" / "en.yml").is_file()
     deck_data = _read_yaml(repo / "company" / "xyz" / "deck.yml")
     assert deck_data["parts"][0]["title"] == "Partie 1"
 
@@ -170,7 +170,7 @@ def test_dry_run_reports_no_fatal_and_does_not_write(repo: Path) -> None:
 
 def test_apply_merges_titles_and_cleans_up(repo: Path) -> None:
     report = migrate_en_decks.migrate_decks(repo, None, apply=True, git_mv=False)
-    migrate_en_decks.migrate_sections(repo / "shared" / "latex", report, apply=True)
+    migrate_en_decks.migrate_sections(repo / "latex", report, apply=True)
 
     assert not report.fatal
 
@@ -181,7 +181,7 @@ def test_apply_merges_titles_and_cleans_up(repo: Path) -> None:
     assert sections[0] == "$i18n-demo@hello"
     assert sections[1] == {"about": {"fr": "A propos", "en": "About"}}
 
-    section_path = repo / "shared" / "latex" / "i18n-demo" / "i18n-demo.yml"
+    section_path = repo / "latex" / "i18n-demo" / "i18n-demo.yml"
     section_data = _read_yaml(section_path)
     assert section_data["title"] == {"fr": "Section de démo", "en": "Demo section"}
 
@@ -193,9 +193,9 @@ def test_apply_merges_titles_and_cleans_up(repo: Path) -> None:
 
     # Cleanup: the old bilingual-tree conventions are all gone.
     assert not (repo / "company" / "xyz" / "en").exists()
-    assert not (repo / "shared" / "latex" / "i18n-demo" / "en" / "en.yml").exists()
+    assert not (repo / "latex" / "i18n-demo" / "en" / "en.yml").exists()
     # Already-correct shared-section translated body files are untouched.
-    assert (repo / "shared" / "latex" / "i18n-demo" / "en" / "hello.tex").is_file()
+    assert (repo / "latex" / "i18n-demo" / "en" / "hello.tex").is_file()
 
     # Deck-local file relocated from the old en/latex tree to the new
     # sibling-file convention.
@@ -214,7 +214,7 @@ def test_apply_merges_local_section_translated_only_in_en_deck_tree(
     merged and discarded, never relocated as if it were ordinary content.
     """
     report = migrate_en_decks.migrate_decks(repo, None, apply=True, git_mv=False)
-    migrate_en_decks.migrate_sections(repo / "shared" / "latex", report, apply=True)
+    migrate_en_decks.migrate_sections(repo / "latex", report, apply=True)
 
     assert not report.fatal
 
@@ -244,7 +244,7 @@ def test_apply_merges_local_section_translated_as_independent_duplicate(
     discarded, not relocated to a nonsensical dup/en/dup.yml content path.
     """
     report = migrate_en_decks.migrate_decks(repo, None, apply=True, git_mv=False)
-    migrate_en_decks.migrate_sections(repo / "shared" / "latex", report, apply=True)
+    migrate_en_decks.migrate_sections(repo / "latex", report, apply=True)
 
     assert not report.fatal
 
@@ -262,7 +262,7 @@ def test_apply_leaves_untranslated_plain_titles_alone(repo: Path) -> None:
     original = (repo / "company" / "fronly" / "deck.yml").read_text(encoding="utf8")
 
     report = migrate_en_decks.migrate_decks(repo, None, apply=True, git_mv=False)
-    migrate_en_decks.migrate_sections(repo / "shared" / "latex", report, apply=True)
+    migrate_en_decks.migrate_sections(repo / "latex", report, apply=True)
 
     fronly_path = repo / "company" / "fronly" / "deck.yml"
     assert fronly_path not in report.migrated_decks
@@ -271,11 +271,11 @@ def test_apply_leaves_untranslated_plain_titles_alone(repo: Path) -> None:
 
 def test_apply_is_idempotent(repo: Path) -> None:
     report1 = migrate_en_decks.migrate_decks(repo, None, apply=True, git_mv=False)
-    migrate_en_decks.migrate_sections(repo / "shared" / "latex", report1, apply=True)
+    migrate_en_decks.migrate_sections(repo / "latex", report1, apply=True)
     assert not report1.fatal
 
     report2 = migrate_en_decks.migrate_decks(repo, None, apply=True, git_mv=False)
-    migrate_en_decks.migrate_sections(repo / "shared" / "latex", report2, apply=True)
+    migrate_en_decks.migrate_sections(repo / "latex", report2, apply=True)
 
     assert not report2.fatal
     assert not report2.migrated_decks
@@ -291,7 +291,7 @@ def test_structural_mismatch_is_fatal_and_untouched(
     init_repository(str(tmp_path))
     monkeypatch.setattr(appdirs, "user_config_dir", lambda _: str(tmp_path))
     _write(tmp_path / "deckz.yml", 'build_command: ["true"]\n')
-    _write(tmp_path / "shared" / "latex" / ".keep", "")
+    _write(tmp_path / "latex" / ".keep", "")
 
     deck_dir = tmp_path / "company" / "mismatch"
     _write(
@@ -317,7 +317,7 @@ def test_main_exits_nonzero_on_fatal(tmp_path: Path, monkeypatch: Any) -> None:
     init_repository(str(tmp_path))
     monkeypatch.setattr(appdirs, "user_config_dir", lambda _: str(tmp_path))
     _write(tmp_path / "deckz.yml", 'build_command: ["true"]\n')
-    _write(tmp_path / "shared" / "latex" / ".keep", "")
+    _write(tmp_path / "latex" / ".keep", "")
 
     deck_dir = tmp_path / "company" / "mismatch"
     _write(

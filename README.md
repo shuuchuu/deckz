@@ -35,17 +35,17 @@ root (git repository)
 ├── deckz.yml
 ├── variables.yml
 ├── templates
+│   ├── assets_builders.py
 │   └── jinja2
 │       ├── main.tex
 │       └── env.py
-├── shared
+├── latex
+│   └── some-section
+│       ├── some-section.yml
+│       ├── intro.tex
+│       └── advanced.tex
+├── assets
 │   ├── img
-│   ├── code
-│   ├── latex
-│   │   └── some-section
-│   │       ├── some-section.yml
-│   │       ├── intro.tex
-│   │       └── advanced.tex
 │   ├── tikz
 │   ├── plt
 │   └── pltly
@@ -61,14 +61,24 @@ root (git repository)
         └── latex
 ```
 
-- `shared`: everything shared across decks: images and code snippets
-  (`img`, `code`), reusable LaTeX sections (`latex`), and generated
-  standalone figures (`tikz`, `plt` for matplotlib, `pltly` for plotly).
+- `latex`: reusable LaTeX sections, shared across decks.
+- `assets`: everything else shared across decks (images, generated
+  standalone figures, or any other kind of asset your own
+  `templates/assets_builders.py` produces). `deckz` doesn't know or care
+  what subdirectories live under `assets` -- it symlinks every one of them
+  into each build directory, so `some-section.tex` can reference
+  `assets/tikz/some-figure` the same way regardless of what else is in
+  there. The `tikz`/`plt`/`pltly` names above are just this repo's own
+  convention, set up by its `templates/assets_builders.py` -- see [Assets
+  builders](#assets-builders).
 - `templates/jinja2/main.tex`: the Jinja2 template used to render every
   deck's main `.tex` file.
 - `templates/jinja2/env.py`: the Python module that configures the Jinja2
   environment(s) used to render content files -- see [Content files and
   the Jinja2 environment](#content-files-and-the-jinja2-environment).
+- `templates/assets_builders.py`: the Python module that builds this
+  repo's assets (standalone figures, or anything else) -- see [Assets
+  builders](#assets-builders).
 - Each deck is a directory containing a `deck.yml` (its definition) and
   optionally a `latex` directory for files local to that deck.
 - `variables.yml` files can be placed at any level of the directory
@@ -177,9 +187,9 @@ text actually differs by language -- see [Titles, variables and
 
 ### Shared sections
 
-A shared section lives under `shared/latex` (or a deck's local `latex`
+A shared section lives under `latex` (or a deck's local `latex`
 directory) and has a sibling `.yml` file describing its flavors, e.g.
-`shared/latex/first-section/first-section.yml`:
+`latex/first-section/first-section.yml`:
 
 ```yaml
 title: First section
@@ -302,6 +312,49 @@ def image(context: Context, path: str) -> str:
 This is the hook that keeps `deckz asset search`/`deckz asset deps` (and
 the i18n tooling) accurate: skip it, and asset usage/licensing detection
 silently misses whatever your filter references.
+
+### Assets builders
+
+`deckz` itself has no opinion on what assets a deck needs (standalone
+figures, or anything else) or how to build them. Your repo supplies a
+Python module (`templates/assets_builders.py`) exposing:
+
+```python
+from collections.abc import Iterable
+from pathlib import Path
+
+from deckz.components.protocols import AssetsBuilderProtocol, CompilerProtocol
+
+
+def assets_builders(
+    assets_dir: Path, compiler: CompilerProtocol
+) -> Iterable[AssetsBuilderProtocol]:
+    ...
+```
+
+called once (by `deckz run`/`deckz check shared`/`deckz check all`/`deckz
+run-assets`/`deckz watch assets`) to obtain every builder to run. Each
+builder implements `AssetsBuilderProtocol`:
+
+```python
+from collections.abc import Iterable
+from pathlib import Path
+
+
+class MyAssetsBuilder:
+    def build_assets(self) -> None:
+        ...  # write output files somewhere under assets_dir
+
+    def watched_dirs(self) -> Iterable[Path]:
+        ...  # source directories `deckz watch assets` should watch
+```
+
+`build_assets` should write its output somewhere under `assets_dir` --
+`deckz` symlinks every top-level directory found there into every build
+directory, without needing to know their names (see [Repository
+layout](#repository-layout)). `watched_dirs` only matters for `deckz watch
+assets`: it tells the watch loop which source directories should trigger a
+rebuild.
 
 ### Markdown content and `pandoc`
 

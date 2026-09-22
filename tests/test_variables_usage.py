@@ -49,7 +49,7 @@ def _repo(tmp_path: Path, monkeypatch: MonkeyPatch) -> Path:
     )
 
     _write(
-        git_dir / "shared" / "latex" / "greeting" / "greeting.yml",
+        git_dir / "latex" / "greeting" / "greeting.yml",
         "variables_to_define:\n  - depth\n  - format\nflavors:\n"
         "  - name: loud\n    variables: { depth: shallow, format: bold }\n"
         "    includes:\n      - body\n"
@@ -57,26 +57,26 @@ def _repo(tmp_path: Path, monkeypatch: MonkeyPatch) -> Path:
         "    includes:\n      - body_quiet\n",
     )
     _write(
-        git_dir / "shared" / "latex" / "greeting" / "body.tex",
+        git_dir / "latex" / "greeting" / "body.tex",
         "{{ variables.depth }} {{ variables.typo }}\n",
     )
     _write(
-        git_dir / "shared" / "latex" / "greeting" / "body_quiet.tex",
+        git_dir / "latex" / "greeting" / "body_quiet.tex",
         "{{ variables.depth }}\n",
     )
 
     _write(
-        git_dir / "shared" / "latex" / "broken" / "broken.yml",
+        git_dir / "latex" / "broken" / "broken.yml",
         "variables_to_define:\n  - x\nflavors:\n"
         "  - name: incomplete\n    includes:\n      - body\n",
     )
-    _write(git_dir / "shared" / "latex" / "broken" / "body.tex", "static\n")
+    _write(git_dir / "latex" / "broken" / "body.tex", "static\n")
 
     _write(
-        git_dir / "shared" / "latex" / "badsyntax" / "badsyntax.yml",
+        git_dir / "latex" / "badsyntax" / "badsyntax.yml",
         "flavors:\n  - name: only\n    includes:\n      - body\n",
     )
-    _write(git_dir / "shared" / "latex" / "badsyntax" / "body.tex", "{% if %}\n")
+    _write(git_dir / "latex" / "badsyntax" / "body.tex", "{% if %}\n")
 
     _write(
         git_dir / "company" / "deck.yml",
@@ -128,10 +128,10 @@ def test_check_variables_clean_repo_has_no_findings(
         "    return Environment()\n",
     )
     _write(
-        git_dir / "shared" / "latex" / "about" / "about.yml",
+        git_dir / "latex" / "about" / "about.yml",
         "flavors:\n  - name: standard\n    includes:\n      - body\n",
     )
-    _write(git_dir / "shared" / "latex" / "about" / "body.tex", "Hello.\n")
+    _write(git_dir / "latex" / "about" / "body.tex", "Hello.\n")
 
     settings = GlobalSettings.from_yaml(git_dir)
     report = check_variables(settings)

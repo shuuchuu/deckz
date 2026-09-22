@@ -8,7 +8,7 @@ def search(asset: str, /, *, workdir: Path = Path()) -> None:
     """Find which files use ASSET.
 
     Args:
-        asset: Asset to search in files. Specify the path relative to the shared \
+        asset: Asset to search in files. Specify the path relative to the assets \
             directory and whithout extension, e.g. img/turing
         workdir: Path to move into before running the command
 

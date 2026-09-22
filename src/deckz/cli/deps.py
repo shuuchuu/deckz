@@ -41,7 +41,7 @@ def deps(
 
     settings = GlobalSettings.from_yaml(workdir)
     sections_analyzer = SectionsAnalyzer(
-        settings.paths.shared_latex_dir,
+        settings.paths.latex_dir,
         settings.paths.git_dir,
         settings.file_extensions,
     )

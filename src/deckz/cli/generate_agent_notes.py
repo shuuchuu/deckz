@@ -4,7 +4,7 @@ _AGENT_NOTES = """\
 # Working in this repo
 
 This is a `deckz`-managed repository: a set of Beamer LaTeX decks that
-share slides ("sections") with each other via `shared/`. Run `deckz --help`
+share slides ("sections") with each other via `latex/`. Run `deckz --help`
 or `deckz <command> --help` for the full, authoritative command reference
 -- these notes only cover conventions that aren't self-documenting there.
 
@@ -14,7 +14,7 @@ or `deckz <command> --help` for the full, authoritative command reference
   root, your XDG config dir, and every directory between the repo root and
   wherever you run `deckz` from -- so settings/variables can be overridden
   per company/deck by placing a file deeper in the tree.
-- Shared content lives under `shared/latex/<section>/<section>.yml` (the
+- Shared content lives under `latex/<section>/<section>.yml` (the
   directory name must match the yml's stem) plus its sibling `.tex`/`.md`
   body files.
 - Each deck is `<company>/<deck>/deck.yml`, with its own local `latex/`
@@ -30,7 +30,7 @@ includes declared in that section's own `.yml`.
 A deck (or a nested section) can override a single file of a shared
 section without forking the whole section: if
 `<deck>/latex/<section>/<file>.tex` exists, it's used in place of
-`shared/latex/<section>/<file>.tex` for that deck only -- a local file
+`latex/<section>/<file>.tex` for that deck only -- a local file
 always wins over a shared one at the same relative path.
 
 A flavor can set its own `variables`, merged into `variables.yml` on top

@@ -176,9 +176,7 @@ def test_clean_all_removes_run_scratch_dir(working_dir: Path) -> None:
 
 
 def test_clean_latex_dry_run(working_dir: Path) -> None:
-    shared_unused_path = (
-        working_dir.parent.parent / "shared" / "latex" / "questions.tex"
-    )
+    shared_unused_path = working_dir.parent.parent / "latex" / "questions.tex"
     local_unused_path = working_dir / "latex" / "orphan.tex"
     assert shared_unused_path.exists()
     assert local_unused_path.exists()
@@ -190,9 +188,7 @@ def test_clean_latex_dry_run(working_dir: Path) -> None:
 
 
 def test_clean_latex(working_dir: Path) -> None:
-    shared_unused_path = (
-        working_dir.parent.parent / "shared" / "latex" / "questions.tex"
-    )
+    shared_unused_path = working_dir.parent.parent / "latex" / "questions.tex"
     local_unused_path = working_dir / "latex" / "orphan.tex"
     used_path = working_dir / "latex" / "about.tex"
     assert shared_unused_path.exists()

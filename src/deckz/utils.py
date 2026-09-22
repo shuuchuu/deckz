@@ -5,6 +5,7 @@ from contextlib import contextmanager, suppress
 from multiprocessing import get_context
 from multiprocessing.pool import Pool
 from pathlib import Path
+from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -32,6 +33,40 @@ def copy_file_if_newer(original: Path, copy: Path) -> bool:
     copy.parent.mkdir(parents=True, exist_ok=True)
     copyfile(original, copy)
     return True
+
+
+def import_module_from_path(path: Path, name: str) -> ModuleType:
+    """Import a module from its file path, without it needing to be on `sys.path`.
+
+    Used to load a Python module a target repo supplies by filesystem \
+    convention (e.g. `templates/jinja2/env.py`, `templates/assets_builders.py`) \
+    rather than as an installed/importable package.
+
+    Args:
+        path: Path to the module's `.py` file.
+        name: Name to register the loaded module under (only used internally \
+            by the import machinery, does not need to be importable itself).
+
+    Returns:
+        The imported module.
+
+    Raises:
+        DeckzError: If `path` does not exist or cannot be loaded as a module.
+    """
+    from importlib.util import module_from_spec, spec_from_file_location
+
+    from .exceptions import DeckzError
+
+    if not path.is_file():
+        msg = f"could not find a Python module at {path}"
+        raise DeckzError(msg)
+    spec = spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        msg = f"could not load {path} as a module"
+        raise DeckzError(msg)
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def import_module_and_submodules(package_name: str) -> None:
@@ -160,31 +195,31 @@ def section_files(latex_dirs: Iterator[Path]) -> Iterator[Path]:
         yield from latex_dir.rglob("*.yml")
 
 
-def latex_dirs(git_dir: Path, shared_latex_dir: Path) -> Iterator[Path]:
+def latex_dirs(git_dir: Path, latex_dir: Path) -> Iterator[Path]:
     from itertools import chain
 
     return chain(
-        [shared_latex_dir],
+        [latex_dir],
         (settings.paths.local_latex_dir for settings in all_deck_settings(git_dir)),
     )
 
 
-def shared_section_ids(shared_latex_dir: Path) -> list[str]:
+def shared_section_ids(latex_dir: Path) -> list[str]:
     """List every shared section, as ids usable with `Parser`/`from_section`.
 
     A directory counts as a section when its own name matches the stem of a \
     `.yml` file directly inside it (e.g. `about/about.yml`).
 
     Args:
-        shared_latex_dir: Path to the shared latex directory.
+        latex_dir: Path to the shared latex directory.
 
     Returns:
-        The sorted list of shared/latex-relative section ids, e.g. "about" \
-        or "python/basics".
+        The sorted list of latex-relative section ids, e.g. "about" or \
+        "python/basics".
     """
     return sorted(
-        yml_path.parent.relative_to(shared_latex_dir).as_posix()
-        for yml_path in shared_latex_dir.rglob("*.yml")
+        yml_path.parent.relative_to(latex_dir).as_posix()
+        for yml_path in latex_dir.rglob("*.yml")
         if yml_path.parent.name == yml_path.stem
     )
 

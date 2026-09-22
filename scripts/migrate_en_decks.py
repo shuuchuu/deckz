@@ -507,7 +507,7 @@ def main() -> None:
     only = [(repo / o).resolve() for o in args.only] if args.only else None
 
     report = migrate_decks(repo, only, apply=args.apply, git_mv=args.git_mv)
-    migrate_sections(repo / "shared" / "latex", report, apply=args.apply)
+    migrate_sections(repo / "latex", report, apply=args.apply)
 
     print(report.render())
     if not args.apply:

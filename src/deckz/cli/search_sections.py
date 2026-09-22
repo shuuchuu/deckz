@@ -18,7 +18,7 @@ def search_sections(keywords: list[str], /, *, workdir: Path = Path()) -> None:
     - SECTION <section>\t<title>: yml title/default_titles hit
     - FRAME <section>\t<file>\t<frame_title>: frame title hit
 
-    <section> is a shared/latex-relative id (e.g. python/basics): check its \
+    <section> is a latex-relative id (e.g. python/basics): check its \
     yml for the flavor(s) that include <file> before referencing it.
 
     Args:
@@ -30,7 +30,7 @@ def search_sections(keywords: list[str], /, *, workdir: Path = Path()) -> None:
     from ..configuring.settings import GlobalSettings
 
     settings = GlobalSettings.from_yaml(workdir)
-    section_matches, frame_matches = compute(settings.paths.shared_latex_dir, keywords)
+    section_matches, frame_matches = compute(settings.paths.latex_dir, keywords)
     for section_match in section_matches:
         print(f"SECTION {section_match.section}\t{section_match.title}")
     for frame_match in frame_matches:

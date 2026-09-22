@@ -24,9 +24,7 @@ def deduplicate(*, dry_run: bool = False, workdir: Path = Path()) -> None:
 
     console = Console(highlight=False)
     settings = GlobalSettings.from_yaml(workdir)
-    flavors_merger = FlavorsMerger(
-        settings.paths.git_dir, settings.paths.shared_latex_dir
-    )
+    flavors_merger = FlavorsMerger(settings.paths.git_dir, settings.paths.latex_dir)
 
     with console.status("Finding identical flavors"):
         merges = flavors_merger.merge(dry_run=dry_run)

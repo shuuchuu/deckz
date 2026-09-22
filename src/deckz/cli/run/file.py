@@ -23,7 +23,7 @@ def run_file(
 
     Args:
         latex: File to compile. Its path should be specified relative to \
-            shared/latex
+            latex/
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs

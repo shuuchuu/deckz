@@ -143,9 +143,7 @@ def check_shared(
     git_dir = global_settings.paths.git_dir
     GlobalSettingsFactory(global_settings).assets_builder().build_assets()
     settings = DeckSettings.from_yaml(check_scratch_dir(git_dir, "shared"))
-    deck = build_shared_deck(
-        settings.paths.shared_latex_dir, settings.file_extensions, lang
-    )
+    deck = build_shared_deck(settings.paths.latex_dir, settings.file_extensions, lang)
     _build(
         deck=deck,
         settings=settings,
@@ -169,7 +167,7 @@ def check_all(
     GlobalSettingsFactory(global_settings).assets_builder().build_assets()
     settings = DeckSettings.from_yaml(check_scratch_dir(git_dir, "all"))
     deck = build_all_deck(
-        git_dir, settings.paths.shared_latex_dir, settings.file_extensions, lang
+        git_dir, settings.paths.latex_dir, settings.file_extensions, lang
     )
     _build(
         deck=deck,
