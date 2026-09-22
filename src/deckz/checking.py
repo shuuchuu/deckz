@@ -1,4 +1,4 @@
-"""Assemble synthetic decks for the `deckz check shared`/`deckz check all` commands.
+"""Assemble synthetic decks for the `deckz run shared`/`deckz run all` commands.
 
 Both commands validate shared content without needing a full repository \
 compile, by building one throwaway [`Deck`][deckz.models.Deck] in memory \
@@ -7,7 +7,7 @@ to a synthetic "all files" flavor -- see \
 [`Parser.all_files_section`][deckz.components.parser.Parser.all_files_section].
 """
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable
 from pathlib import Path, PurePath
 
 from .components.factory import DeckSettingsFactory
@@ -19,7 +19,7 @@ _PART_NAME = PartName("sections")
 
 
 def check_scratch_dir(git_dir: Path, name: str) -> Path:
-    """Directory used as the synthetic check deck's `current_dir`.
+    """Directory used as the synthetic `deckz check variables` deck's `current_dir`.
 
     Created eagerly: `DeckSettings.from_yaml` resolves `git_dir` via \
     `pygit2.discover_repository`, which fails on a path that doesn't exist \
@@ -28,7 +28,7 @@ def check_scratch_dir(git_dir: Path, name: str) -> Path:
 
     Args:
         git_dir: Root of the deckz-managed repository.
-        name: Distinguishes the `check shared`/`check all` scratch trees.
+        name: Distinguishes the scratch tree from any other under `.check`.
 
     Returns:
         The (now existing) scratch directory.
@@ -38,25 +38,24 @@ def check_scratch_dir(git_dir: Path, name: str) -> Path:
     return path
 
 
-def check_scratch_dirs(git_dir: Path) -> Iterator[Path]:
-    """Every existing check-command scratch directory, if any.
+def run_scratch_dir(git_dir: Path, name: str) -> Path:
+    """Directory used as the `deckz run shared`/`deckz run all` deck's `current_dir`.
 
-    These are wholly synthetic, throwaway trees (never containing a real \
-    `deck.yml`), unlike a real deck's directory -- so, unlike \
-    `deckz clean deck`/`deckz clean all`'s handling of real decks, removing \
-    one in full (not just its build directory) is safe, and avoids stale \
-    output lingering after a shared section is renamed or removed.
+    Created eagerly: `DeckSettings.from_yaml` resolves `git_dir` via \
+    `pygit2.discover_repository`, which fails on a path that doesn't exist \
+    yet, and the directory is meant to persist across runs anyway (so \
+    incremental compilation and manual PDF inspection both work).
 
     Args:
         git_dir: Root of the deckz-managed repository.
+        name: Distinguishes the `run shared`/`run all` scratch trees.
 
-    Yields:
-        The existing scratch directories directly under `<git_dir>/.check`.
+    Returns:
+        The (now existing) scratch directory.
     """
-    check_dir = git_dir / ".check"
-    if not check_dir.is_dir():
-        return
-    yield from (path for path in sorted(check_dir.iterdir()) if path.is_dir())
+    path = git_dir / ".run" / name
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def build_shared_deck(
@@ -113,7 +112,7 @@ def build_all_deck(
     Returns:
         The built deck.
     """
-    deck = build_shared_deck(latex_dir, file_extensions, lang, name="check-all")
+    deck = build_shared_deck(latex_dir, file_extensions, lang, name="run-all")
     part = deck.parts[_PART_NAME]
     plain_sections = {node.unresolved_path.as_posix(): node for node in part.nodes}
     deck_settings = sorted(

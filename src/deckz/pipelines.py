@@ -6,7 +6,7 @@ from typing import Any
 from rich.progress import BarColumn, Progress
 from watchfiles import watch as watchfiles_watch
 
-from .checking import build_all_deck, build_shared_deck, check_scratch_dir
+from .checking import build_all_deck, build_shared_deck, run_scratch_dir
 from .components.factory import DeckSettingsFactory, GlobalSettingsFactory
 from .configuring.settings import DeckSettings, GlobalSettings
 from .configuring.variables import get_variables, resolve_variables
@@ -100,7 +100,7 @@ def run_section(
     )
 
 
-def run_all(
+def run_decks(
     directory: Path,
     lang: Lang,
     build_handout: bool,
@@ -132,7 +132,7 @@ def run_all(
             progress.update(task_id, advance=1)
 
 
-def check_shared(
+def run_shared(
     directory: Path,
     lang: Lang,
     build_handout: bool,
@@ -142,7 +142,7 @@ def check_shared(
     global_settings = GlobalSettings.from_yaml(directory)
     git_dir = global_settings.paths.git_dir
     GlobalSettingsFactory(global_settings).assets_builder().build_assets()
-    settings = DeckSettings.from_yaml(check_scratch_dir(git_dir, "shared"))
+    settings = DeckSettings.from_yaml(run_scratch_dir(git_dir, "shared"))
     deck = build_shared_deck(settings.paths.latex_dir, settings.file_extensions, lang)
     _build(
         deck=deck,
@@ -155,7 +155,7 @@ def check_shared(
     )
 
 
-def check_all(
+def run_all(
     directory: Path,
     lang: Lang,
     build_handout: bool,
@@ -165,7 +165,7 @@ def check_all(
     global_settings = GlobalSettings.from_yaml(directory)
     git_dir = global_settings.paths.git_dir
     GlobalSettingsFactory(global_settings).assets_builder().build_assets()
-    settings = DeckSettings.from_yaml(check_scratch_dir(git_dir, "all"))
+    settings = DeckSettings.from_yaml(run_scratch_dir(git_dir, "all"))
     deck = build_all_deck(
         git_dir, settings.paths.latex_dir, settings.file_extensions, lang
     )

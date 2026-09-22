@@ -245,8 +245,8 @@ ever reads.
 ### Titles, variables and `--en`
 
 There is only ever one `deck.yml`/section `.yml` -- English is never a
-separate deck or a duplicated section, only a `--en` flag on `deckz run` (and
-`deckz check`/`deckz watch`):
+separate deck or a duplicated section, only a `--en` flag on `deckz run`
+(and `deckz check variables`):
 
 - Any title (`deck.yml` part/include titles, a section's `title`,
   `default_titles` values, a flavor's title) and any `variables.yml` value
@@ -332,8 +332,8 @@ def assets_builders(
     ...
 ```
 
-called once (by `deckz run`/`deckz check shared`/`deckz check all`/`deckz
-run-assets`/`deckz watch assets`) to obtain every builder to run. Each
+called once (by `deckz run`/`deckz run shared`/`deckz run all`/`deckz run
+assets`) to obtain every builder to run. Each
 builder implements `AssetsBuilderProtocol`:
 
 ```python
@@ -346,15 +346,15 @@ class MyAssetsBuilder:
         ...  # write output files somewhere under assets_dir
 
     def watched_dirs(self) -> Iterable[Path]:
-        ...  # source directories `deckz watch assets` should watch
+        ...  # source directories `deckz run assets --watch` should watch
 ```
 
 `build_assets` should write its output somewhere under `assets_dir` --
 `deckz` symlinks every top-level directory found there into every build
 directory, without needing to know their names (see [Repository
-layout](#repository-layout)). `watched_dirs` only matters for `deckz watch
-assets`: it tells the watch loop which source directories should trigger a
-rebuild.
+layout](#repository-layout)). `watched_dirs` only matters for `deckz run
+assets --watch`: it tells the watch loop which source directories should
+trigger a rebuild.
 
 ### Markdown content and `pandoc`
 
@@ -376,24 +376,26 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
 --help` for a specific command. The main ones:
 
 - `deckz run` (alias for `deckz run deck`, optionally restricted with
-  `--parts`) / `deckz run file LATEX` / `deckz run section SECTION FLAVOR`:
-  compile the deck in the current directory, a single LaTeX file, or a
-  specific section flavor. Add `--en` to compile the English variant (see
-  [Titles, variables and `--en`](#titles-variables-and---en)). `run file`/
-  `run section` write their output under `<git_dir>/.run/`, not the current
-  deck's own `pdf`/`.build`, and open it once done (add `--no-open` for
-  agentic/headless use, where only the printed path matters).
-- `deckz check decks` / `deckz check shared` / `deckz check all`: validate
-  the repository by compiling. `check decks` compiles every real deck end to
+  `--parts`) / `deckz run file LATEX` / `deckz run section SECTION FLAVOR` /
+  `deckz run assets`: compile the deck in the current directory, a single
+  LaTeX file, a specific section flavor, or the project's standalone assets.
+  Add `--en` to compile the English variant (see [Titles, variables and
+  `--en`](#titles-variables-and---en)), or `--watch` to recompile on file
+  changes instead of once. `run file`/`run section` write their output
+  under `<git_dir>/.run/`, not the current deck's own `pdf`/`.build`, and
+  open it once done (add `--no-open` for agentic/headless use, where only
+  the printed path matters).
+- `deckz run decks` / `deckz run shared` / `deckz run all`: validate
+  the repository by compiling. `run decks` compiles every real deck end to
   end (by far the slowest for a repo with many decks, since every shared
-  section gets recompiled once per deck that includes it). `check shared`
+  section gets recompiled once per deck that includes it). `run shared`
   compiles one throwaway deck containing every shared section expanded to
   every file in its directory (not just the ones some named flavor lists) --
-  fast enough to run while editing shared content. `check all` does the same
+  fast enough to run while editing shared content. `run all` does the same
   plus one extra copy of a section for every deck that locally overrides one
   of its files. `--en` is strict: the first gap in translation coverage
-  aborts the run. `check shared`/`check all` write their throwaway output
-  under `<git_dir>/.check/`.
+  aborts the run. `run shared`/`run all` write their throwaway output
+  under `<git_dir>/.run/`.
 - `deckz check variables`: statically survey every shared section's every
   named flavor (not just the ones some deck currently uses) plus every real
   deck, resolving `variables` the same way a real build would. Reports a
@@ -403,8 +405,6 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
   parse (`UNPARSABLE`), and a flavor/deck that fails to parse at all, e.g. a
   `variables_to_define` contract violation (`STRUCTURAL`). No LaTeX
   toolchain needed.
-- `deckz watch deck` / `deckz watch section SECTION FLAVOR`: recompile on
-  file changes. Both also accept `--en`.
 - `deckz show` (alias for `deckz show tree`): show the resolved tree of
   sections and files for the current deck.
 - `deckz show settings` / `deckz show variables` / `deckz show paths`:
@@ -425,9 +425,8 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
   used, or find assets missing license metadata.
 - `deckz clean` / `deckz clean all` / `deckz clean latex`: remove build
   directories, or unused shared/local LaTeX files. `deckz clean all` also
-  removes any `check shared`/`check all` scratch directory under
-  `<git_dir>/.check/`, and the `run file`/`run section` scratch directory
-  under `<git_dir>/.run/`.
+  removes the whole `<git_dir>/.run/` scratch tree (`run shared`/`run all`/
+  `run file`/`run section`), and `<git_dir>/.check/` (`check variables`).
 - `deckz i18n missing-en [--all]`: report fr content/titles/variables with no
   English counterpart, i.e. what a `deckz run --en` would currently fail on.
 - `deckz generate-agent-notes`: print onboarding notes for an AI coding

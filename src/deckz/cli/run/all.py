@@ -3,8 +3,8 @@ from pathlib import Path
 from . import app
 
 
-@app.command(name="decks")
-def check_decks(
+@app.command()
+def all(  # ruff: ignore[builtin-variable-shadowing]
     *,
     handout: bool = False,
     presentation: bool = True,
@@ -12,26 +12,24 @@ def check_decks(
     en: bool = False,
     workdir: Path = Path(),
 ) -> None:
-    """Compile every deck in the repository, end to end.
+    """Compile `run shared`'s deck, plus every deck-local override.
 
-    By far the slowest of the three `check` subcommands on a repo with many \
-    decks: every shared section gets recompiled once per deck that includes \
-    it, rather than once. Prefer `check shared` or `check all` while \
-    iterating on shared content.
+    For every real deck that locally overrides at least one file of a \
+    shared section, adds one extra copy of that section using the deck's \
+    own file in place of the shared one -- all in the same single compile \
+    as `run shared`.
 
     Args:
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
-        en: Compile the English variant of every deck. Strict across the \
-            whole repository: the first deck missing any translation aborts \
-            the whole run
+        en: Compile the English variant
         workdir: Path to move into before running the command
 
     """
-    from ...pipelines import run_all
+    from ...pipelines import run_all as _run_all
 
-    run_all(
+    _run_all(
         directory=workdir,
         lang="en" if en else "fr",
         build_handout=handout,

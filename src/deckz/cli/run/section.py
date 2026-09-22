@@ -14,6 +14,7 @@ def run_section(
     presentation: bool = True,
     print: bool = True,  # ruff: ignore[builtin-argument-shadowing]
     en: bool = False,
+    watch: bool = False,
     open: bool = True,  # ruff: ignore[builtin-argument-shadowing]
     workdir: Path = Path(),
 ) -> None:
@@ -30,6 +31,7 @@ def run_section(
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
         en: Compile the English variant
+        watch: Recompile on file changes, instead of compiling once
         open: Open the output directory once compiled. Disable for \
             agentic/headless use, where only the printed path is useful
         workdir: Path to move into before running the command
@@ -40,7 +42,7 @@ def run_section(
     from typer import launch
 
     from ...configuring.settings import DeckSettings
-    from ...pipelines import run_section
+    from ...pipelines import run_section as _run_section
 
     logger = getLogger(__name__)
     settings = DeckSettings.from_yaml(workdir)
@@ -48,7 +50,39 @@ def run_section(
     settings.paths.build_dir = scratch_dir / ".build"
     settings.paths.pdf_dir = scratch_dir / "pdf"
 
-    run_section(
+    if watch:
+        from ...pipelines import watch as _watch
+
+        logger.info("Watching the latex, assets, current and user directories")
+        logger.info(
+            f"Output directory located at [link=file://{settings.paths.pdf_dir}]"
+            f"{settings.paths.pdf_dir}[/link]",
+            extra={"markup": True},
+        )
+        if open:
+            launch(str(settings.paths.pdf_dir))
+        to_watch = [
+            settings.paths.latex_dir,
+            settings.paths.assets_dir,
+            settings.paths.current_dir,
+        ]
+        if settings.paths.user_config_dir.exists():
+            to_watch.append(settings.paths.user_config_dir)
+        _watch(
+            frozenset(to_watch),
+            frozenset([settings.paths.pdf_dir, settings.paths.build_dir]),
+            _run_section,
+            section=section,
+            flavor=flavor,
+            settings=settings,
+            lang="en" if en else "fr",
+            build_handout=handout,
+            build_presentation=presentation,
+            build_print=print,
+        )
+        return
+
+    _run_section(
         section=section,
         flavor=flavor,
         settings=settings,

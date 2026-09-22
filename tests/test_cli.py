@@ -53,7 +53,7 @@ def test_generate_agent_notes(capsys: Any) -> None:
 
     output = capsys.readouterr().out
     assert "deckz run file LATEX" in output
-    assert "deckz check shared" in output
+    assert "deckz run shared" in output
 
 
 def test_extras_labs(tmp_path: Path) -> None:
@@ -114,46 +114,44 @@ def test_run_section(working_dir: Path) -> None:
     assert "First section" in text
 
 
-def test_check_decks(working_dir: Path) -> None:
-    main(("check", "decks"))
+def test_run_decks(working_dir: Path) -> None:
+    main(("run", "decks"))
 
     n_pages, text = extract_info(working_dir / "pdf" / "abc-p1-presentation.pdf")
     assert n_pages == 14
     assert "John Doe" in text
 
 
-def test_check_shared(working_dir: Path) -> None:
-    main(("check", "shared"))
+def test_run_shared(working_dir: Path) -> None:
+    main(("run", "shared"))
 
     git_dir = working_dir.parent.parent
-    pdf_path = (
-        git_dir / ".check" / "shared" / "pdf" / "shared-sections-presentation.pdf"
-    )
+    pdf_path = git_dir / ".run" / "shared" / "pdf" / "shared-sections-presentation.pdf"
     _, text = extract_info(pdf_path)
     assert "Shared description content" in text
     assert "Extra shared content" in text
 
 
-def test_check_all(working_dir: Path) -> None:
-    main(("check", "all"))
+def test_run_all(working_dir: Path) -> None:
+    main(("run", "all"))
 
     git_dir = working_dir.parent.parent
-    pdf_path = (
-        git_dir / ".check" / "all" / "pdf" / "check-all-sections-presentation.pdf"
-    )
+    pdf_path = git_dir / ".run" / "all" / "pdf" / "run-all-sections-presentation.pdf"
     _, text = extract_info(pdf_path)
     assert "Shared description content" in text
     assert "ABC-local override of the shared description" in text
     assert text.count("Extra shared content") == 2
 
 
-def test_clean_all_removes_check_scratch_dirs(working_dir: Path) -> None:
-    main(("check", "shared"))
-    main(("check", "all"))
+def test_clean_all_removes_run_shared_and_all_scratch_dirs(
+    working_dir: Path,
+) -> None:
+    main(("run", "shared"))
+    main(("run", "all"))
 
     git_dir = working_dir.parent.parent
-    shared_scratch_dir = git_dir / ".check" / "shared"
-    all_scratch_dir = git_dir / ".check" / "all"
+    shared_scratch_dir = git_dir / ".run" / "shared"
+    all_scratch_dir = git_dir / ".run" / "all"
     assert shared_scratch_dir.is_dir()
     assert all_scratch_dir.is_dir()
 

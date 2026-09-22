@@ -3,8 +3,8 @@ from pathlib import Path
 from . import app
 
 
-@app.command()
-def all(  # ruff: ignore[builtin-variable-shadowing]
+@app.command(name="shared")
+def run_shared(
     *,
     handout: bool = False,
     presentation: bool = True,
@@ -12,12 +12,13 @@ def all(  # ruff: ignore[builtin-variable-shadowing]
     en: bool = False,
     workdir: Path = Path(),
 ) -> None:
-    """Compile `check shared`'s deck, plus every deck-local override.
+    """Compile every shared section at once, in one throwaway deck.
 
-    For every real deck that locally overrides at least one file of a \
-    shared section, adds one extra copy of that section using the deck's \
-    own file in place of the shared one -- all in the same single compile \
-    as `check shared`.
+    Each section is expanded to a synthetic "all files" flavor: every file \
+    physically in the section's own directory, not just the ones some real \
+    named flavor happens to list. Much faster than `run decks`: use this \
+    while editing shared content without waiting for a full repository \
+    compile.
 
     Args:
         handout: Produce PDFs without animations
@@ -27,9 +28,9 @@ def all(  # ruff: ignore[builtin-variable-shadowing]
         workdir: Path to move into before running the command
 
     """
-    from ...pipelines import check_all as _check_all
+    from ...pipelines import run_shared as _run_shared
 
-    _check_all(
+    _run_shared(
         directory=workdir,
         lang="en" if en else "fr",
         build_handout=handout,

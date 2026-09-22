@@ -50,24 +50,24 @@ or a declared variable nothing ever reads.
   deck's own build output. Output goes under `<git_dir>/.run/`; add
   `--no-open` to skip opening the result (useful for headless/agent use,
   where the printed output path is all you need).
-- `deckz check shared` -- compile every shared section at once (fast); use
+- `deckz run shared` -- compile every shared section at once (fast); use
   this while editing shared content instead of waiting for a full deck or
   repo build.
-- `deckz check all` -- `check shared`, plus one extra copy of every
+- `deckz run all` -- `run shared`, plus one extra copy of every
   section that some deck locally overrides.
-- `deckz check decks` -- compile every real deck end to end. By far the
+- `deckz run decks` -- compile every real deck end to end. By far the
   slowest option on a repo with many decks.
 - `deckz check variables` -- statically survey every shared flavor and
   every real deck for `variables.xxx` usage gaps, no LaTeX toolchain
   needed.
-- `deckz watch deck` / `deckz watch section SECTION FLAVOR` -- recompile
-  on file changes.
+- Add `--watch` to `run`/`run file`/`run section`/`run assets` to
+  recompile on file changes instead of once.
 - `deckz clean all` -- wipe every deck's build dir, plus the `.check`/
   `.run` scratch directories above.
 
 ## English variant
 
-Add `--en` to `run`/`check`/`watch` to compile the English variant. There
+Add `--en` to `run`/`check variables` to compile the English variant. There
 is never a separate English deck or section: it's the same
 `deck.yml`/section `.yml`, with any title given as `{fr: ..., en: ...}`
 instead of a plain string, and `en/` sibling files for translated bodies.

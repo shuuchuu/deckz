@@ -3,8 +3,8 @@ from pathlib import Path
 from . import app
 
 
-@app.command(name="shared")
-def check_shared(
+@app.command(name="decks")
+def run_decks(
     *,
     handout: bool = False,
     presentation: bool = True,
@@ -12,25 +12,26 @@ def check_shared(
     en: bool = False,
     workdir: Path = Path(),
 ) -> None:
-    """Compile every shared section at once, in one throwaway deck.
+    """Compile every deck in the repository, end to end.
 
-    Each section is expanded to a synthetic "all files" flavor: every file \
-    physically in the section's own directory, not just the ones some real \
-    named flavor happens to list. Much faster than `check decks`: use this \
-    while editing shared content without waiting for a full repository \
-    compile.
+    By far the slowest of the three `run` validation subcommands on a repo \
+    with many decks: every shared section gets recompiled once per deck \
+    that includes it, rather than once. Prefer `run shared` or `run all` \
+    while iterating on shared content.
 
     Args:
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
-        en: Compile the English variant
+        en: Compile the English variant of every deck. Strict across the \
+            whole repository: the first deck missing any translation aborts \
+            the whole run
         workdir: Path to move into before running the command
 
     """
-    from ...pipelines import check_shared as _check_shared
+    from ...pipelines import run_decks as _run_decks
 
-    _check_shared(
+    _run_decks(
         directory=workdir,
         lang="en" if en else "fr",
         build_handout=handout,

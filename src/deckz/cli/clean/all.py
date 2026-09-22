@@ -14,7 +14,6 @@ def all(*, workdir: Path = Path()) -> None:  # ruff: ignore[builtin-variable-sha
     from logging import getLogger
     from shutil import rmtree
 
-    from ...checking import check_scratch_dirs
     from ...utils import all_deck_settings, get_git_dir
 
     logger = getLogger(__name__)
@@ -25,10 +24,7 @@ def all(*, workdir: Path = Path()) -> None:  # ruff: ignore[builtin-variable-sha
         else:
             logger.info(f"Deleting {settings.paths.build_dir}")
             rmtree(settings.paths.build_dir)
-    for scratch_dir in check_scratch_dirs(git_dir):
-        logger.info(f"Deleting {scratch_dir}")
-        rmtree(scratch_dir)
-    run_scratch_dir = git_dir / ".run"
-    if run_scratch_dir.is_dir():
-        logger.info(f"Deleting {run_scratch_dir}")
-        rmtree(run_scratch_dir)
+    for scratch_dir in (git_dir / ".check", git_dir / ".run"):
+        if scratch_dir.is_dir():
+            logger.info(f"Deleting {scratch_dir}")
+            rmtree(scratch_dir)

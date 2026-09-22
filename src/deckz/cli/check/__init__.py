@@ -4,8 +4,8 @@ from .. import app as _parent_app
 
 app = App(
     name="check",
-    help="Validate the repository by compiling shared content, or every deck. "
-    "No default: 'decks', 'shared', and 'all' have wildly different costs, so "
-    "an explicit subcommand is required.",
+    help="Static, non-compiling analyses of the repository "
+    "(see 'deckz run decks'/'deckz run shared'/'deckz run all' for the "
+    "compiling validations).",
 )
 _parent_app.command(app)

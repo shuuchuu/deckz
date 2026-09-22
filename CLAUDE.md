@@ -45,11 +45,11 @@ Dependency management and running: this project uses `uv`; run tools via
 Related commands are grouped under sub-apps: most are their own package
 under `src/deckz/cli/` with one module per subcommand (`run`, `check`,
 `clean`, `show`, `flavor`, `asset`, `i18n`, `extras` — see `run/__init__.py`
-for the pattern: an `App(name=...)` registered onto the parent app);
-`watch.py` instead defines its subcommands directly in a single module. A
+for the pattern: an `App(name=...)` registered onto the parent app). A
 sub-app may declare a default subcommand via `@app.default`
-(`run`/`show`/`clean` do; `check` deliberately doesn't, since its
-subcommands' costs differ too much to pick one safely). Command functions
+(`run`/`show`/`clean` do; `check` deliberately doesn't, to keep its shape
+stable as more static analyses are added — it currently has a single
+subcommand, `variables`). Command functions
 themselves stay thin: they parse CLI args, build a `DeckSettings`/
 `GlobalSettings`, and delegate to `src/deckz/pipelines.py`,
 `src/deckz/checking.py`, or an `analyzing/*` module — no business logic
@@ -65,7 +65,7 @@ already-computed sibling fields via a custom `BeforeValidator`
 merged from three locations, in order: the target repo's git root, the
 user's XDG config dir, and the current directory up to the git root (see
 `utils.dirs_hierarchy` / `load_all_yamls`). `GlobalSettings` covers
-repo-wide operations (e.g. `check decks`, asset building); `DeckSettings`
+repo-wide operations (e.g. `run decks`, asset building); `DeckSettings`
 extends it for operations scoped to a single deck (the current working
 directory must be inside a deck).
 
@@ -88,7 +88,7 @@ factory. `DeckSettingsFactory.deck_builder()` picks between
 ### Build pipeline
 
 `pipelines.py` holds the orchestration functions the CLI commands call
-(`run`, `run_file`, `run_section`, `run_all`, `check_shared`, `check_all`,
+(`run`, `run_file`, `run_section`, `run_decks`, `run_shared`, `run_all`,
 `run_assets`, `watch`). The common path (`_build`) is: resolve variables →
 cascade them through the parsed `Deck` (`configuring/variables.py::resolve_variables`:
 deck-wide `variables.yml`, overridden by each section's own matched-flavor
@@ -96,11 +96,13 @@ deck-wide `variables.yml`, overridden by each section's own matched-flavor
 `variables` attribute in place) → build assets (tikz/plotly/plt standalones)
 via the assets builder → build the deck (render Jinja2 → compile LaTeX) via
 the deck builder; `_build` also takes an optional `basedirs` override, used
-only by `check_shared`/`check_all` since their synthetic decks can include
+only by `run_shared`/`run_all` since their synthetic decks can include
 files living under any deck's directory, not just one
 `current_dir`/`shared_dir` pair. `watch()` is a generic file-watch-and-rerun
-wrapper (used by `deckz watch deck` / `deckz watch section`), not
-build-specific.
+wrapper, not build-specific: each of `run/deck.py`, `run/file.py`,
+`run/section.py`, and `run/assets.py` calls it directly when invoked with
+`--watch`, wrapping that same module's one-shot pipeline call instead of
+running it once.
 
 Because a section's resolved `variables` can differ by which flavor
 included it, the same physical file can need two different renders within
@@ -113,19 +115,21 @@ decided so the main template's `\input` reference and the on-disk rendered
 copy always agree. `components/incremental_deck_builder.py` mirrors this in
 its own parallel `_FileRef`/`_Fragment` structures.
 
-`check_shared`/`check_all` (backing `deckz check shared`/`deckz check all`)
+`run_shared`/`run_all` (backing `deckz run shared`/`deckz run all`)
 build their `Deck` purely in memory via `src/deckz/checking.py` — no yaml is
 ever written to disk. They use `Parser.all_files_section()`
 (`components/parser.py`) to expand a shared section to every file in its
-own directory rather than a named flavor's `includes` list; `check_all`
+own directory rather than a named flavor's `includes` list; `run_all`
 additionally builds one extra copy of a section per deck that locally
 overrides one of its files (detected by re-resolving with that deck's own
 `local_latex_dir`). Both write their output to a persistent
-`<git_dir>/.check/{shared,all}/` scratch directory (`checking.check_scratch_dir`),
-since these decks have no real deck directory of their own; `deckz run
-file`/`deckz run section` use the same convention under `<git_dir>/.run/`,
-to avoid polluting a real deck's own `pdf`/`.build`. `deckz clean all`
-sweeps both.
+`<git_dir>/.run/{shared,all}/` scratch directory (`checking.run_scratch_dir`),
+alongside `deckz run file`/`deckz run section`'s own `<git_dir>/.run/{file,section}/`
+scratch trees, since none of these synthetic/preview decks have a real deck
+directory of their own. `deckz check variables` uses the same
+`checking.check_scratch_dir` helper for its own scratch tree, kept separately
+under `<git_dir>/.check/variables/` since that command stayed under `check`.
+`deckz clean all` sweeps both `.run/` and `.check/` wholesale.
 
 ### Data model
 
