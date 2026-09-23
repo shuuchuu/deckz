@@ -3,8 +3,10 @@ from . import app
 _AGENT_NOTES = """\
 # Working in this repo
 
-This is a `deckz`-managed repository: a set of Beamer LaTeX decks that
-share slides ("sections") with each other via `latex/`. Run `deckz --help`
+This is a `deckz`-managed repository: a set of slide decks that share
+slides ("sections") with each other via `latex/` (a historical name: its
+content files may be Markdown, compiled with Typst or LaTeX depending on
+`deckz.yml`'s `compiler` and main template). Run `deckz --help`
 or `deckz <command> --help` for the full, authoritative command reference
 -- these notes only cover conventions that aren't self-documenting there.
 
@@ -15,8 +17,8 @@ or `deckz <command> --help` for the full, authoritative command reference
   wherever you run `deckz` from -- so settings/variables can be overridden
   per company/deck by placing a file deeper in the tree.
 - Shared content lives under `latex/<section>/<section>.yml` (the
-  directory name must match the yml's stem) plus its sibling `.tex`/`.md`
-  body files.
+  directory name must match the yml's stem) plus its sibling content
+  files (`deckz.yml`'s `file_extensions`: `.md`, `.tex`).
 - Each deck is `<company>/<deck>/deck.yml`, with its own local `latex/`
   directory for deck-specific content and per-file overrides (see below).
 
@@ -29,8 +31,8 @@ includes declared in that section's own `.yml`.
 
 A deck (or a nested section) can override a single file of a shared
 section without forking the whole section: if
-`<deck>/latex/<section>/<file>.tex` exists, it's used in place of
-`latex/<section>/<file>.tex` for that deck only -- a local file
+`<deck>/latex/<section>/<file>.md` exists, it's used in place of
+`latex/<section>/<file>.md` for that deck only -- a local file
 always wins over a shared one at the same relative path.
 
 A flavor can set its own `variables`, merged into `variables.yml` on top
@@ -50,20 +52,20 @@ or a declared variable nothing ever reads.
   deck's own build output. Output goes under `<git_dir>/.run/`; add
   `--no-open` to skip opening the result (useful for headless/agent use,
   where the printed output path is all you need).
-- `deckz run shared` -- compile every shared section at once (fast); use
-  this while editing shared content instead of waiting for a full deck or
-  repo build.
+- `deckz run shared` -- compile every shared section, one PDF per
+  section; much faster than `run decks`, which recompiles a section once
+  per deck using it.
 - `deckz run all` -- `run shared`, plus one extra copy of every
   section that some deck locally overrides.
 - `deckz run decks` -- compile every real deck end to end. By far the
   slowest option on a repo with many decks.
 - `deckz check variables` -- statically survey every shared flavor and
-  every real deck for `variables.xxx` usage gaps, no LaTeX toolchain
-  needed.
+  every real deck for `variables.xxx` usage gaps, without compiling
+  anything.
 - Add `--watch` to `run`/`run file`/`run section`/`run assets` to
   recompile on file changes instead of once.
-- `deckz clean all` -- wipe every deck's build dir, plus the `.check`/
-  `.run` scratch directories above.
+- `deckz clean all` -- wipe every deck's build dir, plus the `.run`
+  scratch directory above and `check variables`' `.check` one.
 
 ## English variant
 

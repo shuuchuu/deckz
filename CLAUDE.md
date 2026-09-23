@@ -5,11 +5,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 `deckz` is a CLI tool (Python, `src/deckz`) for managing a large number of
-Beamer LaTeX decks shared by several people, with slides ("sections") shared
-across decks. It is not usable out of the box on an arbitrary repository: it
+slide decks shared by several people, with slides ("sections") shared
+across decks. Decks compile with Typst (`compiler: typst`, a `.typ` main
+template, Markdown content converted by pandoc) or with LaTeX/Beamer
+(`compiler: command`, e.g. `latexmk`). It is not usable out of the box on an arbitrary repository: it
 enforces strong conventions on the layout of the repository it *operates on*
 (a separate, unrelated git repo containing `deckz.yml`, `variables.yml`,
-`shared/`, per-company/per-deck directories, etc. — see README.md for the
+`latex/` (shared content, a historical name), `assets/`, `templates/`,
+per-company/per-deck directories, etc. — see README.md for the
 full layout). Keep this distinction in mind: "the repo" (this codebase) vs.
 "a deckz-managed repo" (what the tool acts on at runtime).
 
@@ -59,7 +62,7 @@ lives in the `cli/` layer.
 
 `configuring/settings.py` defines `GlobalPaths`/`DeckSettings`/`GlobalSettings`
 (Pydantic models). Paths are built from a small template-like mechanism:
-fields declared as raw strings like `"{git_dir}/shared"` are resolved against
+fields declared as raw strings like `"{git_dir}/latex"` are resolved against
 already-computed sibling fields via a custom `BeforeValidator`
 (`_convert`/`_Path`). `deckz.yml` and `variables.yml` are looked up and
 merged from three locations, in order: the target repo's git root, the
@@ -95,13 +98,13 @@ never in deckz's own process) based on `settings.compiler`.
 cascade them through the parsed `Deck` (`configuring/variables.py::resolve_variables`:
 deck-wide `variables.yml`, overridden by each section's own matched-flavor
 `variables`, deepest section wins, mutating every `Section`/`File`'s own
-`variables` attribute in place) → build assets (tikz/plotly/plt standalones)
-via the assets builder → build the deck (render Jinja2 → convert Markdown with pandoc → compile
+`variables` attribute in place) → build assets via the assets builder (the
+target repo's own `templates/assets_builders.py`, e.g. TikZ/plot standalones) → build the deck (render Jinja2 → convert Markdown with pandoc → compile
 with the configured compiler, LaTeX or Typst) via
 the deck builder; `_build` also takes an optional `basedirs` override, used
 only by `run_shared`/`run_all` since their synthetic decks can include
 files living under any deck's directory, not just one
-`current_dir`/`shared_dir` pair. `watch()` is a generic file-watch-and-rerun
+`current_dir`/`latex_dir` pair. `watch()` is a generic file-watch-and-rerun
 wrapper, not build-specific: each of `run/deck.py`, `run/file.py`,
 `run/section.py`, and `run/assets.py` calls it directly when invoked with
 `--watch`, wrapping that same module's one-shot pipeline call instead of
@@ -114,8 +117,8 @@ value, both pulled into one deck): `components/deck_builder.py` dedupes
 build-time dependencies by `DependencyRef` (resolved path + a short hash of
 its effective `variables`, from `variables_fingerprint`), not by path alone,
 and `dependency_relative_path` is the single place that naming scheme is
-decided so the main template's `\input` reference and the on-disk rendered
-copy always agree.
+decided so the main template's reference (`\input`/`#include`) and the
+on-disk rendered copy always agree.
 
 `run_shared`/`run_all` (backing `deckz run shared`/`deckz run all`)
 build their `Deck` purely in memory via `src/deckz/checking.py` — no yaml is
@@ -138,7 +141,7 @@ under `<git_dir>/.check/variables/` since that command stayed under `check`.
 `models.py` defines the deck domain model: `DeckDefinition`/`Deck`,
 `PartDefinition`/`Part`, section/flavor includes, and the
 `ResolvedPath`/`UnresolvedPath` distinction used when resolving shared vs.
-local LaTeX file/section references. `Parser` (`components/parser.py`)
+local content file/section references. `Parser` (`components/parser.py`)
 turns YAML deck/section definitions into this model; the rest of the
 pipeline operates on the model, not on YAML directly.
 
