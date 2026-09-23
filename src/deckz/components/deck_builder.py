@@ -275,14 +275,12 @@ def setup_link(source: Path, target: Path) -> None:
         raise DeckzError(msg)
     target = target.resolve()
     if source.is_symlink():
-        if source.resolve().samefile(target):
+        if source.exists() and source.resolve().samefile(target):
             return
-        msg = (
-            f"{source} already exists in the build directory and does not point to "
-            f"{target}. Please clean the build directory"
-        )
-        raise DeckzError(msg)
-    if source.exists():
+        # A link deckz made itself, left pointing elsewhere or nowhere, e.g.
+        # by a rename of the directories it links to: relinking loses nothing.
+        source.unlink()
+    elif source.exists():
         msg = (
             f"{source} already exists in the build directory. Please clean the "
             "build directory"
