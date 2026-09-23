@@ -199,6 +199,13 @@ def all_deck_settings(git_dir: Path) -> Iterator["DeckSettings"]:
     from .configuring.settings import DeckSettings
 
     for targets_path in git_dir.rglob("deck.yml"):
+        # Skip hidden directories: build directories (`.build`, `.run`) can
+        # hold a deck.yml (e.g. a symlink to their deck's), and aren't decks.
+        if any(
+            part.startswith(".")
+            for part in targets_path.relative_to(git_dir).parent.parts
+        ):
+            continue
         yield DeckSettings.from_yaml(targets_path.parent)
 
 
