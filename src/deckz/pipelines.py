@@ -11,6 +11,7 @@ from .components.factory import DeckSettingsFactory, GlobalSettingsFactory
 from .components.typst_compiler import keep_warm
 from .configuring.settings import DeckSettings, GlobalSettings
 from .configuring.variables import get_variables, resolve_variables
+from .exceptions import DeckzError
 from .models import Deck, FlavorName, Lang, PartName
 from .utils import all_deck_settings
 
@@ -129,7 +130,11 @@ def run_decks(
                 build_print=build_print,
             )
             if not result:
-                break
+                deck_dir = deck_settings.paths.current_dir.relative_to(
+                    global_settings.paths.git_dir
+                )
+                msg = f"{deck_dir} failed to compile, see the errors above"
+                raise DeckzError(msg)
             progress.update(task_id, advance=1)
 
 

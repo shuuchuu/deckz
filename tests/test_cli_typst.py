@@ -8,10 +8,11 @@ from typing import Any
 import appdirs
 from pdfminer.high_level import extract_text
 from pygit2 import init_repository
-from pytest import fixture
+from pytest import fixture, raises
 
 from deckz.cli import main
 from deckz.components.typst_compiler import keep_warm
+from deckz.exceptions import DeckzError
 
 _RUN_ARGS = ("run", "--no-presentation", "--no-print")
 
@@ -91,6 +92,16 @@ def test_compile_error_is_reported(working_dir: Path, caplog: Any) -> None:
     assert "Compilation abc-handout errored" in caplog.text
     assert "unknown variable: no-such-function" in caplog.text
     assert not (working_dir / "pdf" / "abc-handout.pdf").exists()
+
+
+def test_run_decks_fails_on_a_compile_error(working_dir: Path) -> None:
+    _write_newer(
+        working_dir / "latex" / "about.md",
+        "# About\n\n```{=typst}\n#no-such-function()\n```\n",
+    )
+
+    with raises(DeckzError, match="company/abc"):
+        main(("run", "decks", "--handout", "--no-presentation"))
 
 
 def test_warm_rebuild_sees_content_edit(working_dir: Path) -> None:
