@@ -1,0 +1,7 @@
+name: ABC
+parts:
+  - name: p1
+    title: Part 1
+    sections:
+      - about
+      - $greeting@standard

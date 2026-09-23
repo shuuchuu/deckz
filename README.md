@@ -5,7 +5,7 @@
 [![Test Coverage](https://img.shields.io/codecov/c/github/shuuchuu/deckz?style=for-the-badge)](https://codecov.io/gh/shuuchuu/deckz)
 [![PyPI Project](https://img.shields.io/pypi/v/deckz?style=for-the-badge)](https://pypi.org/project/deckz/)
 
-`deckz` is a tool to manage a large number of Beamer decks, shared by several
+`deckz` is a tool to manage a large number of slide decks (Typst or LaTeX/Beamer), shared by several
 people, with slides ("sections") shared across decks. It is not meant to be
 usable out of the box by people who stumble upon this repository: it enforces
 strong conventions on the layout of the repository it operates on. Please
@@ -111,6 +111,15 @@ file_extensions:
   - .tex
 ```
 
+- `compiler`: `command` (the default) runs `build_command` in a fresh
+  process for each PDF, e.g. `latexmk`. `typst` compiles a `.typ` main
+  template (`paths.jinja2_main_template`) with the `typst` Python bindings,
+  and doesn't use `build_command`. Each PDF compiles in its own child
+  process, which gives its memory back when done (Typst can take a few GB
+  on a large deck). Under `deckz run --watch`, each PDF's process stays
+  alive instead, so rebuilds are incremental: on a 145-page deck, an edit
+  re-renders every PDF in about a second. `typst_parallel_compilations`
+  (default 1) caps how many compile at once.
 - `pandoc_command`: how `deckz` invokes `pandoc` to convert a rendered
   Markdown content file to the `.tex` fragment that gets `\input`, including
   any `--lua-filter=...` your own Beamer conventions need (fenced divs for

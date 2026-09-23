@@ -6,8 +6,6 @@ from subprocess import run
 from ..exceptions import DeckzError
 from .protocols import MarkdownConverterProtocol
 
-_FILTER_PREFIX = "--lua-filter="
-
 
 class PandocConverter(MarkdownConverterProtocol):
     def __init__(self, pandoc_command: Iterable[str]) -> None:
@@ -30,8 +28,13 @@ class PandocConverter(MarkdownConverterProtocol):
     def fingerprint(self) -> str:
         parts = list(self._pandoc_command)
         for arg in self._pandoc_command:
-            if arg.startswith(_FILTER_PREFIX):
-                filter_path = Path(arg.removeprefix(_FILTER_PREFIX))
-                if filter_path.is_file():
-                    parts.append(sha256(filter_path.read_bytes()).hexdigest())
+            # Every file the command reads, whether passed as an input
+            # (e.g. a macros file concatenated ahead of the fragment) or as an
+            # option's value (`--lua-filter=...`, `--syntax-definition=...`).
+            # Only absolute paths: the command runs from each fragment's own
+            # directory, so the factory formats real file arguments absolute.
+            _, _, value = arg.rpartition("=") if arg.startswith("--") else ("", "", arg)
+            path = Path(value)
+            if path.is_absolute() and path.is_file():
+                parts.append(sha256(path.read_bytes()).hexdigest())
         return sha256("\0".join(parts).encode("utf8")).hexdigest()

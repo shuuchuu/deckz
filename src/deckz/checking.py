@@ -5,6 +5,11 @@ compile, by building one throwaway [`Deck`][deckz.models.Deck] in memory \
 (never written to disk as yaml) containing every shared section expanded \
 to a synthetic "all files" flavor -- see \
 [`Parser.all_files_section`][deckz.components.parser.Parser.all_files_section].
+
+Each section is its own part, so each compiles to its own PDF: one document \
+holding the whole repository's content would need more memory than a \
+typical machine has (Typst takes a few MB per page), and a compilation that \
+stops at its first error would hide every later section's errors.
 """
 
 from collections.abc import Iterable
@@ -15,7 +20,9 @@ from .components.parser import Parser
 from .models import Deck, Lang, Node, Part, PartName, UnresolvedPath
 from .utils import all_deck_settings, shared_section_ids
 
-_PART_NAME = PartName("sections")
+
+def _part_name(section_id: str) -> PartName:
+    return PartName(section_id.replace("/", "-"))
 
 
 def check_scratch_dir(git_dir: Path, name: str) -> Path:
@@ -24,7 +31,7 @@ def check_scratch_dir(git_dir: Path, name: str) -> Path:
     Created eagerly: `DeckSettings.from_yaml` resolves `git_dir` via \
     `pygit2.discover_repository`, which fails on a path that doesn't exist \
     yet, and the directory is meant to persist across runs anyway (so \
-    incremental compilation and manual PDF inspection both work).
+    fragment caching and manual PDF inspection both work).
 
     Args:
         git_dir: Root of the deckz-managed repository.
@@ -44,7 +51,7 @@ def run_scratch_dir(git_dir: Path, name: str) -> Path:
     Created eagerly: `DeckSettings.from_yaml` resolves `git_dir` via \
     `pygit2.discover_repository`, which fails on a path that doesn't exist \
     yet, and the directory is meant to persist across runs anyway (so \
-    incremental compilation and manual PDF inspection both work).
+    fragment caching and manual PDF inspection both work).
 
     Args:
         git_dir: Root of the deckz-managed repository.
@@ -82,11 +89,15 @@ def build_shared_deck(
         file_extensions=file_extensions,
         lang=lang,
     )
-    nodes: list[Node] = [
-        parser.all_files_section(section_id)
-        for section_id in shared_section_ids(latex_dir)
-    ]
-    deck = Deck(name=name, parts={_PART_NAME: Part(title=None, nodes=nodes)})
+    deck = Deck(
+        name=name,
+        parts={
+            _part_name(section_id): Part(
+                title=None, nodes=[parser.all_files_section(section_id)]
+            )
+            for section_id in shared_section_ids(latex_dir)
+        },
+    )
     parser.validate(deck)
     return deck
 
@@ -113,8 +124,10 @@ def build_all_deck(
         The built deck.
     """
     deck = build_shared_deck(latex_dir, file_extensions, lang, name="run-all")
-    part = deck.parts[_PART_NAME]
-    plain_sections = {node.unresolved_path.as_posix(): node for node in part.nodes}
+    plain_sections: dict[str, Node] = {
+        part.nodes[0].unresolved_path.as_posix(): part.nodes[0]
+        for part in deck.parts.values()
+    }
     deck_settings = sorted(
         all_deck_settings(git_dir), key=lambda s: s.paths.current_dir.as_posix()
     )
@@ -137,6 +150,8 @@ def build_all_deck(
                 PurePath(f"{section_id}-{counter}")
             )
             candidate.title = f"{candidate.title or section_id} [{deck_label}]"
-            part.nodes.append(candidate)
+            deck.parts[_part_name(f"{section_id}-{counter}")] = Part(
+                title=None, nodes=[candidate]
+            )
             counter += 1
     return deck

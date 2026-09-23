@@ -33,6 +33,13 @@ class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
         )
 
     def compiler(self) -> CompilerProtocol:
+        if self._settings.compiler == "typst":
+            from .typst_compiler import TypstCompiler
+
+            return TypstCompiler(
+                max_parallel=self._settings.typst_parallel_compilations
+            )
+
         from .compiler import Compiler
 
         return Compiler(build_command=self._settings.build_command)
@@ -110,14 +117,7 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
         build_print: bool,
         basedirs: tuple[Path, ...] | None = None,
     ) -> DeckBuilderProtocol:
-        if self._settings.incremental_compilation:
-            from .incremental_deck_builder import IncrementalDeckBuilder
-
-            builder_cls = IncrementalDeckBuilder
-        else:
-            from .deck_builder import DeckBuilder
-
-            builder_cls = DeckBuilder
+        from .deck_builder import DeckBuilder
 
         output_dir = self._settings.paths.pdf_dir
         build_dir = self._settings.paths.build_dir
@@ -132,7 +132,7 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
             else ()
         )
 
-        return builder_cls(
+        return DeckBuilder(
             variables=variables,
             deck=deck,
             build_presentation=build_presentation,

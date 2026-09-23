@@ -6,6 +6,7 @@ from collections.abc import (
     Sequence,
     Set,
 )
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import Enum
 from hashlib import sha256
@@ -31,7 +32,7 @@ from ..models import (
     Title,
     TitleOrContent,
 )
-from ..utils import copy_file_if_newer, create_pool
+from ..utils import copy_file_if_newer
 from .compiler import CompileResult
 from .protocols import (
     CompilerProtocol,
@@ -71,7 +72,7 @@ def dependency_relative_path(
     Relative to whichever of `basedirs` contains `resolved_path`, with \
     `fingerprint` appended to the stem -- the single place this naming \
     scheme is decided, so the main template's content reference (built by \
-    `_SlidesNodeVisitor`/the incremental builder's `_TimelineNodeVisitor`) \
+    `_SlidesNodeVisitor`) \
     and the on-disk rendered copy (built by \
     [`copy_dependencies`][deckz.components.deck_builder.copy_dependencies]) \
     always agree.
@@ -155,6 +156,7 @@ class DeckBuilder(DeckBuilderProtocol):
 
     def build_deck(self) -> bool:
         items = self._list_items()
+        self._markdown_fingerprint = self._markdown_converter.fingerprint()
         results = []
         with (
             Progress(
@@ -162,12 +164,16 @@ class DeckBuilder(DeckBuilderProtocol):
                 BarColumn(),
                 "[progress.percentage]{task.percentage:>3.0f}%",
             ) as progress,
-            create_pool(min(cpu_count(), len(items))) as pool,
+            # Threads, not processes: rendering is cheap next to pandoc and
+            # the compiler, which both run in subprocesses. Staying in this
+            # process is also what lets TypstCompiler keep its warm worker
+            # processes from one `--watch` rebuild to the next.
+            ThreadPoolExecutor(min(cpu_count(), len(items))) as pool,
         ):
             task_id = progress.add_task("Compiling…", total=len(items))
             for item_name, result in zip(
                 items,
-                pool.imap(self._build_item_pair, items.items()),
+                pool.map(self._build_item_pair, items.items()),
                 strict=True,
             ):
                 results.append((item_name, result))
@@ -201,7 +207,7 @@ class DeckBuilder(DeckBuilderProtocol):
             )
         if self._build_print:
             to_compile[self._name_compile_item(CompileType.PrintHandout)] = CompileItem(
-                all_slides, all_dependencies, CompileType.Handout, True
+                all_slides, all_dependencies, CompileType.PrintHandout, True
             )
         for name, slides in self._parts_slides.items():
             dependencies = self._dependencies[name]
@@ -221,13 +227,27 @@ class DeckBuilder(DeckBuilderProtocol):
         build_pdf_path = main_path.with_suffix(".pdf")
         output_pdf_path = self._output_dir / f"{name}.pdf"
         self._render_main(item, main_path)
-        copied = copy_dependencies(item.dependencies, build_dir, self._basedirs)
+        # `copy_dependencies` only re-copies (and so re-renders/re-converts) a
+        # fragment whose source is newer than its build copy, but a pandoc
+        # command or filter change doesn't touch any source: force a full
+        # pass whenever the converter's fingerprint moved since this item's
+        # last successful render.
+        fingerprint_path = build_dir / ".markdown-fingerprint"
+        markdown_stale = (
+            not fingerprint_path.is_file()
+            or fingerprint_path.read_text(encoding="utf8") != self._markdown_fingerprint
+        )
+        copied = copy_dependencies(
+            item.dependencies, build_dir, self._basedirs, force=markdown_stale
+        )
         render_dependencies(
             self._renderer,
             self._markdown_converter,
             copied,
             target_suffix=self._template.suffix,
         )
+        if markdown_stale:
+            fingerprint_path.write_text(self._markdown_fingerprint, encoding="utf8")
         result = self._compiler.compile(main_path)
         if result.ok:
             self._output_dir.mkdir(parents=True, exist_ok=True)

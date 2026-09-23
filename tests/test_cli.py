@@ -122,12 +122,18 @@ def test_run_decks(working_dir: Path) -> None:
     assert "John Doe" in text
 
 
+def _all_pdfs_text(pdf_dir: Path) -> str:
+    # One PDF per shared section (see deckz.checking).
+    pdfs = sorted(pdf_dir.glob("*.pdf"))
+    assert pdfs
+    return "\n".join(extract_info(pdf)[1] for pdf in pdfs)
+
+
 def test_run_shared(working_dir: Path) -> None:
     main(("run", "shared"))
 
     git_dir = working_dir.parent.parent
-    pdf_path = git_dir / ".run" / "shared" / "pdf" / "shared-sections-presentation.pdf"
-    _, text = extract_info(pdf_path)
+    text = _all_pdfs_text(git_dir / ".run" / "shared" / "pdf")
     assert "Shared description content" in text
     assert "Extra shared content" in text
 
@@ -136,8 +142,7 @@ def test_run_all(working_dir: Path) -> None:
     main(("run", "all"))
 
     git_dir = working_dir.parent.parent
-    pdf_path = git_dir / ".run" / "all" / "pdf" / "run-all-sections-presentation.pdf"
-    _, text = extract_info(pdf_path)
+    text = _all_pdfs_text(git_dir / ".run" / "all" / "pdf")
     assert "Shared description content" in text
     assert "ABC-local override of the shared description" in text
     assert text.count("Extra shared content") == 2

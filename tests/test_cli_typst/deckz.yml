@@ -1,0 +1,12 @@
+compiler: typst
+pandoc_command:
+  - pandoc
+  - -f
+  - markdown-auto_identifiers
+  - -t
+  - typst
+  - --lua-filter={templates_dir}/pandoc/filter.lua
+file_extensions:
+  - .md
+paths:
+  jinja2_main_template: "{jinja2_dir}/main.typ"

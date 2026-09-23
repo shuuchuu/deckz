@@ -83,7 +83,7 @@ class MarkdownConverterProtocol(Protocol):
     def fingerprint(self) -> str:
         """A stable fingerprint of this converter's configuration.
 
-        Used by the incremental deck builder to invalidate cached fragments \
+        Used by the deck builder to invalidate cached fragments \
         when the pandoc command or a referenced filter file changes, even \
         though the Markdown source itself didn't.
         """

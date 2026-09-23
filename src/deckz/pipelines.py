@@ -8,6 +8,7 @@ from watchfiles import watch as watchfiles_watch
 
 from .checking import build_all_deck, build_shared_deck, run_scratch_dir
 from .components.factory import DeckSettingsFactory, GlobalSettingsFactory
+from .components.typst_compiler import keep_warm
 from .configuring.settings import DeckSettings, GlobalSettings
 from .configuring.variables import get_variables, resolve_variables
 from .models import Deck, FlavorName, Lang, PartName
@@ -210,6 +211,18 @@ def watch[**P](
         if (r_to_watch := p.resolve()) not in dirs_to_avoid
     }
     print("\n".join(sorted(str(d) for d in dirs_to_watch)))
+    # Keeps a Typst worker process alive per compiled PDF, so every rebuild
+    # after the first is incremental (no effect on other compilers).
+    with keep_warm():
+        _watch_loop(dirs_to_watch, function, *function_args, **function_kwargs)
+
+
+def _watch_loop[**P](
+    dirs_to_watch: Set[Path],
+    function: Callable[P, Any],
+    *function_args: P.args,
+    **function_kwargs: P.kwargs,
+) -> None:
     _logger.info("Initial build")
     try:
         function(*function_args, **function_kwargs)

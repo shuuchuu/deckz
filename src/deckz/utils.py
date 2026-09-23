@@ -5,12 +5,20 @@ from contextlib import contextmanager, suppress
 from multiprocessing import get_context
 from multiprocessing.pool import Pool
 from pathlib import Path
+from threading import Lock
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .configuring.settings import DeckSettings
     from .models import Deck
+
+# Modules loaded by `import_module_from_path`, keyed by what makes a reload
+# necessary: a long-lived process (`--watch`) reuses an unchanged module --
+# and whatever it memoizes at module level -- across builds, but still picks
+# up an edit to it.
+_path_modules: dict[tuple[Path, int, str], ModuleType] = {}
+_path_modules_lock = Lock()
 
 
 def copy_file_if_newer(original: Path, copy: Path) -> bool:
@@ -40,7 +48,8 @@ def import_module_from_path(path: Path, name: str) -> ModuleType:
 
     Used to load a Python module a target repo supplies by filesystem \
     convention (e.g. `templates/jinja2/env.py`, `templates/assets_builders.py`) \
-    rather than as an installed/importable package.
+    rather than as an installed/importable package. Memoized for as long as \
+    the file is unmodified.
 
     Args:
         path: Path to the module's `.py` file.
@@ -60,13 +69,18 @@ def import_module_from_path(path: Path, name: str) -> ModuleType:
     if not path.is_file():
         msg = f"could not find a Python module at {path}"
         raise DeckzError(msg)
-    spec = spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        msg = f"could not load {path} as a module"
-        raise DeckzError(msg)
-    module = module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    key = (path.resolve(), path.stat().st_mtime_ns, name)
+    with _path_modules_lock:
+        if key in _path_modules:
+            return _path_modules[key]
+        spec = spec_from_file_location(name, path)
+        if spec is None or spec.loader is None:
+            msg = f"could not load {path} as a module"
+            raise DeckzError(msg)
+        module = module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _path_modules[key] = module
+        return module
 
 
 def import_module_and_submodules(package_name: str) -> None:
@@ -172,9 +186,7 @@ def _parse_deck(settings: "DeckSettings") -> tuple[Path, "Deck"]:
 
 
 def all_decks(git_dir: Path) -> dict[Path, "Deck"]:
-    from multiprocessing import Pool
-
-    with Pool() as pool:
+    with create_pool() as pool:
         return dict(pool.map(_parse_deck, list(all_deck_settings(git_dir))))
 
 

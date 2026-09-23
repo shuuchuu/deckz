@@ -1,0 +1,2 @@
+-- Identity filter: tests rewrite it to check that a filter change alone
+-- (no content change) invalidates cached fragments.

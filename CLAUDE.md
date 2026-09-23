@@ -77,13 +77,15 @@ directory must be inside a deck).
 `components/factory.py` provides `GlobalSettingsFactory` /
 `DeckSettingsFactory` as the construction points — they lazily import and
 instantiate the concrete implementation (`components/parser.py`,
-`components/deck_builder.py` / `incremental_deck_builder.py`,
-`components/compiler.py`, `components/renderer.py`, etc.) wired up with
+`components/deck_builder.py`, `components/compiler.py` /
+`components/typst_compiler.py`, `components/renderer.py`, etc.) wired up with
 paths/settings. Call sites depend on the protocol/factory, not on concrete
 classes directly, so new implementations only need to be plugged in at the
-factory. `DeckSettingsFactory.deck_builder()` picks between
-`DeckBuilder` and `IncrementalDeckBuilder` based on
-`settings.incremental_compilation`.
+factory. `GlobalSettingsFactory.compiler()` picks between `Compiler` (runs
+`build_command` in a subprocess per PDF) and `TypstCompiler` (the `typst`
+bindings in a child process per PDF, kept warm across `--watch` rebuilds so
+Typst's incremental cache survives; see the module's header comment for why
+never in deckz's own process) based on `settings.compiler`.
 
 ### Build pipeline
 
@@ -94,7 +96,8 @@ cascade them through the parsed `Deck` (`configuring/variables.py::resolve_varia
 deck-wide `variables.yml`, overridden by each section's own matched-flavor
 `variables`, deepest section wins, mutating every `Section`/`File`'s own
 `variables` attribute in place) → build assets (tikz/plotly/plt standalones)
-via the assets builder → build the deck (render Jinja2 → compile LaTeX) via
+via the assets builder → build the deck (render Jinja2 → convert Markdown with pandoc → compile
+with the configured compiler, LaTeX or Typst) via
 the deck builder; `_build` also takes an optional `basedirs` override, used
 only by `run_shared`/`run_all` since their synthetic decks can include
 files living under any deck's directory, not just one
@@ -112,8 +115,7 @@ build-time dependencies by `DependencyRef` (resolved path + a short hash of
 its effective `variables`, from `variables_fingerprint`), not by path alone,
 and `dependency_relative_path` is the single place that naming scheme is
 decided so the main template's `\input` reference and the on-disk rendered
-copy always agree. `components/incremental_deck_builder.py` mirrors this in
-its own parallel `_FileRef`/`_Fragment` structures.
+copy always agree.
 
 `run_shared`/`run_all` (backing `deckz run shared`/`deckz run all`)
 build their `Deck` purely in memory via `src/deckz/checking.py` — no yaml is
