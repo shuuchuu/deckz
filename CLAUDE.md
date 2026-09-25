@@ -133,7 +133,7 @@ alongside `deckz run file`/`deckz run section`'s own `<git_dir>/.run/{file,secti
 scratch trees, since none of these synthetic/preview decks have a real deck
 directory of their own. `deckz check variables` uses the same
 `checking.check_scratch_dir` helper for its own scratch tree, kept separately
-under `<git_dir>/.check/variables/` since that command stayed under `check`.
+under `<git_dir>/.check/variables/` since it's a `check` command, not a `run` one.
 `deckz clean all` sweeps both `.run/` and `.check/` wholesale.
 
 ### Data model
