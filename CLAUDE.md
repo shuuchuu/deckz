@@ -198,7 +198,11 @@ subcommands (`github_querying.py` for `issue`, `mailing.py` for `random`,
 `labs.py` for `labs`) plus `uploading.py` for the top-level `deckz upload`
 — side commands unrelated to the build pipeline, each with its own thin
 `cli/extras/*.py` (or `cli/upload.py`) wrapper, same split as everywhere
-else in `cli/`.
+else in `cli/`. Their third-party clients (Google, GitHub, SendGrid,
+email-validator) are the `deckz[extras]` optional dependencies, installed
+by the `dev` group: the CLI wrappers import them inside
+`extras.extras_imports()`, which turns a missing one into a
+`MissingExtraError`.
 
 ## Conventions
 

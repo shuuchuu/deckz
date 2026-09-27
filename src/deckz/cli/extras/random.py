@@ -31,11 +31,15 @@ def random(
     from rich.console import Console
     from rich.markdown import Markdown
     from rich.prompt import Prompt
-    from sendgrid import SendGridAPIClient
-    from sendgrid.helpers.mail import Mail
 
     from ...configuring.settings import GlobalSettings
-    from ...extras.mailing import MailsConfig
+    from ...extras import extras_imports
+
+    with extras_imports():
+        from sendgrid import SendGridAPIClient
+        from sendgrid.helpers.mail import Mail
+
+        from ...extras.mailing import MailsConfig
 
     logger = getLogger(__name__)
     config = MailsConfig.from_yaml(GlobalSettings.from_yaml(workdir).paths.mails)

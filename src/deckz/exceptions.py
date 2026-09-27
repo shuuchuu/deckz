@@ -33,6 +33,10 @@ class InvalidConfigurationError(DeckzError):
     """A yaml file of the deckz-managed repo is missing, unparsable or invalid."""
 
 
+class MissingExtraError(DeckzError):
+    """A command needs an optional dependency that isn't installed."""
+
+
 class CompilationError(DeckzError):
     pass
 

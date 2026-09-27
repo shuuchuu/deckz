@@ -22,7 +22,10 @@ def issue(
     from logging import getLogger
 
     from ...configuring.settings import GlobalSettings
-    from ...extras.github_querying import GitHubAPI, IssuesConfig
+    from ...extras import extras_imports
+
+    with extras_imports():
+        from ...extras.github_querying import GitHubAPI, IssuesConfig
 
     logger = getLogger(__name__)
 

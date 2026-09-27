@@ -19,6 +19,16 @@ With `pip`:
 pip install deckz
 ```
 
+The side commands `deckz upload` and `deckz extras issue`/`random` need
+optional dependencies (Google Drive, GitHub and SendGrid clients):
+
+```shell
+pip install "deckz[extras]"
+```
+
+Whatever your `templates/assets_builders.py` imports (e.g. matplotlib or
+plotly) is your repository's own dependency: install it alongside deckz.
+
 ### Shell completion
 
 Run `deckz --help` and look for the `--install-completion` /

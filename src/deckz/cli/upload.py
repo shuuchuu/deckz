@@ -12,6 +12,9 @@ def upload(*, workdir: Path = Path()) -> None:
 
     """
     from ..configuring.settings import DeckSettings
-    from ..extras.uploading import Uploader
+    from ..extras import extras_imports
+
+    with extras_imports():
+        from ..extras.uploading import Uploader
 
     Uploader(DeckSettings.from_yaml(workdir))
