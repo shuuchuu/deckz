@@ -59,7 +59,7 @@ def test_run_typst(working_dir: Path) -> None:
 
 def test_rebuild_in_same_process_sees_content_edit(working_dir: Path) -> None:
     main(_RUN_ARGS)
-    _write_newer(working_dir / "latex" / "about.md", "# About\n\nEdited content.\n")
+    _write_newer(working_dir / "content" / "about.md", "# About\n\nEdited content.\n")
 
     main(_RUN_ARGS)
 
@@ -94,7 +94,7 @@ def _break(path: Path) -> None:
 
 
 def test_compile_error_is_reported(working_dir: Path, caplog: Any) -> None:
-    _break(working_dir / "latex" / "about.md")
+    _break(working_dir / "content" / "about.md")
 
     with raises(SystemExit) as exc_info:
         main(_RUN_ARGS)
@@ -106,7 +106,7 @@ def test_compile_error_is_reported(working_dir: Path, caplog: Any) -> None:
 
 
 def test_run_decks_fails_on_a_compile_error(working_dir: Path, caplog: Any) -> None:
-    _break(working_dir / "latex" / "about.md")
+    _break(working_dir / "content" / "about.md")
 
     with raises(SystemExit) as exc_info:
         main(("run", "decks", "--handout", "--no-presentation"))
@@ -120,22 +120,22 @@ def test_run_decks_fails_on_a_compile_error(working_dir: Path, caplog: Any) -> N
     [
         (
             ("run", "file", "about", "--no-open", *_NO_PDF),
-            Path("latex/about.md"),
+            Path("content/about.md"),
             "about failed to compile",
         ),
         (
             ("run", "section", "greeting", "standard", "--no-open", *_NO_PDF),
-            Path("../../latex/greeting/hello.md"),
+            Path("../../content/greeting/hello.md"),
             "greeting@standard failed to compile",
         ),
         (
             ("run", "shared"),
-            Path("../../latex/greeting/hello.md"),
+            Path("../../content/greeting/hello.md"),
             "shared failed to compile",
         ),
         (
             ("run", "all"),
-            Path("../../latex/greeting/hello.md"),
+            Path("../../content/greeting/hello.md"),
             "run-all failed to compile",
         ),
     ],
@@ -163,7 +163,7 @@ def test_nothing_to_compile_is_a_warning(working_dir: Path, caplog: Any) -> None
 
 
 def test_debug_env_var_keeps_the_exception(working_dir: Path, monkeypatch: Any) -> None:
-    _break(working_dir / "latex" / "about.md")
+    _break(working_dir / "content" / "about.md")
     monkeypatch.setenv("DECKZ_DEBUG", "1")
 
     with raises(CompilationError, match="ABC failed to compile"):
@@ -171,7 +171,7 @@ def test_debug_env_var_keeps_the_exception(working_dir: Path, monkeypatch: Any) 
 
 
 def test_watch_survives_a_compile_error(working_dir: Path, caplog: Any) -> None:
-    _break(working_dir / "latex" / "about.md")
+    _break(working_dir / "content" / "about.md")
 
     _run_once(
         "done",
@@ -192,7 +192,9 @@ def test_warm_rebuild_sees_content_edit(working_dir: Path) -> None:
     # processes (and their cache). The edit must still show up.
     with keep_warm():
         main(_RUN_ARGS)
-        _write_newer(working_dir / "latex" / "about.md", "# About\n\nEdited content.\n")
+        _write_newer(
+            working_dir / "content" / "about.md", "# About\n\nEdited content.\n"
+        )
         main(_RUN_ARGS)
 
     text = _handout_text(working_dir)

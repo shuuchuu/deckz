@@ -4,8 +4,8 @@ from . import app
 
 
 @app.command()
-def latex(*, dry_run: bool = False, workdir: Path = Path()) -> None:
-    """Delete unused LaTeX files, shared or local to a deck.
+def content(*, dry_run: bool = False, workdir: Path = Path()) -> None:
+    """Delete unused content files, shared or local to a deck.
 
     Args:
         dry_run: Only list the files that would be deleted, without deleting them
@@ -23,16 +23,16 @@ def latex(*, dry_run: bool = False, workdir: Path = Path()) -> None:
     console = Console(highlight=False)
     settings = GlobalSettings.from_yaml(workdir)
     sections_analyzer = SectionsAnalyzer(
-        settings.paths.latex_dir,
+        settings.paths.content_dir,
         settings.paths.git_dir,
         settings.file_extensions,
     )
 
-    with console.status("Finding unused LaTeX files"):
+    with console.status("Finding unused content files"):
         unused_files = sections_analyzer.unused_files()
 
     if not unused_files:
-        console.print("No unused LaTeX file!")
+        console.print("No unused content file!")
         return
 
     git_dir = settings.paths.git_dir
@@ -43,6 +43,6 @@ def latex(*, dry_run: bool = False, workdir: Path = Path()) -> None:
 
     plural = "s" * (len(unused_files) > 1)
     if dry_run:
-        console.print(f"\n{len(unused_files)} unused LaTeX file{plural} found")
+        console.print(f"\n{len(unused_files)} unused content file{plural} found")
     else:
-        logger.info(f"Deleted {len(unused_files)} unused LaTeX file{plural}")
+        logger.info(f"Deleted {len(unused_files)} unused content file{plural}")

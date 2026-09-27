@@ -72,7 +72,7 @@ def run(
 
 
 def run_file(
-    latex: str,
+    path: str,
     settings: DeckSettings,
     lang: Lang,
     build_handout: bool,
@@ -82,7 +82,7 @@ def run_file(
 ) -> None:
     try:
         _build(
-            deck=DeckSettingsFactory(settings, lang=lang).parser().from_file(latex),
+            deck=DeckSettingsFactory(settings, lang=lang).parser().from_file(path),
             settings=settings,
             lang=lang,
             build_handout=build_handout,
@@ -92,7 +92,7 @@ def run_file(
         )
     except CompilationError as e:
         # The synthetic preview deck is named "deck": name what was asked for.
-        msg = f"{latex} failed to compile, see the errors above"
+        msg = f"{path} failed to compile, see the errors above"
         raise CompilationError(msg) from e
 
 
@@ -170,7 +170,7 @@ def run_shared(
     git_dir = global_settings.paths.git_dir
     GlobalSettingsFactory(global_settings).assets_builder().build_assets()
     settings = DeckSettings.from_yaml(run_scratch_dir(git_dir, "shared"))
-    deck = build_shared_deck(settings.paths.latex_dir, settings.file_extensions, lang)
+    deck = build_shared_deck(settings.paths.content_dir, settings.file_extensions, lang)
     _build(
         deck=deck,
         settings=settings,
@@ -196,7 +196,7 @@ def run_all(
     GlobalSettingsFactory(global_settings).assets_builder().build_assets()
     settings = DeckSettings.from_yaml(run_scratch_dir(git_dir, "all"))
     deck = build_all_deck(
-        git_dir, settings.paths.latex_dir, settings.file_extensions, lang
+        git_dir, settings.paths.content_dir, settings.file_extensions, lang
     )
     _build(
         deck=deck,

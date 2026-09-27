@@ -24,7 +24,7 @@ def working_dir(tmp_path: Path, monkeypatch: Any) -> Iterator[Path]:
     init_repository(str(tmp_path))
     monkeypatch.setattr(appdirs, "user_config_dir", lambda _: str(tmp_path))
 
-    shared = tmp_path / "latex"
+    shared = tmp_path / "content"
     # A single section definition, never duplicated for English: only the
     # translated body file lives under a sibling en/ directory.
     _write(
@@ -60,7 +60,7 @@ def test_show_paths(working_dir: Path, capsys: CaptureFixture[str]) -> None:
     main(("show", "paths"))
 
     out = capsys.readouterr().out.splitlines()
-    assert out == [str(working_dir.parent.parent / "latex/i18n-demo/hello.md")]
+    assert out == [str(working_dir.parent.parent / "content/i18n-demo/hello.md")]
 
 
 def test_section_flavors(working_dir: Path, capsys: CaptureFixture[str]) -> None:
@@ -85,7 +85,7 @@ def test_missing_en_clean(working_dir: Path, capsys: CaptureFixture[str]) -> Non
 def test_missing_en_reports_missing_file(
     working_dir: Path, capsys: CaptureFixture[str]
 ) -> None:
-    (working_dir.parent.parent / "latex/i18n-demo/en/hello.md").unlink()
+    (working_dir.parent.parent / "content/i18n-demo/en/hello.md").unlink()
 
     main(("i18n", "missing-en"))
 
@@ -115,7 +115,7 @@ def test_missing_en_reports_missing_translation_key(
 def test_missing_en_reports_untranslated_plain_string(
     working_dir: Path, capsys: CaptureFixture[str]
 ) -> None:
-    section_path = working_dir.parent.parent / "latex/i18n-demo/i18n-demo.yml"
+    section_path = working_dir.parent.parent / "content/i18n-demo/i18n-demo.yml"
     section_path.write_text(
         section_path.read_text(encoding="utf8").replace(
             "title:\n  fr: Section de démo\n  en: Demo section\n",

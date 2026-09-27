@@ -25,7 +25,7 @@ def _repo(tmp_path: Path) -> tuple[Path, Path]:
     """A repo with a shared section and a local deck-local file, both bilingual.
 
     Returns:
-        (local_latex_dir, shared_latex_dir)
+        (local_content_dir, shared_content_dir)
     """
     shared = tmp_path / "shared"
     local = tmp_path / "local"

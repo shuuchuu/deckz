@@ -39,8 +39,8 @@ class Parser(ParserProtocol):
 
     def __init__(
         self,
-        local_latex_dir: Path,
-        shared_latex_dir: Path,
+        local_content_dir: Path,
+        shared_content_dir: Path,
         file_extensions: Iterable[str],
         lang: Lang = "fr",
         *,
@@ -49,9 +49,9 @@ class Parser(ParserProtocol):
         """Initialize an instance with the necessary path information.
 
         Args:
-            local_latex_dir: Path to the local latex directory. Used during the \
+            local_content_dir: Path to the local content directory. Used during the \
                 includes resolving process
-            shared_latex_dir: Path to the shared latex directory. Used during the \
+            shared_content_dir: Path to the shared content directory. Used during the \
                 includes resolving process
             file_extensions: Extensions to try, in order, when resolving a file \
                 include (e.g. `(".md", ".typ")` to prefer a Markdown file \
@@ -66,8 +66,8 @@ class Parser(ParserProtocol):
                 precisely to report the translation gaps that would \
                 otherwise make a real build fail.
         """
-        self._local_latex_dir = local_latex_dir
-        self._shared_latex_dir = shared_latex_dir
+        self._local_content_dir = local_content_dir
+        self._shared_content_dir = shared_content_dir
         self._file_extensions = tuple(file_extensions)
         self._lang = lang
         self._lenient = lenient
@@ -129,7 +129,7 @@ class Parser(ParserProtocol):
         """Build a section from every file physically present in its directory.
 
         Args:
-            section: Shared/latex-relative section id, e.g. "python/basics".
+            section: Shared/content-relative section id, e.g. "python/basics".
 
         Returns:
             The built section.
@@ -137,7 +137,7 @@ class Parser(ParserProtocol):
         return self._all_files_section(UnresolvedPath(PurePath(section)))
 
     def _all_files_section(self, unresolved_path: UnresolvedPath) -> Section:
-        section_dir = self._shared_latex_dir / unresolved_path
+        section_dir = self._shared_content_dir / unresolved_path
         section = Section(
             title=None,
             unresolved_path=unresolved_path,
@@ -187,14 +187,14 @@ class Parser(ParserProtocol):
         ]
         return section
 
-    def from_file(self, latex: str) -> Deck:
+    def from_file(self, path: str) -> Deck:
         deck = Deck(
             name="deck",
             parts=self._parse_parts(
                 [
                     PartDefinition.model_construct(
                         name=PartName("part_name"),
-                        sections=[FileInclude(path=IncludePath(PurePath(latex)))],
+                        sections=[FileInclude(path=IncludePath(PurePath(path)))],
                     )
                 ]
             ),
@@ -403,8 +403,8 @@ class Parser(ParserProtocol):
         *,
         lang_aware: bool = True,
     ) -> ResolvedPath | None:
-        local_path = self._local_latex_dir / unresolved_path
-        shared_path = self._shared_latex_dir / unresolved_path
+        local_path = self._local_content_dir / unresolved_path
+        shared_path = self._shared_content_dir / unresolved_path
         existence_tester = Path.is_file if resolve_target == "file" else Path.is_dir
         if lang_aware and resolve_target == "file" and self._lang == "en":
             # No fr fallback: a missing en/ sibling under --en must fail loudly

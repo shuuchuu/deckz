@@ -12,7 +12,7 @@ def section_flavors(section: str, /, *, workdir: Path = Path()) -> None:
     without opening the yml file itself.
 
     Args:
-        section: Shared/latex-relative section id, e.g. python/basics
+        section: Shared/content-relative section id, e.g. python/basics
         workdir: Path to move into before running the command
 
     """
@@ -20,7 +20,7 @@ def section_flavors(section: str, /, *, workdir: Path = Path()) -> None:
     from ..configuring.settings import GlobalSettings
 
     settings = GlobalSettings.from_yaml(workdir)
-    section_dir = settings.paths.latex_dir / section
+    section_dir = settings.paths.content_dir / section
     yml_path = section_dir / f"{section_dir.name}.yml"
     for name in flavor_names(yml_path):
         print(name)

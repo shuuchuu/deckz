@@ -13,8 +13,8 @@ from .flavor_files import FlavorFilesEditor, RenameMap, SectionEdit
 class FlavorRenamer:
     """Rename a section's flavor and rewrite every reference to it."""
 
-    def __init__(self, git_dir: Path, shared_latex_dir: Path) -> None:
-        self._editor = FlavorFilesEditor(git_dir, shared_latex_dir)
+    def __init__(self, git_dir: Path, shared_content_dir: Path) -> None:
+        self._editor = FlavorFilesEditor(git_dir, shared_content_dir)
 
     def rename(
         self,
@@ -46,10 +46,10 @@ class FlavorRenamer:
         if old == new:
             return False
 
-        latex_directories = self._editor.latex_directories()
-        definitions = self._editor.section_definitions(latex_directories)
+        content_directories = self._editor.content_directories()
+        definitions = self._editor.section_definitions(content_directories)
         section_path, definition = self._find_section(
-            section, definitions, latex_directories
+            section, definitions, content_directories
         )
 
         names = {flavor.name for flavor in definition.flavors}
@@ -66,13 +66,13 @@ class FlavorRenamer:
         rename_map: RenameMap = {section: {old: new}}
         self._editor.rewrite_section_file(
             section_path,
-            latex_directories,
+            content_directories,
             rename_map,
             edit=self._rename_flavor(section, old, new),
         )
         for path in definitions:
             if path != section_path:
-                self._editor.rewrite_section_file(path, latex_directories, rename_map)
+                self._editor.rewrite_section_file(path, content_directories, rename_map)
         self._editor.rewrite_deck_files(rename_map)
 
         return True
@@ -81,10 +81,10 @@ class FlavorRenamer:
         self,
         section: UnresolvedPath,
         definitions: dict[Path, SectionDefinition],
-        latex_directories: list[Path],
+        content_directories: list[Path],
     ) -> tuple[Path, SectionDefinition]:
         for path, definition in definitions.items():
-            if self._editor.unresolved_path(path, latex_directories) == section:
+            if self._editor.unresolved_path(path, content_directories) == section:
                 return path, definition
         msg = f"section {section} not found"
         raise SectionNotFoundError(msg)

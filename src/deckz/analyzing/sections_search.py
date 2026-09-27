@@ -42,7 +42,7 @@ def resolved_files(deck: Deck) -> set[ResolvedPath]:
 
 
 def _section_flavor_deck(
-    shared_latex_dir: Path,
+    shared_content_dir: Path,
     file_extensions: Iterable[str],
     section: str,
     flavor: FlavorName,
@@ -50,15 +50,15 @@ def _section_flavor_deck(
     from ..components.parser import Parser
 
     parser = Parser(
-        local_latex_dir=shared_latex_dir,
-        shared_latex_dir=shared_latex_dir,
+        local_content_dir=shared_content_dir,
+        shared_content_dir=shared_content_dir,
         file_extensions=file_extensions,
     )
     return parser.from_section(section, flavor)
 
 
 def section_files(
-    shared_latex_dir: Path,
+    shared_content_dir: Path,
     file_extensions: Iterable[str],
     section: str,
     flavor: FlavorName,
@@ -69,16 +69,16 @@ def section_files(
     that includes `$<section>@<flavor>`.
 
     Args:
-        shared_latex_dir: Path to the shared latex directory.
+        shared_content_dir: Path to the shared content directory.
         file_extensions: Extensions to try, in order, when resolving files.
-        section: Shared/latex-relative section id, e.g. "python/basics".
+        section: Shared/content-relative section id, e.g. "python/basics".
         flavor: Flavor to resolve.
 
     Returns:
         The set of resolved file paths.
     """
     return resolved_files(
-        _section_flavor_deck(shared_latex_dir, file_extensions, section, flavor)
+        _section_flavor_deck(shared_content_dir, file_extensions, section, flavor)
     )
 
 
@@ -87,7 +87,7 @@ class SectionTitleMatch:
     """A section whose yml `title` or `default_titles` matched a keyword."""
 
     section: str
-    """Shared/latex-relative section id, e.g. "python/basics"."""
+    """Shared/content-relative section id, e.g. "python/basics"."""
 
     title: str
     """The matching title."""
@@ -98,7 +98,7 @@ class FrameTitleMatch:
     """A frame whose title matched a keyword."""
 
     section: str
-    """Shared/latex-relative id of the section owning the file, e.g. \
+    """Shared/content-relative id of the section owning the file, e.g. \
     "python/basics". Check its yml for the flavor(s) that include `file`."""
 
     file: Path
@@ -140,7 +140,7 @@ def _frame_title_matches(
 
 
 def search_sections(
-    shared_latex_dir: Path, keywords: Sequence[str]
+    shared_content_dir: Path, keywords: Sequence[str]
 ) -> tuple[list[SectionTitleMatch], list[FrameTitleMatch]]:
     """Search fr shared sections for KEYWORDS (OR'd, case-insensitive substring).
 
@@ -149,7 +149,7 @@ def search_sections(
     bodies, code or comments.
 
     Args:
-        shared_latex_dir: Path to the shared latex directory.
+        shared_content_dir: Path to the shared content directory.
         keywords: Keywords to search for.
 
     Returns:
@@ -158,8 +158,8 @@ def search_sections(
     """
     section_matches: list[SectionTitleMatch] = []
     frame_matches: list[FrameTitleMatch] = []
-    for section in shared_section_ids(shared_latex_dir):
-        section_dir = shared_latex_dir / section
+    for section in shared_section_ids(shared_content_dir):
+        section_dir = shared_content_dir / section
         yml_path = section_dir / f"{section_dir.name}.yml"
 
         data = load_yaml(yml_path) or {}

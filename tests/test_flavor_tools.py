@@ -21,7 +21,7 @@ def repo(tmp_path: Path, monkeypatch: Any) -> Path:
     monkeypatch.setattr(appdirs, "user_config_dir", lambda _: str(tmp_path))
     monkeypatch.chdir(tmp_path)
 
-    shared = tmp_path / "latex"
+    shared = tmp_path / "content"
     _write(
         shared / "greeting" / "greeting.yml",
         "title: Greeting\n"
@@ -53,7 +53,7 @@ def test_flavor_deduplicate_merges_identical_flavors_with_markdown_content(
 ) -> None:
     main(("flavor", "deduplicate"))
 
-    section_data = load_yaml(repo / "latex" / "greeting" / "greeting.yml")
+    section_data = load_yaml(repo / "content" / "greeting" / "greeting.yml")
     flavor_names = [flavor["name"] for flavor in section_data["flavors"]]
     assert flavor_names == ["casual"]
 
@@ -62,7 +62,7 @@ def test_flavor_deduplicate_merges_identical_flavors_with_markdown_content(
 
     # The Markdown content file itself is untouched: deduplication only ever
     # rewrites yaml, never file bodies.
-    assert (repo / "latex" / "greeting" / "hello.md").read_text(
+    assert (repo / "content" / "greeting" / "hello.md").read_text(
         encoding="utf8"
     ) == "# Hello\n\nHi!\n"
 
@@ -70,7 +70,7 @@ def test_flavor_deduplicate_merges_identical_flavors_with_markdown_content(
 def test_flavor_rename_rewrites_usages_with_markdown_content(repo: Path) -> None:
     main(("flavor", "rename", "greeting", "casual", "friendly"))
 
-    section_data = load_yaml(repo / "latex" / "greeting" / "greeting.yml")
+    section_data = load_yaml(repo / "content" / "greeting" / "greeting.yml")
     flavor_names = [flavor["name"] for flavor in section_data["flavors"]]
     assert flavor_names == ["friendly", "formal"]
 

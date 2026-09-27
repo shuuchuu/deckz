@@ -12,7 +12,7 @@ class FlavorsMerge:
     """A group of identical flavors found in a single section."""
 
     section: UnresolvedPath
-    """Path of the section the flavors belong to, relative to its latex directory."""
+    """Path of the section the flavors belong to, relative to its content directory."""
 
     kept: FlavorName
     """Name of the flavor that was kept."""
@@ -25,8 +25,8 @@ class FlavorsMerge:
 class FlavorsMerger:
     """Find and merge sections' flavors that are identical up to their name."""
 
-    def __init__(self, git_dir: Path, shared_latex_dir: Path) -> None:
-        self._editor = FlavorFilesEditor(git_dir, shared_latex_dir)
+    def __init__(self, git_dir: Path, shared_content_dir: Path) -> None:
+        self._editor = FlavorFilesEditor(git_dir, shared_content_dir)
 
     def merge(self, *, dry_run: bool = False) -> list[FlavorsMerge]:
         """Find identical flavors and, unless `dry_run`, merge them.
@@ -42,13 +42,13 @@ class FlavorsMerger:
         Returns:
             The list of merges found (and applied, unless `dry_run`).
         """
-        latex_directories = self._editor.latex_directories()
-        definitions = self._editor.section_definitions(latex_directories)
+        content_directories = self._editor.content_directories()
+        definitions = self._editor.section_definitions(content_directories)
 
         rename_map: dict[UnresolvedPath, dict[FlavorName, FlavorName]] = {}
         merges: list[FlavorsMerge] = []
         for path, definition in definitions.items():
-            unresolved_section = self._editor.unresolved_path(path, latex_directories)
+            unresolved_section = self._editor.unresolved_path(path, content_directories)
             renames = self._find_duplicates(definition.flavors)
             if not renames:
                 continue
@@ -62,7 +62,7 @@ class FlavorsMerger:
             for path in definitions:
                 self._editor.rewrite_section_file(
                     path,
-                    latex_directories,
+                    content_directories,
                     rename_map,
                     edit=self._delete_merged_flavors(rename_map),
                 )

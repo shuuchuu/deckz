@@ -37,7 +37,7 @@ class ParserProtocol(Protocol):
 
     def from_section(self, section: str, flavor: "FlavorName") -> "Deck": ...
 
-    def from_file(self, latex: str) -> "Deck": ...
+    def from_file(self, path: str) -> "Deck": ...
 
     def all_files_section(self, section: str) -> "Section":
         """Build a section from every file physically present in its directory.
@@ -49,7 +49,7 @@ class ParserProtocol(Protocol):
         lookup as any other file.
 
         Args:
-            section: Shared/latex-relative section id, e.g. "python/basics".
+            section: Shared/content-relative section id, e.g. "python/basics".
 
         Returns:
             The built section.

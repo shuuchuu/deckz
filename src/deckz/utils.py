@@ -215,36 +215,36 @@ def all_deck_settings(git_dir: Path) -> Iterator["DeckSettings"]:
         yield DeckSettings.from_yaml(targets_path.parent)
 
 
-def section_files(latex_dirs: Iterator[Path]) -> Iterator[Path]:
-    for latex_dir in latex_dirs:
-        yield from latex_dir.rglob("*.yml")
+def section_files(content_dirs: Iterator[Path]) -> Iterator[Path]:
+    for content_dir in content_dirs:
+        yield from content_dir.rglob("*.yml")
 
 
-def latex_dirs(git_dir: Path, latex_dir: Path) -> Iterator[Path]:
+def content_dirs(git_dir: Path, content_dir: Path) -> Iterator[Path]:
     from itertools import chain
 
     return chain(
-        [latex_dir],
-        (settings.paths.local_latex_dir for settings in all_deck_settings(git_dir)),
+        [content_dir],
+        (settings.paths.local_content_dir for settings in all_deck_settings(git_dir)),
     )
 
 
-def shared_section_ids(latex_dir: Path) -> list[str]:
+def shared_section_ids(content_dir: Path) -> list[str]:
     """List every shared section, as ids usable with `Parser`/`from_section`.
 
     A directory counts as a section when its own name matches the stem of a \
     `.yml` file directly inside it (e.g. `about/about.yml`).
 
     Args:
-        latex_dir: Path to the shared latex directory.
+        content_dir: Path to the shared content directory.
 
     Returns:
-        The sorted list of latex-relative section ids, e.g. "about" or \
+        The sorted list of content-relative section ids, e.g. "about" or \
         "python/basics".
     """
     return sorted(
-        yml_path.parent.relative_to(latex_dir).as_posix()
-        for yml_path in latex_dir.rglob("*.yml")
+        yml_path.parent.relative_to(content_dir).as_posix()
+        for yml_path in content_dir.rglob("*.yml")
         if yml_path.parent.name == yml_path.stem
     )
 

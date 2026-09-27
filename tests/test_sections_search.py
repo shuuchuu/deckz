@@ -11,8 +11,8 @@ def _write(path: Path, content: str) -> None:
 
 
 @fixture
-def shared_latex_dir(tmp_path: Path) -> Path:
-    shared = tmp_path / "shared" / "latex"
+def shared_content_dir(tmp_path: Path) -> Path:
+    shared = tmp_path / "shared" / "content"
     _write(
         shared / "greetings" / "greetings.yml",
         "title: Greetings\n"
@@ -33,52 +33,54 @@ def shared_latex_dir(tmp_path: Path) -> Path:
     return shared
 
 
-def test_search_sections_title_match(shared_latex_dir: Path) -> None:
-    section_matches, frame_matches = search_sections(shared_latex_dir, ["greetings"])
+def test_search_sections_title_match(shared_content_dir: Path) -> None:
+    section_matches, frame_matches = search_sections(shared_content_dir, ["greetings"])
     assert [m.section for m in section_matches] == ["greetings"]
     assert not frame_matches
 
 
 def test_search_sections_frame_title_match_case_insensitive(
-    shared_latex_dir: Path,
+    shared_content_dir: Path,
 ) -> None:
-    section_matches, frame_matches = search_sections(shared_latex_dir, ["BONJOUR"])
+    section_matches, frame_matches = search_sections(shared_content_dir, ["BONJOUR"])
     assert not section_matches
     assert [m.frame_title for m in frame_matches] == ["Bonjour"]
     assert frame_matches[0].section == "greetings"
 
 
 def test_search_sections_does_not_recurse_into_en_sibling(
-    shared_latex_dir: Path,
+    shared_content_dir: Path,
 ) -> None:
     # "Hello" only exists as an English frame title, in the non-canonical
     # en/hello.md sibling; frame search only globs the section's own
     # directory (non-recursively), so it must not turn up here.
-    section_matches, frame_matches = search_sections(shared_latex_dir, ["hello"])
+    section_matches, frame_matches = search_sections(shared_content_dir, ["hello"])
     assert not section_matches
     assert not frame_matches
 
 
-def test_search_sections_or_across_keywords(shared_latex_dir: Path) -> None:
-    _, frame_matches = search_sections(shared_latex_dir, ["nonexistent", "revoir"])
+def test_search_sections_or_across_keywords(shared_content_dir: Path) -> None:
+    _, frame_matches = search_sections(shared_content_dir, ["nonexistent", "revoir"])
     assert [m.frame_title for m in frame_matches] == ["Au revoir"]
 
 
-def test_search_sections_no_match(shared_latex_dir: Path) -> None:
-    section_matches, frame_matches = search_sections(shared_latex_dir, ["nonexistent"])
+def test_search_sections_no_match(shared_content_dir: Path) -> None:
+    section_matches, frame_matches = search_sections(
+        shared_content_dir, ["nonexistent"]
+    )
     assert not section_matches
     assert not frame_matches
 
 
-def test_flavor_names(shared_latex_dir: Path) -> None:
-    assert flavor_names(shared_latex_dir / "greetings" / "greetings.yml") == ["fr"]
+def test_flavor_names(shared_content_dir: Path) -> None:
+    assert flavor_names(shared_content_dir / "greetings" / "greetings.yml") == ["fr"]
 
 
-def test_search_sections_markdown_heading_match(shared_latex_dir: Path) -> None:
+def test_search_sections_markdown_heading_match(shared_content_dir: Path) -> None:
     _write(
-        shared_latex_dir / "greetings" / "goodbye.md",
+        shared_content_dir / "greetings" / "goodbye.md",
         "# Goodbye\n\nSee you soon!\n",
     )
-    _, frame_matches = search_sections(shared_latex_dir, ["goodbye"])
+    _, frame_matches = search_sections(shared_content_dir, ["goodbye"])
     assert [m.frame_title for m in frame_matches] == ["Goodbye"]
     assert frame_matches[0].file.suffix == ".md"

@@ -15,14 +15,14 @@ from ..models import (
     SectionDefinition,
     UnresolvedPath,
 )
-from ..utils import all_decks, latex_dirs, load_yaml
+from ..utils import all_decks, content_dirs, load_yaml
 
 
 class SectionsAnalyzer:
     def __init__(
-        self, shared_latex_dir: Path, git_dir: Path, file_extensions: Iterable[str]
+        self, shared_content_dir: Path, git_dir: Path, file_extensions: Iterable[str]
     ) -> None:
-        self._shared_latex_dir = shared_latex_dir
+        self._shared_content_dir = shared_content_dir
         self._git_dir = git_dir
         self._file_extensions = tuple(file_extensions)
 
@@ -43,9 +43,9 @@ class SectionsAnalyzer:
     def unused_files(self) -> frozenset[Path]:
         return frozenset(
             path
-            for latex_dir in latex_dirs(self._git_dir, self._shared_latex_dir)
+            for content_dir in content_dirs(self._git_dir, self._shared_content_dir)
             for file_extension in self._file_extensions
-            for path in latex_dir.rglob(f"*{file_extension}")
+            for path in content_dir.rglob(f"*{file_extension}")
             if ResolvedPath(path.resolve()) not in self._used_files
         )
 
@@ -72,11 +72,11 @@ class SectionsAnalyzer:
     @cached_property
     def _shared_sections(self) -> dict[UnresolvedPath, SectionDefinition]:
         result = {}
-        for path in self._shared_latex_dir.rglob("*.yml"):
+        for path in self._shared_content_dir.rglob("*.yml"):
             content = load_yaml(path)
-            result[UnresolvedPath(path.parent.relative_to(self._shared_latex_dir))] = (
-                SectionDefinition.model_validate(content)
-            )
+            result[
+                UnresolvedPath(path.parent.relative_to(self._shared_content_dir))
+            ] = SectionDefinition.model_validate(content)
         return result
 
     @cached_property
@@ -88,7 +88,7 @@ class SectionsAnalyzer:
         Returns:
             Nested dictionaries: deck path -> part name -> section path -> flavor.
         """
-        section_stats_processor = _SectionsUsageNodeVisitor(self._shared_latex_dir)
+        section_stats_processor = _SectionsUsageNodeVisitor(self._shared_content_dir)
         return {
             deck_path: section_stats_processor.process(deck)
             for deck_path, deck in self._decks.items()
@@ -106,8 +106,8 @@ class SectionsAnalyzer:
 class _SectionsUsageNodeVisitor(
     NodeVisitor[[MutableMapping[UnresolvedPath, MutableSet[FlavorName]]], None]
 ):
-    def __init__(self, shared_latex_dir: Path) -> None:
-        self._shared_latex_dir = shared_latex_dir
+    def __init__(self, shared_content_dir: Path) -> None:
+        self._shared_content_dir = shared_content_dir
 
     def process(
         self, deck: Deck
@@ -142,7 +142,7 @@ class _SectionsUsageNodeVisitor(
         section: Section,
         section_stats: MutableMapping[UnresolvedPath, MutableSet[FlavorName]],
     ) -> None:
-        if section.resolved_path.is_relative_to(self._shared_latex_dir):
+        if section.resolved_path.is_relative_to(self._shared_content_dir):
             if section.unresolved_path not in section_stats:
                 section_stats[section.unresolved_path] = set()
             section_stats[section.unresolved_path].add(section.flavor)

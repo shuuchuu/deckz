@@ -52,7 +52,7 @@ def test_generate_agent_notes(capsys: Any) -> None:
     main("generate-agent-notes")
 
     output = capsys.readouterr().out
-    assert "deckz run file LATEX" in output
+    assert "deckz run file PATH" in output
     assert "deckz run shared" in output
 
 
@@ -178,27 +178,27 @@ def test_clean_all_removes_run_scratch_dir(working_dir: Path) -> None:
     assert not run_scratch_dir.exists()
 
 
-def test_clean_latex_dry_run(working_dir: Path) -> None:
-    shared_unused_path = working_dir.parent.parent / "latex" / "questions.md"
-    local_unused_path = working_dir / "latex" / "orphan.md"
+def test_clean_content_dry_run(working_dir: Path) -> None:
+    shared_unused_path = working_dir.parent.parent / "content" / "questions.md"
+    local_unused_path = working_dir / "content" / "orphan.md"
     assert shared_unused_path.exists()
     assert local_unused_path.exists()
 
-    main(("clean", "latex", "--dry-run"))
+    main(("clean", "content", "--dry-run"))
 
     assert shared_unused_path.exists()
     assert local_unused_path.exists()
 
 
-def test_clean_latex(working_dir: Path) -> None:
-    shared_unused_path = working_dir.parent.parent / "latex" / "questions.md"
-    local_unused_path = working_dir / "latex" / "orphan.md"
-    used_path = working_dir / "latex" / "about.md"
+def test_clean_content(working_dir: Path) -> None:
+    shared_unused_path = working_dir.parent.parent / "content" / "questions.md"
+    local_unused_path = working_dir / "content" / "orphan.md"
+    used_path = working_dir / "content" / "about.md"
     assert shared_unused_path.exists()
     assert local_unused_path.exists()
     assert used_path.exists()
 
-    main(("clean", "latex"))
+    main(("clean", "content"))
 
     assert not shared_unused_path.exists()
     assert not local_unused_path.exists()
@@ -206,7 +206,7 @@ def test_clean_latex(working_dir: Path) -> None:
 
 
 def test_flavor_deduplicate_dry_run(working_dir: Path) -> None:
-    section_path = working_dir / "latex" / "first-section" / "first-section.yml"
+    section_path = working_dir / "content" / "first-section" / "first-section.yml"
     deck_path = working_dir / "deck.yml"
 
     main(("flavor", "deduplicate", "--dry-run"))
@@ -216,7 +216,7 @@ def test_flavor_deduplicate_dry_run(working_dir: Path) -> None:
 
 
 def test_flavor_deduplicate(working_dir: Path) -> None:
-    section_path = working_dir / "latex" / "first-section" / "first-section.yml"
+    section_path = working_dir / "content" / "first-section" / "first-section.yml"
     deck_path = working_dir / "deck.yml"
 
     main(("flavor", "deduplicate"))
@@ -232,7 +232,7 @@ def test_flavor_deduplicate(working_dir: Path) -> None:
 
 
 def test_flavor_rename_dry_run(working_dir: Path) -> None:
-    section_path = working_dir / "latex" / "first-section" / "first-section.yml"
+    section_path = working_dir / "content" / "first-section" / "first-section.yml"
     deck_path = working_dir / "deck.yml"
 
     main(("flavor", "rename", "first-section", "standard", "extended", "--dry-run"))
@@ -242,7 +242,7 @@ def test_flavor_rename_dry_run(working_dir: Path) -> None:
 
 
 def test_flavor_rename(working_dir: Path) -> None:
-    section_path = working_dir / "latex" / "first-section" / "first-section.yml"
+    section_path = working_dir / "content" / "first-section" / "first-section.yml"
     deck_path = working_dir / "deck.yml"
 
     main(("flavor", "rename", "first-section", "standard", "extended"))
@@ -301,7 +301,7 @@ def test_run_en(bilingual_dir: Path) -> None:
 def test_run_en_missing_file_fails_loudly(
     bilingual_dir: Path, caplog: Any, capsys: Any
 ) -> None:
-    (bilingual_dir / "latex" / "en" / "hello.md").unlink()
+    (bilingual_dir / "content" / "en" / "hello.md").unlink()
 
     with raises(SystemExit) as exc_info:
         main(("run", "--en"))

@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from ruamel.yaml import YAML
 
 from ..models import FlavorName, SectionDefinition, UnresolvedPath
-from ..utils import latex_dirs, load_yaml, section_files
+from ..utils import content_dirs, load_yaml, section_files
 
 RenameMap = Mapping[UnresolvedPath, Mapping[FlavorName, FlavorName]]
 """For each section, the flavor names to rewrite references of, to their new name."""
@@ -27,21 +27,21 @@ class FlavorFilesEditor:
     wherever it is defined, to point to a new flavor name instead.
     """
 
-    def __init__(self, git_dir: Path, shared_latex_dir: Path) -> None:
+    def __init__(self, git_dir: Path, shared_content_dir: Path) -> None:
         self._git_dir = git_dir
-        self._shared_latex_dir = shared_latex_dir
+        self._shared_content_dir = shared_content_dir
         self._yaml = YAML()
         self._yaml.indent(mapping=2, sequence=4, offset=2)
 
-    def latex_directories(self) -> list[Path]:
-        return list(latex_dirs(self._git_dir, self._shared_latex_dir))
+    def content_directories(self) -> list[Path]:
+        return list(content_dirs(self._git_dir, self._shared_content_dir))
 
     def section_definitions(
-        self, latex_directories: list[Path]
+        self, content_directories: list[Path]
     ) -> dict[Path, SectionDefinition]:
         return {
             path: definition
-            for path in section_files(iter(latex_directories))
+            for path in section_files(iter(content_directories))
             if (definition := self._as_section_definition(path)) is not None
         }
 
@@ -55,22 +55,22 @@ class FlavorFilesEditor:
             return None
 
     @staticmethod
-    def unresolved_path(path: Path, latex_directories: list[Path]) -> UnresolvedPath:
-        for latex_dir in latex_directories:
-            if path.is_relative_to(latex_dir):
-                return UnresolvedPath(path.parent.relative_to(latex_dir))
-        msg = f"{path} is not located under a known latex directory"
+    def unresolved_path(path: Path, content_directories: list[Path]) -> UnresolvedPath:
+        for content_dir in content_directories:
+            if path.is_relative_to(content_dir):
+                return UnresolvedPath(path.parent.relative_to(content_dir))
+        msg = f"{path} is not located under a known content directory"
         raise ValueError(msg)
 
     def rewrite_section_file(
         self,
         path: Path,
-        latex_directories: list[Path],
+        content_directories: list[Path],
         rename_map: RenameMap,
         *,
         edit: SectionEdit | None = None,
     ) -> None:
-        unresolved_section = self.unresolved_path(path, latex_directories)
+        unresolved_section = self.unresolved_path(path, content_directories)
         with path.open(encoding="utf8") as fh:
             data = self._yaml.load(fh)
 

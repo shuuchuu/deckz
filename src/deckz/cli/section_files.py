@@ -13,7 +13,7 @@ def section_files(section: str, flavor: str, /, *, workdir: Path = Path()) -> No
     line, sorted. Fails loudly if FLAVOR does not exist for SECTION.
 
     Args:
-        section: Shared/latex-relative section id, e.g. python/basics
+        section: Shared/content-relative section id, e.g. python/basics
         flavor: Flavor name to resolve
         workdir: Path to move into before running the command
 
@@ -24,7 +24,7 @@ def section_files(section: str, flavor: str, /, *, workdir: Path = Path()) -> No
     settings = GlobalSettings.from_yaml(workdir)
     for path in sorted(
         compute(
-            settings.paths.latex_dir,
+            settings.paths.content_dir,
             settings.file_extensions,
             section,
             FlavorName(flavor),

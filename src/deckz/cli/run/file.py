@@ -5,7 +5,7 @@ from . import app
 
 @app.command(name="file")
 def run_file(
-    latex: str,
+    path: str,
     /,
     *,
     handout: bool = True,
@@ -16,15 +16,15 @@ def run_file(
     open: bool = True,  # ruff: ignore[builtin-argument-shadowing]
     workdir: Path = Path(),
 ) -> None:
-    """Compile a single LaTeX file.
+    """Compile a single content file.
 
     Output is written to a dedicated scratch directory under \
     `<git_dir>/.run/file/`, not the current deck's own build/pdf \
     directories, so repeated previews don't clutter a real deck's output.
 
     Args:
-        latex: File to compile. Its path should be specified relative to \
-            latex/
+        path: File to compile, relative to content/ and without its \
+            extension
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
@@ -43,12 +43,12 @@ def run_file(
     from .._presentation import RichProgress, open_path
 
     logger = getLogger(__name__)
-    settings = preview_settings(DeckSettings.from_yaml(workdir), "file", latex)
+    settings = preview_settings(DeckSettings.from_yaml(workdir), "file", path)
 
     if watch:
         from ...pipelines import watch as _watch
 
-        logger.info(f"Watching {latex}, the latex, assets and user directories")
+        logger.info(f"Watching {path}, the content, assets and user directories")
         logger.info(
             f"Output directory located at [link=file://{settings.paths.pdf_dir}]"
             f"{settings.paths.pdf_dir}[/link]",
@@ -56,14 +56,14 @@ def run_file(
         )
         if open:
             open_path(settings.paths.pdf_dir)
-        to_watch = [settings.paths.latex_dir, settings.paths.assets_dir]
+        to_watch = [settings.paths.content_dir, settings.paths.assets_dir]
         if settings.paths.user_config_dir.exists():
             to_watch.append(settings.paths.user_config_dir)
         _watch(
             frozenset(to_watch),
             frozenset([settings.paths.pdf_dir, settings.paths.build_dir]),
             _run_file,
-            latex=latex,
+            path=path,
             settings=settings,
             lang="en" if en else "fr",
             build_handout=handout,
@@ -74,7 +74,7 @@ def run_file(
         return
 
     _run_file(
-        latex=latex,
+        path=path,
         settings=settings,
         lang="en" if en else "fr",
         build_handout=handout,

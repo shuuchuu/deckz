@@ -52,7 +52,7 @@ def run_section(
     if watch:
         from ...pipelines import watch as _watch
 
-        logger.info("Watching the latex, assets, current and user directories")
+        logger.info("Watching the content, assets, current and user directories")
         logger.info(
             f"Output directory located at [link=file://{settings.paths.pdf_dir}]"
             f"{settings.paths.pdf_dir}[/link]",
@@ -61,7 +61,7 @@ def run_section(
         if open:
             open_path(settings.paths.pdf_dir)
         to_watch = [
-            settings.paths.latex_dir,
+            settings.paths.content_dir,
             settings.paths.assets_dir,
             settings.paths.current_dir,
         ]

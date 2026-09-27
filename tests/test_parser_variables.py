@@ -24,7 +24,7 @@ def _repo(tmp_path: Path) -> tuple[Path, Path]:
     own `variables_to_define`.
 
     Returns:
-        (local_latex_dir, shared_latex_dir)
+        (local_content_dir, shared_content_dir)
     """
     shared = tmp_path / "shared"
     local = tmp_path / "local"

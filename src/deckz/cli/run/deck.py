@@ -53,9 +53,9 @@ def run(
     from ...pipelines import watch as _watch
 
     logger = getLogger(__name__)
-    logger.info("Watching the latex, assets, current and user directories")
+    logger.info("Watching the content, assets, current and user directories")
     to_watch = [
-        settings.paths.latex_dir,
+        settings.paths.content_dir,
         settings.paths.assets_dir,
         settings.paths.current_dir,
     ]

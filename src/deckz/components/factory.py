@@ -96,8 +96,8 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
         from .parser import Parser
 
         return Parser(
-            local_latex_dir=self._settings.paths.local_latex_dir,
-            shared_latex_dir=self._settings.paths.latex_dir,
+            local_content_dir=self._settings.paths.local_content_dir,
+            shared_content_dir=self._settings.paths.content_dir,
             file_extensions=self._settings.file_extensions,
             lang=self._lang,
         )
@@ -141,7 +141,7 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
             basedirs=basedirs
             if basedirs is not None
             else (
-                self._settings.paths.latex_dir,
+                self._settings.paths.content_dir,
                 assets_dir,
                 self._settings.paths.current_dir,
             ),

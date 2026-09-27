@@ -69,7 +69,7 @@ def run_scratch_dir(git_dir: Path, name: str) -> Path:
 def preview_settings(settings: DeckSettings, *parts: str) -> DeckSettings:
     """Copy of a deck's settings writing to a `deckz run file`/`section` scratch tree.
 
-    The deck itself (its `current_dir`, local latex dir, variables) stays \
+    The deck itself (its `current_dir`, local content dir, variables) stays \
     the same: only the build and PDF directories move, under \
     `<git_dir>/.run/<parts...>/`, so repeated previews don't clutter the \
     deck's own output.
@@ -87,7 +87,7 @@ def preview_settings(settings: DeckSettings, *parts: str) -> DeckSettings:
 
 
 def build_shared_deck(
-    latex_dir: Path,
+    content_dir: Path,
     file_extensions: Iterable[str],
     lang: Lang,
     *,
@@ -96,7 +96,7 @@ def build_shared_deck(
     """Build a deck containing every shared section, expanded to all its files.
 
     Args:
-        latex_dir: Path to the shared latex directory.
+        content_dir: Path to the shared content directory.
         file_extensions: Extensions to try, in order, when resolving files.
         lang: Language to build the deck in.
         name: Name given to the built deck.
@@ -105,8 +105,8 @@ def build_shared_deck(
         The built deck.
     """
     parser = Parser(
-        local_latex_dir=latex_dir,
-        shared_latex_dir=latex_dir,
+        local_content_dir=content_dir,
+        shared_content_dir=content_dir,
         file_extensions=file_extensions,
         lang=lang,
     )
@@ -116,7 +116,7 @@ def build_shared_deck(
             _part_name(section_id): Part(
                 title=None, nodes=[parser.all_files_section(section_id)]
             )
-            for section_id in shared_section_ids(latex_dir)
+            for section_id in shared_section_ids(content_dir)
         },
     )
     parser.validate(deck)
@@ -125,7 +125,7 @@ def build_shared_deck(
 
 def build_all_deck(
     git_dir: Path,
-    latex_dir: Path,
+    content_dir: Path,
     file_extensions: Iterable[str],
     lang: Lang,
 ) -> Deck:
@@ -137,14 +137,14 @@ def build_all_deck(
 
     Args:
         git_dir: Root of the deckz-managed repository.
-        latex_dir: Path to the shared latex directory.
+        content_dir: Path to the shared content directory.
         file_extensions: Extensions to try, in order, when resolving files.
         lang: Language to build the deck in.
 
     Returns:
         The built deck.
     """
-    deck = build_shared_deck(latex_dir, file_extensions, lang, name="run-all")
+    deck = build_shared_deck(content_dir, file_extensions, lang, name="run-all")
     plain_sections: dict[str, Node] = {
         part.nodes[0].unresolved_path.as_posix(): part.nodes[0]
         for part in deck.parts.values()
@@ -161,7 +161,7 @@ def build_all_deck(
             candidate = parser.all_files_section(section_id)
             overridden = any(
                 node.parsing_error is None
-                and not node.resolved_path.is_relative_to(latex_dir)
+                and not node.resolved_path.is_relative_to(content_dir)
                 for node in candidate.nodes
             )
             if not overridden:

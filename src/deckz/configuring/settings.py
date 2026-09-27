@@ -38,7 +38,7 @@ class GlobalPaths(BaseModel):
     )
     settings: _Path = cast("Path", "{git_dir}/settings.yml")
     assets_dir: _Path = cast("Path", "{git_dir}/assets")
-    latex_dir: _Path = cast("Path", "{git_dir}/latex")
+    content_dir: _Path = cast("Path", "{git_dir}/content")
     templates_dir: _Path = cast("Path", "{git_dir}/templates")
     jinja2_dir: _Path = cast("Path", "{templates_dir}/jinja2")
     jinja2_main_template: _Path = cast("Path", "{jinja2_dir}/main.typ")
@@ -60,7 +60,7 @@ class GlobalPaths(BaseModel):
 class DeckPaths(GlobalPaths):
     build_dir: _Path = cast("Path", "{current_dir}/.build")
     pdf_dir: _Path = cast("Path", "{current_dir}/pdf")
-    local_latex_dir: _Path = cast("Path", "{current_dir}/latex")
+    local_content_dir: _Path = cast("Path", "{current_dir}/content")
     deck_definition: _Path = cast("Path", "{current_dir}/deck.yml")
 
 

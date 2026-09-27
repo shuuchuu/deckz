@@ -165,10 +165,10 @@ def _shared_flavor_contexts(
 ) -> list[tuple[str, FlavorName, str]]:
     from .sections_search import flavor_names
 
-    shared_latex_dir = settings.paths.latex_dir
+    shared_content_dir = settings.paths.content_dir
     contexts: list[tuple[str, FlavorName, str]] = []
-    for section_id in shared_section_ids(shared_latex_dir):
-        yml_path = shared_latex_dir / section_id / f"{Path(section_id).name}.yml"
+    for section_id in shared_section_ids(shared_content_dir):
+        yml_path = shared_content_dir / section_id / f"{Path(section_id).name}.yml"
         for flavor in flavor_names(yml_path):
             contexts.append((section_id, flavor, f"shared:{section_id}@{flavor}"))
     return contexts
@@ -193,13 +193,13 @@ def check_variables(settings: "GlobalSettings", lang: Lang = "fr") -> VariablesR
     acc = _Accumulator()
     renderer = GlobalSettingsFactory(settings).renderer()
     git_dir = settings.paths.git_dir
-    shared_latex_dir = settings.paths.latex_dir
+    shared_content_dir = settings.paths.content_dir
 
     scratch_settings = DeckSettings.from_yaml(check_scratch_dir(git_dir, "variables"))
     shared_base_variables = {**get_variables(scratch_settings, lang), "lang": lang}
     shared_parser = Parser(
-        local_latex_dir=shared_latex_dir,
-        shared_latex_dir=shared_latex_dir,
+        local_content_dir=shared_content_dir,
+        shared_content_dir=shared_content_dir,
         file_extensions=settings.file_extensions,
         lang=lang,
         lenient=True,
@@ -217,8 +217,8 @@ def check_variables(settings: "GlobalSettings", lang: Lang = "fr") -> VariablesR
             deck_settings.paths.deck_definition.parent.relative_to(git_dir)
         )
         deck_parser = Parser(
-            local_latex_dir=deck_settings.paths.local_latex_dir,
-            shared_latex_dir=deck_settings.paths.latex_dir,
+            local_content_dir=deck_settings.paths.local_content_dir,
+            shared_content_dir=deck_settings.paths.content_dir,
             file_extensions=deck_settings.file_extensions,
             lang=lang,
             lenient=True,

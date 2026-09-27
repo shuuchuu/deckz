@@ -35,8 +35,8 @@ def _audit_deck(settings: "DeckSettings") -> Deck:
     from ..components.parser import Parser
 
     parser = Parser(
-        local_latex_dir=settings.paths.local_latex_dir,
-        shared_latex_dir=settings.paths.latex_dir,
+        local_content_dir=settings.paths.local_content_dir,
+        shared_content_dir=settings.paths.content_dir,
         file_extensions=settings.file_extensions,
         lang="fr",
         lenient=True,
