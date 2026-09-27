@@ -39,12 +39,10 @@ def run_section(
     """
     from logging import getLogger
 
-    from typer import launch
-
     from ...checking import preview_settings
     from ...configuring.settings import DeckSettings
     from ...pipelines import run_section as _run_section
-    from .._presentation import RichProgress
+    from .._presentation import RichProgress, open_path
 
     logger = getLogger(__name__)
     settings = preview_settings(
@@ -61,7 +59,7 @@ def run_section(
             extra={"markup": True},
         )
         if open:
-            launch(str(settings.paths.pdf_dir))
+            open_path(settings.paths.pdf_dir)
         to_watch = [
             settings.paths.latex_dir,
             settings.paths.assets_dir,
@@ -100,4 +98,4 @@ def run_section(
         extra={"markup": True},
     )
     if open:
-        launch(str(settings.paths.pdf_dir))
+        open_path(settings.paths.pdf_dir)

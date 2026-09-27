@@ -37,12 +37,10 @@ def run_file(
     """
     from logging import getLogger
 
-    from typer import launch
-
     from ...checking import preview_settings
     from ...configuring.settings import DeckSettings
     from ...pipelines import run_file as _run_file
-    from .._presentation import RichProgress
+    from .._presentation import RichProgress, open_path
 
     logger = getLogger(__name__)
     settings = preview_settings(DeckSettings.from_yaml(workdir), "file", latex)
@@ -57,7 +55,7 @@ def run_file(
             extra={"markup": True},
         )
         if open:
-            launch(str(settings.paths.pdf_dir))
+            open_path(settings.paths.pdf_dir)
         to_watch = [settings.paths.latex_dir, settings.paths.assets_dir]
         if settings.paths.user_config_dir.exists():
             to_watch.append(settings.paths.user_config_dir)
@@ -90,4 +88,4 @@ def run_file(
         extra={"markup": True},
     )
     if open:
-        launch(str(settings.paths.pdf_dir))
+        open_path(settings.paths.pdf_dir)

@@ -6,9 +6,11 @@ itself: it raises errors carrying data and reports progress through a \
 This module is where the CLI turns those into rich widgets.
 """
 
+import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from pathlib import PurePath
+from pathlib import Path, PurePath
+from subprocess import DEVNULL, Popen
 
 from rich.console import Console
 from rich.progress import BarColumn, Progress
@@ -113,3 +115,18 @@ class RichTreeVisitor(NodeVisitor[[UnresolvedPath], tuple[Tree | None, bool]]):
         tree.children.extend(children_trees)
 
         return tree, error
+
+
+def open_path(path: Path) -> None:
+    """Open `path` with the desktop's default application, without waiting for it.
+
+    Args:
+        path: File or directory to open.
+    """
+    if sys.platform == "win32":
+        from os import startfile  # ty: ignore[unresolved-import]
+
+        startfile(path)
+        return
+    command = "open" if sys.platform == "darwin" else "xdg-open"
+    Popen([command, str(path)], stdout=DEVNULL, stderr=DEVNULL, stdin=DEVNULL)

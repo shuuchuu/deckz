@@ -24,7 +24,6 @@ dependencies = [
   "rich >= 14, < 15",
   "ruamel-yaml>=0.18,<1",
   "sendgrid >= 6, < 7",
-  "typer >= 0.13, < 1",
   "typst >= 0.15, < 1",
   "watchfiles >= 1, < 2",
 ]
