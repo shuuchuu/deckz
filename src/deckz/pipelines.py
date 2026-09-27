@@ -170,7 +170,7 @@ def run_shared(
     git_dir = global_settings.paths.git_dir
     GlobalSettingsFactory(global_settings).assets_builder().build_assets()
     settings = DeckSettings.from_yaml(run_scratch_dir(git_dir, "shared"))
-    deck = build_shared_deck(settings.paths.content_dir, settings.file_extensions, lang)
+    deck = build_shared_deck(settings, lang)
     _build(
         deck=deck,
         settings=settings,
@@ -195,9 +195,7 @@ def run_all(
     git_dir = global_settings.paths.git_dir
     GlobalSettingsFactory(global_settings).assets_builder().build_assets()
     settings = DeckSettings.from_yaml(run_scratch_dir(git_dir, "all"))
-    deck = build_all_deck(
-        git_dir, settings.paths.content_dir, settings.file_extensions, lang
-    )
+    deck = build_all_deck(settings, lang)
     _build(
         deck=deck,
         settings=settings,

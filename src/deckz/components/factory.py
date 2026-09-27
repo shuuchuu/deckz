@@ -100,11 +100,41 @@ class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
             renderer=self.renderer(),
         )
 
+    def shared_parser(
+        self, lang: "Lang" = "fr", *, lenient: bool = False
+    ) -> ParserProtocol:
+        """Parser resolving everything against the shared content only.
+
+        Used for decks that don't belong to any deck directory, e.g. a single \
+        shared section's flavor or every shared section at once.
+
+        Args:
+            lang: Language to parse in.
+            lenient: Let a translation map missing `lang` fall back instead \
+                of failing (see [`Parser`][deckz.components.parser.Parser]).
+
+        Returns:
+            The parser.
+        """
+        from .parser import Parser
+
+        content_dir = self._settings.paths.content_dir
+        return Parser(
+            local_content_dir=content_dir,
+            shared_content_dir=content_dir,
+            file_extensions=self._settings.file_extensions,
+            lang=lang,
+            lenient=lenient,
+        )
+
 
 class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProtocol):
-    def __init__(self, settings: "DeckSettings", *, lang: "Lang" = "fr") -> None:
+    def __init__(
+        self, settings: "DeckSettings", *, lang: "Lang" = "fr", lenient: bool = False
+    ) -> None:
         super().__init__(settings)
         self._lang = lang
+        self._lenient = lenient
 
     def parser(self) -> ParserProtocol:
         from .parser import Parser
@@ -114,6 +144,7 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
             shared_content_dir=self._settings.paths.content_dir,
             file_extensions=self._settings.file_extensions,
             lang=self._lang,
+            lenient=self._lenient,
         )
 
     def deck_builder(

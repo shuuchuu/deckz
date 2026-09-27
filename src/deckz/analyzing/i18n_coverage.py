@@ -32,15 +32,9 @@ def _audit_deck(settings: "DeckSettings") -> Deck:
     Returns:
         The parsed deck.
     """
-    from ..components.parser import Parser
+    from ..components.factory import DeckSettingsFactory
 
-    parser = Parser(
-        local_content_dir=settings.paths.local_content_dir,
-        shared_content_dir=settings.paths.content_dir,
-        file_extensions=settings.file_extensions,
-        lang="fr",
-        lenient=True,
-    )
+    parser = DeckSettingsFactory(settings, lang="fr", lenient=True).parser()
     return parser.from_deck_definition(settings.paths.deck_definition)
 
 

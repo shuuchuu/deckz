@@ -27,8 +27,7 @@ def section_files(
     settings = GlobalSettings.from_yaml(workdir)
     for path in sorted(
         compute(
-            settings.paths.content_dir,
-            settings.file_extensions,
+            settings,
             section,
             FlavorName(flavor),
             lang="en" if en else "fr",

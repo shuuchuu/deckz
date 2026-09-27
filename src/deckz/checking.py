@@ -12,12 +12,10 @@ typical machine has (Typst takes a few MB per page), and a compilation that \
 stops at its first error would hide every later section's errors.
 """
 
-from collections.abc import Iterable
 from pathlib import Path, PurePath
 
-from .components.factory import DeckSettingsFactory
-from .components.parser import Parser
-from .configuring.settings import DeckSettings
+from .components.factory import DeckSettingsFactory, GlobalSettingsFactory
+from .configuring.settings import DeckSettings, GlobalSettings
 from .models import Deck, Lang, Node, Part, PartName, UnresolvedPath
 from .utils import all_deck_settings, shared_section_ids
 
@@ -87,8 +85,7 @@ def preview_settings(settings: DeckSettings, *parts: str) -> DeckSettings:
 
 
 def build_shared_deck(
-    content_dir: Path,
-    file_extensions: Iterable[str],
+    settings: GlobalSettings,
     lang: Lang,
     *,
     name: str = "shared",
@@ -96,20 +93,15 @@ def build_shared_deck(
     """Build a deck containing every shared section, expanded to all its files.
 
     Args:
-        content_dir: Path to the shared content directory.
-        file_extensions: Extensions to try, in order, when resolving files.
+        settings: Settings of the repository.
         lang: Language to build the deck in.
         name: Name given to the built deck.
 
     Returns:
         The built deck.
     """
-    parser = Parser(
-        local_content_dir=content_dir,
-        shared_content_dir=content_dir,
-        file_extensions=file_extensions,
-        lang=lang,
-    )
+    parser = GlobalSettingsFactory(settings).shared_parser(lang)
+    content_dir = settings.paths.content_dir
     deck = Deck(
         name=name,
         parts={
@@ -123,12 +115,7 @@ def build_shared_deck(
     return deck
 
 
-def build_all_deck(
-    git_dir: Path,
-    content_dir: Path,
-    file_extensions: Iterable[str],
-    lang: Lang,
-) -> Deck:
+def build_all_deck(settings: GlobalSettings, lang: Lang) -> Deck:
     """Build `build_shared_deck`'s deck, plus every deck-local override.
 
     For every real deck that locally overrides at least one file of a \
@@ -136,15 +123,15 @@ def build_all_deck(
     own file(s) in place of the shared one(s).
 
     Args:
-        git_dir: Root of the deckz-managed repository.
-        content_dir: Path to the shared content directory.
-        file_extensions: Extensions to try, in order, when resolving files.
+        settings: Settings of the repository.
         lang: Language to build the deck in.
 
     Returns:
         The built deck.
     """
-    deck = build_shared_deck(content_dir, file_extensions, lang, name="run-all")
+    git_dir = settings.paths.git_dir
+    content_dir = settings.paths.content_dir
+    deck = build_shared_deck(settings, lang, name="run-all")
     plain_sections: dict[str, Node] = {
         part.nodes[0].unresolved_path.as_posix(): part.nodes[0]
         for part in deck.parts.values()
@@ -156,8 +143,8 @@ def build_all_deck(
         if plain_section.parsing_error is not None:
             continue
         counter = 2
-        for settings in deck_settings:
-            parser = DeckSettingsFactory(settings, lang=lang).parser()
+        for local_settings in deck_settings:
+            parser = DeckSettingsFactory(local_settings, lang=lang).parser()
             candidate = parser.all_files_section(section_id)
             overridden = any(
                 node.parsing_error is None
@@ -166,11 +153,11 @@ def build_all_deck(
             )
             if not overridden:
                 continue
-            deck_label = settings.paths.current_dir.relative_to(git_dir).as_posix()
+            label = local_settings.paths.current_dir.relative_to(git_dir).as_posix()
             candidate.unresolved_path = UnresolvedPath(
                 PurePath(f"{section_id}-{counter}")
             )
-            candidate.title = f"{candidate.title or section_id} [{deck_label}]"
+            candidate.title = f"{candidate.title or section_id} [{label}]"
             deck.parts[_part_name(f"{section_id}-{counter}")] = Part(
                 title=None, nodes=[candidate]
             )

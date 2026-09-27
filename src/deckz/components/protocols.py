@@ -11,6 +11,7 @@ if TYPE_CHECKING:
         CompileResult,
         Deck,
         FlavorName,
+        Lang,
         ResolvedPath,
         Section,
         UnresolvedPath,
@@ -53,6 +54,13 @@ class ParserProtocol(Protocol):
 
         Returns:
             The built section.
+        """
+
+    def validate(self, deck: "Deck") -> None:
+        """Check that every node of `deck` parsed.
+
+        Raises:
+            DeckParsingError: If some node carries a parsing error.
         """
 
 
@@ -149,6 +157,10 @@ class GlobalFactoryProtocol(Protocol):
     def assets_searcher(self) -> AssetsSearcherProtocol: ...
 
     def assets_analyzer(self) -> AssetsAnalyzerProtocol: ...
+
+    def shared_parser(
+        self, lang: "Lang" = "fr", *, lenient: bool = False
+    ) -> ParserProtocol: ...
 
 
 class DeckFactoryProtocol(GlobalFactoryProtocol, Protocol):

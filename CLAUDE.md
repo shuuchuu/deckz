@@ -97,7 +97,11 @@ instantiate the concrete implementation (`components/parser.py`,
 `components/renderer.py`, etc.) wired up with
 paths/settings. Call sites depend on the protocol/factory, not on concrete
 classes directly, so new implementations only need to be plugged in at the
-factory. `GlobalSettingsFactory.compiler()` returns `TypstCompiler`
+factory. That includes `Parser`: a deck's parser comes from
+`DeckSettingsFactory(settings, lang=..., lenient=...).parser()`, and one
+resolving against shared content only (a lone section, `run shared`/`run
+all`) from `GlobalSettingsFactory.shared_parser()`.
+`GlobalSettingsFactory.compiler()` returns `TypstCompiler`
 (`components/compiler.py`: the `typst` bindings in a child process per PDF,
 kept warm across `--watch` rebuilds so Typst's incremental cache survives;
 see the module's header comment for why never in deckz's own process).

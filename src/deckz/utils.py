@@ -181,18 +181,12 @@ def load_all_yamls(paths: Iterable[Path]) -> Iterator[Any]:
 
 
 def _parse_deck(settings: "DeckSettings", lang: "Lang") -> tuple[Path, "Deck"]:
-    from .components.parser import Parser
+    from .components.factory import DeckSettingsFactory
     from .configuring.variables import get_variables, resolve_variables
     from .exceptions import DeckParsingError
 
-    parser = Parser(
-        local_content_dir=settings.paths.local_content_dir,
-        shared_content_dir=settings.paths.content_dir,
-        file_extensions=settings.file_extensions,
-        lang=lang,
-        # A translation gap must not hide the rest of an en deck from analyses.
-        lenient=lang != "fr",
-    )
+    # A translation gap must not hide the rest of an en deck from analyses.
+    parser = DeckSettingsFactory(settings, lang=lang, lenient=lang != "fr").parser()
     try:
         deck = parser.from_deck_definition(settings.paths.deck_definition)
     except DeckParsingError as e:

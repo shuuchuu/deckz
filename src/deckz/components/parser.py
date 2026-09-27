@@ -420,8 +420,7 @@ class Parser(ParserProtocol):
                 return ResolvedPath(path.resolve())
         return None
 
-    @staticmethod
-    def validate(deck: Deck) -> None:
+    def validate(self, deck: Deck) -> None:
         finder = _ErrorFinderNodeVisitor()
         errors = [
             error

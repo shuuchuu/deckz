@@ -4,14 +4,18 @@ Understands each section's title/frame structure instead of grepping raw file \
 content.
 """
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from re import MULTILINE
 from re import compile as re_compile
+from typing import TYPE_CHECKING
 
 from ..models import Deck, FlavorName, Lang, ResolvedPath, is_lang_map
 from ..utils import load_yaml, shared_section_ids
+
+if TYPE_CHECKING:
+    from ..configuring.settings import GlobalSettings
 
 _MARKDOWN_HEADING = re_compile(r"^#+[ \t]+(.+?)[ \t]*$", MULTILINE)
 
@@ -42,26 +46,19 @@ def resolved_files(deck: Deck) -> set[ResolvedPath]:
 
 
 def _section_flavor_deck(
-    shared_content_dir: Path,
-    file_extensions: Iterable[str],
-    section: str,
-    flavor: FlavorName,
-    lang: Lang = "fr",
+    settings: "GlobalSettings", section: str, flavor: FlavorName, lang: Lang = "fr"
 ) -> Deck:
-    from ..components.parser import Parser
+    from ..components.factory import GlobalSettingsFactory
 
-    parser = Parser(
-        local_content_dir=shared_content_dir,
-        shared_content_dir=shared_content_dir,
-        file_extensions=file_extensions,
-        lang=lang,
+    return (
+        GlobalSettingsFactory(settings)
+        .shared_parser(lang)
+        .from_section(section, flavor)
     )
-    return parser.from_section(section, flavor)
 
 
 def section_files(
-    shared_content_dir: Path,
-    file_extensions: Iterable[str],
+    settings: "GlobalSettings",
     section: str,
     flavor: FlavorName,
     lang: Lang = "fr",
@@ -72,8 +69,7 @@ def section_files(
     that includes `$<section>@<flavor>`.
 
     Args:
-        shared_content_dir: Path to the shared content directory.
-        file_extensions: Extensions to try, in order, when resolving files.
+        settings: Settings of the repository.
         section: Shared/content-relative section id, e.g. "python/basics".
         flavor: Flavor to resolve.
         lang: Language to resolve the files in.
@@ -81,9 +77,7 @@ def section_files(
     Returns:
         The set of resolved file paths.
     """
-    return resolved_files(
-        _section_flavor_deck(shared_content_dir, file_extensions, section, flavor, lang)
-    )
+    return resolved_files(_section_flavor_deck(settings, section, flavor, lang))
 
 
 @dataclass(frozen=True)

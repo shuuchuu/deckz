@@ -186,25 +186,17 @@ def check_variables(settings: "GlobalSettings", lang: Lang = "fr") -> VariablesR
         The findings collected across the whole survey.
     """
     from ..checking import check_scratch_dir
-    from ..components.factory import GlobalSettingsFactory
-    from ..components.parser import Parser
+    from ..components.factory import DeckSettingsFactory, GlobalSettingsFactory
     from ..configuring.settings import DeckSettings
     from ..configuring.variables import get_variables
 
     acc = _Accumulator()
     renderer = GlobalSettingsFactory(settings).renderer()
     git_dir = settings.paths.git_dir
-    shared_content_dir = settings.paths.content_dir
 
     scratch_settings = DeckSettings.from_yaml(check_scratch_dir(git_dir, "variables"))
     shared_base_variables = {**get_variables(scratch_settings, lang), "lang": lang}
-    shared_parser = Parser(
-        local_content_dir=shared_content_dir,
-        shared_content_dir=shared_content_dir,
-        file_extensions=settings.file_extensions,
-        lang=lang,
-        lenient=True,
-    )
+    shared_parser = GlobalSettingsFactory(settings).shared_parser(lang, lenient=True)
     for section_id, flavor, context in _shared_flavor_contexts(settings):
         try:
             deck = shared_parser.from_section(section_id, flavor)
@@ -217,13 +209,9 @@ def check_variables(settings: "GlobalSettings", lang: Lang = "fr") -> VariablesR
         deck_context = str(
             deck_settings.paths.deck_definition.parent.relative_to(git_dir)
         )
-        deck_parser = Parser(
-            local_content_dir=deck_settings.paths.local_content_dir,
-            shared_content_dir=deck_settings.paths.content_dir,
-            file_extensions=deck_settings.file_extensions,
-            lang=lang,
-            lenient=True,
-        )
+        deck_parser = DeckSettingsFactory(
+            deck_settings, lang=lang, lenient=True
+        ).parser()
         try:
             deck = deck_parser.from_deck_definition(deck_settings.paths.deck_definition)
         except DeckzError as e:
