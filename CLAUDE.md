@@ -24,7 +24,8 @@ Dependency management and running: this project uses `uv`; run tools via
 - Lint + format-check + typecheck: `uv run doit check` (or individually:
   `uv run ruff check src/deckz tests`, `uv run ruff format --check src/deckz tests`,
   `uv run ty check src/deckz tests`)
-- Tests: `uv run doit test` or `uv run pytest`
+- Tests: `uv run doit test` (runs `pytest -n auto`, parallel via pytest-xdist)
+  or `uv run pytest` (serial)
   - Single test: `uv run pytest tests/test_cli.py::test_name`
 - Default doit task (`uv run doit`) runs `check` only, not `test`.
 - Install the git pre-commit hook (runs `uv run doit check test` before

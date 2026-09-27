@@ -19,7 +19,7 @@ def task_check():
 def task_test():
     return {
         "actions": [
-            "uv run pytest",
+            "uv run pytest -n auto",
         ],
     }
 
