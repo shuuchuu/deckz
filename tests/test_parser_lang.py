@@ -1,10 +1,9 @@
 from pathlib import Path
 
-from pydantic import ValidationError
 from pytest import raises
 
 from deckz.components.parser import Parser
-from deckz.exceptions import DeckzError
+from deckz.exceptions import DeckzError, InvalidConfigurationError
 from deckz.models import PartName, Section
 
 
@@ -144,7 +143,7 @@ def test_incomplete_lang_map_title_still_fails_loudly(tmp_path: Path) -> None:
         "    sections:\n      - about\n",
     )
     parser = Parser(local, shared, (".tex",), lang="en")
-    with raises(ValidationError):
+    with raises(InvalidConfigurationError, match="missing 'en' translation"):
         parser.from_deck_definition(local.parent / "deck.yml")
 
 

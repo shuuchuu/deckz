@@ -9,11 +9,13 @@ from pydantic import (
     BeforeValidator,
     ConfigDict,
     Field,
+    ValidationError,
     ValidationInfo,
     model_validator,
 )
 
 from .. import app_name
+from ..exceptions import InvalidConfigurationError
 from ..utils import dirs_hierarchy, get_git_dir, load_all_yamls
 
 
@@ -109,7 +111,11 @@ class GlobalSettings(BaseModel):
             content["paths"] = {}
         if "current_dir" not in content["paths"]:
             content["paths"]["current_dir"] = path
-        return cls.model_validate(content)
+        try:
+            return cls.model_validate(content)
+        except ValidationError as e:
+            msg = f"invalid deckz.yml settings:\n{e}"
+            raise InvalidConfigurationError(msg) from e
 
 
 class DeckSettings(GlobalSettings):

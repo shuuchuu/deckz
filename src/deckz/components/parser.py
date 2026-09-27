@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import ValidationError
 
-from ..exceptions import DeckParsingError
+from ..exceptions import DeckParsingError, InvalidConfigurationError
 from ..models import (
     Deck,
     DeckDefinition,
@@ -81,11 +81,25 @@ class Parser(ParserProtocol):
 
         Returns:
             The parsed deck
+
+        Raises:
+            InvalidConfigurationError: If the definition is missing, isn't \
+                valid YAML or doesn't match the expected schema.
         """
-        deck_definition = DeckDefinition.model_validate(
-            load_yaml(deck_definition_path),
-            context={"lang": self._lang, "lenient": self._lenient},
-        )
+        if not deck_definition_path.is_file():
+            msg = (
+                f"no deck definition found at {deck_definition_path}, run this "
+                "command from inside a deck"
+            )
+            raise InvalidConfigurationError(msg)
+        try:
+            deck_definition = DeckDefinition.model_validate(
+                load_yaml(deck_definition_path),
+                context={"lang": self._lang, "lenient": self._lenient},
+            )
+        except ValidationError as e:
+            msg = f"{deck_definition_path} is not a valid deck definition:\n{e}"
+            raise InvalidConfigurationError(msg) from e
         deck = Deck(
             name=deck_definition.name, parts=self._parse_parts(deck_definition.parts)
         )

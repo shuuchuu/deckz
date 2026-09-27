@@ -163,9 +163,15 @@ def get_git_dir(path: Path) -> Path:
 
 
 def load_yaml(path: Path) -> Any:
-    from yaml import safe_load
+    from yaml import YAMLError, safe_load
 
-    return safe_load(path.read_text(encoding="utf8"))
+    from .exceptions import InvalidConfigurationError
+
+    try:
+        return safe_load(path.read_text(encoding="utf8"))
+    except YAMLError as e:
+        msg = f"{path} is not valid YAML:\n{e}"
+        raise InvalidConfigurationError(msg) from e
 
 
 def load_all_yamls(paths: Iterable[Path]) -> Iterator[Any]:

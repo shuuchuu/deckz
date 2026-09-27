@@ -29,6 +29,10 @@ class FlavorAlreadyExistsError(DeckzError):
     pass
 
 
+class InvalidConfigurationError(DeckzError):
+    """A yaml file of the deckz-managed repo is missing, unparsable or invalid."""
+
+
 class CompilationError(DeckzError):
     pass
 

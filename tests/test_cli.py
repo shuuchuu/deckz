@@ -6,7 +6,6 @@ from typing import Any
 
 import appdirs
 from pdfminer.high_level import extract_pages, extract_text
-from pydantic import ValidationError
 from pygit2 import init_repository
 from pytest import fixture, raises
 
@@ -318,15 +317,51 @@ def test_run_en_missing_file_fails_loudly(
     assert "hello" in capsys.readouterr().err
 
 
-def test_run_en_missing_title_translation_fails_loudly(bilingual_dir: Path) -> None:
+def test_run_en_missing_title_translation_fails_loudly(
+    bilingual_dir: Path, caplog: Any
+) -> None:
     deck_path = bilingual_dir / "deck.yml"
     deck_path.write_text(
         deck_path.read_text(encoding="utf8").replace("      en: Part 1\n", ""),
         encoding="utf8",
     )
 
-    with raises(ValidationError):
+    with raises(SystemExit) as exc_info:
         main(("run", "--en"))
+
+    assert exc_info.value.code == 1
+    assert "is not a valid deck definition" in caplog.text
+    assert "missing 'en'" in caplog.text
+
+
+def test_run_with_unparsable_deck_definition_exits_1(
+    working_dir: Path, caplog: Any
+) -> None:
+    (working_dir / "deck.yml").write_text("name: [unclosed\n", encoding="utf8")
+
+    with raises(SystemExit) as exc_info:
+        main(("run",))
+
+    assert exc_info.value.code == 1
+    assert "is not valid YAML" in caplog.text
+
+
+def test_run_outside_a_deck_exits_1(working_dir: Path, caplog: Any) -> None:
+    with raises(SystemExit) as exc_info:
+        main(("run", "--workdir", str(working_dir.parent)))
+
+    assert exc_info.value.code == 1
+    assert "no deck definition found" in caplog.text
+
+
+def test_run_with_invalid_settings_exits_1(working_dir: Path, caplog: Any) -> None:
+    (working_dir / "deckz.yml").write_text("compiler: bogus\n", encoding="utf8")
+
+    with raises(SystemExit) as exc_info:
+        main(("run",))
+
+    assert exc_info.value.code == 1
+    assert "invalid deckz.yml settings" in caplog.text
 
 
 def test_run_en_plain_string_title_used_as_is(bilingual_dir: Path) -> None:
