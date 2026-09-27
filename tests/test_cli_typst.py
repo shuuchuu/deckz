@@ -116,19 +116,36 @@ def test_run_decks_fails_on_a_compile_error(working_dir: Path, caplog: Any) -> N
 
 
 @mark.parametrize(
-    ("args", "broken"),
+    ("args", "broken", "message"),
     [
-        (("run", "file", "about", "--no-open", *_NO_PDF), Path("latex/about.md")),
+        (
+            ("run", "file", "about", "--no-open", *_NO_PDF),
+            Path("latex/about.md"),
+            "about failed to compile",
+        ),
         (
             ("run", "section", "greeting", "standard", "--no-open", *_NO_PDF),
             Path("../../latex/greeting/hello.md"),
+            "greeting@standard failed to compile",
         ),
-        (("run", "shared"), Path("../../latex/greeting/hello.md")),
-        (("run", "all"), Path("../../latex/greeting/hello.md")),
+        (
+            ("run", "shared"),
+            Path("../../latex/greeting/hello.md"),
+            "shared failed to compile",
+        ),
+        (
+            ("run", "all"),
+            Path("../../latex/greeting/hello.md"),
+            "run-all failed to compile",
+        ),
     ],
 )
 def test_run_commands_exit_1_on_a_compile_error(
-    working_dir: Path, args: tuple[str, ...], broken: Path
+    working_dir: Path,
+    caplog: Any,
+    args: tuple[str, ...],
+    broken: Path,
+    message: str,
 ) -> None:
     _break(working_dir / broken)
 
@@ -136,6 +153,13 @@ def test_run_commands_exit_1_on_a_compile_error(
         main(args)
 
     assert exc_info.value.code == 1
+    assert message in caplog.text
+
+
+def test_nothing_to_compile_is_a_warning(working_dir: Path, caplog: Any) -> None:
+    main(("run", "shared", "--no-presentation"))
+
+    assert "Nothing to compile" in caplog.text
 
 
 def test_debug_env_var_keeps_the_exception(working_dir: Path, monkeypatch: Any) -> None:

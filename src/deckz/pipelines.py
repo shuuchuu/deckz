@@ -80,15 +80,20 @@ def run_file(
     build_print: bool,
     progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
-    _build(
-        deck=DeckSettingsFactory(settings, lang=lang).parser().from_file(latex),
-        settings=settings,
-        lang=lang,
-        build_handout=build_handout,
-        build_presentation=build_presentation,
-        build_print=build_print,
-        progress=progress,
-    )
+    try:
+        _build(
+            deck=DeckSettingsFactory(settings, lang=lang).parser().from_file(latex),
+            settings=settings,
+            lang=lang,
+            build_handout=build_handout,
+            build_presentation=build_presentation,
+            build_print=build_print,
+            progress=progress,
+        )
+    except CompilationError as e:
+        # The synthetic preview deck is named "deck": name what was asked for.
+        msg = f"{latex} failed to compile, see the errors above"
+        raise CompilationError(msg) from e
 
 
 def run_section(
@@ -101,17 +106,22 @@ def run_section(
     build_print: bool,
     progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
-    _build(
-        deck=DeckSettingsFactory(settings, lang=lang)
-        .parser()
-        .from_section(section, flavor),
-        settings=settings,
-        lang=lang,
-        build_handout=build_handout,
-        build_presentation=build_presentation,
-        build_print=build_print,
-        progress=progress,
-    )
+    try:
+        _build(
+            deck=DeckSettingsFactory(settings, lang=lang)
+            .parser()
+            .from_section(section, flavor),
+            settings=settings,
+            lang=lang,
+            build_handout=build_handout,
+            build_presentation=build_presentation,
+            build_print=build_print,
+            progress=progress,
+        )
+    except CompilationError as e:
+        # The synthetic preview deck is named "deck": name what was asked for.
+        msg = f"{section}@{flavor} failed to compile, see the errors above"
+        raise CompilationError(msg) from e
 
 
 def run_decks(

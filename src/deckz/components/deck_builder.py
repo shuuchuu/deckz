@@ -157,6 +157,11 @@ class DeckBuilder(DeckBuilderProtocol):
 
     def build_deck(self) -> bool:
         items = self._list_items()
+        if not items:
+            self._logger.warning(
+                "Nothing to compile: handout, presentation and print are all disabled"
+            )
+            return True
         self._markdown_fingerprint = self._markdown_converter.fingerprint()
         results = []
         with (
