@@ -75,6 +75,9 @@ class Uploader:
                     ["https://www.googleapis.com/auth/drive.file"],
                 )
                 creds = flow.run_local_server(port=0)
+            self._settings.paths.gdrive_credentials.parent.mkdir(
+                parents=True, exist_ok=True
+            )
             with self._settings.paths.gdrive_credentials.open("wb") as fh:
                 pickle_dump(creds, fh)
 

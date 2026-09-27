@@ -2,7 +2,6 @@ from functools import reduce
 from pathlib import Path
 from typing import Annotated, Any, Self, cast
 
-from appdirs import user_config_dir as appdirs_user_config_dir
 from pydantic import (
     AfterValidator,
     BaseModel,
@@ -25,14 +24,24 @@ def _convert(input_value: str | Path, info: ValidationInfo) -> Path:
 
 
 _Path = Annotated[Path, BeforeValidator(_convert), AfterValidator(Path.resolve)]
-_user_config_dir = Path(appdirs_user_config_dir(app_name)).resolve()
+
+
+def default_user_config_dir() -> Path:
+    """The user's XDG config directory for deckz, looked up on each call.
+
+    Returns:
+        The directory. It may not exist.
+    """
+    import appdirs
+
+    return Path(appdirs.user_config_dir(app_name)).resolve()
 
 
 # ruff: file-ignore[missing-f-string-syntax]
 class GlobalPaths(BaseModel):
-    model_config = ConfigDict(validate_default=True)
+    model_config = ConfigDict(validate_default=True, frozen=True)
     current_dir: _Path
-    user_config_dir: Path = _user_config_dir
+    user_config_dir: _Path = Field(default_factory=default_user_config_dir)
     git_dir: _Path = Field(
         default_factory=lambda data: get_git_dir(data["current_dir"])
     )
@@ -51,11 +60,6 @@ class GlobalPaths(BaseModel):
         "Path", "{user_config_dir}/gdrive-credentials.pickle"
     )
 
-    def model_post_init(self, __context: Any) -> None:
-        for field, value in self.__dict__.items():
-            setattr(self, field, value.resolve())
-        self.user_config_dir.mkdir(parents=True, exist_ok=True)
-
 
 class DeckPaths(GlobalPaths):
     build_dir: _Path = cast("Path", "{current_dir}/.build")
@@ -65,6 +69,7 @@ class DeckPaths(GlobalPaths):
 
 
 class GlobalSettings(BaseModel):
+    model_config = ConfigDict(frozen=True)
     typst_parallel_compilations: int = Field(default=1, ge=1)
     """How many Typst compilations (one per PDF) may run at once.
 
@@ -92,19 +97,22 @@ class GlobalSettings(BaseModel):
     def from_yaml(cls, path: Path) -> Self:
         resolved_path = path.resolve()
         git_dir = get_git_dir(resolved_path).resolve()
+        user_config_dir = default_user_config_dir()
         content: dict[str, Any] = reduce(
             lambda a, b: {**a, **b},
             load_all_yamls(
                 d
-                for p in dirs_hierarchy(git_dir, _user_config_dir, resolved_path)
+                for p in dirs_hierarchy(git_dir, user_config_dir, resolved_path)
                 if (d := p / "deckz.yml").is_file()
             ),
             {},
         )
-        if "paths" not in content:
-            content["paths"] = {}
-        if "current_dir" not in content["paths"]:
-            content["paths"]["current_dir"] = path
+        # Pass what was just discovered rather than letting validation look
+        # it up again.
+        paths = content.setdefault("paths", {})
+        paths.setdefault("current_dir", path)
+        paths.setdefault("git_dir", git_dir)
+        paths.setdefault("user_config_dir", user_config_dir)
         try:
             return cls.model_validate(content)
         except ValidationError as e:

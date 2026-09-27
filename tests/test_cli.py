@@ -22,7 +22,7 @@ def _make_repo(tmp_path: Path, monkeypatch: Any) -> Path:
     copytree(data_dir, tmp_dir)
     move(tmp_dir / "user-variables.yml", tmp_user_dir / "variables.yml")
     init_repository(str(tmp_dir))
-    monkeypatch.setattr(appdirs, "user_config_dir", lambda _: str(tmp_dir))
+    monkeypatch.setattr(appdirs, "user_config_dir", lambda _: str(tmp_user_dir))
     return tmp_dir
 
 
