@@ -58,6 +58,18 @@ themselves stay thin: they parse CLI args, build a `DeckSettings`/
 `src/deckz/checking.py`, or an `analyzing/*` module — no business logic
 lives in the `cli/` layer.
 
+The reverse holds too: the core never draws on the terminal. Rich widgets
+live only in `cli/_presentation.py` (`RichTreeVisitor`, `RichProgress`,
+`open_path`). The core reports progress through a
+`ProgressReporterProtocol` (`NullProgress` by default, `RichProgress` passed
+in by the `run` commands) and reports failures by raising a `DeckzError`
+subclass, e.g. `DeckParsingError` carrying the deck whose tree `main()`
+renders, or `CompilationError` from a failed build. `main()` is the single
+error boundary: it turns any `DeckzError` into a logged message and exit
+code 1, without a traceback (`DECKZ_DEBUG=1` re-raises instead). Tests
+driving `main(...)` therefore assert `raises(SystemExit)` with code 1, not
+the `DeckzError` itself.
+
 ### Settings resolution
 
 `configuring/settings.py` defines `GlobalPaths`/`DeckSettings`/`GlobalSettings`
@@ -104,7 +116,11 @@ with the configured compiler, LaTeX or Typst) via
 the deck builder; `_build` also takes an optional `basedirs` override, used
 only by `run_shared`/`run_all` since their synthetic decks can include
 files living under any deck's directory, not just one
-`current_dir`/`latex_dir` pair. `watch()` is a generic file-watch-and-rerun
+`current_dir`/`latex_dir` pair. `_build` raises `CompilationError` when
+any PDF fails to compile, so every `run_*` pipeline fails the command.
+`deckz run file`/`deckz run section` get their `.run/` scratch output dirs
+from `checking.preview_settings`, a copy of the deck's settings; settings
+objects are never mutated after construction. `watch()` is a generic file-watch-and-rerun
 wrapper, not build-specific: each of `run/deck.py`, `run/file.py`,
 `run/section.py`, and `run/assets.py` calls it directly when invoked with
 `--watch`, wrapping that same module's one-shot pipeline call instead of
