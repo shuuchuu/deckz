@@ -11,7 +11,7 @@ from .components.factory import DeckSettingsFactory, GlobalSettingsFactory
 from .components.typst_compiler import keep_warm
 from .configuring.settings import DeckSettings, GlobalSettings
 from .configuring.variables import get_variables, resolve_variables
-from .exceptions import DeckzError
+from .exceptions import CompilationError, DeckzError
 from .models import Deck, FlavorName, Lang, PartName
 from .utils import all_deck_settings
 
@@ -26,19 +26,21 @@ def _build(
     build_presentation: bool,
     build_print: bool,
     basedirs: tuple[Path, ...] | None = None,
-) -> bool:
+) -> None:
     variables = {**get_variables(settings, lang=lang), "lang": lang}
     resolve_variables(deck, variables)
     factory = DeckSettingsFactory(settings, lang=lang)
     factory.assets_builder().build_assets()
-    return factory.deck_builder(
+    if not factory.deck_builder(
         variables=variables,
         deck=deck,
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
         basedirs=basedirs,
-    ).build_deck()
+    ).build_deck():
+        msg = f"{deck.name} failed to compile, see the errors above"
+        raise CompilationError(msg)
 
 
 def run(
@@ -119,22 +121,23 @@ def run_decks(
     ) as progress:
         task_id = progress.add_task("Building decks…", total=len(decks_settings))
         for deck_settings in decks_settings:
-            result = _build(
-                deck=DeckSettingsFactory(deck_settings, lang=lang)
-                .parser()
-                .from_deck_definition(deck_settings.paths.deck_definition),
-                settings=deck_settings,
-                lang=lang,
-                build_handout=build_handout,
-                build_presentation=build_presentation,
-                build_print=build_print,
-            )
-            if not result:
+            try:
+                _build(
+                    deck=DeckSettingsFactory(deck_settings, lang=lang)
+                    .parser()
+                    .from_deck_definition(deck_settings.paths.deck_definition),
+                    settings=deck_settings,
+                    lang=lang,
+                    build_handout=build_handout,
+                    build_presentation=build_presentation,
+                    build_print=build_print,
+                )
+            except CompilationError as e:
                 deck_dir = deck_settings.paths.current_dir.relative_to(
                     global_settings.paths.git_dir
                 )
                 msg = f"{deck_dir} failed to compile, see the errors above"
-                raise DeckzError(msg)
+                raise CompilationError(msg) from e
             progress.update(task_id, advance=1)
 
 
@@ -229,16 +232,25 @@ def _watch_loop[**P](
     **function_kwargs: P.kwargs,
 ) -> None:
     _logger.info("Initial build")
-    try:
-        function(*function_args, **function_kwargs)
-        _logger.info("Initial build finished")
-    except Exception as e:
-        _logger.exception(str(e), extra={"markup": True})
+    _run_once("Initial build finished", function, *function_args, **function_kwargs)
 
     for _ in watchfiles_watch(*dirs_to_watch, raise_interrupt=False, recursive=False):
         _logger.info("Detected changes, starting a new build")
-        try:
-            function(*function_args, **function_kwargs)
-            _logger.info("Build finished")
-        except Exception as e:
-            _logger.exception(str(e), extra={"markup": True})
+        _run_once("Build finished", function, *function_args, **function_kwargs)
+
+
+def _run_once[**P](
+    success_message: str,
+    function: Callable[P, Any],
+    *function_args: P.args,
+    **function_kwargs: P.kwargs,
+) -> None:
+    # A failed build must not end the watch: report it and wait for the next
+    # change. User errors get their message only, bugs keep their traceback.
+    try:
+        function(*function_args, **function_kwargs)
+        _logger.info(success_message)
+    except DeckzError as e:
+        _logger.error(str(e))
+    except Exception as e:
+        _logger.exception(str(e), extra={"markup": True})

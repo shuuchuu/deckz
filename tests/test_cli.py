@@ -11,7 +11,6 @@ from pygit2 import init_repository
 from pytest import fixture, raises
 
 from deckz.cli import main
-from deckz.exceptions import DeckzError, FlavorAlreadyExistsError, FlavorNotFoundError
 
 
 def _make_repo(tmp_path: Path, monkeypatch: Any) -> Path:
@@ -258,14 +257,20 @@ def test_flavor_rename(working_dir: Path) -> None:
     assert "John Doe" in text
 
 
-def test_flavor_rename_unknown_flavor(working_dir: Path) -> None:
-    with raises(FlavorNotFoundError):
+def test_flavor_rename_unknown_flavor(working_dir: Path, caplog: Any) -> None:
+    with raises(SystemExit) as exc_info:
         main(("flavor", "rename", "first-section", "nonexistent", "extended"))
 
+    assert exc_info.value.code == 1
+    assert "has no flavor named nonexistent" in caplog.text
 
-def test_flavor_rename_name_collision(working_dir: Path) -> None:
-    with raises(FlavorAlreadyExistsError):
+
+def test_flavor_rename_name_collision(working_dir: Path, caplog: Any) -> None:
+    with raises(SystemExit) as exc_info:
         main(("flavor", "rename", "first-section", "standard", "light"))
+
+    assert exc_info.value.code == 1
+    assert "already has a flavor named light" in caplog.text
 
 
 def test_run_fr_default(bilingual_dir: Path) -> None:
@@ -298,11 +303,14 @@ def test_run_en(bilingual_dir: Path) -> None:
     assert not (bilingual_dir / "pdf" / "bilingual-p1-presentation.pdf").exists()
 
 
-def test_run_en_missing_file_fails_loudly(bilingual_dir: Path) -> None:
+def test_run_en_missing_file_fails_loudly(bilingual_dir: Path, caplog: Any) -> None:
     (bilingual_dir / "latex" / "en" / "hello.tex").unlink()
 
-    with raises(DeckzError):
+    with raises(SystemExit) as exc_info:
         main(("run", "--en"))
+
+    assert exc_info.value.code == 1
+    assert "deck parsing failed" in caplog.text
 
 
 def test_run_en_missing_title_translation_fails_loudly(bilingual_dir: Path) -> None:

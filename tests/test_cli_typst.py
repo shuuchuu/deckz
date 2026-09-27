@@ -8,13 +8,16 @@ from typing import Any
 import appdirs
 from pdfminer.high_level import extract_text
 from pygit2 import init_repository
-from pytest import fixture, raises
+from pytest import fixture, mark, raises
 
 from deckz.cli import main
 from deckz.components.typst_compiler import keep_warm
-from deckz.exceptions import DeckzError
+from deckz.configuring.settings import DeckSettings
+from deckz.exceptions import CompilationError
+from deckz.pipelines import _run_once, run
 
-_RUN_ARGS = ("run", "--no-presentation", "--no-print")
+_NO_PDF = ("--no-presentation", "--no-print")
+_RUN_ARGS = ("run", *_NO_PDF)
 
 
 @fixture
@@ -81,27 +84,81 @@ def test_filter_change_reconverts_unchanged_fragments(working_dir: Path) -> None
     assert "Markdown too! FILTERED" in text
 
 
+_BROKEN_TYPST = "```{=typst}\n#no-such-function()\n```\n"
+
+
+def _break(path: Path) -> None:
+    _write_newer(path, f"# Broken\n\n{_BROKEN_TYPST}")
+
+
 def test_compile_error_is_reported(working_dir: Path, caplog: Any) -> None:
-    _write_newer(
-        working_dir / "latex" / "about.md",
-        "# About\n\n```{=typst}\n#no-such-function()\n```\n",
-    )
+    _break(working_dir / "latex" / "about.md")
 
-    main(_RUN_ARGS)
+    with raises(SystemExit) as exc_info:
+        main(_RUN_ARGS)
 
+    assert exc_info.value.code == 1
     assert "Compilation abc-handout errored" in caplog.text
     assert "unknown variable: no-such-function" in caplog.text
     assert not (working_dir / "pdf" / "abc-handout.pdf").exists()
 
 
-def test_run_decks_fails_on_a_compile_error(working_dir: Path) -> None:
-    _write_newer(
-        working_dir / "latex" / "about.md",
-        "# About\n\n```{=typst}\n#no-such-function()\n```\n",
+def test_run_decks_fails_on_a_compile_error(working_dir: Path, caplog: Any) -> None:
+    _break(working_dir / "latex" / "about.md")
+
+    with raises(SystemExit) as exc_info:
+        main(("run", "decks", "--handout", "--no-presentation"))
+
+    assert exc_info.value.code == 1
+    assert "company/abc failed to compile" in caplog.text
+
+
+@mark.parametrize(
+    ("args", "broken"),
+    [
+        (("run", "file", "about", "--no-open", *_NO_PDF), Path("latex/about.md")),
+        (
+            ("run", "section", "greeting", "standard", "--no-open", *_NO_PDF),
+            Path("../../latex/greeting/hello.md"),
+        ),
+        (("run", "shared"), Path("../../latex/greeting/hello.md")),
+        (("run", "all"), Path("../../latex/greeting/hello.md")),
+    ],
+)
+def test_run_commands_exit_1_on_a_compile_error(
+    working_dir: Path, args: tuple[str, ...], broken: Path
+) -> None:
+    _break(working_dir / broken)
+
+    with raises(SystemExit) as exc_info:
+        main(args)
+
+    assert exc_info.value.code == 1
+
+
+def test_debug_env_var_keeps_the_exception(working_dir: Path, monkeypatch: Any) -> None:
+    _break(working_dir / "latex" / "about.md")
+    monkeypatch.setenv("DECKZ_DEBUG", "1")
+
+    with raises(CompilationError, match="ABC failed to compile"):
+        main(_RUN_ARGS)
+
+
+def test_watch_survives_a_compile_error(working_dir: Path, caplog: Any) -> None:
+    _break(working_dir / "latex" / "about.md")
+
+    _run_once(
+        "done",
+        run,
+        settings=DeckSettings.from_yaml(working_dir),
+        lang="fr",
+        build_handout=True,
+        build_presentation=False,
+        build_print=False,
     )
 
-    with raises(DeckzError, match="company/abc"):
-        main(("run", "decks", "--handout", "--no-presentation"))
+    assert "ABC failed to compile" in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
 
 
 def test_warm_rebuild_sees_content_edit(working_dir: Path) -> None:

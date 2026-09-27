@@ -1,3 +1,6 @@
+from .models import Deck
+
+
 class DeckzError(Exception):
     pass
 
@@ -24,3 +27,13 @@ class FlavorNotFoundError(DeckzError):
 
 class FlavorAlreadyExistsError(DeckzError):
     pass
+
+
+class CompilationError(DeckzError):
+    pass
+
+
+class DeckParsingError(DeckzError):
+    def __init__(self, message: str, deck: Deck) -> None:
+        super().__init__(message)
+        self.deck = deck
