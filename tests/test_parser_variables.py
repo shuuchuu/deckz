@@ -4,7 +4,7 @@ from pytest import raises
 
 from deckz.components.parser import Parser
 from deckz.configuring.variables import resolve_variables
-from deckz.exceptions import DeckzError
+from deckz.exceptions import DeckParsingError, DeckzError
 from deckz.models import File, FlavorName, PartName, Section
 
 
@@ -171,3 +171,14 @@ def test_base_variables_are_overridden_by_flavor_variables(tmp_path: Path) -> No
     (outer,) = deck.parts[PartName("part_name")].nodes
     assert isinstance(outer, Section)
     assert outer.variables == {"depth": "deep", "other": "kept"}
+
+
+def test_invalid_section_yaml_is_a_parsing_error(tmp_path: Path) -> None:
+    local, shared = _repo(tmp_path)
+    _write(shared / "broken" / "broken.yml", "flavors: [\n")
+
+    parser = Parser(local, shared, (".md",))
+    with raises(DeckParsingError) as excinfo:
+        parser.from_section("broken", FlavorName("any"))
+    (error,) = excinfo.value.errors
+    assert "is not valid YAML" in error

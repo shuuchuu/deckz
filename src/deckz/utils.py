@@ -169,7 +169,7 @@ def load_yaml(path: Path) -> Any:
 
     try:
         return safe_load(path.read_text(encoding="utf8"))
-    except YAMLError as e:
+    except (YAMLError, UnicodeDecodeError) as e:
         msg = f"{path} is not valid YAML:\n{e}"
         raise InvalidConfigurationError(msg) from e
 

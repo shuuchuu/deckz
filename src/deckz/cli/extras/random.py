@@ -61,7 +61,7 @@ def random(
                 msg = "all numbers should be between 1 and the number of participants"
                 raise ValueError(msg)
             ok = True
-        except Exception:
+        except ValueError:
             console.print("Could not parse your selection, please try again.")
     selected_names = [names[i - 1] for i in numbers]
     name = choice(selected_names)

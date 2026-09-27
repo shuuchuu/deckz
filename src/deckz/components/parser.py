@@ -154,7 +154,7 @@ class Parser(ParserProtocol):
             return section
         try:
             content = load_yaml(definition_path)
-        except Exception as e:
+        except (InvalidConfigurationError, OSError) as e:
             section.parsing_error = f"{e}"
             return section
         try:
@@ -266,7 +266,7 @@ class Parser(ParserProtocol):
         section.resolved_path = definition_resolved_path.parent
         try:
             content = load_yaml(definition_resolved_path)
-        except Exception as e:
+        except (InvalidConfigurationError, OSError) as e:
             section.parsing_error = f"{e}"
             return section
         try:

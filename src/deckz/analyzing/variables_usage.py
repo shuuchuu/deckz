@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from jinja2 import TemplateSyntaxError, nodes
+from pydantic import ValidationError
 
 from ..exceptions import DeckzError
 from ..models import Deck, File, FlavorName, Lang, Node, Section, SectionDefinition
@@ -98,7 +99,7 @@ def _declared_names(acc: _Accumulator, section: Section) -> set[str]:
         try:
             definition = SectionDefinition.model_validate(load_yaml(yml_path))
             declared = {d.name for d in definition.variables_to_define}
-        except Exception:
+        except (DeckzError, OSError, ValidationError):
             declared = set()
         acc.declared[yml_path] = declared
         acc.referenced.setdefault(yml_path, set())
