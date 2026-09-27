@@ -99,6 +99,9 @@ pandoc_command:
   - typst
   - --lua-filter={templates_dir}/pandoc/filters/boxes.lua
 typst_parallel_compilations: 1
+typst_font_paths:
+  - assets/fonts
+typst_ignore_system_fonts: true
 ```
 
 - `typst_parallel_compilations`: how many PDFs compile at once (default
@@ -109,6 +112,16 @@ typst_parallel_compilations: 1
   run --watch`, each PDF's process stays alive instead, so rebuilds are
   incremental: on a 145-page deck, an edit re-renders every PDF in about a
   second.
+- `typst_font_paths`: directories where Typst looks for fonts, on top of
+  its embedded ones (Libertinus Serif, New Computer Modern, DejaVu Sans
+  Mono). Relative to the git root; `{git_dir}`, `{assets_dir}` and
+  `{templates_dir}` are substituted too. Defaults to none.
+- `typst_ignore_system_fonts`: when true, Typst doesn't use the fonts
+  installed on the machine (default false). Together with fonts
+  committed under `typst_font_paths`, every author's PDFs then come out
+  identical whatever fonts they have installed, and each PDF also skips
+  scanning the system's fonts (about 0.2s per PDF with a thousand fonts
+  installed).
 - `pandoc_command`: how `deckz` invokes `pandoc` to convert a rendered
   Markdown content file to the `.typ` fragment that gets `#include`d,
   including any `--lua-filter=...` your own conventions need (fenced divs

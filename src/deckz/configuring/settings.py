@@ -72,6 +72,18 @@ class GlobalSettings(BaseModel):
     core within a single compilation, so more than 1 mostly trades memory for \
     a small speedup.
     """
+    typst_font_paths: tuple[str, ...] = ()
+    """Directories Typst searches for fonts, on top of its embedded ones.
+
+    Relative to the git root; `{git_dir}`, `{assets_dir}` and \
+    `{templates_dir}` are substituted.
+    """
+    typst_ignore_system_fonts: bool = False
+    """Don't let Typst use the system's fonts.
+
+    Builds then only depend on `typst_font_paths` and Typst's embedded \
+    fonts, identical on every machine, and each PDF skips a system font scan.
+    """
     pandoc_command: tuple[str, ...] = ()
     file_extensions: tuple[str, ...] = (".md",)
     paths: GlobalPaths = Field(default_factory=GlobalPaths)

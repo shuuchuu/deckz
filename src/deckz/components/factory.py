@@ -36,7 +36,21 @@ class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
     def compiler(self) -> CompilerProtocol:
         from .compiler import TypstCompiler
 
-        return TypstCompiler(max_parallel=self._settings.typst_parallel_compilations)
+        # Relative to the git root, whatever deckz's own working directory.
+        paths = self._settings.paths
+        return TypstCompiler(
+            max_parallel=self._settings.typst_parallel_compilations,
+            font_paths=tuple(
+                paths.git_dir
+                / path.format(
+                    git_dir=paths.git_dir,
+                    assets_dir=paths.assets_dir,
+                    templates_dir=paths.templates_dir,
+                )
+                for path in self._settings.typst_font_paths
+            ),
+            ignore_system_fonts=self._settings.typst_ignore_system_fonts,
+        )
 
     def markdown_converter(self) -> MarkdownConverterProtocol:
         from .markdown_converter import PandocConverter

@@ -28,11 +28,21 @@ _warm_workers: dict[Path, "_Worker"] | None = None
 _warm_lock = Lock()
 
 
-def _serve(connection: Connection, main: str) -> None:
+def _serve(
+    connection: Connection,
+    main: str,
+    font_paths: list[str],
+    ignore_system_fonts: bool,
+) -> None:
     """Child process loop: compile `main` on each request, until told to stop."""
     import typst
 
-    compiler = typst.Compiler(main, root=str(Path(main).parent))
+    compiler = typst.Compiler(
+        main,
+        root=str(Path(main).parent),
+        font_paths=font_paths,
+        ignore_system_fonts=ignore_system_fonts,
+    )
     output = str(Path(main).with_suffix(".pdf"))
     while connection.recv():
         try:
@@ -45,10 +55,19 @@ def _serve(connection: Connection, main: str) -> None:
 
 
 class _Worker:
-    def __init__(self, main: Path) -> None:
+    def __init__(
+        self, main: Path, font_paths: tuple[Path, ...], ignore_system_fonts: bool
+    ) -> None:
         self._connection, child_connection = get_context("spawn").Pipe()
         self._process: BaseProcess = get_context("spawn").Process(
-            target=_serve, args=(child_connection, str(main)), daemon=True
+            target=_serve,
+            args=(
+                child_connection,
+                str(main),
+                [str(path) for path in font_paths],
+                ignore_system_fonts,
+            ),
+            daemon=True,
         )
         self._process.start()
         child_connection.close()
@@ -109,10 +128,26 @@ class TypstCompiler(CompilerProtocol):
     incremental. At most `max_parallel` compilations run at once: Typst \
     already parallelizes a single compilation across cores, and each \
     concurrent one adds a whole document's memory (up to a few GB).
+
+    Typst finds fonts in `font_paths`, in its own embedded fonts, and, \
+    unless `ignore_system_fonts`, in the system's. Scanning the system's \
+    fonts costs every child process a fixed ~0.2s with a thousand fonts \
+    installed, so ignoring them speeds up builds as well as making them \
+    independent of the machine's fonts.
     """
 
-    def __init__(self, max_parallel: int = 1) -> None:
+    def __init__(
+        self,
+        max_parallel: int = 1,
+        font_paths: tuple[Path, ...] = (),
+        ignore_system_fonts: bool = False,
+    ) -> None:
         self._slots = BoundedSemaphore(max_parallel)
+        self._font_paths = font_paths
+        self._ignore_system_fonts = ignore_system_fonts
+
+    def _worker(self, main: Path) -> _Worker:
+        return _Worker(main, self._font_paths, self._ignore_system_fonts)
 
     def compile(self, file: Path) -> CompileResult:
         main = file.resolve()
@@ -122,12 +157,12 @@ class TypstCompiler(CompilerProtocol):
                 if workers is not None and (
                     main not in workers or not workers[main].alive
                 ):
-                    workers[main] = _Worker(main)
+                    workers[main] = self._worker(main)
                 worker = workers[main] if workers is not None else None
             if worker is not None:
                 with worker.lock:
                     return worker.compile()
-            worker = _Worker(main)
+            worker = self._worker(main)
             try:
                 return worker.compile()
             finally:

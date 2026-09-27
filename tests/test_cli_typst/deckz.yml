@@ -9,3 +9,5 @@ file_extensions:
   - .md
 paths:
   jinja2_main_template: "{jinja2_dir}/main.typ"
+# Typst's embedded fonts are enough here: skips a system font scan per PDF.
+typst_ignore_system_fonts: true

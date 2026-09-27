@@ -4,3 +4,5 @@ pandoc_command:
   - markdown-auto_identifiers
   - -t
   - typst
+# Typst's embedded fonts are enough here: skips a system font scan per PDF.
+typst_ignore_system_fonts: true

@@ -14,6 +14,7 @@ from pytest import fixture, mark, raises
 
 from deckz.cli import main
 from deckz.components.compiler import keep_warm
+from deckz.components.factory import GlobalSettingsFactory
 from deckz.configuring.settings import DeckSettings
 from deckz.exceptions import CompilationError
 from deckz.pipelines import _run_once, run
@@ -211,6 +212,26 @@ def test_one_shot_build_leaves_no_worker_process(working_dir: Path) -> None:
     main(_RUN_ARGS)
 
     assert active_children() == []
+
+
+def test_font_settings_reach_typst(working_dir: Path) -> None:
+    git_dir = working_dir.parent.parent
+    copytree(Path(__file__).parent / "fonts", git_dir / "fonts")
+    main_path = working_dir / "font.typ"
+    main_path.write_text('#set text(font: "Noto Sans Lycian")\nHello\n')
+
+    def compile_with_current_settings() -> str:
+        settings = DeckSettings.from_yaml(working_dir)
+        result = GlobalSettingsFactory(settings).compiler().compile(main_path)
+        assert result.ok
+        return result.diagnostics
+
+    # The fixture ignores system fonts, where this one may well be installed.
+    assert "unknown font family" in compile_with_current_settings()
+    with (git_dir / "deckz.yml").open("a", encoding="utf8") as fh:
+        # Relative to the git root, not to the deck deckz runs from.
+        fh.write("typst_font_paths:\n  - fonts\n")
+    assert "unknown font family" not in compile_with_current_settings()
 
 
 class _RecordingProgress:
