@@ -14,7 +14,7 @@ def _write(path: Path, content: str) -> None:
 
 
 def _frame(title: str) -> str:
-    return f"\\begin{{frame}}{{{title}}}\n  {title}!\n\\end{{frame}}\n"
+    return f"# {title}\n\n{title}!\n"
 
 
 def _repo(tmp_path: Path) -> tuple[Path, Path]:
@@ -35,7 +35,7 @@ def _repo(tmp_path: Path) -> tuple[Path, Path]:
         "  - name: constrained\n    variables: { depth: deep }\n"
         "    includes:\n      - body\n",
     )
-    _write(shared / "inner" / "body.tex", _frame("Body"))
+    _write(shared / "inner" / "body.md", _frame("Body"))
     _write(
         shared / "outer" / "outer.yml",
         "flavors:\n"
@@ -49,7 +49,7 @@ def _repo(tmp_path: Path) -> tuple[Path, Path]:
 
 def test_flavor_variables_cascade_into_nested_sections(tmp_path: Path) -> None:
     local, shared = _repo(tmp_path)
-    parser = Parser(local, shared, (".tex",))
+    parser = Parser(local, shared, (".md",))
     deck = parser.from_section("outer", FlavorName("shallow"))
     resolve_variables(deck, {"lang": "fr"})
 
@@ -68,7 +68,7 @@ def test_flavor_variables_cascade_into_nested_sections(tmp_path: Path) -> None:
 
 def test_sibling_flavors_do_not_leak_into_each_other(tmp_path: Path) -> None:
     local, shared = _repo(tmp_path)
-    parser = Parser(local, shared, (".tex",))
+    parser = Parser(local, shared, (".md",))
 
     shallow_deck = parser.from_section("outer", FlavorName("shallow"))
     resolve_variables(shallow_deck, {})
@@ -85,7 +85,7 @@ def test_sibling_flavors_do_not_leak_into_each_other(tmp_path: Path) -> None:
 
 def test_nested_flavor_variables_override_ancestor(tmp_path: Path) -> None:
     local, shared = _repo(tmp_path)
-    parser = Parser(local, shared, (".tex",))
+    parser = Parser(local, shared, (".md",))
     deck = parser.from_section("outer", FlavorName("shallow"))
     resolve_variables(deck, {})
 
@@ -104,9 +104,9 @@ def test_variables_to_define_missing_is_a_parsing_error(tmp_path: Path) -> None:
         "variables_to_define:\n  - depth\nflavors:\n"
         "  - name: incomplete\n    includes:\n      - body\n",
     )
-    _write(shared / "strict" / "body.tex", _frame("Body"))
+    _write(shared / "strict" / "body.md", _frame("Body"))
 
-    parser = Parser(local, shared, (".tex",))
+    parser = Parser(local, shared, (".md",))
     with raises(DeckzError):
         parser.from_section("strict", FlavorName("incomplete"))
 
@@ -119,9 +119,9 @@ def test_variables_to_define_satisfied_has_no_parsing_error(tmp_path: Path) -> N
         "  - name: complete\n    variables: { depth: deep }\n"
         "    includes:\n      - body\n",
     )
-    _write(shared / "strict" / "body.tex", _frame("Body"))
+    _write(shared / "strict" / "body.md", _frame("Body"))
 
-    parser = Parser(local, shared, (".tex",))
+    parser = Parser(local, shared, (".md",))
     deck = parser.from_section("strict", FlavorName("complete"))
     (section,) = deck.parts[PartName("part_name")].nodes
     assert isinstance(section, Section)
@@ -139,9 +139,9 @@ def test_variables_to_define_allowed_values_rejects_out_of_range(
         "  - name: wrong\n    variables: { depth: medium }\n"
         "    includes:\n      - body\n",
     )
-    _write(shared / "strict" / "body.tex", _frame("Body"))
+    _write(shared / "strict" / "body.md", _frame("Body"))
 
-    parser = Parser(local, shared, (".tex",))
+    parser = Parser(local, shared, (".md",))
     with raises(DeckzError):
         parser.from_section("strict", FlavorName("wrong"))
 
@@ -154,9 +154,9 @@ def test_variables_to_define_allowed_values_accepts_in_range(tmp_path: Path) -> 
         "  - name: right\n    variables: { depth: deep }\n"
         "    includes:\n      - body\n",
     )
-    _write(shared / "strict" / "body.tex", _frame("Body"))
+    _write(shared / "strict" / "body.md", _frame("Body"))
 
-    parser = Parser(local, shared, (".tex",))
+    parser = Parser(local, shared, (".md",))
     deck = parser.from_section("strict", FlavorName("right"))
     (section,) = deck.parts[PartName("part_name")].nodes
     assert section.parsing_error is None
@@ -164,7 +164,7 @@ def test_variables_to_define_allowed_values_accepts_in_range(tmp_path: Path) -> 
 
 def test_base_variables_are_overridden_by_flavor_variables(tmp_path: Path) -> None:
     local, shared = _repo(tmp_path)
-    parser = Parser(local, shared, (".tex",))
+    parser = Parser(local, shared, (".md",))
     deck = parser.from_section("outer", FlavorName("deep"))
     resolve_variables(deck, {"depth": "medium", "other": "kept"})
 

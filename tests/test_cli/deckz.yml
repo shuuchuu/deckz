@@ -1,6 +1,6 @@
-build_command:
-  - latexmk
-  - -pdflatex=xelatex -shell-escape -interaction=nonstopmode %O %S
-  - -dvi-
-  - -ps-
-  - -pdf
+pandoc_command:
+  - pandoc
+  - -f
+  - markdown-auto_identifiers
+  - -t
+  - typst

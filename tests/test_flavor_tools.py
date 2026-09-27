@@ -20,9 +20,6 @@ def repo(tmp_path: Path, monkeypatch: Any) -> Path:
     init_repository(str(tmp_path))
     monkeypatch.setattr(appdirs, "user_config_dir", lambda _: str(tmp_path))
     monkeypatch.chdir(tmp_path)
-    _write(
-        tmp_path / "deckz.yml", 'build_command: ["true"]\nfile_extensions: [".md"]\n'
-    )
 
     shared = tmp_path / "latex"
     _write(

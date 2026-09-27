@@ -8,10 +8,10 @@ def search_sections(keywords: list[str], /, *, workdir: Path = Path()) -> None:
     r"""Search shared sections by keyword in yml titles and frame titles.
 
     Case-insensitive substring match, OR'd across KEYWORDS, against each \
-    section's title/default_titles (from its yml) and each of its own .tex \
-    files' frame titles (\begin{frame}{...}) -- never against frame bodies, \
-    code or comments, so it does not false-positive on unrelated content that \
-    happens to mention a keyword.
+    section's title/default_titles (from its yml) and each of its own .md \
+    files' headings -- never against frame bodies, code or comments, so it \
+    does not false-positive on unrelated content that happens to mention a \
+    keyword.
 
     Prints one match per line:
 

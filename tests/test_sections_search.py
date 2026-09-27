@@ -24,16 +24,12 @@ def shared_latex_dir(tmp_path: Path) -> Path:
         "      - hello\n",
     )
     _write(
-        shared / "greetings" / "hello.tex",
-        "\\begin{frame}{Bonjour}\n  Bonjour !\n\\end{frame}\n"
-        "\\begin{frame}[fragile]{Au revoir}\n  Au revoir !\n\\end{frame}\n",
+        shared / "greetings" / "hello.md",
+        "# Bonjour\n\nBonjour !\n\n# Au revoir\n\nAu revoir !\n",
     )
     # No sibling en/en.yml: section structure is never duplicated for
     # English, only translated body files live under en/.
-    _write(
-        shared / "greetings" / "en" / "hello.tex",
-        "\\begin{frame}{Hello}\n  Hello!\n\\end{frame}\n",
-    )
+    _write(shared / "greetings" / "en" / "hello.md", "# Hello\n\nHello!\n")
     return shared
 
 
@@ -52,18 +48,11 @@ def test_search_sections_frame_title_match_case_insensitive(
     assert frame_matches[0].section == "greetings"
 
 
-def test_search_sections_matches_bracketed_frame_option(
-    shared_latex_dir: Path,
-) -> None:
-    _, frame_matches = search_sections(shared_latex_dir, ["revoir"])
-    assert [m.frame_title for m in frame_matches] == ["Au revoir"]
-
-
 def test_search_sections_does_not_recurse_into_en_sibling(
     shared_latex_dir: Path,
 ) -> None:
     # "Hello" only exists as an English frame title, in the non-canonical
-    # en/hello.tex sibling; frame search only globs the section's own
+    # en/hello.md sibling; frame search only globs the section's own
     # directory (non-recursively), so it must not turn up here.
     section_matches, frame_matches = search_sections(shared_latex_dir, ["hello"])
     assert not section_matches

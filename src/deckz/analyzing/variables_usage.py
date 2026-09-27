@@ -56,7 +56,7 @@ class _Accumulator:
 
 def _content_suffix(path: Path) -> str:
     # Mirrors components.renderer._content_suffix: a checked-in dependency can
-    # be named e.g. "foo.tex.j2" directly, not just "foo.tex".
+    # be named e.g. "foo.md.j2" directly, not just "foo.md".
     return path.with_suffix("").suffix if path.suffix == ".j2" else path.suffix
 
 

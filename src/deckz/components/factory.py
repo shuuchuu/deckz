@@ -34,16 +34,9 @@ class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
         )
 
     def compiler(self) -> CompilerProtocol:
-        if self._settings.compiler == "typst":
-            from .typst_compiler import TypstCompiler
+        from .compiler import TypstCompiler
 
-            return TypstCompiler(
-                max_parallel=self._settings.typst_parallel_compilations
-            )
-
-        from .compiler import Compiler
-
-        return Compiler(build_command=self._settings.build_command)
+        return TypstCompiler(max_parallel=self._settings.typst_parallel_compilations)
 
     def markdown_converter(self) -> MarkdownConverterProtocol:
         from .markdown_converter import PandocConverter

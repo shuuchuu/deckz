@@ -1,4 +1,3 @@
-compiler: typst
 pandoc_command:
   - pandoc
   - -f

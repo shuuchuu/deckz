@@ -90,10 +90,10 @@ class CompilerProtocol(Protocol):
 
 
 class MarkdownConverterProtocol(Protocol):
-    """Convert a rendered Markdown file to LaTeX (or another output format).
+    """Convert a rendered Markdown file to Typst.
 
     Implementations shell out to `pandoc`; the actual command (binary, \
-    `--slide-level`, `--lua-filter=...`, etc.) is entirely configured by the \
+    `--lua-filter=...`, etc.) is entirely configured by the \
     target repo via `deckz.yml`'s `pandoc_command`.
     """
 

@@ -4,9 +4,8 @@ _AGENT_NOTES = """\
 # Working in this repo
 
 This is a `deckz`-managed repository: a set of slide decks that share
-slides ("sections") with each other via `latex/` (a historical name: its
-content files may be Markdown, compiled with Typst or LaTeX depending on
-`deckz.yml`'s `compiler` and main template). Run `deckz --help`
+slides ("sections") with each other via `latex/`: Markdown content files,
+converted by pandoc and compiled with Typst. Run `deckz --help`
 or `deckz <command> --help` for the full, authoritative command reference
 -- these notes only cover conventions that aren't self-documenting there.
 
@@ -18,7 +17,7 @@ or `deckz <command> --help` for the full, authoritative command reference
   per company/deck by placing a file deeper in the tree.
 - Shared content lives under `latex/<section>/<section>.yml` (the
   directory name must match the yml's stem) plus its sibling content
-  files (`deckz.yml`'s `file_extensions`: `.md`, `.tex`).
+  files (`deckz.yml`'s `file_extensions`, `.md` by default).
 - Each deck is `<company>/<deck>/deck.yml`, with its own local `latex/`
   directory for deck-specific content and per-file overrides (see below).
 

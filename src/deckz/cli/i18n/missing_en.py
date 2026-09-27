@@ -25,7 +25,7 @@ def missing_en(
         never flagged)
 
     Running this lets you audit gaps -- both what would block `deckz run \
-    --en` and what's merely unlocalized -- without needing a LaTeX toolchain.
+    --en` and what's merely unlocalized -- without compiling anything.
 
     Args:
         all: Check every deck in the repository instead of just WORKDIR

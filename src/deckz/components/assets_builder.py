@@ -8,7 +8,7 @@ from .protocols import AssetsBuilderProtocol, CompilerProtocol
 
 
 class AssetsBuilder(AssetsBuilderProtocol):
-    """Build project-specific assets (tikz standalones, matplotlib/plotly figures, ...).
+    """Build project-specific assets (matplotlib/plotly figures, ...).
 
     `deckz` itself has no opinion on what assets a deck needs or how to \
     build them. The target repo supplies a Python module (by convention \

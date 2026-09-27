@@ -36,10 +36,6 @@ def _repo(tmp_path: Path, monkeypatch: MonkeyPatch) -> Path:
         appdirs, "user_config_dir", lambda *a, **k: str(tmp_path / "userconfig")
     )
 
-    _write(
-        git_dir / "deckz.yml",
-        "build_command:\n  - echo\n",
-    )
     _write(git_dir / "variables.yml", "theme: dark\n")
     _write(
         git_dir / "templates" / "jinja2" / "env.py",
@@ -57,11 +53,11 @@ def _repo(tmp_path: Path, monkeypatch: MonkeyPatch) -> Path:
         "    includes:\n      - body_quiet\n",
     )
     _write(
-        git_dir / "latex" / "greeting" / "body.tex",
+        git_dir / "latex" / "greeting" / "body.md",
         "{{ variables.depth }} {{ variables.typo }}\n",
     )
     _write(
-        git_dir / "latex" / "greeting" / "body_quiet.tex",
+        git_dir / "latex" / "greeting" / "body_quiet.md",
         "{{ variables.depth }}\n",
     )
 
@@ -70,20 +66,20 @@ def _repo(tmp_path: Path, monkeypatch: MonkeyPatch) -> Path:
         "variables_to_define:\n  - x\nflavors:\n"
         "  - name: incomplete\n    includes:\n      - body\n",
     )
-    _write(git_dir / "latex" / "broken" / "body.tex", "static\n")
+    _write(git_dir / "latex" / "broken" / "body.md", "static\n")
 
     _write(
         git_dir / "latex" / "badsyntax" / "badsyntax.yml",
         "flavors:\n  - name: only\n    includes:\n      - body\n",
     )
-    _write(git_dir / "latex" / "badsyntax" / "body.tex", "{% if %}\n")
+    _write(git_dir / "latex" / "badsyntax" / "body.md", "{% if %}\n")
 
     _write(
         git_dir / "company" / "deck.yml",
         "name: D\nparts:\n  - name: p1\n    sections:\n      - local\n",
     )
     _write(
-        git_dir / "company" / "latex" / "local.tex",
+        git_dir / "company" / "latex" / "local.md",
         "{{ variables.missing_local }}\n",
     )
 
@@ -99,8 +95,8 @@ def test_check_variables_reports_all_finding_kinds(
     report = check_variables(settings)
 
     undefined_names = {(path.name, name) for path, name in report.undefined}
-    assert ("body.tex", "typo") in undefined_names
-    assert ("local.tex", "missing_local") in undefined_names
+    assert ("body.md", "typo") in undefined_names
+    assert ("local.md", "missing_local") in undefined_names
     # "depth" is declared and set: never flagged as undefined.
     assert not any(name == "depth" for _, name in undefined_names)
 
@@ -120,7 +116,6 @@ def test_check_variables_clean_repo_has_no_findings(
     monkeypatch.setattr(
         appdirs, "user_config_dir", lambda *a, **k: str(tmp_path / "userconfig")
     )
-    _write(git_dir / "deckz.yml", "build_command:\n  - echo\n")
     _write(
         git_dir / "templates" / "jinja2" / "env.py",
         "from jinja2 import Environment\n\n\n"
@@ -131,7 +126,7 @@ def test_check_variables_clean_repo_has_no_findings(
         git_dir / "latex" / "about" / "about.yml",
         "flavors:\n  - name: standard\n    includes:\n      - body\n",
     )
-    _write(git_dir / "latex" / "about" / "body.tex", "Hello.\n")
+    _write(git_dir / "latex" / "about" / "body.md", "Hello.\n")
 
     settings = GlobalSettings.from_yaml(git_dir)
     report = check_variables(settings)

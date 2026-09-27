@@ -27,7 +27,7 @@ dependencies = [
   "typst >= 0.15, < 1",
   "watchfiles >= 1, < 2",
 ]
-description = "Tool to handle multiple slide decks (Markdown to Typst or LaTeX/Beamer)."
+description = "Tool to handle multiple slide decks (Markdown to Typst)."
 homepage = "https://github.com/shuuchuu/deckz"
 license = "Apache-2.0"
 license-files = ["LICENSE"]

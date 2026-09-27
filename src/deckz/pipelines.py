@@ -6,10 +6,10 @@ from typing import Any
 from watchfiles import watch as watchfiles_watch
 
 from .checking import build_all_deck, build_shared_deck, run_scratch_dir
+from .components.compiler import keep_warm
 from .components.factory import DeckSettingsFactory, GlobalSettingsFactory
 from .components.progress import NullProgress
 from .components.protocols import ProgressReporterProtocol
-from .components.typst_compiler import keep_warm
 from .configuring.settings import DeckSettings, GlobalSettings
 from .configuring.variables import get_variables, resolve_variables
 from .exceptions import CompilationError, DeckzError
@@ -211,7 +211,7 @@ def run_all(
 
 
 def run_assets(directory: Path) -> None:
-    """Build all the project standalones (images, tikz, plots, etc).
+    """Build all the project standalones (images, plots, etc).
 
     Args:
         directory: Path to the current directory. Will be used to find the project \
@@ -241,7 +241,7 @@ def watch[**P](
     }
     _logger.info("Watching:\n%s", "\n".join(sorted(str(d) for d in dirs_to_watch)))
     # Keeps a Typst worker process alive per compiled PDF, so every rebuild
-    # after the first is incremental (no effect on other compilers).
+    # after the first is incremental.
     with keep_warm():
         _watch_loop(dirs_to_watch, function, *function_args, **function_kwargs)
 

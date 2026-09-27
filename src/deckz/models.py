@@ -557,13 +557,10 @@ class CompileResult:
     """Result of a compilation."""
 
     ok: bool
-    """True if the compilation finished with a non-error code, False otherwise."""
+    """True if the compilation succeeded, False otherwise."""
 
-    stdout: str | None = ""
-    """The complete stdout output during compilation."""
-
-    stderr: str | None = ""
-    """The complete stderr output during compilation."""
+    diagnostics: str = ""
+    """The compiler's errors, or its warnings when `ok`."""
 
 
 ########################################################################################

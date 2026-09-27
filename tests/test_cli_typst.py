@@ -13,7 +13,7 @@ from pygit2 import init_repository
 from pytest import fixture, mark, raises
 
 from deckz.cli import main
-from deckz.components.typst_compiler import keep_warm
+from deckz.components.compiler import keep_warm
 from deckz.configuring.settings import DeckSettings
 from deckz.exceptions import CompilationError
 from deckz.pipelines import _run_once, run

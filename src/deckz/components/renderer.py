@@ -59,8 +59,8 @@ class _AbsoluteLoader(BaseLoader):
 
 
 def _content_suffix(path: Path) -> str:
-    # E.g. ".tex" for "foo.tex" (a main template) or "foo.tex.j2" (a
-    # dependency about to be rendered in place), ".md" for "foo.md.j2".
+    # E.g. ".typ" for "foo.typ" (a main template), ".md" for "foo.md.j2" (a
+    # dependency about to be rendered in place).
     return path.with_suffix("").suffix if path.suffix == ".j2" else path.suffix
 
 
@@ -68,12 +68,12 @@ class Renderer(_BaseRenderer):
     """Render Jinja2 templates using a Jinja environment the target repo owns.
 
     `deckz` itself has no opinion on delimiters or filters -- including the \
-    `image` macro or any other LaTeX/Markdown vocabulary -- since none of \
+    `image` macro or any other Typst/Markdown vocabulary -- since none of \
     that is generic. The target repo supplies a Python module (by \
     convention `templates/jinja2/env.py`, see \
     `GlobalPaths.jinja2_env_module`) exposing `environment_for(suffix: str) \
     -> jinja2.Environment`, called once per content-file suffix being \
-    rendered (e.g. once for `.tex`, once for `.md`), so different sources \
+    rendered (e.g. once for `.typ`, once for `.md`), so different sources \
     can use different delimiters/filters.
 
     The one thing `deckz` still injects into every render, regardless of \
@@ -106,7 +106,7 @@ class Renderer(_BaseRenderer):
         )
 
     def environment_for(self, suffix: str) -> Environment:
-        """The target repo's Jinja environment for a content suffix (e.g. `.tex`).
+        """The target repo's Jinja environment for a content suffix (e.g. `.md`).
 
         Exposed beyond `render_to_str`'s own use so other code (e.g. the \
         `deckz check variables` static analyzer) can parse a fragment with \

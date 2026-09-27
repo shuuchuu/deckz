@@ -19,6 +19,7 @@ from typing import Any
 
 from ..exceptions import DeckzError
 from ..models import (
+    CompileResult,
     Deck,
     File,
     NodeVisitor,
@@ -31,7 +32,6 @@ from ..models import (
     TitleOrContent,
 )
 from ..utils import copy_file_if_newer
-from .compiler import CompileResult
 from .protocols import (
     CompilerProtocol,
     DeckBuilderProtocol,
@@ -66,7 +66,7 @@ def variables_fingerprint(variables: Mapping[str, Any]) -> str:
 def dependency_relative_path(
     resolved_path: Path, basedirs: Iterable[Path], fingerprint: str
 ) -> PurePosixPath:
-    r"""The extensionless path used both to `\input` a fragment and to name it.
+    """The extensionless path used both to `#include` a fragment and to name it.
 
     Relative to whichever of `basedirs` contains `resolved_path`, with \
     `fingerprint` appended to the stem -- the single place this naming \
@@ -182,8 +182,9 @@ class DeckBuilder(DeckBuilderProtocol):
         for item_name, result in results:
             if not result.ok:
                 self._logger.warning("Compilation %s errored", item_name)
-                self._logger.warning("Captured %s stderr\n%s", item_name, result.stderr)
-                self._logger.warning("Captured %s stdout\n%s", item_name, result.stdout)
+                self._logger.warning(
+                    "Captured %s diagnostics\n%s", item_name, result.diagnostics
+                )
         return all(result.ok for _, result in results)
 
     def _build_item_pair(self, pair: tuple[str, CompileItem]) -> CompileResult:
@@ -241,12 +242,7 @@ class DeckBuilder(DeckBuilderProtocol):
         copied = copy_dependencies(
             item.dependencies, build_dir, self._basedirs, force=markdown_stale
         )
-        render_dependencies(
-            self._renderer,
-            self._markdown_converter,
-            copied,
-            target_suffix=self._template.suffix,
-        )
+        render_dependencies(self._renderer, self._markdown_converter, copied)
         if markdown_stale:
             fingerprint_path.write_text(self._markdown_fingerprint, encoding="utf8")
         result = self._compiler.compile(main_path)
@@ -327,16 +323,12 @@ def render_dependencies(
     renderer: RendererProtocol,
     markdown_converter: MarkdownConverterProtocol,
     to_render: Iterable[tuple[Path, dict[str, Any]]],
-    *,
-    target_suffix: str = ".tex",
 ) -> None:
     for item_path, variables in to_render:
         rendered_path = item_path.with_suffix("")
         renderer.render_to_path(item_path, rendered_path, variables=variables)
         if rendered_path.suffix == ".md":
-            markdown_converter.convert(
-                rendered_path, rendered_path.with_suffix(target_suffix)
-            )
+            markdown_converter.convert(rendered_path, rendered_path.with_suffix(".typ"))
 
 
 class PartDependenciesNodeVisitor(NodeVisitor[[MutableSet[DependencyRef]], None]):

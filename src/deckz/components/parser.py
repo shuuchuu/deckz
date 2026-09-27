@@ -54,8 +54,8 @@ class Parser(ParserProtocol):
             shared_latex_dir: Path to the shared latex directory. Used during the \
                 includes resolving process
             file_extensions: Extensions to try, in order, when resolving a file \
-                include (e.g. `(".md", ".tex")` to prefer a migrated Markdown \
-                file and fall back to a legacy LaTeX one).
+                include (e.g. `(".md", ".typ")` to prefer a Markdown file \
+                and fall back to a raw Typst one).
             lang: Language to resolve the deck/sections in. Affects which \
                 physical body file is picked for each leaf file node (an "en" \
                 sibling is required, with no fallback to fr) and which string a \

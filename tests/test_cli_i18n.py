@@ -13,7 +13,7 @@ def _write(path: Path, content: str) -> None:
 
 
 def _frame(title: str) -> str:
-    return f"\\begin{{frame}}{{{title}}}\n  {title}!\n\\end{{frame}}\n"
+    return f"# {title}\n\n{title}!\n"
 
 
 @fixture
@@ -23,7 +23,6 @@ def working_dir(tmp_path: Path, monkeypatch: Any) -> Iterator[Path]:
 
     init_repository(str(tmp_path))
     monkeypatch.setattr(appdirs, "user_config_dir", lambda _: str(tmp_path))
-    _write(tmp_path / "deckz.yml", 'build_command: ["true"]\n')
 
     shared = tmp_path / "latex"
     # A single section definition, never duplicated for English: only the
@@ -38,8 +37,8 @@ def working_dir(tmp_path: Path, monkeypatch: Any) -> Iterator[Path]:
         "    includes:\n"
         "      - hello\n",
     )
-    _write(shared / "i18n-demo" / "hello.tex", _frame("Bonjour"))
-    _write(shared / "i18n-demo" / "en" / "hello.tex", _frame("Hello"))
+    _write(shared / "i18n-demo" / "hello.md", _frame("Bonjour"))
+    _write(shared / "i18n-demo" / "en" / "hello.md", _frame("Hello"))
 
     deck_dir = tmp_path / "company" / "xyz"
     _write(
@@ -61,7 +60,7 @@ def test_show_paths(working_dir: Path, capsys: CaptureFixture[str]) -> None:
     main(("show", "paths"))
 
     out = capsys.readouterr().out.splitlines()
-    assert out == [str(working_dir.parent.parent / "latex/i18n-demo/hello.tex")]
+    assert out == [str(working_dir.parent.parent / "latex/i18n-demo/hello.md")]
 
 
 def test_section_flavors(working_dir: Path, capsys: CaptureFixture[str]) -> None:
@@ -74,7 +73,7 @@ def test_section_files(working_dir: Path, capsys: CaptureFixture[str]) -> None:
     main(("section-files", "i18n-demo", "hello"))
 
     (line,) = capsys.readouterr().out.splitlines()
-    assert line.endswith("i18n-demo/hello.tex")
+    assert line.endswith("i18n-demo/hello.md")
 
 
 def test_missing_en_clean(working_dir: Path, capsys: CaptureFixture[str]) -> None:
@@ -86,13 +85,13 @@ def test_missing_en_clean(working_dir: Path, capsys: CaptureFixture[str]) -> Non
 def test_missing_en_reports_missing_file(
     working_dir: Path, capsys: CaptureFixture[str]
 ) -> None:
-    (working_dir.parent.parent / "latex/i18n-demo/en/hello.tex").unlink()
+    (working_dir.parent.parent / "latex/i18n-demo/en/hello.md").unlink()
 
     main(("i18n", "missing-en"))
 
     (line,) = capsys.readouterr().out.splitlines()
     assert line.startswith("FILE\t")
-    assert line.endswith("i18n-demo/en/hello.tex")
+    assert line.endswith("i18n-demo/en/hello.md")
 
 
 def test_missing_en_reports_missing_translation_key(

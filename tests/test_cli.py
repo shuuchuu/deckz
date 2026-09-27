@@ -179,8 +179,8 @@ def test_clean_all_removes_run_scratch_dir(working_dir: Path) -> None:
 
 
 def test_clean_latex_dry_run(working_dir: Path) -> None:
-    shared_unused_path = working_dir.parent.parent / "latex" / "questions.tex"
-    local_unused_path = working_dir / "latex" / "orphan.tex"
+    shared_unused_path = working_dir.parent.parent / "latex" / "questions.md"
+    local_unused_path = working_dir / "latex" / "orphan.md"
     assert shared_unused_path.exists()
     assert local_unused_path.exists()
 
@@ -191,9 +191,9 @@ def test_clean_latex_dry_run(working_dir: Path) -> None:
 
 
 def test_clean_latex(working_dir: Path) -> None:
-    shared_unused_path = working_dir.parent.parent / "latex" / "questions.tex"
-    local_unused_path = working_dir / "latex" / "orphan.tex"
-    used_path = working_dir / "latex" / "about.tex"
+    shared_unused_path = working_dir.parent.parent / "latex" / "questions.md"
+    local_unused_path = working_dir / "latex" / "orphan.md"
+    used_path = working_dir / "latex" / "about.md"
     assert shared_unused_path.exists()
     assert local_unused_path.exists()
     assert used_path.exists()
@@ -277,15 +277,9 @@ def test_flavor_rename_name_collision(working_dir: Path, caplog: Any) -> None:
 def test_run_fr_default(bilingual_dir: Path) -> None:
     main(("run",))
 
-    # The template fixture's \input loop doesn't actually pull frame bodies
-    # in (a pre-existing quirk of this minimal test template, unrelated to
-    # --en), so assert on what it does render: the deck title (a variables.yml
-    # lang-map) and the section title (a deck.yml node-include lang-map).
-    # File-level en/ sibling resolution itself is covered directly, at the
-    # Parser level, in test_parser_lang.py.
     _, text = extract_info(bilingual_dir / "pdf" / "bilingual-p1-presentation.pdf")
     assert "Cas Bilingue" in text
-    assert "Bonjour" in text
+    assert "Bonjour tout le monde!" in text
     assert "Bilingual Case" not in text
     assert "Hello" not in text
 
@@ -297,7 +291,7 @@ def test_run_en(bilingual_dir: Path) -> None:
         bilingual_dir / "pdf" / "en" / "bilingual-p1-presentation.pdf"
     )
     assert "Bilingual Case" in text
-    assert "Hello" in text
+    assert "Hello everyone!" in text
     assert "Cas Bilingue" not in text
     assert "Bonjour" not in text
     # fr output lives at its own, unsuffixed path -- --en never touches it.
@@ -307,7 +301,7 @@ def test_run_en(bilingual_dir: Path) -> None:
 def test_run_en_missing_file_fails_loudly(
     bilingual_dir: Path, caplog: Any, capsys: Any
 ) -> None:
-    (bilingual_dir / "latex" / "en" / "hello.tex").unlink()
+    (bilingual_dir / "latex" / "en" / "hello.md").unlink()
 
     with raises(SystemExit) as exc_info:
         main(("run", "--en"))
@@ -355,7 +349,9 @@ def test_run_outside_a_deck_exits_1(working_dir: Path, caplog: Any) -> None:
 
 
 def test_run_with_invalid_settings_exits_1(working_dir: Path, caplog: Any) -> None:
-    (working_dir / "deckz.yml").write_text("compiler: bogus\n", encoding="utf8")
+    (working_dir / "deckz.yml").write_text(
+        "typst_parallel_compilations: 0\n", encoding="utf8"
+    )
 
     with raises(SystemExit) as exc_info:
         main(("run",))

@@ -9,15 +9,8 @@ RUN apt update \
   curl \
   git \
   gpg \
-  latexmk \
   make \
   pandoc \
-  texlive \
-  texlive-lang-english \
-  texlive-lang-french \
-  texlive-latex-extra \
-  texlive-science \
-  texlive-xetex \
   && apt-get autoremove --purge -y \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*

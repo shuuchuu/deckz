@@ -5,7 +5,7 @@ from . import app
 
 @app.command(name="assets")
 def run_assets(*, watch: bool = False, workdir: Path = Path()) -> None:
-    """Build all the project standalones (images, tikz, plots, etc).
+    """Build all the project standalones (images, plots, etc).
 
     Args:
         watch: Rebuild on file changes, instead of building once

@@ -1,6 +1,6 @@
 from functools import reduce
 from pathlib import Path
-from typing import Annotated, Any, Literal, Self, cast
+from typing import Annotated, Any, Self, cast
 
 from appdirs import user_config_dir as appdirs_user_config_dir
 from pydantic import (
@@ -11,7 +11,6 @@ from pydantic import (
     Field,
     ValidationError,
     ValidationInfo,
-    model_validator,
 )
 
 from .. import app_name
@@ -42,7 +41,7 @@ class GlobalPaths(BaseModel):
     latex_dir: _Path = cast("Path", "{git_dir}/latex")
     templates_dir: _Path = cast("Path", "{git_dir}/templates")
     jinja2_dir: _Path = cast("Path", "{templates_dir}/jinja2")
-    jinja2_main_template: _Path = cast("Path", "{jinja2_dir}/main.tex")
+    jinja2_main_template: _Path = cast("Path", "{jinja2_dir}/main.typ")
     jinja2_env_module: _Path = cast("Path", "{jinja2_dir}/env.py")
     assets_builders_module: _Path = cast("Path", "{templates_dir}/assets_builders.py")
     github_issues: _Path = cast("Path", "{user_config_dir}/github-issues.yml")
@@ -66,16 +65,6 @@ class DeckPaths(GlobalPaths):
 
 
 class GlobalSettings(BaseModel):
-    compiler: Literal["command", "typst"] = "command"
-    """How the main rendered file is compiled to PDF.
-
-    `"command"` shells out to `build_command` once per compiled item (e.g. \
-    `latexmk`). `"typst"` compiles `.typ` main files with the `typst` Python \
-    bindings, each in a child process; under `--watch`, one child per PDF \
-    stays alive with Typst's incremental cache, which is what makes rebuilds \
-    fast. `build_command` is ignored then.
-    """
-    build_command: tuple[str, ...] = ()
     typst_parallel_compilations: int = Field(default=1, ge=1)
     """How many Typst compilations (one per PDF) may run at once.
 
@@ -84,15 +73,8 @@ class GlobalSettings(BaseModel):
     a small speedup.
     """
     pandoc_command: tuple[str, ...] = ()
-    file_extensions: tuple[str, ...] = (".tex",)
+    file_extensions: tuple[str, ...] = (".md",)
     paths: GlobalPaths = Field(default_factory=GlobalPaths)
-
-    @model_validator(mode="after")
-    def _check_build_command(self) -> Self:
-        if self.compiler == "command" and not self.build_command:
-            msg = 'build_command is required when compiler is "command"'
-            raise ValueError(msg)
-        return self
 
     @classmethod
     def from_yaml(cls, path: Path) -> Self:
