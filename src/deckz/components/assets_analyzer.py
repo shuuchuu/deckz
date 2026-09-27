@@ -1,18 +1,19 @@
 from collections.abc import Iterable, Iterator, MutableMapping, MutableSet
 from functools import cached_property
 from pathlib import Path, PurePath
-from typing import cast
+from typing import cast, get_args
 
 from ..models import (
     Deck,
     File,
+    Lang,
     NodeVisitor,
     Part,
-    ResolvedPath,
     Section,
     UnresolvedPath,
 )
 from ..utils import all_decks, load_yaml
+from .deck_builder import DependencyRef, variables_fingerprint
 from .protocols import AssetsAnalyzerProtocol, RendererProtocol
 
 
@@ -33,14 +34,19 @@ class AssetsAnalyzer(AssetsAnalyzerProtocol):
         }
 
     @cached_property
-    def _decks(self) -> dict[Path, Deck]:
-        return all_decks(self._git_dir)
+    def _decks(self) -> list[Deck]:
+        # en decks can reference assets their fr counterparts don't.
+        return [
+            deck
+            for lang in get_args(Lang)
+            for deck in all_decks(self._git_dir, lang).values()
+        ]
 
     @property
-    def _section_dependencies(self) -> dict[UnresolvedPath, set[ResolvedPath]]:
+    def _section_dependencies(self) -> dict[UnresolvedPath, set[DependencyRef]]:
         section_dependencies_processor = _SectionDependenciesNodeVisitor()
-        result: dict[UnresolvedPath, set[ResolvedPath]] = {}
-        for deck in self._decks.values():
+        result: dict[UnresolvedPath, set[DependencyRef]] = {}
+        for deck in self._decks:
             section_dependencies = section_dependencies_processor.process(deck)
             for path, deps in section_dependencies.items():
                 if path not in result:
@@ -48,9 +54,12 @@ class AssetsAnalyzer(AssetsAnalyzerProtocol):
                 result[path].update(deps)
         return result
 
-    def _section_assets(self, dependencies: Iterable[Path]) -> Iterator[Path]:
-        for path in dependencies:
-            for asset in self._renderer.render_to_str(path)[1]:
+    def _section_assets(self, dependencies: Iterable[DependencyRef]) -> Iterator[Path]:
+        for dependency in dependencies:
+            _, assets_usage = self._renderer.render_to_str(
+                dependency.resolved_path, variables=dependency.variables
+            )
+            for asset in assets_usage:
                 yield self._assets_dir / asset
 
     def _is_image_licensed(self, path: Path) -> bool:
@@ -62,16 +71,17 @@ class AssetsAnalyzer(AssetsAnalyzerProtocol):
 
 class _SectionDependenciesNodeVisitor(
     NodeVisitor[
-        [MutableMapping[UnresolvedPath, MutableSet[ResolvedPath]], UnresolvedPath], None
+        [MutableMapping[UnresolvedPath, MutableSet[DependencyRef]], UnresolvedPath],
+        None,
     ]
 ):
-    def process(self, deck: Deck) -> dict[UnresolvedPath, set[ResolvedPath]]:
-        dependencies: dict[UnresolvedPath, set[ResolvedPath]] = {}
+    def process(self, deck: Deck) -> dict[UnresolvedPath, set[DependencyRef]]:
+        dependencies: dict[UnresolvedPath, set[DependencyRef]] = {}
         for part in deck.parts.values():
             self._process_part(
                 part,
                 cast(
-                    "MutableMapping[UnresolvedPath, MutableSet[ResolvedPath]]",
+                    "MutableMapping[UnresolvedPath, MutableSet[DependencyRef]]",
                     dependencies,
                 ),
             )
@@ -80,7 +90,7 @@ class _SectionDependenciesNodeVisitor(
     def _process_part(
         self,
         part: Part,
-        dependencies: MutableMapping[UnresolvedPath, MutableSet[ResolvedPath]],
+        dependencies: MutableMapping[UnresolvedPath, MutableSet[DependencyRef]],
     ) -> None:
         for node in part.nodes:
             node.accept(self, dependencies, UnresolvedPath(PurePath()))
@@ -88,17 +98,23 @@ class _SectionDependenciesNodeVisitor(
     def visit_file(
         self,
         file: File,
-        section_dependencies: MutableMapping[UnresolvedPath, MutableSet[ResolvedPath]],
+        section_dependencies: MutableMapping[UnresolvedPath, MutableSet[DependencyRef]],
         base_unresolved_path: UnresolvedPath,
     ) -> None:
         if base_unresolved_path not in section_dependencies:
             section_dependencies[base_unresolved_path] = set()
-        section_dependencies[base_unresolved_path].add(file.resolved_path)
+        section_dependencies[base_unresolved_path].add(
+            DependencyRef(
+                file.resolved_path,
+                variables_fingerprint(file.variables),
+                file.variables,
+            )
+        )
 
     def visit_section(
         self,
         section: Section,
-        section_dependencies: MutableMapping[UnresolvedPath, MutableSet[ResolvedPath]],
+        section_dependencies: MutableMapping[UnresolvedPath, MutableSet[DependencyRef]],
         base_unresolved_path: UnresolvedPath,
     ) -> None:
         for node in section.nodes:

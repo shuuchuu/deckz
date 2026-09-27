@@ -207,6 +207,61 @@ def test_clean_content(working_dir: Path) -> None:
     assert used_path.exists()
 
 
+def test_clean_content_keeps_en_translations(bilingual_dir: Path) -> None:
+    shared_content_dir = bilingual_dir.parent.parent / "content"
+    (shared_content_dir / "en").mkdir()
+    local_en_path = bilingual_dir / "content" / "en" / "hello.md"
+    # Under --en, a deck's local en/ file wins over the shared one...
+    shadowed_en_path = shared_content_dir / "en" / "hello.md"
+    shadowed_en_path.write_text("Hello\n", encoding="utf8")
+    # ...and over a shared fr file...
+    local_en_over_shared_fr_path = bilingual_dir / "content" / "en" / "questions.md"
+    local_en_over_shared_fr_path.write_text("Questions?\n", encoding="utf8")
+    # ...while a local fr file with no local en/ one falls back to the shared en/.
+    (bilingual_dir / "content" / "bye.md").write_text("Au revoir\n", encoding="utf8")
+    shared_fallback_en_path = shared_content_dir / "en" / "bye.md"
+    shared_fallback_en_path.write_text("Bye\n", encoding="utf8")
+    orphan_en_path = bilingual_dir / "content" / "en" / "orphan.md"
+    orphan_en_path.write_text("Orphan\n", encoding="utf8")
+    deck_path = bilingual_dir / "deck.yml"
+    deck_path.write_text(
+        deck_path.read_text(encoding="utf8") + "      - questions\n      - bye\n",
+        encoding="utf8",
+    )
+
+    main(("clean", "content"))
+
+    assert local_en_path.exists()
+    assert local_en_over_shared_fr_path.exists()
+    assert shared_fallback_en_path.exists()
+    assert not shadowed_en_path.exists()
+    assert not orphan_en_path.exists()
+
+
+def _use_logo_in_en_only(bilingual_dir: Path) -> Path:
+    en_path = bilingual_dir / "content" / "en" / "hello.md"
+    en_path.write_text(
+        'Hello {{ assets_metadata_retriever("img/logo") }}\n', encoding="utf8"
+    )
+    return en_path
+
+
+def test_asset_search_finds_en_files(bilingual_dir: Path, capsys: Any) -> None:
+    _use_logo_in_en_only(bilingual_dir)
+
+    main(("asset", "search", "img/logo"))
+
+    assert "company/bilingual/content/en/hello.md" in capsys.readouterr().out
+
+
+def test_asset_deps_finds_en_only_assets(bilingual_dir: Path, capsys: Any) -> None:
+    _use_logo_in_en_only(bilingual_dir)
+
+    main(("asset", "deps"))
+
+    assert "img/logo.png" in capsys.readouterr().out
+
+
 def test_flavor_deduplicate_dry_run(working_dir: Path) -> None:
     section_path = working_dir / "content" / "first-section" / "first-section.yml"
     deck_path = working_dir / "deck.yml"

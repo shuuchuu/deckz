@@ -5,7 +5,9 @@ from . import app
 
 
 @app.command()
-def section_files(section: str, flavor: str, /, *, workdir: Path = Path()) -> None:
+def section_files(
+    section: str, flavor: str, /, *, en: bool = False, workdir: Path = Path()
+) -> None:
     """Print the files a shared section+flavor resolves to.
 
     Recurses into subsections, exactly like deckz would when building a deck \
@@ -15,6 +17,7 @@ def section_files(section: str, flavor: str, /, *, workdir: Path = Path()) -> No
     Args:
         section: Shared/content-relative section id, e.g. python/basics
         flavor: Flavor name to resolve
+        en: Resolve the English files, as `deckz run --en` would
         workdir: Path to move into before running the command
 
     """
@@ -28,6 +31,7 @@ def section_files(section: str, flavor: str, /, *, workdir: Path = Path()) -> No
             settings.file_extensions,
             section,
             FlavorName(flavor),
+            lang="en" if en else "fr",
         )
     ):
         print(path)

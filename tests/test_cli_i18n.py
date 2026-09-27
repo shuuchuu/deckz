@@ -2,7 +2,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from pytest import CaptureFixture, fixture
+from pytest import CaptureFixture, fixture, raises
 
 from deckz.cli import main
 
@@ -63,6 +63,31 @@ def test_show_paths(working_dir: Path, capsys: CaptureFixture[str]) -> None:
     assert out == [str(working_dir.parent.parent / "content/i18n-demo/hello.md")]
 
 
+def test_show_paths_en(working_dir: Path, capsys: CaptureFixture[str]) -> None:
+    main(("show", "paths", "--en"))
+
+    out = capsys.readouterr().out.splitlines()
+    assert out == [str(working_dir.parent.parent / "content/i18n-demo/en/hello.md")]
+
+
+def test_show_tree_en_flags_missing_translation(working_dir: Path) -> None:
+    (working_dir.parent.parent / "content/i18n-demo/en/hello.md").unlink()
+    main(("show", "tree"))
+
+    with raises(SystemExit) as exc_info:
+        main(("show", "tree", "--en"))
+
+    assert exc_info.value.code == 1
+
+
+def test_show_variables_en(working_dir: Path, capsys: CaptureFixture[str]) -> None:
+    _write(working_dir / "variables.yml", "greeting:\n  fr: Bonjour\n  en: Hello\n")
+
+    main(("show", "variables", "--en"))
+
+    assert "Hello" in capsys.readouterr().out
+
+
 def test_section_flavors(working_dir: Path, capsys: CaptureFixture[str]) -> None:
     main(("section-flavors", "i18n-demo"))
 
@@ -74,6 +99,21 @@ def test_section_files(working_dir: Path, capsys: CaptureFixture[str]) -> None:
 
     (line,) = capsys.readouterr().out.splitlines()
     assert line.endswith("i18n-demo/hello.md")
+
+
+def test_section_files_en(working_dir: Path, capsys: CaptureFixture[str]) -> None:
+    main(("section-files", "i18n-demo", "hello", "--en"))
+
+    (line,) = capsys.readouterr().out.splitlines()
+    assert line.endswith("i18n-demo/en/hello.md")
+
+
+def test_search_sections_en(working_dir: Path, capsys: CaptureFixture[str]) -> None:
+    main(("search-sections", "hello", "--en"))
+
+    out = capsys.readouterr().out
+    assert "SECTION" not in out
+    assert "i18n-demo/en/hello.md\tHello" in out
 
 
 def test_missing_en_clean(working_dir: Path, capsys: CaptureFixture[str]) -> None:

@@ -1,12 +1,13 @@
 from collections.abc import Iterable, MutableMapping, MutableSet
 from functools import cached_property
 from pathlib import Path, PurePath
-from typing import cast
+from typing import cast, get_args
 
 from ..models import (
     Deck,
     File,
     FlavorName,
+    Lang,
     NodeVisitor,
     Part,
     PartName,
@@ -96,10 +97,12 @@ class SectionsAnalyzer:
 
     @cached_property
     def _used_files(self) -> frozenset[ResolvedPath]:
+        """Files some deck resolves to, in fr or under `--en`."""
         files_usage_processor = _FilesUsageNodeVisitor()
         used: set[ResolvedPath] = set()
-        for deck in self._decks.values():
-            used.update(files_usage_processor.process(deck))
+        for lang in get_args(Lang):
+            for deck in all_decks(self._git_dir, lang).values():
+                used.update(files_usage_processor.process(deck))
         return frozenset(used)
 
 

@@ -10,7 +10,7 @@ from pathlib import Path
 from re import MULTILINE
 from re import compile as re_compile
 
-from ..models import Deck, FlavorName, ResolvedPath, is_lang_map
+from ..models import Deck, FlavorName, Lang, ResolvedPath, is_lang_map
 from ..utils import load_yaml, shared_section_ids
 
 _MARKDOWN_HEADING = re_compile(r"^#+[ \t]+(.+?)[ \t]*$", MULTILINE)
@@ -46,6 +46,7 @@ def _section_flavor_deck(
     file_extensions: Iterable[str],
     section: str,
     flavor: FlavorName,
+    lang: Lang = "fr",
 ) -> Deck:
     from ..components.parser import Parser
 
@@ -53,6 +54,7 @@ def _section_flavor_deck(
         local_content_dir=shared_content_dir,
         shared_content_dir=shared_content_dir,
         file_extensions=file_extensions,
+        lang=lang,
     )
     return parser.from_section(section, flavor)
 
@@ -62,6 +64,7 @@ def section_files(
     file_extensions: Iterable[str],
     section: str,
     flavor: FlavorName,
+    lang: Lang = "fr",
 ) -> set[ResolvedPath]:
     """Resolved absolute file paths a shared section+flavor includes.
 
@@ -73,12 +76,13 @@ def section_files(
         file_extensions: Extensions to try, in order, when resolving files.
         section: Shared/content-relative section id, e.g. "python/basics".
         flavor: Flavor to resolve.
+        lang: Language to resolve the files in.
 
     Returns:
         The set of resolved file paths.
     """
     return resolved_files(
-        _section_flavor_deck(shared_content_dir, file_extensions, section, flavor)
+        _section_flavor_deck(shared_content_dir, file_extensions, section, flavor, lang)
     )
 
 
@@ -113,8 +117,10 @@ def _matches(text: str, keywords: Sequence[str]) -> bool:
     return any(keyword.lower() in lowered for keyword in keywords)
 
 
-def _display_text(value: object) -> str | None:
-    """The fr text of a raw (unresolved) title value, a plain string or a lang-map.
+def _display_text(value: object, lang: Lang) -> str | None:
+    """The `lang` text of a raw (unresolved) title value, a string or a lang-map.
+
+    A lang-map missing `lang` falls back to its fr text, then to any text.
 
     Returns:
         The extracted text, or None if `value` isn't title-shaped.
@@ -122,15 +128,16 @@ def _display_text(value: object) -> str | None:
     if isinstance(value, str):
         return value
     if is_lang_map(value):
-        return value.get("fr") or next(iter(value.values()), None)
+        return value.get(lang) or value.get("fr") or next(iter(value.values()), None)
     return None
 
 
 def _frame_title_matches(
-    section_dir: Path, section: str, keywords: Sequence[str]
+    section_dir: Path, section: str, keywords: Sequence[str], lang: Lang
 ) -> list[FrameTitleMatch]:
     matches = []
-    for path in sorted(section_dir.glob("*.md")):
+    files_dir = section_dir / "en" if lang == "en" else section_dir
+    for path in sorted(files_dir.glob("*.md")):
         text = path.read_text(encoding="utf8")
         for match in _MARKDOWN_HEADING.finditer(text):
             frame_title = match.group(1)
@@ -140,17 +147,19 @@ def _frame_title_matches(
 
 
 def search_sections(
-    shared_content_dir: Path, keywords: Sequence[str]
+    shared_content_dir: Path, keywords: Sequence[str], lang: Lang = "fr"
 ) -> tuple[list[SectionTitleMatch], list[FrameTitleMatch]]:
-    """Search fr shared sections for KEYWORDS (OR'd, case-insensitive substring).
+    """Search shared sections for KEYWORDS (OR'd, case-insensitive substring).
 
     Looks only at each section's `.yml` `title`/`default_titles` values and \
     each of its own `.md` files' headings (`#`/`##`/...) -- never at frame \
-    bodies, code or comments.
+    bodies, code or comments. Under "en", titles resolve to their English \
+    text and headings are read from the section's `en/` files instead.
 
     Args:
         shared_content_dir: Path to the shared content directory.
         keywords: Keywords to search for.
+        lang: Language to search titles and headings in.
 
     Returns:
         The yml-title matches and the frame-title matches, each sorted by \
@@ -164,10 +173,10 @@ def search_sections(
 
         data = load_yaml(yml_path) or {}
         raw_titles = [data.get("title"), *(data.get("default_titles") or {}).values()]
-        titles = [t for raw in raw_titles if (t := _display_text(raw))]
+        titles = [t for raw in raw_titles if (t := _display_text(raw, lang))]
         for title in titles:
             if _matches(title, keywords):
                 section_matches.append(SectionTitleMatch(section, title))
 
-        frame_matches.extend(_frame_title_matches(section_dir, section, keywords))
+        frame_matches.extend(_frame_title_matches(section_dir, section, keywords, lang))
     return section_matches, frame_matches

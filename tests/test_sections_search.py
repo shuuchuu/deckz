@@ -84,3 +84,23 @@ def test_search_sections_markdown_heading_match(shared_content_dir: Path) -> Non
     _, frame_matches = search_sections(shared_content_dir, ["goodbye"])
     assert [m.frame_title for m in frame_matches] == ["Goodbye"]
     assert frame_matches[0].file.suffix == ".md"
+
+
+def test_search_sections_en_searches_en_titles_and_files(
+    shared_content_dir: Path,
+) -> None:
+    yml_path = shared_content_dir / "greetings" / "greetings.yml"
+    yml_path.write_text(
+        yml_path.read_text(encoding="utf8").replace(
+            "title: Greetings", "title:\n  fr: Salutations\n  en: Greetings"
+        ),
+        encoding="utf8",
+    )
+
+    section_matches, frame_matches = search_sections(
+        shared_content_dir, ["greetings", "hello", "bonjour"], "en"
+    )
+
+    assert [m.title for m in section_matches] == ["Greetings"]
+    assert [m.frame_title for m in frame_matches] == ["Hello"]
+    assert frame_matches[0].file.parent.name == "en"

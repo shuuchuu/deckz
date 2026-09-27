@@ -6,7 +6,9 @@ from ..utils import dirs_hierarchy, load_all_yamls
 from .settings import GlobalSettings
 
 
-def get_variables(settings: GlobalSettings, lang: Lang = "fr") -> dict[str, Any]:
+def get_variables(
+    settings: GlobalSettings, lang: Lang = "fr", *, lenient: bool = False
+) -> dict[str, Any]:
     merged = reduce(
         lambda a, b: {**a, **b},
         load_all_yamls(
@@ -21,7 +23,7 @@ def get_variables(settings: GlobalSettings, lang: Lang = "fr") -> dict[str, Any]
         {},
     )
     return {
-        key: resolve_lang(value, lang) if is_lang_map(value) else value
+        key: resolve_lang(value, lang, lenient=lenient) if is_lang_map(value) else value
         for key, value in merged.items()
     }
 

@@ -253,7 +253,12 @@ ever reads.
 
 There is only ever one `deck.yml`/section `.yml` -- English is never a
 separate deck or a duplicated section, only a `--en` flag on `deckz run`
-(and `deckz check variables`):
+(and on `deckz check variables`, `deckz show`/`show paths`/`show variables`,
+`deckz section-files` and `deckz search-sections`, to inspect the English
+variant the same way). Commands that act on the whole repository --
+`deckz clean content`, `deckz asset search`, `deckz asset deps` -- always
+cover both languages, so an `en/` file counts as used whenever a
+`deckz run --en` would pick it:
 
 - Any title (`deck.yml` part/include titles, a section's `title`,
   `default_titles` values, a flavor's title) and any `variables.yml` value
@@ -436,7 +441,7 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
 - `deckz asset search ASSET` / `deckz asset deps`: find where an asset is
   used, or find assets missing license metadata.
 - `deckz clean` / `deckz clean all` / `deckz clean content`: remove build
-  directories, or unused shared/local content files. `deckz clean all` also
+  directories, or unused shared/local content files (fr or `en/`). `deckz clean all` also
   removes the whole `<git_dir>/.run/` scratch tree (`run shared`/`run all`/
   `run file`/`run section`), and `<git_dir>/.check/` (`check variables`).
 - `deckz i18n missing-en [--all]`: report fr content/titles/variables with no

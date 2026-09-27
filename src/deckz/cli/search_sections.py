@@ -4,7 +4,9 @@ from . import app
 
 
 @app.command()
-def search_sections(keywords: list[str], /, *, workdir: Path = Path()) -> None:
+def search_sections(
+    keywords: list[str], /, *, en: bool = False, workdir: Path = Path()
+) -> None:
     r"""Search shared sections by keyword in yml titles and frame titles.
 
     Case-insensitive substring match, OR'd across KEYWORDS, against each \
@@ -23,6 +25,7 @@ def search_sections(keywords: list[str], /, *, workdir: Path = Path()) -> None:
 
     Args:
         keywords: Keywords to search for, matched with OR
+        en: Search English titles and the headings of en/ files instead
         workdir: Path to move into before running the command
 
     """
@@ -30,7 +33,9 @@ def search_sections(keywords: list[str], /, *, workdir: Path = Path()) -> None:
     from ..configuring.settings import GlobalSettings
 
     settings = GlobalSettings.from_yaml(workdir)
-    section_matches, frame_matches = compute(settings.paths.content_dir, keywords)
+    section_matches, frame_matches = compute(
+        settings.paths.content_dir, keywords, "en" if en else "fr"
+    )
     for section_match in section_matches:
         print(f"SECTION {section_match.section}\t{section_match.title}")
     for frame_match in frame_matches:

@@ -4,10 +4,11 @@ from . import app
 
 
 @app.command()
-def variables(*, workdir: Path = Path()) -> None:
+def variables(*, en: bool = False, workdir: Path = Path()) -> None:
     """Print the resolved variables.
 
     Args:
+        en: Resolve translation maps to English, as `deckz run --en` would
         workdir: Path to move into before running the command
 
     """
@@ -16,7 +17,7 @@ def variables(*, workdir: Path = Path()) -> None:
     from ...configuring.settings import DeckSettings
     from ...configuring.variables import get_variables
 
-    resolved = get_variables(DeckSettings.from_yaml(workdir))
+    resolved = get_variables(DeckSettings.from_yaml(workdir), "en" if en else "fr")
     max_length = max(len(key) for key in resolved)
     rich_print(
         "\n".join((f"[green]{k:{max_length}}[/] {v}") for k, v in resolved.items())

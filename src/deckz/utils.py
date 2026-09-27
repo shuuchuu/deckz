@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .configuring.settings import DeckSettings
-    from .models import Deck
+    from .models import Deck, Lang, Node
 
 # Modules loaded by `import_module_from_path`, keyed by what makes a reload
 # necessary: a long-lived process (`--watch`) reuses an unchanged module --
@@ -180,20 +180,66 @@ def load_all_yamls(paths: Iterable[Path]) -> Iterator[Any]:
             yield load_yaml(path)
 
 
-def _parse_deck(settings: "DeckSettings") -> tuple[Path, "Deck"]:
-    from .components.factory import DeckSettingsFactory
+def _parse_deck(settings: "DeckSettings", lang: "Lang") -> tuple[Path, "Deck"]:
+    from .components.parser import Parser
+    from .configuring.variables import get_variables, resolve_variables
+    from .exceptions import DeckParsingError
 
+    parser = Parser(
+        local_content_dir=settings.paths.local_content_dir,
+        shared_content_dir=settings.paths.content_dir,
+        file_extensions=settings.file_extensions,
+        lang=lang,
+        # A translation gap must not hide the rest of an en deck from analyses.
+        lenient=lang != "fr",
+    )
+    try:
+        deck = parser.from_deck_definition(settings.paths.deck_definition)
+    except DeckParsingError as e:
+        if lang == "fr":
+            raise
+        deck = e.deck
+        for part in deck.parts.values():
+            part.nodes = _without_unresolved_files(part.nodes)
+    variables = get_variables(settings, lang, lenient=lang != "fr")
+    resolve_variables(deck, {**variables, "lang": lang})
     return (
         settings.paths.deck_definition.parent.relative_to(settings.paths.git_dir),
-        DeckSettingsFactory(settings)
-        .parser()
-        .from_deck_definition(settings.paths.deck_definition),
+        deck,
     )
 
 
-def all_decks(git_dir: Path) -> dict[Path, "Deck"]:
+def _without_unresolved_files(nodes: list["Node"]) -> list["Node"]:
+    from .models import File, Section
+
+    kept: list[Node] = []
+    for node in nodes:
+        if isinstance(node, Section):
+            node.nodes = _without_unresolved_files(node.nodes)
+        if not (isinstance(node, File) and node.parsing_error is not None):
+            kept.append(node)
+    return kept
+
+
+def all_decks(git_dir: Path, lang: "Lang" = "fr") -> dict[Path, "Deck"]:
+    """Parse every deck of the repository, with variables resolved as in a build.
+
+    Args:
+        git_dir: Root of the repository.
+        lang: Language to resolve the decks in. Under "en", files resolve \
+            exactly as with `--en`, except a file with no `en/` counterpart \
+            is left out of the tree instead of failing the parse, so \
+            analyses see every translation that does exist.
+
+    Returns:
+        The parsed decks, keyed by their directory relative to `git_dir`.
+    """
+    from functools import partial
+
     with create_pool() as pool:
-        return dict(pool.map(_parse_deck, list(all_deck_settings(git_dir))))
+        return dict(
+            pool.map(partial(_parse_deck, lang=lang), list(all_deck_settings(git_dir)))
+        )
 
 
 def all_deck_settings(git_dir: Path) -> Iterator["DeckSettings"]:

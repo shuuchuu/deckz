@@ -68,7 +68,9 @@ or a declared variable nothing ever reads.
 
 ## English variant
 
-Add `--en` to `run`/`check variables` to compile the English variant. There
+Add `--en` to `run`/`check variables` to compile the English variant (and to
+`show`/`show paths`/`show variables`/`section-files`/`search-sections` to
+inspect it). There
 is never a separate English deck or section: it's the same
 `deck.yml`/section `.yml`, with any title given as `{fr: ..., en: ...}`
 instead of a plain string, and `en/` sibling files for translated bodies.
