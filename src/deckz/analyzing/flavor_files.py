@@ -47,7 +47,7 @@ class FlavorFilesEditor:
 
     @staticmethod
     def _as_section_definition(path: Path) -> SectionDefinition | None:
-        # Latex directories can also hold unrelated yaml sidecar files (e.g. a file
+        # Content directories can also hold unrelated yaml sidecar files (e.g. a file
         # include's title metadata), which aren't section definitions.
         try:
             return SectionDefinition.model_validate(load_yaml(path))

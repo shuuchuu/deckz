@@ -6,12 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `deckz` is a CLI tool (Python, `src/deckz`) for managing a large number of
 slide decks shared by several people, with slides ("sections") shared
-across decks. Decks compile with Typst (`compiler: typst`, a `.typ` main
-template, Markdown content converted by pandoc) or with LaTeX/Beamer
-(`compiler: command`, e.g. `latexmk`). It is not usable out of the box on an arbitrary repository: it
+across decks. Decks compile with Typst: a `.typ` main template plus
+Markdown content converted by pandoc (LaTeX/Beamer support was removed after
+28.x). It is not usable out of the box on an arbitrary repository: it
 enforces strong conventions on the layout of the repository it *operates on*
 (a separate, unrelated git repo containing `deckz.yml`, `variables.yml`,
-`latex/` (shared content, a historical name), `assets/`, `templates/`,
+`content/` (shared sections), `assets/`, `templates/`,
 per-company/per-deck directories, etc. — see README.md for the
 full layout). Keep this distinction in mind: "the repo" (this codebase) vs.
 "a deckz-managed repo" (what the tool acts on at runtime).
@@ -74,7 +74,7 @@ the `DeckzError` itself.
 
 `configuring/settings.py` defines `GlobalPaths`/`DeckSettings`/`GlobalSettings`
 (Pydantic models). Paths are built from a small template-like mechanism:
-fields declared as raw strings like `"{git_dir}/latex"` are resolved against
+fields declared as raw strings like `"{git_dir}/content"` are resolved against
 already-computed sibling fields via a custom `BeforeValidator`
 (`_convert`/`_Path`). `deckz.yml` and `variables.yml` are looked up and
 merged from three locations, in order: the target repo's git root, the
@@ -92,15 +92,14 @@ directory must be inside a deck).
 `components/factory.py` provides `GlobalSettingsFactory` /
 `DeckSettingsFactory` as the construction points — they lazily import and
 instantiate the concrete implementation (`components/parser.py`,
-`components/deck_builder.py`, `components/compiler.py` /
-`components/typst_compiler.py`, `components/renderer.py`, etc.) wired up with
+`components/deck_builder.py`, `components/compiler.py`,
+`components/renderer.py`, etc.) wired up with
 paths/settings. Call sites depend on the protocol/factory, not on concrete
 classes directly, so new implementations only need to be plugged in at the
-factory. `GlobalSettingsFactory.compiler()` picks between `Compiler` (runs
-`build_command` in a subprocess per PDF) and `TypstCompiler` (the `typst`
-bindings in a child process per PDF, kept warm across `--watch` rebuilds so
-Typst's incremental cache survives; see the module's header comment for why
-never in deckz's own process) based on `settings.compiler`.
+factory. `GlobalSettingsFactory.compiler()` returns `TypstCompiler`
+(`components/compiler.py`: the `typst` bindings in a child process per PDF,
+kept warm across `--watch` rebuilds so Typst's incremental cache survives;
+see the module's header comment for why never in deckz's own process).
 
 ### Build pipeline
 
@@ -111,12 +110,12 @@ cascade them through the parsed `Deck` (`configuring/variables.py::resolve_varia
 deck-wide `variables.yml`, overridden by each section's own matched-flavor
 `variables`, deepest section wins, mutating every `Section`/`File`'s own
 `variables` attribute in place) → build assets via the assets builder (the
-target repo's own `templates/assets_builders.py`, e.g. TikZ/plot standalones) → build the deck (render Jinja2 → convert Markdown with pandoc → compile
-with the configured compiler, LaTeX or Typst) via
+target repo's own `templates/assets_builders.py`, e.g. generated plots) → build the deck
+(render Jinja2 → convert Markdown to Typst with pandoc → compile with Typst) via
 the deck builder; `_build` also takes an optional `basedirs` override, used
 only by `run_shared`/`run_all` since their synthetic decks can include
 files living under any deck's directory, not just one
-`current_dir`/`latex_dir` pair. `_build` raises `CompilationError` when
+`current_dir`/`content_dir` pair. `_build` raises `CompilationError` when
 any PDF fails to compile, so every `run_*` pipeline fails the command.
 `deckz run file`/`deckz run section` get their `.run/` scratch output dirs
 from `checking.preview_settings`, a copy of the deck's settings; settings
@@ -133,7 +132,7 @@ value, both pulled into one deck): `components/deck_builder.py` dedupes
 build-time dependencies by `DependencyRef` (resolved path + a short hash of
 its effective `variables`, from `variables_fingerprint`), not by path alone,
 and `dependency_relative_path` is the single place that naming scheme is
-decided so the main template's reference (`\input`/`#include`) and the
+decided so the main template's reference (`#include`) and the
 on-disk rendered copy always agree.
 
 `run_shared`/`run_all` (backing `deckz run shared`/`deckz run all`)
@@ -143,7 +142,7 @@ ever written to disk. They use `Parser.all_files_section()`
 own directory rather than a named flavor's `includes` list; `run_all`
 additionally builds one extra copy of a section per deck that locally
 overrides one of its files (detected by re-resolving with that deck's own
-`local_latex_dir`). Both write their output to a persistent
+`local_content_dir`). Both write their output to a persistent
 `<git_dir>/.run/{shared,all}/` scratch directory (`checking.run_scratch_dir`),
 alongside `deckz run file`/`deckz run section`'s own `<git_dir>/.run/{file,section}/`
 scratch trees, since none of these synthetic/preview decks have a real deck

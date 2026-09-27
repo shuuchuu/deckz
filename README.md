@@ -5,7 +5,7 @@
 [![Test Coverage](https://img.shields.io/codecov/c/github/shuuchuu/deckz?style=for-the-badge)](https://codecov.io/gh/shuuchuu/deckz)
 [![PyPI Project](https://img.shields.io/pypi/v/deckz?style=for-the-badge)](https://pypi.org/project/deckz/)
 
-`deckz` is a tool to manage a large number of slide decks (Typst or LaTeX/Beamer), shared by several
+`deckz` is a tool to manage a large number of slide decks (Markdown compiled with Typst), shared by several
 people, with slides ("sections") shared across decks. It is not meant to be
 usable out of the box by people who stumble upon this repository: it enforces
 strong conventions on the layout of the repository it operates on. Please
@@ -37,16 +37,15 @@ root (git repository)
 ├── templates
 │   ├── assets_builders.py
 │   └── jinja2
-│       ├── main.tex
+│       ├── main.typ
 │       └── env.py
-├── latex
+├── content
 │   └── some-section
 │       ├── some-section.yml
-│       ├── intro.tex
-│       └── advanced.tex
+│       ├── intro.md
+│       └── advanced.md
 ├── assets
 │   ├── img
-│   ├── tikz
 │   ├── plt
 │   └── pltly
 ├── company1
@@ -54,33 +53,33 @@ root (git repository)
 │   └── deck1
 │       ├── deck.yml
 │       ├── variables.yml
-│       └── latex
+│       └── content
 └── company2
     └── deck2
         ├── deck.yml
-        └── latex
+        └── content
 ```
 
-- `latex`: reusable LaTeX sections, shared across decks.
+- `content`: reusable sections (Markdown content files), shared across decks.
 - `assets`: everything else shared across decks (images, generated
-  standalone figures, or any other kind of asset your own
+  figures, or any other kind of asset your own
   `templates/assets_builders.py` produces). `deckz` doesn't know or care
   what subdirectories live under `assets` -- it symlinks every one of them
-  into each build directory, so `some-section.tex` can reference
-  `assets/tikz/some-figure` the same way regardless of what else is in
-  there. The `tikz`/`plt`/`pltly` names above are just this repo's own
+  into each build directory, so `intro.md` can reference
+  `plt/some-figure.svg` the same way regardless of what else is in
+  there. The `plt`/`pltly` names above are just this repo's own
   convention, set up by its `templates/assets_builders.py` -- see [Assets
   builders](#assets-builders).
-- `templates/jinja2/main.tex`: the Jinja2 template used to render every
-  deck's main `.tex` file.
+- `templates/jinja2/main.typ`: the Jinja2 template used to render every
+  deck's main Typst file.
 - `templates/jinja2/env.py`: the Python module that configures the Jinja2
   environment(s) used to render content files -- see [Content files and
   the Jinja2 environment](#content-files-and-the-jinja2-environment).
 - `templates/assets_builders.py`: the Python module that builds this
-  repo's assets (standalone figures, or anything else) -- see [Assets
+  repo's assets (generated figures, or anything else) -- see [Assets
   builders](#assets-builders).
 - Each deck is a directory containing a `deck.yml` (its definition) and
-  optionally a `latex` directory for files local to that deck.
+  optionally a `content` directory for files local to that deck.
 - `variables.yml` files can be placed at any level of the directory
   hierarchy between the git root and a deck to avoid repeating values
   (e.g. one per client/company, shared by all of that client's decks).
@@ -92,49 +91,36 @@ root (git repository)
 At the root of the repository, `deckz.yml` holds settings, not content, e.g.:
 
 ```yaml
-build_command:
-  - latexmk
-  - -pdflatex=xelatex -shell-escape -interaction=nonstopmode %O %S
-  - -dvi-
-  - -ps-
-  - -pdf
 pandoc_command:
   - pandoc
   - -f
-  - markdown
+  - markdown-auto_identifiers
   - -t
-  - beamer
-  - --slide-level=1
-  - --lua-filter={git_dir}/templates/pandoc/filters/boxes.lua
-file_extensions:
-  - .md
-  - .tex
+  - typst
+  - --lua-filter={templates_dir}/pandoc/filters/boxes.lua
+typst_parallel_compilations: 1
 ```
 
-- `compiler`: `command` (the default) runs `build_command` in a fresh
-  process for each PDF, e.g. `latexmk`. `typst` compiles a `.typ` main
-  template (`paths.jinja2_main_template`) with the `typst` Python bindings,
-  and doesn't use `build_command`. Each PDF compiles in its own child
-  process, which gives its memory back when done (Typst can take a few GB
-  on a large deck). Under `deckz run --watch`, each PDF's process stays
-  alive instead, so rebuilds are incremental: on a 145-page deck, an edit
-  re-renders every PDF in about a second. `typst_parallel_compilations`
-  (default 1) caps how many compile at once.
+- `typst_parallel_compilations`: how many PDFs compile at once (default
+  1). `deckz` compiles the main Typst file (`paths.jinja2_main_template`)
+  with the `typst` Python bindings, each PDF in its own child process,
+  which gives its memory back when done (Typst can take a few GB on a large
+  deck, and already uses every core within one compilation). Under `deckz
+  run --watch`, each PDF's process stays alive instead, so rebuilds are
+  incremental: on a 145-page deck, an edit re-renders every PDF in about a
+  second.
 - `pandoc_command`: how `deckz` invokes `pandoc` to convert a rendered
-  Markdown content file to the `.tex` fragment that gets `\input`, including
-  any `--lua-filter=...` your own Beamer conventions need (fenced divs for
-  admonition boxes, external code-file inclusion, etc.) -- entirely up to
-  you, `deckz` has no opinion here. Only needed if any content is authored
-  in Markdown. `pandoc` is invoked with a working directory matching the
+  Markdown content file to the `.typ` fragment that gets `#include`d,
+  including any `--lua-filter=...` your own conventions need (fenced divs
+  for admonition boxes, external code-file inclusion, etc.) -- entirely up
+  to you, `deckz` has no opinion here. `pandoc` is invoked with a working
+  directory matching the
   content fragment's own (possibly nested) position under the build
   directory, so any path an argument needs (e.g. a `--lua-filter`) should be
   written as `{git_dir}` or `{templates_dir}`, substituted with the resolved
   absolute path -- a bare relative path would not resolve consistently.
 - `file_extensions`: the extensions tried, in order, when resolving a file
-  include. Defaults to `[".tex"]`; a repository migrating content to
-  Markdown sets `[".md", ".tex"]` so a file is picked up as Markdown if
-  present, falling back to a legacy `.tex` sibling otherwise -- letting the
-  two coexist during a section-by-section migration.
+  include. Defaults to `[".md"]`.
 
 `deckz.yml` files are merged, in order, from the git root, from the user's
 config directory (XDG-compliant, e.g.
@@ -160,9 +146,8 @@ deck_title: Machine Learning and COVID-19
 presentation_size: 10pt
 ```
 
-These variables are passed to `templates/jinja2/main.tex` as a `variables`
-mapping; what `main.tex` does with them (e.g. turning each `snake_case` key
-into a `\CamelCase` LaTeX command usable from any included file) is up to
+These variables are passed to `templates/jinja2/main.typ`, and to every
+content file, as a `variables` mapping; what the templates do with them is up to
 your own template and Jinja2 environment, not something `deckz` imposes --
 see [Content files and the Jinja2 environment](#content-files-and-the-jinja2-environment).
 
@@ -196,9 +181,9 @@ text actually differs by language -- see [Titles, variables and
 
 ### Shared sections
 
-A shared section lives under `latex` (or a deck's local `latex`
+A shared section lives under `content` (or a deck's local `content`
 directory) and has a sibling `.yml` file describing its flavors, e.g.
-`latex/first-section/first-section.yml`:
+`content/first-section/first-section.yml`:
 
 ```yaml
 title: First section
@@ -240,7 +225,7 @@ flavors:
       - body
 ```
 
-`body.tex` then reads `\V{variables.depth}` the same way it would read any
+`body.md` then reads `{{ variables.depth }}` the same way it would read any
 deck-wide variable. `variables_to_define` is a contract, not a default: it
 never supplies a value itself, it just declares that every flavor below
 must set that key itself (optionally restricted to the given list of
@@ -265,7 +250,7 @@ separate deck or a duplicated section, only a `--en` flag on `deckz run`
   it actually needs to differ by language, as in `intro`/`advanced` above.
 - A translated body file lives at `<parent-dir>/en/<filename>`, a sibling of
   the French file, whatever `parent-dir` is -- a shared section directory, a
-  deck's local `latex` directory, or any nested subdirectory of either.
+  deck's local `content` directory, or any nested subdirectory of either.
   Section/flavor structure itself is never duplicated for English.
 - `--en` never silently falls back to French for a `{fr: ..., en: ...}` map
   that's missing its `en` key, or for a resolved file with no `en/` sibling:
@@ -294,17 +279,13 @@ def environment_for(suffix: str) -> Environment:
 ```
 
 called once per content-file suffix `deckz` renders (typically once for
-`.tex`, once for `.md` if you author some content in Markdown), so
-different sources can use different delimiters/filters -- e.g. the
-LaTeX-escaped delimiters `\V{...}`/`\BLOCK{...}`/`%%` traditionally used
-for `.tex` (to avoid clashing with LaTeX's own `{`/`}`/`%`) don't need to
-carry over to `.md`, where plain `{{ ... }}`/`{% ... %}` read just as well.
-This is also where you define any macro/filter your content relies on, e.g.
-an `image` filter emitting `\includegraphics{...}` (for `.tex`) or
-`![](...)` (for `.md`).
+the `.typ` main template, once for `.md` content), so different sources can
+use different delimiters/filters. This is also where you define any
+macro/filter your content relies on, e.g. an `image` filter emitting
+`![](...)`.
 
-Whatever filter you use to reference an asset file (an image, a tikz/plot
-standalone, ...) should call the `assets_metadata_retriever` context
+Whatever filter you use to reference an asset file (an image, a generated
+plot, ...) should call the `assets_metadata_retriever` context
 variable `deckz` injects into every render, e.g. from a filter function:
 
 ```python
@@ -324,7 +305,7 @@ silently misses whatever your filter references.
 
 ### Assets builders
 
-`deckz` itself has no opinion on what assets a deck needs (standalone
+`deckz` itself has no opinion on what assets a deck needs (generated
 figures, or anything else) or how to build them. Your repo supplies a
 Python module (`templates/assets_builders.py`) exposing:
 
@@ -367,17 +348,26 @@ trigger a rebuild.
 
 ### Markdown content and `pandoc`
 
-A content file can be authored in Markdown instead of LaTeX: with
-`.md` listed in `file_extensions` (see `deckz.yml` above), `deckz` renders
-it through its own Jinja2 environment (see above) and then converts the
-result to the `.tex` fragment that gets `\input`ed, by shelling out to
-`pandoc_command`. Beamer-specific conventions your content relies on
+Content files are authored in Markdown: `deckz` renders each one through
+its own Jinja2 environment (see above) and then converts the result to the
+`.typ` fragment the main template `#include`s, by shelling out to
+`pandoc_command`. Slide conventions your content relies on
 (admonition boxes, external code-file inclusion, columns, math, ...) are
 entirely up to how you write your Markdown and configure `pandoc_command`
 (typically pandoc's own built-ins plus one or more `--lua-filter=...`
 pointing at Lua filters you maintain in this repository, e.g. under
-`templates/pandoc/`) -- `deckz` only orchestrates the conversion, the same
-way it only orchestrates LaTeX compilation via `build_command`.
+`templates/pandoc/`) -- `deckz` only orchestrates the conversion.
+
+### Upgrading from 28.x (LaTeX removal)
+
+`deckz` no longer compiles LaTeX. In a repository still laid out for 28.x:
+
+- `git mv latex content` at the root, and in every deck directory.
+- Remove `compiler` and `build_command` from `deckz.yml` (they're now
+  ignored), and `file_extensions` if it only lists `.md`.
+- The default main template is now `templates/jinja2/main.typ`: a
+  `paths.jinja2_main_template` override pointing there can go.
+- `deckz clean latex` is now `deckz clean content`.
 
 ## Usage
 
@@ -385,9 +375,9 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
 --help` for a specific command. The main ones:
 
 - `deckz run` (alias for `deckz run deck`, optionally restricted with
-  `--parts`) / `deckz run file LATEX` / `deckz run section SECTION FLAVOR` /
+  `--parts`) / `deckz run file PATH` / `deckz run section SECTION FLAVOR` /
   `deckz run assets`: compile the deck in the current directory, a single
-  LaTeX file, a specific section flavor, or the project's standalone assets.
+  content file, a specific section flavor, or the project's assets.
   Add `--en` to compile the English variant (see [Titles, variables and
   `--en`](#titles-variables-and---en)), or `--watch` to recompile on file
   changes instead of once. `run file`/`run section` write their output
@@ -412,8 +402,8 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
   resolved at that point sets (`UNDEFINED`), a `variables_to_define` name no
   fragment under its section ever reads (`UNUSED`), a fragment that fails to
   parse (`UNPARSABLE`), and a flavor/deck that fails to parse at all, e.g. a
-  `variables_to_define` contract violation (`STRUCTURAL`). No LaTeX
-  toolchain needed.
+  `variables_to_define` contract violation (`STRUCTURAL`). Nothing is
+  compiled.
 - `deckz show` (alias for `deckz show tree`): show the resolved tree of
   sections and files for the current deck.
 - `deckz show settings` / `deckz show variables` / `deckz show paths`:
@@ -422,7 +412,7 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
 - `deckz deps [SECTION] [FLAVOR]`: show shared sections/flavors usage
   across the repository, including unused ones.
 - `deckz search-sections KEYWORDS...`: search shared sections by title or
-  frame title.
+  Markdown heading.
 - `deckz section-flavors SECTION`: list a section's flavor names.
 - `deckz section-files SECTION FLAVOR`: list the files a section+flavor
   resolves to.
@@ -432,8 +422,8 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
   up to their name.
 - `deckz asset search ASSET` / `deckz asset deps`: find where an asset is
   used, or find assets missing license metadata.
-- `deckz clean` / `deckz clean all` / `deckz clean latex`: remove build
-  directories, or unused shared/local LaTeX files. `deckz clean all` also
+- `deckz clean` / `deckz clean all` / `deckz clean content`: remove build
+  directories, or unused shared/local content files. `deckz clean all` also
   removes the whole `<git_dir>/.run/` scratch tree (`run shared`/`run all`/
   `run file`/`run section`), and `<git_dir>/.check/` (`check variables`).
 - `deckz i18n missing-en [--all]`: report fr content/titles/variables with no
