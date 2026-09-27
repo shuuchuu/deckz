@@ -34,6 +34,9 @@ class CompilationError(DeckzError):
 
 
 class DeckParsingError(DeckzError):
-    def __init__(self, message: str, deck: Deck) -> None:
-        super().__init__(message)
+    """Some nodes of `deck` failed to parse, each described in `errors`."""
+
+    def __init__(self, deck: Deck, errors: list[str]) -> None:
+        super().__init__(f"deck parsing failed: {'; '.join(errors)}")
         self.deck = deck
+        self.errors = errors

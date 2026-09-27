@@ -44,6 +44,7 @@ def run_section(
     from ...checking import preview_settings
     from ...configuring.settings import DeckSettings
     from ...pipelines import run_section as _run_section
+    from .._presentation import RichProgress
 
     logger = getLogger(__name__)
     settings = preview_settings(
@@ -79,6 +80,7 @@ def run_section(
             build_handout=handout,
             build_presentation=presentation,
             build_print=print,
+            progress=RichProgress(),
         )
         return
 
@@ -90,6 +92,7 @@ def run_section(
         build_handout=handout,
         build_presentation=presentation,
         build_print=print,
+        progress=RichProgress(),
     )
     logger.info(
         f"Output directory located at [link=file://{settings.paths.pdf_dir}]"

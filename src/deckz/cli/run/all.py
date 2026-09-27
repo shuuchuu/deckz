@@ -28,6 +28,7 @@ def all(  # ruff: ignore[builtin-variable-shadowing]
 
     """
     from ...pipelines import run_all as _run_all
+    from .._presentation import RichProgress
 
     _run_all(
         directory=workdir,
@@ -35,4 +36,5 @@ def all(  # ruff: ignore[builtin-variable-shadowing]
         build_handout=handout,
         build_presentation=presentation,
         build_print=print,
+        progress=RichProgress(),
     )

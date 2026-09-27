@@ -17,8 +17,6 @@ from pathlib import Path, PurePosixPath
 from shutil import copyfile
 from typing import Any
 
-from rich.progress import BarColumn, Progress
-
 from ..exceptions import DeckzError
 from ..models import (
     Deck,
@@ -38,6 +36,7 @@ from .protocols import (
     CompilerProtocol,
     DeckBuilderProtocol,
     MarkdownConverterProtocol,
+    ProgressReporterProtocol,
     RendererProtocol,
 )
 
@@ -136,6 +135,7 @@ class DeckBuilder(DeckBuilderProtocol):
         compiler: CompilerProtocol,
         renderer: RendererProtocol,
         markdown_converter: MarkdownConverterProtocol,
+        progress: ProgressReporterProtocol,
     ):
         self._variables = variables
         self._build_presentation = build_presentation
@@ -152,6 +152,7 @@ class DeckBuilder(DeckBuilderProtocol):
         self._compiler = compiler
         self._renderer = renderer
         self._markdown_converter = markdown_converter
+        self._progress = progress
         self._logger = getLogger(__name__)
 
     def build_deck(self) -> bool:
@@ -159,25 +160,20 @@ class DeckBuilder(DeckBuilderProtocol):
         self._markdown_fingerprint = self._markdown_converter.fingerprint()
         results = []
         with (
-            Progress(
-                "[progress.description]{task.description}",
-                BarColumn(),
-                "[progress.percentage]{task.percentage:>3.0f}%",
-            ) as progress,
+            self._progress.track("Compiling…", len(items)) as advance,
             # Threads, not processes: rendering is cheap next to pandoc and
             # the compiler, which both run in subprocesses. Staying in this
             # process is also what lets TypstCompiler keep its warm worker
             # processes from one `--watch` rebuild to the next.
             ThreadPoolExecutor(min(cpu_count(), len(items))) as pool,
         ):
-            task_id = progress.add_task("Compiling…", total=len(items))
             for item_name, result in zip(
                 items,
                 pool.map(self._build_item_pair, items.items()),
                 strict=True,
             ):
                 results.append((item_name, result))
-                progress.update(task_id, advance=1)
+                advance()
         for item_name, result in results:
             if not result.ok:
                 self._logger.warning("Compilation %s errored", item_name)

@@ -3,11 +3,12 @@ from logging import getLogger
 from pathlib import Path
 from typing import Any
 
-from rich.progress import BarColumn, Progress
 from watchfiles import watch as watchfiles_watch
 
 from .checking import build_all_deck, build_shared_deck, run_scratch_dir
 from .components.factory import DeckSettingsFactory, GlobalSettingsFactory
+from .components.progress import NullProgress
+from .components.protocols import ProgressReporterProtocol
 from .components.typst_compiler import keep_warm
 from .configuring.settings import DeckSettings, GlobalSettings
 from .configuring.variables import get_variables, resolve_variables
@@ -16,6 +17,7 @@ from .models import Deck, FlavorName, Lang, PartName
 from .utils import all_deck_settings
 
 _logger = getLogger(__name__)
+_NULL_PROGRESS = NullProgress()
 
 
 def _build(
@@ -25,6 +27,7 @@ def _build(
     build_handout: bool,
     build_presentation: bool,
     build_print: bool,
+    progress: ProgressReporterProtocol,
     basedirs: tuple[Path, ...] | None = None,
 ) -> None:
     variables = {**get_variables(settings, lang=lang), "lang": lang}
@@ -38,6 +41,7 @@ def _build(
         build_presentation=build_presentation,
         build_print=build_print,
         basedirs=basedirs,
+        progress=progress,
     ).build_deck():
         msg = f"{deck.name} failed to compile, see the errors above"
         raise CompilationError(msg)
@@ -50,6 +54,7 @@ def run(
     build_presentation: bool,
     build_print: bool,
     parts_whitelist: Iterable[PartName] | None = None,
+    progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
     parser = DeckSettingsFactory(settings, lang=lang).parser()
     deck = parser.from_deck_definition(settings.paths.deck_definition)
@@ -62,6 +67,7 @@ def run(
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
+        progress=progress,
     )
 
 
@@ -72,6 +78,7 @@ def run_file(
     build_handout: bool,
     build_presentation: bool,
     build_print: bool,
+    progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
     _build(
         deck=DeckSettingsFactory(settings, lang=lang).parser().from_file(latex),
@@ -80,6 +87,7 @@ def run_file(
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
+        progress=progress,
     )
 
 
@@ -91,6 +99,7 @@ def run_section(
     build_handout: bool,
     build_presentation: bool,
     build_print: bool,
+    progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
     _build(
         deck=DeckSettingsFactory(settings, lang=lang)
@@ -101,6 +110,7 @@ def run_section(
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
+        progress=progress,
     )
 
 
@@ -110,16 +120,12 @@ def run_decks(
     build_handout: bool,
     build_presentation: bool,
     build_print: bool,
+    progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
     global_settings = GlobalSettings.from_yaml(directory)
     GlobalSettingsFactory(global_settings).assets_builder().build_assets()
     decks_settings = list(all_deck_settings(global_settings.paths.git_dir))
-    with Progress(
-        "[progress.description]{task.description}",
-        BarColumn(),
-        "[progress.percentage]{task.percentage:>3.0f}%",
-    ) as progress:
-        task_id = progress.add_task("Building decks…", total=len(decks_settings))
+    with progress.track("Building decks…", len(decks_settings)) as advance:
         for deck_settings in decks_settings:
             try:
                 _build(
@@ -131,6 +137,7 @@ def run_decks(
                     build_handout=build_handout,
                     build_presentation=build_presentation,
                     build_print=build_print,
+                    progress=progress,
                 )
             except CompilationError as e:
                 deck_dir = deck_settings.paths.current_dir.relative_to(
@@ -138,7 +145,7 @@ def run_decks(
                 )
                 msg = f"{deck_dir} failed to compile, see the errors above"
                 raise CompilationError(msg) from e
-            progress.update(task_id, advance=1)
+            advance()
 
 
 def run_shared(
@@ -147,6 +154,7 @@ def run_shared(
     build_handout: bool,
     build_presentation: bool,
     build_print: bool,
+    progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
     global_settings = GlobalSettings.from_yaml(directory)
     git_dir = global_settings.paths.git_dir
@@ -160,6 +168,7 @@ def run_shared(
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
+        progress=progress,
         basedirs=(git_dir,),
     )
 
@@ -170,6 +179,7 @@ def run_all(
     build_handout: bool,
     build_presentation: bool,
     build_print: bool,
+    progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
     global_settings = GlobalSettings.from_yaml(directory)
     git_dir = global_settings.paths.git_dir
@@ -185,6 +195,7 @@ def run_all(
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
+        progress=progress,
         basedirs=(git_dir,),
     )
 
@@ -218,7 +229,7 @@ def watch[**P](
         for p in dir_to_watch.glob("**")
         if (r_to_watch := p.resolve()) not in dirs_to_avoid
     }
-    print("\n".join(sorted(str(d) for d in dirs_to_watch)))
+    _logger.info("Watching:\n%s", "\n".join(sorted(str(d) for d in dirs_to_watch)))
     # Keeps a Typst worker process alive per compiled PDF, so every rebuild
     # after the first is incremental (no effect on other compilers).
     with keep_warm():

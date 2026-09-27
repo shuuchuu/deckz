@@ -6,7 +6,7 @@ from cyclopts import App
 from rich.logging import RichHandler
 
 from .. import __version__
-from ..exceptions import DeckzError
+from ..exceptions import DeckParsingError, DeckzError
 
 app = App(version=__version__)
 app.register_install_completion_command()
@@ -41,5 +41,11 @@ def main(args: Iterable[str] | None = None) -> None:
     except DeckzError as e:
         if environ.get("DECKZ_DEBUG"):
             raise
-        getLogger(__name__).error(str(e))
+        if isinstance(e, DeckParsingError):
+            from ._presentation import render_parse_errors
+
+            render_parse_errors(e.deck)
+            getLogger(__name__).error("deck parsing failed, see the tree above")
+        else:
+            getLogger(__name__).error(str(e))
         raise SystemExit(1) from None

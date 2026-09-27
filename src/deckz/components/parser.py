@@ -1,14 +1,11 @@
 from collections.abc import Iterable
 from os.path import normpath
 from pathlib import Path, PurePath
-from sys import stderr
 from typing import Literal
 
 from pydantic import ValidationError
-from rich import print as rich_print
-from rich.tree import Tree
 
-from ..exceptions import DeckzError
+from ..exceptions import DeckParsingError
 from ..models import (
     Deck,
     DeckDefinition,
@@ -411,86 +408,29 @@ class Parser(ParserProtocol):
 
     @staticmethod
     def validate(deck: Deck) -> None:
-        tree = RichTreeVisitor().process(deck)
-        if tree is not None:
-            rich_print(tree, file=stderr)
-            msg = "deck parsing failed"
-            raise DeckzError(msg)
+        finder = _ErrorFinderNodeVisitor()
+        errors = [
+            error
+            for part in deck.parts.values()
+            for node in part.nodes
+            for error in node.accept(finder)
+        ]
+        if errors:
+            raise DeckParsingError(deck, errors)
 
 
-class RichTreeVisitor(NodeVisitor[[UnresolvedPath], tuple[Tree | None, bool]]):
-    def __init__(self, only_errors: bool = True) -> None:
-        self._only_errors = only_errors
-
-    def process(self, deck: Deck) -> Tree | None:
-        part_trees = []
-        for part_name, part in deck.parts.items():
-            part_tree = self._process_part(part_name, part)
-            if part_tree is not None:
-                part_trees.append(part_tree)
-
-        if part_trees:
-            tree = Tree(deck.name)
-            tree.children.extend(part_trees)
-            return tree
-        return None
-
-    def _process_part(self, part_name: PartName, part: Part) -> Tree | None:
-        error = False
-        children_trees = []
-        for child in part.nodes:
-            child_tree, child_error = child.accept(self, UnresolvedPath(PurePath()))
-            error = error or child_error
-            if child_tree is not None:
-                children_trees.append(child_tree)
-
-        if self._only_errors and not error:
-            return None
-
-        tree = Tree(part_name)
-        tree.children.extend(children_trees)
-        return tree
-
-    def visit_file(
-        self, file: File, base_path: UnresolvedPath
-    ) -> tuple[Tree | None, bool]:
-        if self._only_errors and file.parsing_error is None:
-            return None, False
-        path = (
-            file.unresolved_path.relative_to(base_path)
-            if file.unresolved_path.is_relative_to(base_path)
-            else file.unresolved_path
-        )
+class _ErrorFinderNodeVisitor(NodeVisitor[[], list[str]]):
+    def visit_file(self, file: File) -> list[str]:
         if file.parsing_error is None:
-            return Tree(str(path)), False
-        return Tree(f"[red]{path} ({file.parsing_error})[/]"), True
+            return []
+        return [f"{file.unresolved_path} ({file.parsing_error})"]
 
-    def visit_section(
-        self, section: Section, base_path: UnresolvedPath
-    ) -> tuple[Tree | None, bool]:
-        error = section.parsing_error is not None
-        children_trees = []
-        for child in section.nodes:
-            child_tree, child_error = child.accept(self, section.unresolved_path)
-            error = error or child_error
-            if child_tree is not None:
-                children_trees.append(child_tree)
-
-        if self._only_errors and not error:
-            return None, False
-
-        path = (
-            section.unresolved_path.relative_to(base_path)
-            if section.unresolved_path.is_relative_to(base_path)
-            else section.unresolved_path
+    def visit_section(self, section: Section) -> list[str]:
+        errors = (
+            [f"{section.unresolved_path}@{section.flavor} ({section.parsing_error})"]
+            if section.parsing_error is not None
+            else []
         )
-
-        if section.parsing_error is not None:
-            label = f"[red]{path}@{section.flavor} ({section.parsing_error})[/]"
-        else:
-            label = f"{path}@{section.flavor}"
-
-        tree = Tree(label)
-        tree.children.extend(children_trees)
-
-        return tree, error
+        for node in section.nodes:
+            errors.extend(node.accept(self))
+        return errors

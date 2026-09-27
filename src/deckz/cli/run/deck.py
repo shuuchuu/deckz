@@ -32,6 +32,7 @@ def run(
     """
     from ...configuring.settings import DeckSettings
     from ...pipelines import run as _run
+    from .._presentation import RichProgress
 
     settings = DeckSettings.from_yaml(workdir)
 
@@ -42,6 +43,7 @@ def run(
             build_handout=handout,
             build_presentation=presentation,
             build_print=print,
+            progress=RichProgress(),
             parts_whitelist=parts,
         )
         return
@@ -68,5 +70,6 @@ def run(
         build_handout=handout,
         build_presentation=presentation,
         build_print=print,
+        progress=RichProgress(),
         parts_whitelist=parts,
     )

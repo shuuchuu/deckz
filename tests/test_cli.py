@@ -305,7 +305,9 @@ def test_run_en(bilingual_dir: Path) -> None:
     assert not (bilingual_dir / "pdf" / "bilingual-p1-presentation.pdf").exists()
 
 
-def test_run_en_missing_file_fails_loudly(bilingual_dir: Path, caplog: Any) -> None:
+def test_run_en_missing_file_fails_loudly(
+    bilingual_dir: Path, caplog: Any, capsys: Any
+) -> None:
     (bilingual_dir / "latex" / "en" / "hello.tex").unlink()
 
     with raises(SystemExit) as exc_info:
@@ -313,6 +315,7 @@ def test_run_en_missing_file_fails_loudly(bilingual_dir: Path, caplog: Any) -> N
 
     assert exc_info.value.code == 1
     assert "deck parsing failed" in caplog.text
+    assert "hello" in capsys.readouterr().err
 
 
 def test_run_en_missing_title_translation_fails_loudly(bilingual_dir: Path) -> None:

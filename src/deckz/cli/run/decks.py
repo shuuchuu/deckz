@@ -30,6 +30,7 @@ def run_decks(
 
     """
     from ...pipelines import run_decks as _run_decks
+    from .._presentation import RichProgress
 
     _run_decks(
         directory=workdir,
@@ -37,4 +38,5 @@ def run_decks(
         build_handout=handout,
         build_presentation=presentation,
         build_print=print,
+        progress=RichProgress(),
     )

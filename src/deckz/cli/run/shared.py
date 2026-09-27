@@ -29,6 +29,7 @@ def run_shared(
 
     """
     from ...pipelines import run_shared as _run_shared
+    from .._presentation import RichProgress
 
     _run_shared(
         directory=workdir,
@@ -36,4 +37,5 @@ def run_shared(
         build_handout=handout,
         build_presentation=presentation,
         build_print=print,
+        progress=RichProgress(),
     )

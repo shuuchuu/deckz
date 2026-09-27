@@ -1,3 +1,5 @@
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from multiprocessing import active_children
 from os import utime
 from pathlib import Path
@@ -179,3 +181,35 @@ def test_one_shot_build_leaves_no_worker_process(working_dir: Path) -> None:
     main(_RUN_ARGS)
 
     assert active_children() == []
+
+
+class _RecordingProgress:
+    def __init__(self) -> None:
+        self.tracked: list[tuple[str, int]] = []
+        self.advances = 0
+
+    @contextmanager
+    def track(self, description: str, total: int) -> Iterator[Callable[[], None]]:
+        self.tracked.append((description, total))
+
+        def advance() -> None:
+            self.advances += 1
+
+        yield advance
+
+
+def test_build_reports_progress_through_the_reporter(working_dir: Path) -> None:
+    progress = _RecordingProgress()
+
+    run(
+        settings=DeckSettings.from_yaml(working_dir),
+        lang="fr",
+        build_handout=True,
+        build_presentation=False,
+        build_print=False,
+        progress=progress,
+    )
+
+    # One handout for the whole deck, plus one per part.
+    assert progress.tracked == [("Compiling…", 2)]
+    assert progress.advances == 2

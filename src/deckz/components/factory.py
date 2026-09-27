@@ -12,6 +12,7 @@ from .protocols import (
     GlobalFactoryProtocol,
     MarkdownConverterProtocol,
     ParserProtocol,
+    ProgressReporterProtocol,
     RendererProtocol,
 )
 
@@ -116,8 +117,10 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
         build_handout: bool,
         build_print: bool,
         basedirs: tuple[Path, ...] | None = None,
+        progress: ProgressReporterProtocol | None = None,
     ) -> DeckBuilderProtocol:
         from .deck_builder import DeckBuilder
+        from .progress import NullProgress
 
         output_dir = self._settings.paths.pdf_dir
         build_dir = self._settings.paths.build_dir
@@ -152,4 +155,5 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
             renderer=self.renderer(),
             compiler=self.compiler(),
             markdown_converter=self.markdown_converter(),
+            progress=progress if progress is not None else NullProgress(),
         )

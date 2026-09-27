@@ -1,4 +1,5 @@
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -53,6 +54,24 @@ class ParserProtocol(Protocol):
         Returns:
             The built section.
         """
+
+
+class ProgressReporterProtocol(Protocol):
+    """Report the progress of a long task, without the core knowing how it's shown."""
+
+    def track(
+        self, description: str, total: int
+    ) -> AbstractContextManager[Callable[[], None]]:
+        """Report a task made of `total` steps, for the duration of the context.
+
+        Args:
+            description: What the task does, e.g. `"Compiling…"`.
+            total: Number of steps in the task.
+
+        Returns:
+            A context manager yielding the function to call once per step done.
+        """
+        ...
 
 
 class DeckBuilderProtocol(Protocol):
@@ -141,6 +160,7 @@ class DeckFactoryProtocol(GlobalFactoryProtocol, Protocol):
         build_handout: bool,
         build_print: bool,
         basedirs: tuple[Path, ...] | None = None,
+        progress: ProgressReporterProtocol | None = None,
     ) -> DeckBuilderProtocol: ...
 
     def parser(self) -> ParserProtocol: ...
