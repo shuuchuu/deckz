@@ -114,3 +114,18 @@ class GlobalSettings(BaseModel):
 
 class DeckSettings(GlobalSettings):
     paths: DeckPaths = Field(default_factory=DeckPaths)
+
+    def with_output_dirs(self, build_dir: Path, pdf_dir: Path) -> Self:
+        """Copy of these settings writing to other build and PDF directories.
+
+        Args:
+            build_dir: Absolute path of the new build directory.
+            pdf_dir: Absolute path of the new PDF directory.
+
+        Returns:
+            The copy. These settings are left untouched.
+        """
+        paths = self.paths.model_copy(
+            update={"build_dir": build_dir, "pdf_dir": pdf_dir}
+        )
+        return self.model_copy(update={"paths": paths})

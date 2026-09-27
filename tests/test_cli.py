@@ -10,7 +10,9 @@ from pydantic import ValidationError
 from pygit2 import init_repository
 from pytest import fixture, raises
 
+from deckz.checking import preview_settings
 from deckz.cli import main
+from deckz.configuring.settings import DeckSettings
 
 
 def _make_repo(tmp_path: Path, monkeypatch: Any) -> Path:
@@ -340,3 +342,18 @@ def test_run_en_plain_string_title_used_as_is(bilingual_dir: Path) -> None:
         bilingual_dir / "pdf" / "en" / "bilingual-p1-presentation.pdf"
     )
     assert "Bilingual Case" in text
+
+
+def test_preview_settings_leaves_the_deck_settings_untouched(
+    working_dir: Path,
+) -> None:
+    settings = DeckSettings.from_yaml(working_dir)
+    pdf_dir = settings.paths.pdf_dir
+
+    preview = preview_settings(settings, "section", "first-section", "standard")
+
+    assert settings.paths.pdf_dir == pdf_dir
+    scratch_dir = settings.paths.git_dir / ".run" / "section" / "first-section"
+    assert preview.paths.pdf_dir == scratch_dir / "standard" / "pdf"
+    assert preview.paths.build_dir == scratch_dir / "standard" / ".build"
+    assert preview.paths.current_dir == settings.paths.current_dir

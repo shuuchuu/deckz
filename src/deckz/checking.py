@@ -17,6 +17,7 @@ from pathlib import Path, PurePath
 
 from .components.factory import DeckSettingsFactory
 from .components.parser import Parser
+from .configuring.settings import DeckSettings
 from .models import Deck, Lang, Node, Part, PartName, UnresolvedPath
 from .utils import all_deck_settings, shared_section_ids
 
@@ -63,6 +64,26 @@ def run_scratch_dir(git_dir: Path, name: str) -> Path:
     path = git_dir / ".run" / name
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def preview_settings(settings: DeckSettings, *parts: str) -> DeckSettings:
+    """Copy of a deck's settings writing to a `deckz run file`/`section` scratch tree.
+
+    The deck itself (its `current_dir`, local latex dir, variables) stays \
+    the same: only the build and PDF directories move, under \
+    `<git_dir>/.run/<parts...>/`, so repeated previews don't clutter the \
+    deck's own output.
+
+    Args:
+        settings: Settings of the deck the preview is run from.
+        parts: Path components of the scratch tree under `.run`, e.g. \
+            `("file", "about")`.
+
+    Returns:
+        The copy. `settings` is left untouched.
+    """
+    scratch_dir = settings.paths.git_dir.joinpath(".run", *parts)
+    return settings.with_output_dirs(scratch_dir / ".build", scratch_dir / "pdf")
 
 
 def build_shared_deck(

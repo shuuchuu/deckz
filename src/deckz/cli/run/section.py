@@ -41,14 +41,14 @@ def run_section(
 
     from typer import launch
 
+    from ...checking import preview_settings
     from ...configuring.settings import DeckSettings
     from ...pipelines import run_section as _run_section
 
     logger = getLogger(__name__)
-    settings = DeckSettings.from_yaml(workdir)
-    scratch_dir = settings.paths.git_dir / ".run" / "section" / section / flavor
-    settings.paths.build_dir = scratch_dir / ".build"
-    settings.paths.pdf_dir = scratch_dir / "pdf"
+    settings = preview_settings(
+        DeckSettings.from_yaml(workdir), "section", section, flavor
+    )
 
     if watch:
         from ...pipelines import watch as _watch

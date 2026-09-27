@@ -39,14 +39,12 @@ def run_file(
 
     from typer import launch
 
+    from ...checking import preview_settings
     from ...configuring.settings import DeckSettings
     from ...pipelines import run_file as _run_file
 
     logger = getLogger(__name__)
-    settings = DeckSettings.from_yaml(workdir)
-    scratch_dir = settings.paths.git_dir / ".run" / "file" / latex
-    settings.paths.build_dir = scratch_dir / ".build"
-    settings.paths.pdf_dir = scratch_dir / "pdf"
+    settings = preview_settings(DeckSettings.from_yaml(workdir), "file", latex)
 
     if watch:
         from ...pipelines import watch as _watch
