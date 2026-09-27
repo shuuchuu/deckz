@@ -8,8 +8,8 @@ from time import time
 from typing import Any
 
 import appdirs
-from pdfminer.high_level import extract_text
 from pygit2 import init_repository
+from pypdfium2 import PdfDocument
 from pytest import fixture, mark, raises
 
 from deckz.cli import main
@@ -37,7 +37,11 @@ def working_dir(tmp_path: Path, monkeypatch: Any) -> Path:
 
 
 def _handout_text(working_dir: Path) -> str:
-    return extract_text(working_dir / "pdf" / "abc-handout.pdf")
+    pdf = PdfDocument(working_dir / "pdf" / "abc-handout.pdf")
+    try:
+        return "\n".join(page.get_textpage().get_text_bounded() for page in pdf)
+    finally:
+        pdf.close()
 
 
 def _write_newer(path: Path, content: str) -> None:

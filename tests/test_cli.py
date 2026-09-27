@@ -5,8 +5,8 @@ from shutil import copytree, move
 from typing import Any
 
 import appdirs
-from pdfminer.high_level import extract_pages, extract_text
 from pygit2 import init_repository
+from pypdfium2 import PdfDocument
 from pytest import fixture, raises
 
 from deckz.checking import preview_settings
@@ -41,11 +41,13 @@ def bilingual_dir(tmp_path: Path, monkeypatch: Any) -> Path:
 
 
 def extract_info(pdf_path: Path) -> tuple[int, str]:
-    with pdf_path.open("rb") as fh:
-        pages = list(extract_pages(fh))
-        fh.seek(0)
-        text = extract_text(fh)
-    return len(pages), text
+    pdf = PdfDocument(pdf_path)
+    try:
+        return len(pdf), "\n".join(
+            page.get_textpage().get_text_bounded() for page in pdf
+        )
+    finally:
+        pdf.close()
 
 
 def test_generate_agent_notes(capsys: Any) -> None:
