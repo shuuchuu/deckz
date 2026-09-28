@@ -27,6 +27,12 @@ if TYPE_CHECKING:
 _warm_workers: dict[Path, "_Worker"] | None = None
 _warm_lock = Lock()
 
+# Every live worker, warm or not, so that `stop()` can kill them all; once
+# stopped, no new compilation starts.
+_live_workers: set["_Worker"] = set()
+_live_lock = Lock()
+_stopped = False
+
 
 def _serve(
     connection: Connection,
@@ -35,6 +41,11 @@ def _serve(
     ignore_system_fonts: bool,
 ) -> None:
     """Child process loop: compile `main` on each request, until told to stop."""
+    from signal import SIG_IGN, SIGINT, signal
+
+    # SIGINT is already blocked (see `_Worker`): make that permanent.
+    signal(SIGINT, SIG_IGN)
+
     import typst
 
     compiler = typst.Compiler(
@@ -44,7 +55,8 @@ def _serve(
         ignore_system_fonts=ignore_system_fonts,
     )
     output = str(Path(main).with_suffix(".pdf"))
-    while connection.recv():
+    # The parent going away closes the pipe: stop quietly then too.
+    while _next_request(connection):
         try:
             _, warnings = compiler.compile_with_warnings(output=output)
         except typst.TypstError as e:
@@ -52,6 +64,32 @@ def _serve(
         else:
             connection.send((True, "".join(w.diagnostic for w in warnings)))
     connection.close()
+
+
+def _next_request(connection: Connection) -> bool:
+    try:
+        return connection.recv()
+    except EOFError:
+        return False
+
+
+@contextmanager
+def _sigint_blocked() -> Iterator[None]:
+    """Block SIGINT in this thread, and so in the processes it starts meanwhile.
+
+    Ctrl-C reaches the whole process group, workers included: they must leave
+    it to the parent, which stops them, rather than die with a traceback of
+    their own, even while still starting up. A child inherits its parent
+    thread's signal mask, and, unlike ignoring the signal, blocking it works
+    from any thread, e.g. the deck builder's pool threads.
+    """
+    from signal import SIG_BLOCK, SIG_SETMASK, SIGINT, pthread_sigmask
+
+    previous = pthread_sigmask(SIG_BLOCK, {SIGINT})
+    try:
+        yield
+    finally:
+        pthread_sigmask(SIG_SETMASK, previous)
 
 
 class _Worker:
@@ -69,9 +107,16 @@ class _Worker:
             ),
             daemon=True,
         )
-        self._process.start()
+        with _sigint_blocked():
+            self._process.start()
         child_connection.close()
         self.lock = Lock()
+        with _live_lock:
+            _live_workers.add(self)
+            stopped = _stopped
+        if stopped:
+            # `stop()` ran while this worker was starting.
+            self.kill()
 
     def compile(self) -> CompileResult:
         try:
@@ -97,7 +142,32 @@ class _Worker:
             self._process.join(timeout=5)
             if self._process.is_alive():
                 self._process.kill()
+        self._forget()
+
+    def kill(self) -> None:
+        """Stop at once, even mid-compilation: its `compile` then fails."""
+        self._process.kill()
+        self._process.join()
+        self._forget()
+
+    def _forget(self) -> None:
+        with _live_lock:
+            _live_workers.discard(self)
         self._connection.close()
+
+
+def stop() -> None:
+    """Kill every Typst worker and refuse any further compilation.
+
+    For the CLI's Ctrl-C handling: the compilations running end at once, as \
+    failures, and those not started yet fail without starting.
+    """
+    global _stopped
+    with _live_lock:
+        _stopped = True
+        workers = list(_live_workers)
+    for worker in workers:
+        worker.kill()
 
 
 @contextmanager
@@ -110,13 +180,21 @@ def keep_warm() -> Iterator[None]:
     global _warm_workers
     with _warm_lock:
         _warm_workers = {}
+    interrupted = False
     try:
         yield
+    except BaseException:
+        # E.g. Ctrl-C: don't wait for the compilations still running.
+        interrupted = True
+        raise
     finally:
         with _warm_lock:
             workers, _warm_workers = _warm_workers, None
         for worker in workers.values():
-            worker.close()
+            if interrupted:
+                worker.kill()
+            else:
+                worker.close()
 
 
 class TypstCompiler(CompilerProtocol):
@@ -152,6 +230,8 @@ class TypstCompiler(CompilerProtocol):
     def compile(self, file: Path) -> CompileResult:
         main = file.resolve()
         with self._slots:
+            if _stopped:
+                return CompileResult(False, "compilation cancelled")
             with _warm_lock:
                 workers = _warm_workers
                 if workers is not None and (

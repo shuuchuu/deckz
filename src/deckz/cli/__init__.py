@@ -10,7 +10,10 @@ from rich.logging import RichHandler
 from .. import __version__
 from ..exceptions import DeckParsingError, DeckzError
 
-app = App(version=__version__)
+# Ctrl-C is handled by `_launch`, which needs the KeyboardInterrupt that
+# cyclopts would otherwise turn into a bare `sys.exit(130)`.
+app = App(version=__version__, suppress_keyboard_interrupt=False)
+app.meta.suppress_keyboard_interrupt = False
 app.register_install_completion_command()
 
 
@@ -41,6 +44,25 @@ def main(args: Iterable[str] | None = None) -> None:
         raise SystemExit(2) from None
 
 
+def _stop_child_processes() -> None:
+    # Typst workers and multiprocessing pools, so that a Ctrl-C'd build stops
+    # at once instead of waiting for the compilations already running.
+    from multiprocessing import active_children
+    from signal import SIG_IGN, SIGINT, signal
+
+    from ..components import compiler
+
+    # A repeated Ctrl-C (or one forwarded again by a wrapper such as `uv run`)
+    # must not interrupt this cleanup, or the exit-time join of the build's
+    # threads, with a traceback.
+    signal(SIGINT, SIG_IGN)
+    compiler.stop()
+
+    for child in active_children():
+        child.kill()
+        child.join(timeout=5)
+
+
 @app.meta.default
 def _launch(
     *tokens: Annotated[str, Parameter(show=False, allow_leading_hyphen=True)],
@@ -58,7 +80,8 @@ def _launch(
 
     Raises:
         DeckzError: Only with `--debug` or when `DECKZ_DEBUG` is set.
-        SystemExit: With code 1 on a deckz error.
+        KeyboardInterrupt: On Ctrl-C, only with `--debug` or `DECKZ_DEBUG`.
+        SystemExit: With code 1 on a deckz error, 130 on Ctrl-C.
     """
     # Diagnostics go to stderr, leaving stdout to results (e.g. --json).
     basicConfig(
@@ -77,6 +100,13 @@ def _launch(
     getLogger().setLevel(DEBUG if verbose or debug else WARNING if quiet else INFO)
     try:
         app(tokens, result_action="return_none", exit_on_error=False)
+    except KeyboardInterrupt:
+        if debug or environ.get("DECKZ_DEBUG"):
+            raise
+        _stop_child_processes()
+        getLogger(__name__).error("Interrupted")
+        # 128 + SIGINT, what a shell reports for a process killed by Ctrl-C.
+        raise SystemExit(130) from None
     except DeckzError as e:
         if debug or environ.get("DECKZ_DEBUG"):
             raise

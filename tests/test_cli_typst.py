@@ -1,13 +1,15 @@
 import sys
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from logging import DEBUG, WARNING, getLogger
 from multiprocessing import active_children
-from os import environ, utime
+from os import environ, killpg, utime
 from pathlib import Path
 from shutil import copytree
+from signal import SIGINT, SIGKILL
+from subprocess import PIPE, Popen
 from subprocess import run as run_process
-from time import time
+from time import sleep, time
 from typing import Any
 
 import appdirs
@@ -232,6 +234,57 @@ def test_logs_go_to_stderr(working_dir: Path, tmp_path: Path) -> None:
 
     assert result.stdout == ""
     assert "Nothing to compile" in result.stderr
+
+
+def _spawned_children(pid: int) -> list[int]:
+    # Every thread's children: deckz spawns its workers from pool threads.
+    children = [
+        int(child)
+        for task in Path(f"/proc/{pid}/task").iterdir()
+        for child in (task / "children").read_text().split()
+    ]
+    spawned = []
+    for child in children:
+        with suppress(FileNotFoundError):  # Already gone.
+            if b"spawn_main" in Path(f"/proc/{child}/cmdline").read_bytes():
+                spawned.append(child)
+    return spawned
+
+
+@mark.skipif(sys.platform != "linux", reason="reads /proc")
+def test_ctrl_c_stops_the_build_at_once(working_dir: Path, tmp_path: Path) -> None:
+    # A compilation that runs for a while, interrupted once its Typst worker
+    # is up, the way a terminal does: SIGINT to the whole process group.
+    with (working_dir / "content" / "about.md").open("a", encoding="utf8") as fh:
+        fh.write("```{=typst}\n#let x = 0\n")
+        fh.write("#for i in range(200000000) { x = x + 1 }\n#x\n```\n")
+    process = Popen(
+        [sys.executable, "-c", "from deckz.cli import main; main()", *_RUN_ARGS],
+        stdout=PIPE,
+        stderr=PIPE,
+        text=True,
+        env={**environ, "XDG_CONFIG_HOME": str(tmp_path / "xdg")},
+        start_new_session=True,
+    )
+    try:
+        deadline = time() + 20
+        while not (workers := _spawned_children(process.pid)):
+            assert process.poll() is None, "deckz exited before compiling"
+            assert time() < deadline, "no Typst worker started"
+            sleep(0.05)
+
+        killpg(process.pid, SIGINT)
+        _, stderr = process.communicate(timeout=20)
+    finally:
+        # Whatever happened, never leave the slow build running.
+        with suppress(ProcessLookupError):
+            killpg(process.pid, SIGKILL)
+        process.wait()
+
+    assert process.returncode == 130
+    assert "Interrupted" in stderr
+    assert "Traceback" not in stderr
+    assert not any(Path(f"/proc/{worker}").exists() for worker in workers)
 
 
 def test_debug_env_var_keeps_the_exception(working_dir: Path, monkeypatch: Any) -> None:

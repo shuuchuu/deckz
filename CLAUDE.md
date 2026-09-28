@@ -70,6 +70,12 @@ error boundary: its cyclopts meta app (`_launch`) takes the global
 `--quiet`/`--verbose`/`--debug` flags, sets the log level, and turns any
 `DeckzError` into a logged message and exit code 1, without a traceback
 (`--debug` or `DECKZ_DEBUG=1` re-raises instead); a usage error exits 2.
+On Ctrl-C it exits 130 after `compiler.stop()`, which kills every Typst
+worker and refuses new compilations (the deck builder also cancels its
+queued ones). Workers start with SIGINT blocked (`_sigint_blocked`), so the
+Ctrl-C a terminal sends the whole process group leaves them to the parent.
+Logs and progress bars go to stderr, stdout carries only results
+(`--json` output included).
 Tests driving `main(...)` therefore assert `raises(SystemExit)` with code
 1, not the `DeckzError` itself.
 

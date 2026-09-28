@@ -7,6 +7,9 @@ from collections.abc import Mapping
 from pathlib import Path, PurePath
 from typing import Any
 
+from pytest import MonkeyPatch, raises
+
+from deckz.components import deck_builder
 from deckz.components.deck_builder import DeckBuilder
 from deckz.components.progress import NullProgress
 from deckz.models import (
@@ -186,3 +189,23 @@ def test_same_file_with_different_variables_renders_twice(tmp_path: Path) -> Non
         for path in (tmp_path / "build" / "deck-handout").glob("a-*.md")
     )
     assert rendered == ["A{'depth': 'deep'}", "A{'depth': 'shallow'}"]
+
+
+def test_interrupt_cancels_the_queued_compilations(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    compiled: list[Path] = []
+
+    def interrupted(file: Path) -> CompileResult:
+        compiled.append(file)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(repo.compiler, "compile", interrupted)
+    # One thread: the part's PDF is still queued when the deck's is interrupted.
+    monkeypatch.setattr(deck_builder, "cpu_count", lambda: 1)
+
+    with raises(KeyboardInterrupt):
+        repo.builder(repo.file("a.md")).build_deck()
+
+    assert len(compiled) == 1

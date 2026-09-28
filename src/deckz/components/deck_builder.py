@@ -226,21 +226,26 @@ class DeckBuilder(DeckBuilderProtocol):
             return True
         self._markdown_fingerprint = self._markdown_converter.fingerprint()
         results = []
-        with (
-            self._progress.track("Compiling…", len(items)) as advance,
-            # Threads, not processes: rendering is cheap next to pandoc and
-            # the compiler, which both run in subprocesses. Staying in this
-            # process is also what lets TypstCompiler keep its warm worker
-            # processes from one `--watch` rebuild to the next.
-            ThreadPoolExecutor(min(cpu_count(), len(items))) as pool,
-        ):
-            for item_name, result in zip(
-                items,
-                pool.map(self._build_item_pair, items.items()),
-                strict=True,
-            ):
-                results.append((item_name, result))
-                advance()
+        # Threads, not processes: rendering is cheap next to pandoc and the
+        # compiler, which both run in subprocesses. Staying in this process
+        # is also what lets TypstCompiler keep its warm worker processes from
+        # one `--watch` rebuild to the next.
+        pool = ThreadPoolExecutor(min(cpu_count(), len(items)))
+        try:
+            with self._progress.track("Compiling…", len(items)) as advance:
+                for item_name, result in zip(
+                    items,
+                    pool.map(self._build_item_pair, items.items()),
+                    strict=True,
+                ):
+                    results.append((item_name, result))
+                    advance()
+        except BaseException:
+            # E.g. Ctrl-C: don't start the compilations still queued. Those
+            # running end when the CLI kills the compiler's processes.
+            pool.shutdown(wait=False, cancel_futures=True)
+            raise
+        pool.shutdown()
         for item_name, result in results:
             if not result.ok:
                 self._logger.warning("Compilation %s errored", item_name)
