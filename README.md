@@ -374,6 +374,27 @@ layout](#repository-layout)). `watched_dirs` only matters for `deckz run
 assets --watch`: it tells the watch loop which source directories should
 trigger a rebuild.
 
+### Python hooks: contract and trust
+
+`templates/jinja2/env.py` and `templates/assets_builders.py` are plain
+Python modules that `deckz` imports and runs: running `deckz` on a
+repository executes its code with your permissions, like any build script,
+so only use it on repositories you trust. Whatever they import is your
+repository's own dependency, to install alongside `deckz`.
+
+`deckz` checks each hook when loading it: the module must import cleanly
+and define the expected function, `environment_for` must return a
+`jinja2.Environment`, and each object `assets_builders` returns must have
+`build_assets` and `watched_dirs` methods. A module may declare which
+version of this contract it targets:
+
+```python
+DECKZ_HOOKS_VERSION = 1  # the default when left out
+```
+
+A future incompatible change to the contract will bump that version, so a
+hook written for another one fails to load with a clear message.
+
 ### Markdown content and `pandoc`
 
 Content files are authored in Markdown: `deckz` renders each one through

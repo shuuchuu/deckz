@@ -2,13 +2,13 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from functools import cached_property
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 from jinja2 import BaseLoader, Environment, TemplateNotFound
 
+from ..exceptions import HookError
 from ..models import AssetsMetadata
-from ..utils import import_module_from_path
+from .hooks import load_hook
 from .protocols import GlobalFactoryProtocol, RendererProtocol
 
 
@@ -82,6 +82,9 @@ class Renderer(_BaseRenderer):
     references an asset file must call it to register that usage -- this is \
     what keeps `deckz asset search`/`deckz asset deps` and the i18n tooling \
     accurate.
+
+    See [`hooks`][deckz.components.hooks] for the contract's versioning and \
+    trust boundary.
     """
 
     def __init__(
@@ -115,13 +118,24 @@ class Renderer(_BaseRenderer):
 
         Returns:
             The environment, memoized per suffix.
+
+        Raises:
+            HookError: If the hook doesn't return a `jinja2.Environment`.
         """
         if suffix not in self._environments:
-            env = self._module.environment_for(suffix)
+            env = self._hook(suffix)
+            if not isinstance(env, Environment):
+                msg = (
+                    f"{self._jinja_env_module_path}: environment_for({suffix!r}) "
+                    f"returned {type(env).__name__}, not a jinja2.Environment"
+                )
+                raise HookError(msg)
             env.loader = _AbsoluteLoader()
             self._environments[suffix] = env
         return self._environments[suffix]
 
     @cached_property
-    def _module(self) -> ModuleType:
-        return import_module_from_path(self._jinja_env_module_path, "deckz._jinja_env")
+    def _hook(self) -> Callable[[str], Any]:
+        return load_hook(
+            self._jinja_env_module_path, "deckz._jinja_env", "environment_for"
+        )

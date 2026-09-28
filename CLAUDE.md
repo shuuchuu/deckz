@@ -158,6 +158,16 @@ directory of their own. `deckz check variables` uses the same
 under `<git_dir>/.check/variables/` since it's a `check` command, not a `run` one.
 `deckz clean all` sweeps both `.run/` and `.check/` wholesale.
 
+### Hooks
+
+The target repo's `templates/jinja2/env.py` (`environment_for`) and
+`templates/assets_builders.py` (`assets_builders`) are loaded through
+`components/hooks.py::load_hook`, which turns an import failure, a missing
+function or a `DECKZ_HOOKS_VERSION` other than `HOOKS_VERSION` into a
+`HookError`; `Renderer`/`AssetsBuilder` also check what the hooks return.
+Its module docstring documents the trust boundary (the hooks are arbitrary
+code from the target repo).
+
 ### Data model
 
 `models.py` defines the deck domain model: `DeckDefinition`/`Deck`,

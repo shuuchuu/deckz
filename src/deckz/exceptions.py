@@ -37,6 +37,10 @@ class MissingExtraError(DeckzError):
     """A command needs an optional dependency that isn't installed."""
 
 
+class HookError(DeckzError):
+    """A Python hook of the deckz-managed repo is missing, broken or misbehaves."""
+
+
 class CompilationError(DeckzError):
     pass
 
