@@ -400,7 +400,16 @@ pointing at Lua filters you maintain in this repository, e.g. under
 ## Usage
 
 Run `deckz --help` for the full list of commands, or `deckz <command>
---help` for a specific command. The main ones:
+--help` for a specific command. Global options go before the command:
+`--quiet`/`-q` only logs warnings and errors, `--verbose`/`-v` adds details
+such as per-PDF timings and which fragments get re-rendered, and `--debug`
+also shows the traceback of a deckz error (as does `DECKZ_DEBUG=1`).
+
+Exit codes: 0 on success, 1 on a deckz error (e.g. a missing flavor or a
+failed compile) or on `deckz check variables` findings, 2 on a command-line
+usage error.
+
+The main commands:
 
 - `deckz run` (alias for `deckz run deck`, optionally restricted with
   `--parts`) / `deckz run file PATH` / `deckz run section SECTION FLAVOR` /

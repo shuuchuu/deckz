@@ -1,5 +1,6 @@
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from logging import DEBUG, WARNING, getLogger
 from multiprocessing import active_children
 from os import utime
 from pathlib import Path
@@ -173,6 +174,34 @@ def test_debug_env_var_keeps_the_exception(working_dir: Path, monkeypatch: Any) 
 
     with raises(CompilationError, match="ABC failed to compile"):
         main(_RUN_ARGS)
+
+
+def test_debug_flag_keeps_the_exception(working_dir: Path) -> None:
+    _break(working_dir / "content" / "about.md")
+
+    with raises(CompilationError, match="ABC failed to compile"):
+        main(("--debug", *_RUN_ARGS))
+
+
+def test_usage_error_exits_2(working_dir: Path) -> None:
+    with raises(SystemExit) as exc_info:
+        main(("run", "--no-such-option"))
+
+    assert exc_info.value.code == 2
+
+
+@mark.parametrize(
+    ("flag", "level"), [("--quiet", WARNING), ("-v", DEBUG), ("--debug", DEBUG)]
+)
+def test_verbosity_flags_set_the_log_level(
+    working_dir: Path, monkeypatch: Any, flag: str, level: int
+) -> None:
+    root = getLogger()
+    monkeypatch.setattr(root, "level", root.level)
+
+    main((flag, "generate-agent-notes"))
+
+    assert root.level == level
 
 
 def test_watch_survives_a_compile_error(working_dir: Path, caplog: Any) -> None:

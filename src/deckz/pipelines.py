@@ -1,6 +1,7 @@
 from collections.abc import Callable, Iterable, Set
 from logging import getLogger
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 from watchfiles import watch as watchfiles_watch
@@ -32,7 +33,9 @@ def _build(
 ) -> None:
     variables = {**get_variables(settings, lang=lang), "lang": lang}
     factory = DeckSettingsFactory(settings, lang=lang)
+    start = perf_counter()
     factory.assets_builder().build_assets()
+    _logger.debug("Built assets in %.2fs", perf_counter() - start)
     if not factory.deck_builder(
         variables=variables,
         deck=resolve_variables(deck, variables),

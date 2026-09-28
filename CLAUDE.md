@@ -66,10 +66,12 @@ live only in `cli/_presentation.py` (`RichTreeVisitor`, `RichProgress`,
 in by the `run` commands) and reports failures by raising a `DeckzError`
 subclass, e.g. `DeckParsingError` carrying the deck whose tree `main()`
 renders, or `CompilationError` from a failed build. `main()` is the single
-error boundary: it turns any `DeckzError` into a logged message and exit
-code 1, without a traceback (`DECKZ_DEBUG=1` re-raises instead). Tests
-driving `main(...)` therefore assert `raises(SystemExit)` with code 1, not
-the `DeckzError` itself.
+error boundary: its cyclopts meta app (`_launch`) takes the global
+`--quiet`/`--verbose`/`--debug` flags, sets the log level, and turns any
+`DeckzError` into a logged message and exit code 1, without a traceback
+(`--debug` or `DECKZ_DEBUG=1` re-raises instead); a usage error exits 2.
+Tests driving `main(...)` therefore assert `raises(SystemExit)` with code
+1, not the `DeckzError` itself.
 
 ### Settings resolution
 

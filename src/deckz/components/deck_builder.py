@@ -15,6 +15,7 @@ from logging import getLogger
 from multiprocessing import cpu_count
 from pathlib import Path, PurePosixPath
 from shutil import copyfile
+from time import perf_counter
 from typing import Any
 
 from ..exceptions import DeckzError
@@ -40,6 +41,8 @@ from .protocols import (
     ProgressReporterProtocol,
     RendererProtocol,
 )
+
+_logger = getLogger(__name__)
 
 
 class CompileType(Enum):
@@ -225,6 +228,7 @@ class DeckBuilder(DeckBuilderProtocol):
         return to_compile
 
     def _build_item(self, name: str, item: CompileItem) -> CompileResult:
+        start = perf_counter()
         build_dir = setup_build_dir(self._build_dir, name, self._dirs_to_link)
         main_path = build_dir / f"{name}{self._template.suffix}"
         build_pdf_path = main_path.with_suffix(".pdf")
@@ -240,13 +244,28 @@ class DeckBuilder(DeckBuilderProtocol):
             not fingerprint_path.is_file()
             or fingerprint_path.read_text(encoding="utf8") != self._markdown_fingerprint
         )
+        if markdown_stale:
+            self._logger.debug(
+                "%s: rendering every fragment, first build or the Markdown "
+                "converter changed",
+                name,
+            )
         copied = copy_dependencies(
             item.dependencies, build_dir, self._basedirs, force=markdown_stale
         )
         render_dependencies(self._renderer, self._markdown_converter, copied)
         if markdown_stale:
             fingerprint_path.write_text(self._markdown_fingerprint, encoding="utf8")
+        rendered = perf_counter()
         result = self._compiler.compile(main_path)
+        self._logger.debug(
+            "%s: rendered %d of %d fragments in %.2fs, compiled in %.2fs",
+            name,
+            len(copied),
+            len(item.dependencies),
+            rendered - start,
+            perf_counter() - rendered,
+        )
         if result.ok:
             self._output_dir.mkdir(parents=True, exist_ok=True)
             copyfile(build_pdf_path, output_pdf_path)
@@ -316,6 +335,7 @@ def copy_dependencies(
             copyfile(dependency.resolved_path, build_path)
             copied.append((build_path, dependency.variables))
         elif copy_file_if_changed(dependency.resolved_path, build_path):
+            _logger.debug("Re-rendering %s: new or changed", dependency.resolved_path)
             copied.append((build_path, dependency.variables))
     return copied
 
