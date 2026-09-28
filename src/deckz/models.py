@@ -381,11 +381,13 @@ class Node(ABC):
 
     title: str | None
     unresolved_path: UnresolvedPath
-    # resolved_path and parsing_error could benefit from a refactoring using something
-    # like Either because we cannot have both a ResolvedPath and a parsing_error at the
-    # same time.
-    resolved_path: ResolvedPath
+    resolved_path: ResolvedPath | None
+    """Where the node was found, or None if it couldn't be (see `parsing_error`). \
+    A section found on disk can still fail to parse, e.g. on an unknown flavor."""
     parsing_error: str | None
+    """Why the node failed to parse, or None if it parsed. \
+    [`Parser.validate`][deckz.components.parser.Parser.validate] rejects a deck \
+    holding any, so the deck builder never sees one."""
 
     @abstractmethod
     def accept[**P, T](

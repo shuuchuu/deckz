@@ -149,7 +149,7 @@ def build_all_deck(settings: GlobalSettings, lang: Lang) -> Deck:
             parser = DeckSettingsFactory(local_settings, lang=lang).parser()
             candidate = parser.all_files_section(section_id)
             overridden = any(
-                node.parsing_error is None
+                node.resolved_path is not None
                 and not node.resolved_path.is_relative_to(content_dir)
                 for node in candidate.nodes
             )

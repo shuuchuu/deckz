@@ -61,7 +61,11 @@ def _section_yml_paths(deck: Deck) -> set[Path]:
 
     def visit(nodes: Iterable[object]) -> None:
         for node in nodes:
-            if isinstance(node, Section) and node.parsing_error is None:
+            if (
+                isinstance(node, Section)
+                and node.parsing_error is None
+                and node.resolved_path is not None
+            ):
                 paths.add(node.resolved_path / f"{node.resolved_path.name}.yml")
                 visit(node.nodes)
 

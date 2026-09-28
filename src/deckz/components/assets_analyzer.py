@@ -101,6 +101,8 @@ class _SectionDependenciesNodeVisitor(
         section_dependencies: MutableMapping[UnresolvedPath, MutableSet[DependencyRef]],
         base_unresolved_path: UnresolvedPath,
     ) -> None:
+        if file.resolved_path is None:
+            return
         if base_unresolved_path not in section_dependencies:
             section_dependencies[base_unresolved_path] = set()
         section_dependencies[base_unresolved_path].add(

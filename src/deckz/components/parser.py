@@ -247,7 +247,7 @@ class Parser(ParserProtocol):
         section = Section(
             title=title,
             unresolved_path=unresolved_path,
-            resolved_path=ResolvedPath(Path()),
+            resolved_path=None,
             parsing_error=None,
             flavor=flavor,
             nodes=(),
@@ -378,7 +378,7 @@ class Parser(ParserProtocol):
         file = File(
             title=title,
             unresolved_path=unresolved_path,
-            resolved_path=ResolvedPath(Path()),
+            resolved_path=None,
             parsing_error=None,
         )
         resolved_path = None

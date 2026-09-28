@@ -89,12 +89,7 @@ def referenced_variable_names(ast: "nodes.Template") -> set[str]:
     return names
 
 
-def _section_yml_path(section: Section) -> Path:
-    return section.resolved_path / f"{section.resolved_path.name}.yml"
-
-
-def _declared_names(acc: _Accumulator, section: Section) -> set[str]:
-    yml_path = _section_yml_path(section)
+def _declared_names(acc: _Accumulator, yml_path: Path) -> set[str]:
     if yml_path not in acc.declared:
         try:
             definition = SectionDefinition.model_validate(load_yaml(yml_path))
@@ -112,17 +107,18 @@ def _check_file(
     renderer: "RendererProtocol",
     acc: _Accumulator,
 ) -> None:
-    if file.parsing_error is not None:
+    path = file.resolved_path
+    if path is None:
         return
     try:
-        env = renderer.environment_for(_content_suffix(file.resolved_path))
-        ast = env.parse(file.resolved_path.read_text(encoding="utf8"))
+        env = renderer.environment_for(_content_suffix(path))
+        ast = env.parse(path.read_text(encoding="utf8"))
     except TemplateSyntaxError as e:
-        acc.report.unparsable.append((file.resolved_path, str(e)))
+        acc.report.unparsable.append((path, str(e)))
         return
     for name in referenced_variable_names(ast):
         if name not in file.variables:
-            acc.report.undefined.append((file.resolved_path, name))
+            acc.report.undefined.append((path, name))
         for yml_path, declared in ancestors:
             if name in declared:
                 acc.referenced[yml_path].add(name)
@@ -135,12 +131,11 @@ def _walk_node(
     acc: _Accumulator,
 ) -> None:
     if isinstance(node, Section):
-        if node.parsing_error is not None:
+        if node.parsing_error is not None or node.resolved_path is None:
             return
-        declared = _declared_names(acc, node)
-        new_ancestors = (
-            [*ancestors, (_section_yml_path(node), declared)] if declared else ancestors
-        )
+        yml_path = node.resolved_path / f"{node.resolved_path.name}.yml"
+        declared = _declared_names(acc, yml_path)
+        new_ancestors = [*ancestors, (yml_path, declared)] if declared else ancestors
         for child in node.nodes:
             _walk_node(child, new_ancestors, renderer, acc)
     elif isinstance(node, File):

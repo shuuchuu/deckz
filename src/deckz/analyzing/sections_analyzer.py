@@ -145,7 +145,9 @@ class _SectionsUsageNodeVisitor(
         section: Section,
         section_stats: MutableMapping[UnresolvedPath, MutableSet[FlavorName]],
     ) -> None:
-        if section.resolved_path.is_relative_to(self._shared_content_dir):
+        if section.resolved_path is not None and section.resolved_path.is_relative_to(
+            self._shared_content_dir
+        ):
             if section.unresolved_path not in section_stats:
                 section_stats[section.unresolved_path] = set()
             section_stats[section.unresolved_path].add(section.flavor)
@@ -162,7 +164,8 @@ class _FilesUsageNodeVisitor(NodeVisitor[[MutableSet[ResolvedPath]], None]):
         return used
 
     def visit_file(self, file: File, used: MutableSet[ResolvedPath]) -> None:
-        used.add(file.resolved_path)
+        if file.resolved_path is not None:
+            used.add(file.resolved_path)
 
     def visit_section(self, section: Section, used: MutableSet[ResolvedPath]) -> None:
         for node in section.nodes:

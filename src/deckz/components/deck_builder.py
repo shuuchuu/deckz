@@ -332,6 +332,14 @@ def render_dependencies(
             markdown_converter.convert(rendered_path, rendered_path.with_suffix(".typ"))
 
 
+def _resolved_path(file: File) -> ResolvedPath:
+    if file.resolved_path is None:
+        # Parser.validate rejects such a deck before it gets here.
+        msg = f"unresolved file {file.unresolved_path} ({file.parsing_error})"
+        raise ValueError(msg)
+    return file.resolved_path
+
+
 class PartDependenciesNodeVisitor(NodeVisitor[[MutableSet[DependencyRef]], None]):
     def process(self, deck: Deck) -> dict[PartName, set[DependencyRef]]:
         return {
@@ -348,7 +356,7 @@ class PartDependenciesNodeVisitor(NodeVisitor[[MutableSet[DependencyRef]], None]
     def visit_file(self, file: File, dependencies: MutableSet[DependencyRef]) -> None:
         dependencies.add(
             DependencyRef(
-                file.resolved_path,
+                _resolved_path(file),
                 variables_fingerprint(file.variables),
                 file.variables,
             )
@@ -384,7 +392,7 @@ class _SlidesNodeVisitor(NodeVisitor[[MutableSequence[TitleOrContent], int], Non
             sections.append(Title(file.title, level))
         fingerprint = variables_fingerprint(file.variables)
         reference = dependency_relative_path(
-            file.resolved_path, self._basedirs, fingerprint
+            _resolved_path(file), self._basedirs, fingerprint
         )
         sections.append(str(reference))
 
