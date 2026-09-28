@@ -8,9 +8,9 @@ def search(asset: str, /, *, json: bool = False, workdir: Path = Path()) -> None
     """Find which files use ASSET.
 
     Args:
-        asset: Asset to search in files. Specify the path relative to the assets \
+        asset: Asset to search in files. Specify the path relative to the assets
             directory and whithout extension, e.g. img/turing
-        json: Print one JSON array of the files' paths, relative to the \
+        json: Print one JSON array of the files' paths, relative to the
             repository root, instead
         workdir: Path to move into before running the command
 

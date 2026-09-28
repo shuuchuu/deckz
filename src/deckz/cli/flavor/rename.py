@@ -15,7 +15,7 @@ def rename(
 ) -> None:
     """Rename a section's flavor and rewrite all its usages.
 
-    Every reference to the flavor, in every deck and section of the repository, \
+    Every reference to the flavor, in every deck and section of the repository,
     is rewritten to use the new name instead.
 
     Args:

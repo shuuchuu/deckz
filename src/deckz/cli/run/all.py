@@ -15,9 +15,9 @@ def all(  # ruff: ignore[builtin-variable-shadowing]
 ) -> None:
     """Compile `run shared`'s deck, plus every deck-local override.
 
-    For every real deck that locally overrides at least one file of a \
-    shared section, adds one extra copy of that section using the deck's \
-    own file in place of the shared one -- all in the same single compile \
+    For every real deck that locally overrides at least one file of a
+    shared section, adds one extra copy of that section using the deck's
+    own file in place of the shared one -- all in the same single compile
     as `run shared`.
 
     Args:
@@ -25,7 +25,7 @@ def all(  # ruff: ignore[builtin-variable-shadowing]
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
         en: Compile the English variant
-        dry_run: Only print the PDFs that would be compiled and the content \
+        dry_run: Only print the PDFs that would be compiled and the content
             fragments each would re-render, without building anything
         workdir: Path to move into before running the command
 

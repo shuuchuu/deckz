@@ -10,9 +10,9 @@ def tree(workdir: Path = Path(), *, en: bool = False, json: bool = False) -> Non
 
     Args:
         en: Resolve the English variant, as `deckz run --en` would
-        json: Print the tree as one JSON object instead: the deck's "name" \
-            and "parts", each with its "name", "title" and nested "nodes" \
-            (with "kind", "path", "resolved_path", "title", "error", and for \
+        json: Print the tree as one JSON object instead: the deck's "name"
+            and "parts", each with its "name", "title" and nested "nodes"
+            (with "kind", "path", "resolved_path", "title", "error", and for
             a section "flavor" and its own "nodes")
         workdir: Path to move into before running the command.
     """

@@ -20,10 +20,10 @@ app.register_install_completion_command()
 def main(args: Iterable[str] | None = None) -> None:
     """Run the deckz CLI.
 
-    Exit codes: 0 on success, 1 on a deckz error (a user error such as a \
-    missing flavor or a failed compile, reported without a traceback) or on \
-    `deckz check variables` findings, 2 on a command-line usage error. Pass \
-    `--debug` (or set `DECKZ_DEBUG=1`) to get the traceback of a deckz error \
+    Exit codes: 0 on success, 1 on a deckz error (a user error such as a
+    missing flavor or a failed compile, reported without a traceback) or on
+    `deckz check variables` findings, 2 on a command-line usage error. Pass
+    `--debug` (or set `DECKZ_DEBUG=1`) to get the traceback of a deckz error
     instead.
 
     Args:

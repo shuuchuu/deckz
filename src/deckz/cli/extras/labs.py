@@ -12,14 +12,14 @@ def labs(
 ) -> None:
     """Normalize Jupyter notebooks to this project's Colab conventions.
 
-    Collapses every "Solution" markdown heading cell and disables Colab's \
-    generative AI features, for every notebook found at or under each of \
+    Collapses every "Solution" markdown heading cell and disables Colab's
+    generative AI features, for every notebook found at or under each of
     NOTEBOOKS (a file, or a directory searched recursively for `*.ipynb`).
 
     Args:
-        notebooks: Notebook files, or directories to search recursively \
+        notebooks: Notebook files, or directories to search recursively
             for notebook files
-        dry_run: Only list the notebooks that would change, without \
+        dry_run: Only list the notebooks that would change, without
             writing them
 
     """

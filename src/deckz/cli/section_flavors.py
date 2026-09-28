@@ -7,8 +7,8 @@ from . import app
 def section_flavors(section: str, /, *, workdir: Path = Path()) -> None:
     """Print a shared section's flavor names, one per line.
 
-    Reads only <SECTION>'s own yml (no resolution, no repo-wide scan) -- \
-    useful to check a flavor exists before referencing it in a deck.yml, \
+    Reads only `<SECTION>`'s own yml (no resolution, no repo-wide scan) --
+    useful to check a flavor exists before referencing it in a deck.yml,
     without opening the yml file itself.
 
     Args:

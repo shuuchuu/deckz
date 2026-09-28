@@ -14,21 +14,21 @@ def search_sections(
 ) -> None:
     r"""Search shared sections by keyword in yml titles and frame titles.
 
-    Case-insensitive substring match, OR'd across KEYWORDS, against each \
-    section's title/default_titles (from its yml) and each of its own .md \
-    files' headings -- never against frame bodies, code or comments, so it \
-    does not false-positive on unrelated content that happens to mention a \
+    Case-insensitive substring match, OR'd across KEYWORDS, against each
+    section's title/default_titles (from its yml) and each of its own .md
+    files' headings -- never against frame bodies, code or comments, so it
+    does not false-positive on unrelated content that happens to mention a
     keyword.
 
     Prints one match per line:
 
-    - SECTION <section>\t<title>: yml title/default_titles hit
-    - FRAME <section>\t<file>\t<frame_title>: frame title hit
+    - `SECTION <section>\t<title>`: yml title/default_titles hit
+    - `FRAME <section>\t<file>\t<frame_title>`: frame title hit
 
-    <section> is a content-relative id (e.g. python/basics): check its \
-    yml for the flavor(s) that include <file> before referencing it.
+    `<section>` is a content-relative id (e.g. python/basics): check its
+    yml for the flavor(s) that include `<file>` before referencing it.
 
-    With --json, prints one JSON array of objects instead, each with a \
+    With --json, prints one JSON array of objects instead, each with a
     "kind" (section/frame), "section", "title" and, for a frame, "file".
 
     Args:

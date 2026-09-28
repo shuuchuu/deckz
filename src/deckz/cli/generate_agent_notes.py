@@ -83,8 +83,8 @@ instead of a plain string, and `en/` sibling files for translated bodies.
 def generate_agent_notes() -> None:
     """Print onboarding notes for an AI coding agent working in this repo.
 
-    Prints to stdout so you can redirect it wherever your agent reads \
-    project notes from, e.g. `deckz generate-agent-notes > CLAUDE.md` or \
+    Prints to stdout so you can redirect it wherever your agent reads
+    project notes from, e.g. `deckz generate-agent-notes > CLAUDE.md` or
     `> AGENTS.md`.
     """
     print(_AGENT_NOTES)

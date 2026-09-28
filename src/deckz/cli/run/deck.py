@@ -24,12 +24,12 @@ def run(
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
-        en: Compile the English variant. Every resolved file, title and \
-            variable must have a complete English translation, or the build \
+        en: Compile the English variant. Every resolved file, title and
+            variable must have a complete English translation, or the build
             fails immediately
         watch: Recompile on file changes, instead of compiling once
-        dry_run: Only print the PDFs that would be compiled and the content \
-            fragments each would re-render (new or changed since its last \
+        dry_run: Only print the PDFs that would be compiled and the content
+            fragments each would re-render (new or changed since its last
             build), without building anything, assets included
         workdir: Path to move into before running the command
 

@@ -7,7 +7,7 @@ from . import app
 def paths(*, en: bool = False, json: bool = False, workdir: Path = Path()) -> None:
     """Print the resolved absolute file paths of the WORKDIR's deck tree.
 
-    One path per line, sorted -- for scripting/scoping reads, not for human \
+    One path per line, sorted -- for scripting/scoping reads, not for human
     inspection.
 
     Args:

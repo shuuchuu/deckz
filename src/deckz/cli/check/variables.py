@@ -9,26 +9,26 @@ def check_variables(
 ) -> None:
     """Report `variables.xxx` usage gaps across every shared flavor and every deck.
 
-    Walks every shared section's every named flavor -- not just the ones \
-    some deck currently uses -- plus every real deck's own tree, resolving \
-    `variables` the same way a real build would (deck-wide `variables.yml`, \
-    then each matched flavor's own `variables`, cascaded down to nested \
+    Walks every shared section's every named flavor -- not just the ones
+    some deck currently uses -- plus every real deck's own tree, resolving
+    `variables` the same way a real build would (deck-wide `variables.yml`,
+    then each matched flavor's own `variables`, cascaded down to nested
     includes). Reports:
 
-    - UNDEFINED <fragment> <name>: a fragment reads `variables.<name>` (or \
+    - `UNDEFINED <fragment> <name>`: a fragment reads `variables.<name>` (or
         `variables['<name>']`) but nothing resolved at that point sets it.
-    - UNUSED <section_yml> <name>: a section's `variables_to_define` \
-        declares <name> but no fragment reachable under it, in any flavor, \
+    - `UNUSED <section_yml> <name>`: a section's `variables_to_define`
+        declares `<name>` but no fragment reachable under it, in any flavor,
         ever reads it.
-    - UNPARSABLE <fragment> <error>: a fragment fails to parse with the \
+    - `UNPARSABLE <fragment> <error>`: a fragment fails to parse with the
         target repo's own Jinja environment.
-    - STRUCTURAL <context> <error>: a flavor/deck fails to parse at all \
-        (commonly a flavor missing a `variables_to_define` entry, or one \
-        with a value outside its `allowed_values`) -- the detailed tree is \
+    - `STRUCTURAL <context> <error>`: a flavor/deck fails to parse at all
+        (commonly a flavor missing a `variables_to_define` entry, or one
+        with a value outside its `allowed_values`) -- the detailed tree is
         printed to stderr, same as any other parsing failure.
 
-    With --json, prints one JSON array of objects instead, each with a \
-    "kind" (undefined/unused/unparsable/structural) and the same fields: \
+    With --json, prints one JSON array of objects instead, each with a
+    "kind" (undefined/unused/unparsable/structural) and the same fields:
     "fragment"/"section"/"context" and "name"/"error".
 
     Exits 1 when anything is reported.

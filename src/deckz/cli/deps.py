@@ -27,8 +27,8 @@ def deps(
         section: Restrict the output to only this section
         flavor: Restrict the output further to only this section
         unused: Display unused flavors
-        json: Print one JSON object instead, with "unused_flavors" \
-            (section to flavor names) and, given SECTION, "dependents" (deck \
+        json: Print one JSON object instead, with "unused_flavors"
+            (section to flavor names) and, given SECTION, "dependents" (deck
             to part names)
         workdir: Path to move into before running the command
 

@@ -14,22 +14,22 @@ def missing_en(
 
     Resolves the deck at WORKDIR as deckz would without --en, then reports:
 
-    - FILE <fr_path> <expected_en_path>: fr file with no en/ sibling on disk. \
+    - `FILE <fr_path> <expected_en_path>`: fr file with no en/ sibling on disk.
         Blocks `deckz run --en`.
-    - TITLE <status> <yml_path> <field>: title that is a plain string \
-        ("untranslated" -- informational only, a plain string is always \
-        valid, used as-is in every language, but commonly means "not yet \
-        localized"), or a `{fr, en}` map missing its "en" key \
+    - `TITLE <status> <yml_path> <field>`: title that is a plain string
+        ("untranslated" -- informational only, a plain string is always
+        valid, used as-is in every language, but commonly means "not yet
+        localized"), or a `{fr, en}` map missing its "en" key
         ("missing-en" -- blocks `deckz run --en`)
-    - VARIABLE <status> <variables_yml_path> <key>: same "missing-en" case, \
-        for a translation map declared in variables.yml (plain scalars are \
+    - `VARIABLE <status> <variables_yml_path> <key>`: same "missing-en" case,
+        for a translation map declared in variables.yml (plain scalars are
         never flagged)
 
-    Running this lets you audit gaps -- both what would block `deckz run \
+    Running this lets you audit gaps -- both what would block `deckz run
     --en` and what's merely unlocalized -- without compiling anything.
 
-    With --json, prints one JSON array of objects instead, each with a \
-    "kind" (file/title/variable) and the fields above: "fr_path"/"en_path", \
+    With --json, prints one JSON array of objects instead, each with a
+    "kind" (file/title/variable) and the fields above: "fr_path"/"en_path",
     or "status", "path" and "field"/"key".
 
     Args:

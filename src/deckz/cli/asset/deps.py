@@ -16,8 +16,8 @@ def deps(
     Args:
         verbose: Detailed output with a listing of used assets
         descending: Sort sections by ascending number of unlicensed assets
-        json: Print one JSON array instead, of objects with a "section" and \
-            its unlicensed "assets" (relative to the assets directory, \
+        json: Print one JSON array instead, of objects with a "section" and
+            its unlicensed "assets" (relative to the assets directory,
             without extension), sorted as the table would be
         workdir: Path to move into before running the command
 

@@ -7,9 +7,9 @@ from . import app
 def deduplicate(*, dry_run: bool = False, workdir: Path = Path()) -> None:
     """Merge sections' flavors that are identical up to their name.
 
-    For every group of flavors of a section sharing the exact same title and \
-    includes, only the first one is kept: the others are deleted, and every \
-    reference to them, in every deck and section of the repository, is rewritten \
+    For every group of flavors of a section sharing the exact same title and
+    includes, only the first one is kept: the others are deleted, and every
+    reference to them, in every deck and section of the repository, is rewritten
     to point to the kept flavor instead.
 
     Args:

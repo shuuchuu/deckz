@@ -15,19 +15,19 @@ def run_decks(
 ) -> None:
     """Compile every deck in the repository, end to end.
 
-    By far the slowest of the three `run` validation subcommands on a repo \
-    with many decks: every shared section gets recompiled once per deck \
-    that includes it, rather than once. Prefer `run shared` or `run all` \
+    By far the slowest of the three `run` validation subcommands on a repo
+    with many decks: every shared section gets recompiled once per deck
+    that includes it, rather than once. Prefer `run shared` or `run all`
     while iterating on shared content.
 
     Args:
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
-        en: Compile the English variant of every deck. Strict across the \
-            whole repository: the first deck missing any translation aborts \
+        en: Compile the English variant of every deck. Strict across the
+            whole repository: the first deck missing any translation aborts
             the whole run
-        dry_run: Only print the PDFs that would be compiled and the content \
+        dry_run: Only print the PDFs that would be compiled and the content
             fragments each would re-render, without building anything
         workdir: Path to move into before running the command
 

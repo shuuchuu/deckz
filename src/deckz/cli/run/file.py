@@ -19,21 +19,21 @@ def run_file(
 ) -> None:
     """Compile a single content file.
 
-    Output is written to a dedicated scratch directory under \
-    `<git_dir>/.run/file/`, not the current deck's own build/pdf \
+    Output is written to a dedicated scratch directory under
+    `<git_dir>/.run/file/`, not the current deck's own build/pdf
     directories, so repeated previews don't clutter a real deck's output.
 
     Args:
-        path: File to compile, relative to content/ and without its \
+        path: File to compile, relative to content/ and without its
             extension
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
         en: Compile the English variant
         watch: Recompile on file changes, instead of compiling once
-        open: Open the output directory once compiled. Disable for \
+        open: Open the output directory once compiled. Disable for
             agentic/headless use, where only the printed path is useful
-        dry_run: Only print the PDFs that would be compiled and the content \
+        dry_run: Only print the PDFs that would be compiled and the content
             fragments each would re-render, without building anything
         workdir: Path to move into before running the command
 

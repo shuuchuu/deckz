@@ -10,8 +10,8 @@ def section_files(
 ) -> None:
     """Print the files a shared section+flavor resolves to.
 
-    Recurses into subsections, exactly like deckz would when building a deck \
-    that includes $<SECTION>@<FLAVOR>. Prints one resolved absolute path per \
+    Recurses into subsections, exactly like deckz would when building a deck
+    that includes `$<SECTION>@<FLAVOR>`. Prints one resolved absolute path per
     line, sorted. Fails loudly if FLAVOR does not exist for SECTION.
 
     Args:
