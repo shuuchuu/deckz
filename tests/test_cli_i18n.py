@@ -89,6 +89,33 @@ def test_show_variables_en(working_dir: Path, capsys: CaptureFixture[str]) -> No
     assert "Hello" in capsys.readouterr().out
 
 
+def test_show_json(working_dir: Path, capsys: CaptureFixture[str]) -> None:
+    _write(working_dir / "variables.yml", "greeting:\n  fr: Bonjour\n  en: Hello\n")
+    hello = str(working_dir.parent.parent / "content/i18n-demo/hello.md")
+
+    main(("show", "paths", "--json"))
+    assert loads(capsys.readouterr().out) == [hello]
+
+    main(("show", "variables", "--en", "--json"))
+    assert loads(capsys.readouterr().out)["greeting"] == "Hello"
+
+    main(("show", "settings", "--json"))
+    settings = loads(capsys.readouterr().out)
+    assert settings["paths"]["current_dir"] == str(working_dir.resolve())
+
+    main(("show", "tree", "--json"))
+    tree = loads(capsys.readouterr().out)
+    (part,) = tree["parts"]
+    (section,) = part["nodes"]
+    assert (section["kind"], section["path"], section["error"]) == (
+        "section",
+        "i18n-demo",
+        None,
+    )
+    (file,) = section["nodes"]
+    assert file["resolved_path"] == hello
+
+
 def test_section_flavors(working_dir: Path, capsys: CaptureFixture[str]) -> None:
     main(("section-flavors", "i18n-demo"))
 

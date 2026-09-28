@@ -436,11 +436,14 @@ results.
 
 Exit codes: 0 on success, 1 on a deckz error (e.g. a missing flavor or a
 failed compile) or on `deckz check variables` findings, 2 on a command-line
-usage error.
+usage error, 130 when interrupted with Ctrl-C (which stops the compilations
+under way at once).
 
 `deckz check variables`, `deckz search-sections` and `deckz i18n
-missing-en` print one tab-separated finding per line, or, with `--json`, a
-single JSON array of objects (see each command's `--help` for the fields).
+missing-en` print one tab-separated finding per line. With `--json`, they,
+as well as `deckz show tree`/`paths`/`settings`/`variables`, `deckz deps`
+and `deckz asset deps`/`search`, print a single JSON document instead (see
+each command's `--help` for its fields).
 
 The main commands:
 

@@ -18,6 +18,7 @@ def deps(
     /,
     *,
     unused: bool = True,
+    json: bool = False,
     workdir: Path = Path(),
 ) -> None:
     """Display information about shared sections and flavors usage.
@@ -26,6 +27,9 @@ def deps(
         section: Restrict the output to only this section
         flavor: Restrict the output further to only this section
         unused: Display unused flavors
+        json: Print one JSON object instead, with "unused_flavors" \
+            (section to flavor names) and, given SECTION, "dependents" (deck \
+            to part names)
         workdir: Path to move into before running the command
 
     """
@@ -45,6 +49,25 @@ def deps(
         settings.paths.git_dir,
         settings.file_extensions,
     )
+
+    if json:
+        from ._presentation import print_json
+
+        report: dict[str, object] = {}
+        if unused:
+            report["unused_flavors"] = {
+                str(path): sorted(flavors)
+                for path, flavors in sections_analyzer.unused_flavors().items()
+            }
+        if section is not None:
+            report["dependents"] = {
+                str(deck): sorted(parts)
+                for deck, parts in sections_analyzer.parts_using_flavor(
+                    section, flavor
+                ).items()
+            }
+        print_json(report)
+        return
 
     if unused:
         with console.status("Processing decks"):

@@ -5,13 +5,20 @@ from . import app
 
 @app.command()
 def deps(
-    *, verbose: bool = True, descending: bool = True, workdir: Path = Path()
+    *,
+    verbose: bool = True,
+    descending: bool = True,
+    json: bool = False,
+    workdir: Path = Path(),
 ) -> None:
     """Find unlicensed assets with output detailed by section.
 
     Args:
         verbose: Detailed output with a listing of used assets
         descending: Sort sections by ascending number of unlicensed assets
+        json: Print one JSON array instead, of objects with a "section" and \
+            its unlicensed "assets" (relative to the assets directory, \
+            without extension), sorted as the table would be
         workdir: Path to move into before running the command
 
     """
@@ -78,7 +85,22 @@ def deps(
             )
             if v
         }
-    if verbose:
+    if json:
+        from .._presentation import print_json
+
+        assets_dir = settings.paths.assets_dir
+        print_json(
+            [
+                {
+                    "section": str(section),
+                    "assets": sorted(
+                        str(image.relative_to(assets_dir)) for image in images
+                    ),
+                }
+                for section, images in sorted_unlicensed_assets.items()
+            ]
+        )
+    elif verbose:
         console.print("[bold]Sections and their unlicensed assets[/]")
         _display_section_assets(
             sorted_unlicensed_assets, console, settings.paths.assets_dir

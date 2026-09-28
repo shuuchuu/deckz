@@ -1,5 +1,6 @@
 import json
 import sys  # ruff: ignore[unused-import]
+from json import loads
 from pathlib import Path
 from shutil import copytree, move
 from typing import Any
@@ -260,6 +261,34 @@ def test_asset_deps_finds_en_only_assets(bilingual_dir: Path, capsys: Any) -> No
     main(("asset", "deps"))
 
     assert "img/logo.png" in capsys.readouterr().out
+
+
+def test_asset_json(bilingual_dir: Path, capsys: Any) -> None:
+    _use_logo_in_en_only(bilingual_dir)
+
+    main(("asset", "search", "img/logo", "--json"))
+    assert loads(capsys.readouterr().out) == ["company/bilingual/content/en/hello.md"]
+
+    main(("asset", "deps", "--json"))
+    assert any("img/logo" in r["assets"] for r in loads(capsys.readouterr().out))
+
+
+def test_deps_json(working_dir: Path, capsys: Any) -> None:
+    main(("deps", "--json"))
+    assert loads(capsys.readouterr().out) == {"unused_flavors": {"about": ["standard"]}}
+
+    deck_path = working_dir / "deck.yml"
+    deck_path.write_text(
+        deck_path.read_text(encoding="utf8").replace(
+            "      - about\n", "      - $about@standard\n"
+        ),
+        encoding="utf8",
+    )
+    main(("deps", "about", "--json"))
+    assert loads(capsys.readouterr().out) == {
+        "unused_flavors": {},
+        "dependents": {"company/abc": ["p2"]},
+    }
 
 
 def test_flavor_deduplicate_dry_run(working_dir: Path) -> None:
