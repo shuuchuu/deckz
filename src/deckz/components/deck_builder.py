@@ -241,8 +241,9 @@ class DeckBuilder(DeckBuilderProtocol):
                     results.append((item_name, result))
                     advance()
         except BaseException:
-            # E.g. Ctrl-C: don't start the compilations still queued. Those
-            # running end when the CLI kills the compiler's processes.
+            # E.g. Ctrl-C: let it reach the CLI at once, which kills the
+            # compiler's processes, rather than wait for the compilations
+            # running; and don't start those still queued.
             pool.shutdown(wait=False, cancel_futures=True)
             raise
         pool.shutdown()

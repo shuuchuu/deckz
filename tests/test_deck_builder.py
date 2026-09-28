@@ -5,6 +5,9 @@ No pandoc or Typst needed: the fakes only record calls and write files.
 
 from collections.abc import Mapping
 from pathlib import Path, PurePath
+from signal import SIGINT, pthread_kill
+from threading import Event, get_ident
+from time import sleep
 from typing import Any
 
 from pytest import MonkeyPatch, raises
@@ -191,21 +194,34 @@ def test_same_file_with_different_variables_renders_twice(tmp_path: Path) -> Non
     assert rendered == ["A{'depth': 'deep'}", "A{'depth': 'shallow'}"]
 
 
-def test_interrupt_cancels_the_queued_compilations(
+def test_interrupt_does_not_wait_for_running_compilations(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
     repo = _repo(tmp_path)
     compiled: list[Path] = []
+    main_thread = get_ident()
+    release = Event()
+    finished = Event()
 
-    def interrupted(file: Path) -> CompileResult:
+    def ctrl_c_during_compilation(file: Path) -> CompileResult:
+        # Ctrl-C reaches the main thread while this compilation still runs,
+        # the part's PDF still queued behind it.
         compiled.append(file)
-        raise KeyboardInterrupt
+        pthread_kill(main_thread, SIGINT)
+        release.wait(timeout=10)
+        finished.set()
+        return CompileResult(ok=True)
 
-    monkeypatch.setattr(repo.compiler, "compile", interrupted)
-    # One thread: the part's PDF is still queued when the deck's is interrupted.
+    monkeypatch.setattr(repo.compiler, "compile", ctrl_c_during_compilation)
+    # One thread, so that the part's PDF waits in the queue.
     monkeypatch.setattr(deck_builder, "cpu_count", lambda: 1)
 
     with raises(KeyboardInterrupt):
         repo.builder(repo.file("a.md")).build_deck()
 
+    # Raised without waiting for the running compilation, which the CLI then
+    # stops, and without starting the queued one.
+    assert not finished.is_set()
+    release.set()
+    sleep(0.5)
     assert len(compiled) == 1
