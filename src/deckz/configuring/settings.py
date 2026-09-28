@@ -97,9 +97,23 @@ class GlobalSettings(BaseModel):
     paths: GlobalPaths = Field(default_factory=GlobalPaths)
 
     @classmethod
-    def from_yaml(cls, path: Path) -> Self:
+    def from_yaml(cls, path: Path, *, git_dir: Path | None = None) -> Self:
+        """Load the settings in effect at `path`, merging every `deckz.yml` above.
+
+        Args:
+            path: Directory to load the settings for, e.g. a deck's.
+            git_dir: Root of the repository containing `path`, when the \
+                caller already knows it (e.g. while walking every deck), to \
+                skip discovering it again.
+
+        Returns:
+            The settings.
+
+        Raises:
+            InvalidConfigurationError: If a `deckz.yml` is invalid.
+        """
         resolved_path = path.resolve()
-        git_dir = get_git_dir(resolved_path).resolve()
+        git_dir = (get_git_dir(resolved_path) if git_dir is None else git_dir).resolve()
         user_config_dir = default_user_config_dir()
         content: dict[str, Any] = reduce(
             lambda a, b: {**a, **b},

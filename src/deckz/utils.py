@@ -252,10 +252,13 @@ def all_decks(git_dir: Path, lang: "Lang" = "fr") -> dict[Path, "ResolvedDeck"]:
 
 
 def all_deck_settings(git_dir: Path) -> Iterator["DeckSettings"]:
-    """Yield all deck paths that can be found recursively from the git directory.
+    """Yield the settings of every deck found recursively under the git directory.
+
+    Each deck's own settings are loaded (a deck directory may have its own \
+    `deckz.yml`), but the repository root is `git_dir`, not rediscovered.
 
     Yields:
-        Paths of each deck found.
+        Settings of each deck found.
     """
     from .configuring.settings import DeckSettings
 
@@ -267,7 +270,7 @@ def all_deck_settings(git_dir: Path) -> Iterator["DeckSettings"]:
             for part in targets_path.relative_to(git_dir).parent.parts
         ):
             continue
-        yield DeckSettings.from_yaml(targets_path.parent)
+        yield DeckSettings.from_yaml(targets_path.parent, git_dir=git_dir)
 
 
 def section_files(content_dirs: Iterator[Path]) -> Iterator[Path]:
