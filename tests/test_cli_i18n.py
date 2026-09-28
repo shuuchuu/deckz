@@ -103,6 +103,12 @@ def test_show_json(working_dir: Path, capsys: CaptureFixture[str]) -> None:
     settings = loads(capsys.readouterr().out)
     assert settings["paths"]["current_dir"] == str(working_dir.resolve())
 
+    assert "deck_definition" in settings["paths"]
+    # Outside a deck, the repository's settings, without deck-only paths.
+    main(("show", "settings", "--json", "--workdir", str(working_dir.parent)))
+    settings = loads(capsys.readouterr().out)
+    assert "deck_definition" not in settings["paths"]
+
     main(("show", "tree", "--json"))
     tree = loads(capsys.readouterr().out)
     (part,) = tree["parts"]
