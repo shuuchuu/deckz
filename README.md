@@ -431,6 +431,8 @@ Run `deckz --help` for the full list of commands, or `deckz <command>
 `--quiet`/`-q` only logs warnings and errors, `--verbose`/`-v` adds details
 such as per-PDF timings and which fragments get re-rendered, and `--debug`
 also shows the traceback of a deckz error (as does `DECKZ_DEBUG=1`).
+Logs and progress bars go to stderr, so stdout only carries a command's
+results.
 
 Exit codes: 0 on success, 1 on a deckz error (e.g. a missing flavor or a
 failed compile) or on `deckz check variables` findings, 2 on a command-line

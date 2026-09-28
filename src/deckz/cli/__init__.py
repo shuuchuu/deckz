@@ -4,6 +4,7 @@ from os import environ
 from typing import Annotated
 
 from cyclopts import App, Parameter
+from rich.console import Console
 from rich.logging import RichHandler
 
 from .. import __version__
@@ -59,10 +60,17 @@ def _launch(
         DeckzError: Only with `--debug` or when `DECKZ_DEBUG` is set.
         SystemExit: With code 1 on a deckz error.
     """
+    # Diagnostics go to stderr, leaving stdout to results (e.g. --json).
     basicConfig(
         format="%(message)s",
         datefmt="%H:%M:%S",
-        handlers=[RichHandler(rich_tracebacks=True, tracebacks_show_locals=False)],
+        handlers=[
+            RichHandler(
+                console=Console(stderr=True),
+                rich_tracebacks=True,
+                tracebacks_show_locals=False,
+            )
+        ],
     )
     # Set apart from basicConfig, which is a no-op once the root logger has
     # handlers, e.g. on a second `main` call in the same process.

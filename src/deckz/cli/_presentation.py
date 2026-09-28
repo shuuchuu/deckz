@@ -31,6 +31,7 @@ class RichProgress(ProgressReporterProtocol):
             "[progress.description]{task.description}",
             BarColumn(),
             "[progress.percentage]{task.percentage:>3.0f}%",
+            console=Console(stderr=True),
         ) as progress:
             task_id = progress.add_task(description, total=total)
             yield lambda: progress.update(task_id, advance=1)

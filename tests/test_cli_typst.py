@@ -1,10 +1,12 @@
+import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from logging import DEBUG, WARNING, getLogger
 from multiprocessing import active_children
-from os import utime
+from os import environ, utime
 from pathlib import Path
 from shutil import copytree
+from subprocess import run as run_process
 from time import time
 from typing import Any
 
@@ -186,6 +188,26 @@ def test_nothing_to_compile_is_a_warning(working_dir: Path, caplog: Any) -> None
     main(("run", "shared", "--no-presentation"))
 
     assert "Nothing to compile" in caplog.text
+
+
+def test_logs_go_to_stderr(working_dir: Path, tmp_path: Path) -> None:
+    # A real process: under pytest, the root logger already has handlers, so
+    # main's logging setup is skipped.
+    result = run_process(
+        [
+            sys.executable,
+            "-c",
+            "from deckz.cli import main; main()",
+            *("run", "--no-handout", "--no-presentation", "--no-print"),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={**environ, "XDG_CONFIG_HOME": str(tmp_path / "xdg"), "COLUMNS": "200"},
+    )
+
+    assert result.stdout == ""
+    assert "Nothing to compile" in result.stderr
 
 
 def test_debug_env_var_keeps_the_exception(working_dir: Path, monkeypatch: Any) -> None:
