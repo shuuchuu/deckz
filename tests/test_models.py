@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from pytest import raises
 
 from deckz.models import (
+    SCHEMA_VERSION,
     Deck,
     DeckDefinition,
     LangMap,
@@ -191,3 +192,13 @@ def test_deck_filter_rejects_unknown_parts() -> None:
 def test_deck_is_frozen() -> None:
     with raises(FrozenInstanceError):
         _deck().name = "other"  # ty: ignore[invalid-assignment]
+
+
+def test_schema_version_defaults_to_the_current_one() -> None:
+    definition = DeckDefinition.model_validate({"name": "deck", "parts": []})
+    assert definition.schema_version == SCHEMA_VERSION
+
+
+def test_unsupported_schema_version_is_rejected() -> None:
+    with raises(ValidationError, match="schema_version 2 is not supported"):
+        SectionDefinition.model_validate({"schema_version": 2, "flavors": []})

@@ -14,6 +14,7 @@ from pydantic import (
 
 from .. import app_name
 from ..exceptions import InvalidConfigurationError
+from ..models import SCHEMA_VERSION, SchemaVersion
 from ..utils import dirs_hierarchy, get_git_dir, load_all_yamls
 
 
@@ -70,6 +71,8 @@ class DeckPaths(GlobalPaths):
 
 class GlobalSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
+    schema_version: SchemaVersion = SCHEMA_VERSION
+    """Version of the `deckz.yml` format."""
     typst_parallel_compilations: int = Field(default=1, ge=1)
     """How many Typst compilations (one per PDF) may run at once.
 

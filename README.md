@@ -96,6 +96,12 @@ root (git repository)
 
 ## Configuration
 
+`deckz.yml`, `deck.yml` and section definition files all accept an
+optional `schema_version` key, the version of their format (currently and
+by default `1`). A future incompatible format change will bump it, so an
+older `deckz` rejects a newer file with a clear message instead of
+misreading it.
+
 ### `deckz.yml`
 
 At the root of the repository, `deckz.yml` holds settings, not content, e.g.:

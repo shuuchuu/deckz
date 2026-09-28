@@ -95,7 +95,7 @@ from pathlib import Path, PurePath
 from typing import Annotated, Any, Literal, NewType, Protocol, TypeGuard
 
 from pydantic import BaseModel, ValidationInfo
-from pydantic.functional_validators import BeforeValidator
+from pydantic.functional_validators import AfterValidator, BeforeValidator
 
 ########################################################################################
 # Simple scalars                                                                       #
@@ -178,6 +178,28 @@ def resolve_lang(value: "str | LangMap", lang: Lang, *, lenient: bool = False) -
         return value.get("fr") or next(iter(value.values()))
     msg = f"missing {lang!r} translation in {value!r}"
     raise ValueError(msg)
+
+
+SCHEMA_VERSION = 1
+"""Version of the yaml formats (`deckz.yml`, `deck.yml`, section definitions) \
+this deckz reads."""
+
+
+def _check_schema_version(version: int) -> int:
+    if version != SCHEMA_VERSION:
+        msg = (
+            f"schema_version {version} is not supported, this deckz reads "
+            f"schema_version {SCHEMA_VERSION}"
+        )
+        raise ValueError(msg)
+    return version
+
+
+SchemaVersion = Annotated[int, AfterValidator(_check_schema_version)]
+"""The optional `schema_version` key of a yaml file deckz reads. Left out, \
+it's the current [`SCHEMA_VERSION`][deckz.models.SCHEMA_VERSION]; a future \
+incompatible format change will bump it, so an older deckz rejects a newer \
+file instead of misreading it."""
 
 
 def _resolve_title(value: "str | LangMap", info: ValidationInfo) -> str:
@@ -310,6 +332,9 @@ class FlavorDefinition(BaseModel):
 class SectionDefinition(BaseModel):
     """Specify the different attributes of a section."""
 
+    schema_version: SchemaVersion = SCHEMA_VERSION
+    """Version of the format this file is written in."""
+
     title: LocalizedStr | None = None
     """The title of the section. Will be given as input to the rendering code."""
 
@@ -345,6 +370,9 @@ class PartDefinition(BaseModel):
 
 class DeckDefinition(BaseModel):
     """Specify the different attributes of a deck."""
+
+    schema_version: SchemaVersion = SCHEMA_VERSION
+    """Version of the format this file is written in."""
 
     name: str
     """The name of the deck. Will be a part of the output file name."""
