@@ -11,12 +11,16 @@ from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path, PurePath
 from subprocess import DEVNULL, Popen
+from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.progress import BarColumn, Progress
 from rich.tree import Tree
 
 from ..components.protocols import ProgressReporterProtocol
+
+if TYPE_CHECKING:
+    from ..components.deck_builder import PlannedCompile
 from ..models import Deck, File, NodeVisitor, Part, PartName, Section, UnresolvedPath
 
 
@@ -140,3 +144,31 @@ def print_json(records: Iterable[Mapping[str, object]]) -> None:
     from json import dumps
 
     print(dumps(list(records), indent=2, default=str))
+
+
+def print_plan(planned: Iterable["PlannedCompile"], relative_to: Path) -> None:
+    """Print what a build would do, one PDF per line, then its changed fragments.
+
+    Args:
+        planned: The build's plan.
+        relative_to: Directory paths are printed relative to, when inside it.
+    """
+
+    def display(path: Path) -> str:
+        if path.is_relative_to(relative_to):
+            return str(path.relative_to(relative_to))
+        return str(path)
+
+    for item in planned:
+        if item.full_render:
+            print(
+                f"{display(item.output_path)}: render all {item.fragments} "
+                "fragments (first build or Markdown converter changed)"
+            )
+            continue
+        print(
+            f"{display(item.output_path)}: render "
+            f"{len(item.changed_fragments)} of {item.fragments} fragments"
+        )
+        for fragment in item.changed_fragments:
+            print(f"  {display(fragment)}")

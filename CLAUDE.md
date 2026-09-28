@@ -126,7 +126,11 @@ files living under any deck's directory, not just one
 any PDF fails to compile, so every `run_*` pipeline fails the command.
 `deckz run file`/`deckz run section` get their `.run/` scratch output dirs
 from `checking.preview_settings`, a copy of the deck's settings; settings
-objects are never mutated after construction. `watch()` is a generic file-watch-and-rerun
+objects are never mutated after construction. `pipelines.plan` (backing `deckz run --dry-run`) stops before building:
+it returns the deck builder's `plan()`, a `PlannedCompile` per PDF with the
+fragments that would be re-rendered, whose freshness test
+(`utils.file_changed` on each `build_copy_path`) is the one `build_deck`
+applies. `watch()` is a generic file-watch-and-rerun
 wrapper, not build-specific: each of `run/deck.py`, `run/file.py`,
 `run/section.py`, and `run/assets.py` calls it directly when invoked with
 `--watch`, wrapping that same module's one-shot pipeline call instead of

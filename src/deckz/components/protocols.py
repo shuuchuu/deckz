@@ -17,6 +17,7 @@ if TYPE_CHECKING:
         Section,
         UnresolvedPath,
     )
+    from .deck_builder import PlannedCompile
 
 
 class ParserProtocol(Protocol):
@@ -84,6 +85,10 @@ class ProgressReporterProtocol(Protocol):
 
 
 class DeckBuilderProtocol(Protocol):
+    def plan(self) -> list["PlannedCompile"]:
+        """What `build_deck` would compile and render, without doing any of it."""
+        ...
+
     def build_deck(self) -> bool: ...
 
 

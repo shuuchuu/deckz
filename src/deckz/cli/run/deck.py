@@ -14,6 +14,7 @@ def run(
     print: bool = True,  # ruff: ignore[builtin-argument-shadowing]
     en: bool = False,
     watch: bool = False,
+    dry_run: bool = False,
     workdir: Path = Path(),
 ) -> None:
     """Compile the deck in WORKDIR (default).
@@ -27,6 +28,9 @@ def run(
             variable must have a complete English translation, or the build \
             fails immediately
         watch: Recompile on file changes, instead of compiling once
+        dry_run: Only print the PDFs that would be compiled and the content \
+            fragments each would re-render (new or changed since its last \
+            build), without building anything, assets included
         workdir: Path to move into before running the command
 
     """
@@ -35,6 +39,23 @@ def run(
     from .._presentation import RichProgress
 
     settings = DeckSettings.from_yaml(workdir)
+
+    if dry_run:
+        from ...pipelines import plan
+        from .._presentation import print_plan
+
+        print_plan(
+            plan(
+                settings=settings,
+                lang="en" if en else "fr",
+                build_handout=handout,
+                build_presentation=presentation,
+                build_print=print,
+                parts_whitelist=parts,
+            ),
+            settings.paths.git_dir,
+        )
+        return
 
     if not watch:
         _run(

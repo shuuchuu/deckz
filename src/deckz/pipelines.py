@@ -8,6 +8,7 @@ from watchfiles import watch as watchfiles_watch
 
 from .checking import build_all_deck, build_shared_deck, run_scratch_dir
 from .components.compiler import keep_warm
+from .components.deck_builder import PlannedCompile
 from .components.factory import DeckSettingsFactory, GlobalSettingsFactory
 from .components.progress import NullProgress
 from .components.protocols import ProgressReporterProtocol
@@ -49,6 +50,45 @@ def _build(
         raise CompilationError(msg)
 
 
+def _parse_deck(
+    settings: DeckSettings, lang: Lang, parts_whitelist: Iterable[PartName] | None
+) -> Deck:
+    parser = DeckSettingsFactory(settings, lang=lang).parser()
+    deck = parser.from_deck_definition(settings.paths.deck_definition)
+    return deck if parts_whitelist is None else deck.filter(parts_whitelist)
+
+
+def plan(
+    settings: DeckSettings,
+    lang: Lang,
+    build_handout: bool,
+    build_presentation: bool,
+    build_print: bool,
+    parts_whitelist: Iterable[PartName] | None = None,
+) -> list[PlannedCompile]:
+    """What `run` would compile and render, without building anything.
+
+    Assets builders aren't run either: what they would regenerate is up to \
+    the target repository's own code.
+
+    Returns:
+        One entry per PDF `run` would produce.
+    """
+    deck = _parse_deck(settings, lang, parts_whitelist)
+    variables = {**get_variables(settings, lang=lang), "lang": lang}
+    return (
+        DeckSettingsFactory(settings, lang=lang)
+        .deck_builder(
+            variables=variables,
+            deck=resolve_variables(deck, variables),
+            build_handout=build_handout,
+            build_presentation=build_presentation,
+            build_print=build_print,
+        )
+        .plan()
+    )
+
+
 def run(
     settings: DeckSettings,
     lang: Lang,
@@ -58,10 +98,7 @@ def run(
     parts_whitelist: Iterable[PartName] | None = None,
     progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
-    parser = DeckSettingsFactory(settings, lang=lang).parser()
-    deck = parser.from_deck_definition(settings.paths.deck_definition)
-    if parts_whitelist is not None:
-        deck = deck.filter(parts_whitelist)
+    deck = _parse_deck(settings, lang, parts_whitelist)
     _build(
         deck=deck,
         settings=settings,

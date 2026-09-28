@@ -33,7 +33,7 @@ from ..models import (
     Title,
     TitleOrContent,
 )
-from ..utils import copy_file_if_changed
+from ..utils import copy_file_if_changed, file_changed
 from .protocols import (
     CompilerProtocol,
     DeckBuilderProtocol,
@@ -116,6 +116,28 @@ class DependencyRef:
 
 
 @dataclass(frozen=True)
+class PlannedCompile:
+    """One PDF a build would produce, and what it would render first."""
+
+    name: str
+    """Name of the compilation, e.g. `"abc-handout"`."""
+
+    output_path: Path
+    """Where the PDF would be written."""
+
+    fragments: int
+    """How many content fragments the PDF includes."""
+
+    full_render: bool
+    """Whether every fragment would be rendered: on a first build, or after a \
+    change of the Markdown converter's command or filters."""
+
+    changed_fragments: tuple[ResolvedPath, ...]
+    """Fragments new or changed since this PDF's last build, rendered even \
+    without `full_render`."""
+
+
+@dataclass(frozen=True)
 class CompileItem:
     parts: Sequence[PartSlides]
     dependencies: Set[DependencyRef]
@@ -158,6 +180,42 @@ class DeckBuilder(DeckBuilderProtocol):
         self._markdown_converter = markdown_converter
         self._progress = progress
         self._logger = getLogger(__name__)
+
+    def plan(self) -> list[PlannedCompile]:
+        """What `build_deck` would compile and render, without doing any of it.
+
+        Returns:
+            One entry per PDF, in compilation order.
+        """
+        markdown_fingerprint = self._markdown_converter.fingerprint()
+        planned = []
+        for name, item in self._list_items().items():
+            build_dir = self._build_dir / name
+            fingerprint_path = build_dir / ".markdown-fingerprint"
+            full_render = (
+                not fingerprint_path.is_file()
+                or fingerprint_path.read_text(encoding="utf8") != markdown_fingerprint
+            )
+            changed = tuple(
+                sorted(
+                    dependency.resolved_path
+                    for dependency in item.dependencies
+                    if file_changed(
+                        dependency.resolved_path,
+                        build_copy_path(dependency, build_dir, self._basedirs),
+                    )
+                )
+            )
+            planned.append(
+                PlannedCompile(
+                    name=name,
+                    output_path=self._output_dir / f"{name}.pdf",
+                    fragments=len(item.dependencies),
+                    full_render=full_render,
+                    changed_fragments=changed,
+                )
+            )
+        return planned
 
     def build_deck(self) -> bool:
         items = self._list_items()
@@ -315,6 +373,22 @@ def setup_build_dir(build_dir: Path, name: str, dirs_to_link: Iterable[Path]) ->
     return target_build_dir
 
 
+def build_copy_path(
+    dependency: DependencyRef, target_build_dir: Path, basedirs: Iterable[Path]
+) -> Path:
+    """Where `dependency`'s source is copied in a build dir, to be rendered.
+
+    Returns:
+        The path of the copy, a `.j2` file next to its rendered output.
+    """
+    relative_path = dependency_relative_path(
+        dependency.resolved_path, basedirs, dependency.variables_fingerprint
+    )
+    return (target_build_dir / relative_path).with_name(
+        f"{relative_path.name}{dependency.resolved_path.suffix}.j2"
+    )
+
+
 def copy_dependencies(
     dependencies: Iterable[DependencyRef],
     target_build_dir: Path,
@@ -324,12 +398,7 @@ def copy_dependencies(
 ) -> list[tuple[Path, Mapping[str, Any]]]:
     copied = []
     for dependency in dependencies:
-        relative_path = dependency_relative_path(
-            dependency.resolved_path, basedirs, dependency.variables_fingerprint
-        )
-        build_path = (target_build_dir / relative_path).with_name(
-            f"{relative_path.name}{dependency.resolved_path.suffix}.j2"
-        )
+        build_path = build_copy_path(dependency, target_build_dir, basedirs)
         if force:
             build_path.parent.mkdir(parents=True, exist_ok=True)
             copyfile(dependency.resolved_path, build_path)

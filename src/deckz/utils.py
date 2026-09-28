@@ -22,6 +22,17 @@ _path_modules: dict[tuple[Path, int, str], ModuleType] = {}
 _path_modules_lock = Lock()
 
 
+def file_changed(original: Path, copy: Path) -> bool:
+    """Whether `copy` is missing or differs from `original` in content.
+
+    Returns:
+        True if `copy` needs updating.
+    """
+    from filecmp import cmp
+
+    return not (copy.is_file() and cmp(original, copy, shallow=False))
+
+
 def copy_file_if_changed(original: Path, copy: Path) -> bool:
     """Copy `original` to `copy` unless `copy` already has the same content.
 
@@ -35,10 +46,9 @@ def copy_file_if_changed(original: Path, copy: Path) -> bool:
     Returns:
         True if the file was copied, False if it wasn't needed.
     """
-    from filecmp import cmp
     from shutil import copyfile
 
-    if copy.is_file() and cmp(original, copy, shallow=False):
+    if not file_changed(original, copy):
         return False
     copy.parent.mkdir(parents=True, exist_ok=True)
     copyfile(original, copy)

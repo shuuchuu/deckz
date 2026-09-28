@@ -11,7 +11,7 @@ from typing import Any
 import appdirs
 from pygit2 import init_repository
 from pypdfium2 import PdfDocument
-from pytest import fixture, mark, raises
+from pytest import CaptureFixture, fixture, mark, raises
 
 from deckz.cli import main
 from deckz.components.compiler import keep_warm
@@ -61,6 +61,26 @@ def test_run_typst(working_dir: Path) -> None:
     assert "Hello from Markdown, the answer is 42!" in text
     assert "Hi there, this shared section is Markdown too!" in text
     assert (working_dir / "pdf" / "abc-p1-handout.pdf").is_file()
+
+
+def test_dry_run_plans_without_building(
+    working_dir: Path, capsys: CaptureFixture[str]
+) -> None:
+    main((*_RUN_ARGS, "--dry-run"))
+
+    lines = capsys.readouterr().out.splitlines()
+    assert "company/abc/pdf/abc-handout.pdf: render all 2 fragments" in lines[0]
+    assert not (working_dir / "pdf").exists()
+    assert not (working_dir / ".build").exists()
+
+    main(_RUN_ARGS)
+    (working_dir / "content" / "about.md").write_text("# About\n\nNew.\n")
+    capsys.readouterr()
+    main((*_RUN_ARGS, "--dry-run"))
+
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "company/abc/pdf/abc-handout.pdf: render 1 of 2 fragments"
+    assert lines[1] == "  company/abc/content/about.md"
 
 
 def test_rebuild_in_same_process_sees_content_edit(working_dir: Path) -> None:
