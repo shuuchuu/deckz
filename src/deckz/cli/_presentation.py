@@ -7,7 +7,7 @@ This module is where the CLI turns those into rich widgets.
 """
 
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path, PurePath
 from subprocess import DEVNULL, Popen
@@ -130,3 +130,13 @@ def open_path(path: Path) -> None:
         return
     command = "open" if sys.platform == "darwin" else "xdg-open"
     Popen([command, str(path)], stdout=DEVNULL, stderr=DEVNULL, stdin=DEVNULL)
+
+
+def print_json(records: Iterable[Mapping[str, object]]) -> None:
+    """Print `records` to stdout as one JSON array, for a command's `--json`.
+
+    Paths and other non-JSON values are printed as strings.
+    """
+    from json import dumps
+
+    print(dumps(list(records), indent=2, default=str))

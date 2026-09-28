@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from json import loads
 from pathlib import Path
 from typing import Any
 
@@ -179,3 +180,22 @@ def test_search_sections(working_dir: Path, capsys: CaptureFixture[str]) -> None
     (line,) = capsys.readouterr().out.splitlines()
     assert line.startswith("FRAME i18n-demo\t")
     assert line.endswith("\tBonjour")
+
+
+def test_search_sections_json(working_dir: Path, capsys: CaptureFixture[str]) -> None:
+    main(("search-sections", "bonjour", "--json"))
+
+    (record,) = loads(capsys.readouterr().out)
+    assert record["kind"] == "frame"
+    assert record["section"] == "i18n-demo"
+    assert record["title"] == "Bonjour"
+
+
+def test_missing_en_json(working_dir: Path, capsys: CaptureFixture[str]) -> None:
+    (working_dir.parent.parent / "content/i18n-demo/en/hello.md").unlink()
+
+    main(("i18n", "missing-en", "--json"))
+
+    (record,) = loads(capsys.readouterr().out)
+    assert record["kind"] == "file"
+    assert record["en_path"].endswith("i18n-demo/en/hello.md")

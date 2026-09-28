@@ -1,10 +1,12 @@
+from json import loads
 from pathlib import Path
 
 import appdirs
 from pygit2 import init_repository
-from pytest import MonkeyPatch
+from pytest import CaptureFixture, MonkeyPatch, raises
 
 from deckz.analyzing.variables_usage import check_variables
+from deckz.cli import main
 from deckz.configuring.settings import GlobalSettings
 
 
@@ -135,3 +137,23 @@ def test_check_variables_clean_repo_has_no_findings(
     assert report.unused == []
     assert report.unparsable == []
     assert report.structural == []
+
+
+def test_check_variables_json_output(
+    tmp_path: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    git_dir = _repo(tmp_path, monkeypatch)
+
+    with raises(SystemExit) as exc_info:
+        main(("check", "variables", "--json", "--workdir", str(git_dir)))
+
+    assert exc_info.value.code == 1
+    records = loads(capsys.readouterr().out)
+    assert {"undefined", "unused", "unparsable", "structural"} == {
+        record["kind"] for record in records
+    }
+    assert {
+        "kind": "unused",
+        "section": str(git_dir / "content" / "greeting" / "greeting.yml"),
+        "name": "format",
+    } in records

@@ -436,6 +436,10 @@ Exit codes: 0 on success, 1 on a deckz error (e.g. a missing flavor or a
 failed compile) or on `deckz check variables` findings, 2 on a command-line
 usage error.
 
+`deckz check variables`, `deckz search-sections` and `deckz i18n
+missing-en` print one tab-separated finding per line, or, with `--json`, a
+single JSON array of objects (see each command's `--help` for the fields).
+
 The main commands:
 
 - `deckz run` (alias for `deckz run deck`, optionally restricted with

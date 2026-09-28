@@ -7,6 +7,7 @@ from . import app
 def missing_en(
     *,
     all: bool = False,  # ruff: ignore[builtin-argument-shadowing]
+    json: bool = False,
     workdir: Path = Path(),
 ) -> None:
     """Report fr content/titles/variables with no en counterpart.
@@ -27,8 +28,13 @@ def missing_en(
     Running this lets you audit gaps -- both what would block `deckz run \
     --en` and what's merely unlocalized -- without compiling anything.
 
+    With --json, prints one JSON array of objects instead, each with a \
+    "kind" (file/title/variable) and the fields above: "fr_path"/"en_path", \
+    or "status", "path" and "field"/"key".
+
     Args:
         all: Check every deck in the repository instead of just WORKDIR
+        json: Print the gaps as JSON
         workdir: Path to move into before running the command
 
     """
@@ -43,10 +49,30 @@ def missing_en(
     else:
         settings_list = [DeckSettings.from_yaml(workdir)]
 
+    records: list[dict[str, object]] = []
     for settings in settings_list:
-        for fr_path, en_path in missing_en_files(settings):
-            print(f"FILE\t{fr_path}\t{en_path}")
-        for yml_path, field, status in title_gaps(settings):
-            print(f"TITLE\t{status}\t{yml_path}\t{field}")
-        for var_path, key, status in variable_gaps(settings):
-            print(f"VARIABLE\t{status}\t{var_path}\t{key}")
+        records.extend(
+            {"kind": "file", "fr_path": fr_path, "en_path": en_path}
+            for fr_path, en_path in missing_en_files(settings)
+        )
+        records.extend(
+            {"kind": "title", "status": status, "path": yml_path, "field": field}
+            for yml_path, field, status in title_gaps(settings)
+        )
+        records.extend(
+            {"kind": "variable", "status": status, "path": var_path, "key": key}
+            for var_path, key, status in variable_gaps(settings)
+        )
+
+    if json:
+        from .._presentation import print_json
+
+        print_json(records)
+        return
+    for record in records:
+        if record["kind"] == "file":
+            print(f"FILE\t{record['fr_path']}\t{record['en_path']}")
+        elif record["kind"] == "title":
+            print(f"TITLE\t{record['status']}\t{record['path']}\t{record['field']}")
+        else:
+            print(f"VARIABLE\t{record['status']}\t{record['path']}\t{record['key']}")
