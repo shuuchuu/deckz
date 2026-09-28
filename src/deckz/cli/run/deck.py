@@ -35,38 +35,20 @@ def run(
 
     """
     from ...configuring.settings import DeckSettings
+    from ...pipelines import OutputKinds, build, deck_targets
     from ...pipelines import run as _run
-    from .._presentation import RichProgress
+    from .._presentation import RichProgress, print_plan_of
 
     settings = DeckSettings.from_yaml(workdir)
+    lang = "en" if en else "fr"
+    outputs = OutputKinds(handout=handout, presentation=presentation, print=print)
 
     if dry_run:
-        from ...pipelines import plan
-        from .._presentation import print_plan
-
-        print_plan(
-            plan(
-                settings=settings,
-                lang="en" if en else "fr",
-                build_handout=handout,
-                build_presentation=presentation,
-                build_print=print,
-                parts_whitelist=parts,
-            ),
-            settings.paths.git_dir,
-        )
+        print_plan_of(deck_targets(settings, lang, parts), lang, outputs)
         return
 
     if not watch:
-        _run(
-            settings=settings,
-            lang="en" if en else "fr",
-            build_handout=handout,
-            build_presentation=presentation,
-            build_print=print,
-            progress=RichProgress(),
-            parts_whitelist=parts,
-        )
+        build(deck_targets(settings, lang, parts), lang, outputs, RichProgress())
         return
 
     from logging import getLogger
@@ -87,10 +69,8 @@ def run(
         frozenset([settings.paths.pdf_dir, settings.paths.build_dir]),
         _run,
         settings=settings,
-        lang="en" if en else "fr",
-        build_handout=handout,
-        build_presentation=presentation,
-        build_print=print,
+        lang=lang,
+        outputs=outputs,
+        parts=parts,
         progress=RichProgress(),
-        parts_whitelist=parts,
     )

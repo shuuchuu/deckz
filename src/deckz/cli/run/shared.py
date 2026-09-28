@@ -10,6 +10,7 @@ def run_shared(
     presentation: bool = True,
     print: bool = False,  # ruff: ignore[builtin-argument-shadowing]
     en: bool = False,
+    dry_run: bool = False,
     workdir: Path = Path(),
 ) -> None:
     """Compile every shared section at once, in one throwaway deck.
@@ -25,17 +26,18 @@ def run_shared(
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
         en: Compile the English variant
+        dry_run: Only print the PDFs that would be compiled and the content \
+            fragments each would re-render, without building anything
         workdir: Path to move into before running the command
 
     """
-    from ...pipelines import run_shared as _run_shared
-    from .._presentation import RichProgress
+    from ...pipelines import OutputKinds, build, shared_targets
+    from .._presentation import RichProgress, print_plan_of
 
-    _run_shared(
-        directory=workdir,
-        lang="en" if en else "fr",
-        build_handout=handout,
-        build_presentation=presentation,
-        build_print=print,
-        progress=RichProgress(),
-    )
+    lang = "en" if en else "fr"
+    outputs = OutputKinds(handout=handout, presentation=presentation, print=print)
+    targets = shared_targets(workdir, lang)
+    if dry_run:
+        print_plan_of(targets, lang, outputs)
+    else:
+        build(targets, lang, outputs, RichProgress())

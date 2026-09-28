@@ -110,24 +110,32 @@ see the module's header comment for why never in deckz's own process).
 
 ### Build pipeline
 
-`pipelines.py` holds the orchestration functions the CLI commands call
-(`run`, `run_file`, `run_section`, `run_decks`, `run_shared`, `run_all`,
-`run_assets`, `watch`). The common path (`_build`) is: resolve variables →
+`pipelines.py` holds the orchestration the CLI commands call. Planning is
+separate from execution: each `run` command first computes its
+`BuildTarget`s (`deck_targets`, `file_targets`, `section_targets`,
+`decks_targets`, `shared_targets`, `all_targets`: parsed decks plus the
+settings, failure label and optional `basedirs` to build each with), then
+either `build`s them or, under `--dry-run`, prints their `plan`. The
+`run`/`run_file`/…/`run_all` functions are `build` over those targets, kept
+for `watch()` to re-run (reparsing on each change). `build` builds the
+assets once, then for each target: resolve variables →
 cascade them through the parsed `Deck` (`configuring/variables.py::resolve_variables`:
 deck-wide `variables.yml`, overridden by each section's own matched-flavor
 `variables`, deepest section wins, returning a new `ResolvedDeck` whose
 every `File` carries its effective `variables`) → build assets via the assets builder (the
 target repo's own `templates/assets_builders.py`, e.g. generated plots) → build the deck
 (render Jinja2 → convert Markdown to Typst with pandoc → compile with Typst) via
-the deck builder; `_build` also takes an optional `basedirs` override, used
-only by `run_shared`/`run_all` since their synthetic decks can include
+the deck builder; a target's `basedirs` override is set only by
+`shared_targets`/`all_targets` since their synthetic decks can include
 files living under any deck's directory, not just one
-`current_dir`/`content_dir` pair. `_build` raises `CompilationError` when
-any PDF fails to compile, so every `run_*` pipeline fails the command.
+`current_dir`/`content_dir` pair. `build` raises `CompilationError`, naming
+the target's label, when any PDF fails to compile, so every `run` command
+fails.
 `deckz run file`/`deckz run section` get their `.run/` scratch output dirs
 from `checking.preview_settings`, a copy of the deck's settings; settings
-objects are never mutated after construction. `pipelines.plan` (backing `deckz run --dry-run`) stops before building:
-it returns the deck builder's `plan()`, a `PlannedCompile` per PDF with the
+objects are never mutated after construction. `pipelines.plan` (backing
+`--dry-run`) stops before building anything, assets included: it returns
+each target's deck builder's `plan()`, a `PlannedCompile` per PDF with the
 fragments that would be re-rendered, whose freshness test
 (`utils.file_changed` on each `build_copy_path`) is the one `build_deck`
 applies. `watch()` is a generic file-watch-and-rerun
@@ -146,11 +154,11 @@ and `dependency_relative_path` is the single place that naming scheme is
 decided so the main template's reference (`#include`) and the
 on-disk rendered copy always agree.
 
-`run_shared`/`run_all` (backing `deckz run shared`/`deckz run all`)
+`shared_targets`/`all_targets` (backing `deckz run shared`/`deckz run all`)
 build their `Deck` purely in memory via `src/deckz/checking.py` — no yaml is
 ever written to disk. They use `Parser.all_files_section()`
 (`components/parser.py`) to expand a shared section to every file in its
-own directory rather than a named flavor's `includes` list; `run_all`
+own directory rather than a named flavor's `includes` list; `all_targets`
 additionally builds one extra copy of a section per deck that locally
 overrides one of its files (detected by re-resolving with that deck's own
 `local_content_dir`). Both write their output to a persistent

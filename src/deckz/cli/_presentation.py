@@ -7,7 +7,7 @@ This module is where the CLI turns those into rich widgets.
 """
 
 import sys
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path, PurePath
 from subprocess import DEVNULL, Popen
@@ -18,10 +18,12 @@ from rich.progress import BarColumn, Progress
 from rich.tree import Tree
 
 from ..components.protocols import ProgressReporterProtocol
+from ..models import Deck, File, NodeVisitor, Part, PartName, Section, UnresolvedPath
 
 if TYPE_CHECKING:
     from ..components.deck_builder import PlannedCompile
-from ..models import Deck, File, NodeVisitor, Part, PartName, Section, UnresolvedPath
+    from ..models import Lang
+    from ..pipelines import BuildTarget, OutputKinds
 
 
 class RichProgress(ProgressReporterProtocol):
@@ -137,14 +139,69 @@ def open_path(path: Path) -> None:
     Popen([command, str(path)], stdout=DEVNULL, stderr=DEVNULL, stdin=DEVNULL)
 
 
-def print_json(records: Iterable[Mapping[str, object]]) -> None:
-    """Print `records` to stdout as one JSON array, for a command's `--json`.
+def print_json(data: object) -> None:
+    """Print `data` to stdout as JSON, for a command's `--json`.
 
     Paths and other non-JSON values are printed as strings.
     """
     from json import dumps
 
-    print(dumps(list(records), indent=2, default=str))
+    print(dumps(data, indent=2, default=str))
+
+
+def deck_json(deck: Deck) -> dict[str, object]:
+    """`deck`'s tree as JSON-ready data, for `deckz show tree --json`.
+
+    Returns:
+        The deck's name and parts, each part's nodes nested as in the deck.
+    """
+    visitor = _JsonNodeVisitor()
+    return {
+        "name": deck.name,
+        "parts": [
+            {
+                "name": name,
+                "title": part.title,
+                "nodes": [node.accept(visitor) for node in part.nodes],
+            }
+            for name, part in deck.parts.items()
+        ],
+    }
+
+
+class _JsonNodeVisitor(NodeVisitor[[], dict[str, object]]):
+    def visit_file(self, file: File) -> dict[str, object]:
+        return {
+            "kind": "file",
+            "path": file.unresolved_path.as_posix(),
+            "resolved_path": file.resolved_path,
+            "title": file.title,
+            "error": file.parsing_error,
+        }
+
+    def visit_section(self, section: Section) -> dict[str, object]:
+        return {
+            "kind": "section",
+            "path": section.unresolved_path.as_posix(),
+            "flavor": section.flavor,
+            "resolved_path": section.resolved_path,
+            "title": section.title,
+            "error": section.parsing_error,
+            "nodes": [node.accept(self) for node in section.nodes],
+        }
+
+
+def print_plan_of(
+    targets: "Sequence[BuildTarget]", lang: "Lang", outputs: "OutputKinds"
+) -> None:
+    """Print what building `targets` would do, for a `run` command's `--dry-run`.
+
+    Paths are printed relative to the repository root.
+    """
+    from ..pipelines import plan
+
+    if targets:
+        print_plan(plan(targets, lang, outputs), targets[0].settings.paths.git_dir)
 
 
 def print_plan(planned: Iterable["PlannedCompile"], relative_to: Path) -> None:

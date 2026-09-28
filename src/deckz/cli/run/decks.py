@@ -10,6 +10,7 @@ def run_decks(
     presentation: bool = True,
     print: bool = False,  # ruff: ignore[builtin-argument-shadowing]
     en: bool = False,
+    dry_run: bool = False,
     workdir: Path = Path(),
 ) -> None:
     """Compile every deck in the repository, end to end.
@@ -26,17 +27,18 @@ def run_decks(
         en: Compile the English variant of every deck. Strict across the \
             whole repository: the first deck missing any translation aborts \
             the whole run
+        dry_run: Only print the PDFs that would be compiled and the content \
+            fragments each would re-render, without building anything
         workdir: Path to move into before running the command
 
     """
-    from ...pipelines import run_decks as _run_decks
-    from .._presentation import RichProgress
+    from ...pipelines import OutputKinds, build, decks_targets
+    from .._presentation import RichProgress, print_plan_of
 
-    _run_decks(
-        directory=workdir,
-        lang="en" if en else "fr",
-        build_handout=handout,
-        build_presentation=presentation,
-        build_print=print,
-        progress=RichProgress(),
-    )
+    lang = "en" if en else "fr"
+    outputs = OutputKinds(handout=handout, presentation=presentation, print=print)
+    targets = decks_targets(workdir, lang)
+    if dry_run:
+        print_plan_of(targets, lang, outputs)
+    else:
+        build(targets, lang, outputs, RichProgress())

@@ -20,10 +20,11 @@ from deckz.components.compiler import keep_warm
 from deckz.components.factory import GlobalSettingsFactory
 from deckz.configuring.settings import DeckSettings
 from deckz.exceptions import CompilationError
-from deckz.pipelines import _run_once, run
+from deckz.pipelines import OutputKinds, _run_once, run
 
 _NO_PDF = ("--no-presentation", "--no-print")
 _RUN_ARGS = ("run", *_NO_PDF)
+_HANDOUT_ONLY = OutputKinds(handout=True, presentation=False, print=False)
 
 
 @fixture
@@ -83,6 +84,29 @@ def test_dry_run_plans_without_building(
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == "company/abc/pdf/abc-handout.pdf: render 1 of 2 fragments"
     assert lines[1] == "  company/abc/content/about.md"
+
+
+@mark.parametrize(
+    ("args", "pdf"),
+    [
+        (("run", "file", "about", "--no-open"), ".run/file/about/pdf/deck-handout.pdf"),
+        (
+            ("run", "section", "greeting", "standard", "--no-open"),
+            ".run/section/greeting/standard/pdf/deck-handout.pdf",
+        ),
+        (("run", "decks", "--handout"), "company/abc/pdf/abc-handout.pdf"),
+        (("run", "shared", "--handout"), ".run/shared/pdf/shared-handout.pdf"),
+        (("run", "all", "--handout"), ".run/all/pdf/run-all-handout.pdf"),
+    ],
+)
+def test_every_run_command_has_a_dry_run(
+    working_dir: Path, capsys: CaptureFixture[str], args: tuple[str, ...], pdf: str
+) -> None:
+    main((*args, "--no-presentation", "--dry-run"))
+
+    lines = capsys.readouterr().out.splitlines()
+    assert any(line.startswith(f"{pdf}: render all ") for line in lines)
+    assert not list(working_dir.parent.parent.glob("**/*.pdf"))
 
 
 def test_rebuild_in_same_process_sees_content_edit(working_dir: Path) -> None:
@@ -254,9 +278,7 @@ def test_watch_survives_a_compile_error(working_dir: Path, caplog: Any) -> None:
         run,
         settings=DeckSettings.from_yaml(working_dir),
         lang="fr",
-        build_handout=True,
-        build_presentation=False,
-        build_print=False,
+        outputs=_HANDOUT_ONLY,
     )
 
     assert "ABC failed to compile" in caplog.text
@@ -326,9 +348,7 @@ def test_build_reports_progress_through_the_reporter(working_dir: Path) -> None:
     run(
         settings=DeckSettings.from_yaml(working_dir),
         lang="fr",
-        build_handout=True,
-        build_presentation=False,
-        build_print=False,
+        outputs=_HANDOUT_ONLY,
         progress=progress,
     )
 

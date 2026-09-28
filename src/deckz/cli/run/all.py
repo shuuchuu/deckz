@@ -10,6 +10,7 @@ def all(  # ruff: ignore[builtin-variable-shadowing]
     presentation: bool = True,
     print: bool = False,  # ruff: ignore[builtin-argument-shadowing]
     en: bool = False,
+    dry_run: bool = False,
     workdir: Path = Path(),
 ) -> None:
     """Compile `run shared`'s deck, plus every deck-local override.
@@ -24,17 +25,18 @@ def all(  # ruff: ignore[builtin-variable-shadowing]
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
         en: Compile the English variant
+        dry_run: Only print the PDFs that would be compiled and the content \
+            fragments each would re-render, without building anything
         workdir: Path to move into before running the command
 
     """
-    from ...pipelines import run_all as _run_all
-    from .._presentation import RichProgress
+    from ...pipelines import OutputKinds, all_targets, build
+    from .._presentation import RichProgress, print_plan_of
 
-    _run_all(
-        directory=workdir,
-        lang="en" if en else "fr",
-        build_handout=handout,
-        build_presentation=presentation,
-        build_print=print,
-        progress=RichProgress(),
-    )
+    lang = "en" if en else "fr"
+    outputs = OutputKinds(handout=handout, presentation=presentation, print=print)
+    targets = all_targets(workdir, lang)
+    if dry_run:
+        print_plan_of(targets, lang, outputs)
+    else:
+        build(targets, lang, outputs, RichProgress())

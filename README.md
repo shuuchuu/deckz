@@ -450,9 +450,10 @@ The main commands:
   content file, a specific section flavor, or the project's assets.
   Add `--en` to compile the English variant (see [Titles, variables and
   `--en`](#titles-variables-and---en)), or `--watch` to recompile on file
-  changes instead of once. `deckz run --dry-run` only prints the PDFs it
-  would compile and, for each, the content fragments it would re-render
-  (new or changed since that PDF's last build), without building anything.
+  changes instead of once. With `--dry-run`, every `deckz run` command
+  except `run assets` only prints the PDFs it would compile and, for each,
+  the content fragments it would re-render (new or changed since that
+  PDF's last build), without building anything.
   `run file`/`run section` write their output
   under `<git_dir>/.run/`, not the current deck's own `pdf`/`.build`, and
   open it once done (add `--no-open` for agentic/headless use, where only

@@ -16,6 +16,7 @@ def run_section(
     en: bool = False,
     watch: bool = False,
     open: bool = True,  # ruff: ignore[builtin-argument-shadowing]
+    dry_run: bool = False,
     workdir: Path = Path(),
 ) -> None:
     """Compile a specific FLAVOR of a given SECTION.
@@ -34,6 +35,8 @@ def run_section(
         watch: Recompile on file changes, instead of compiling once
         open: Open the output directory once compiled. Disable for \
             agentic/headless use, where only the printed path is useful
+        dry_run: Only print the PDFs that would be compiled and the content \
+            fragments each would re-render, without building anything
         workdir: Path to move into before running the command
 
     """
@@ -41,13 +44,20 @@ def run_section(
 
     from ...checking import preview_settings
     from ...configuring.settings import DeckSettings
+    from ...pipelines import OutputKinds, build, section_targets
     from ...pipelines import run_section as _run_section
-    from .._presentation import RichProgress, open_path
+    from .._presentation import RichProgress, open_path, print_plan_of
 
     logger = getLogger(__name__)
     settings = preview_settings(
         DeckSettings.from_yaml(workdir), "section", section, flavor
     )
+    lang = "en" if en else "fr"
+    outputs = OutputKinds(handout=handout, presentation=presentation, print=print)
+
+    if dry_run:
+        print_plan_of(section_targets(section, flavor, settings, lang), lang, outputs)
+        return
 
     if watch:
         from ...pipelines import watch as _watch
@@ -74,23 +84,17 @@ def run_section(
             section=section,
             flavor=flavor,
             settings=settings,
-            lang="en" if en else "fr",
-            build_handout=handout,
-            build_presentation=presentation,
-            build_print=print,
+            lang=lang,
+            outputs=outputs,
             progress=RichProgress(),
         )
         return
 
-    _run_section(
-        section=section,
-        flavor=flavor,
-        settings=settings,
-        lang="en" if en else "fr",
-        build_handout=handout,
-        build_presentation=presentation,
-        build_print=print,
-        progress=RichProgress(),
+    build(
+        section_targets(section, flavor, settings, lang),
+        lang,
+        outputs,
+        RichProgress(),
     )
     logger.info(
         f"Output directory located at [link=file://{settings.paths.pdf_dir}]"
