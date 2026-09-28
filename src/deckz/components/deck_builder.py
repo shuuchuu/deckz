@@ -32,7 +32,7 @@ from ..models import (
     Title,
     TitleOrContent,
 )
-from ..utils import copy_file_if_newer
+from ..utils import copy_file_if_changed
 from .protocols import (
     CompilerProtocol,
     DeckBuilderProtocol,
@@ -231,7 +231,7 @@ class DeckBuilder(DeckBuilderProtocol):
         output_pdf_path = self._output_dir / f"{name}.pdf"
         self._render_main(item, main_path)
         # `copy_dependencies` only re-copies (and so re-renders/re-converts) a
-        # fragment whose source is newer than its build copy, but a pandoc
+        # fragment whose source differs from its build copy, but a pandoc
         # command or filter change doesn't touch any source: force a full
         # pass whenever the converter's fingerprint moved since this item's
         # last successful render.
@@ -315,7 +315,7 @@ def copy_dependencies(
             build_path.parent.mkdir(parents=True, exist_ok=True)
             copyfile(dependency.resolved_path, build_path)
             copied.append((build_path, dependency.variables))
-        elif copy_file_if_newer(dependency.resolved_path, build_path):
+        elif copy_file_if_changed(dependency.resolved_path, build_path):
             copied.append((build_path, dependency.variables))
     return copied
 

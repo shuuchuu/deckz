@@ -22,11 +22,11 @@ _path_modules: dict[tuple[Path, int, str], ModuleType] = {}
 _path_modules_lock = Lock()
 
 
-def copy_file_if_newer(original: Path, copy: Path) -> bool:
-    """Copy `original` to `copy` if `copy` is older than `original` or does not exist.
+def copy_file_if_changed(original: Path, copy: Path) -> bool:
+    """Copy `original` to `copy` unless `copy` already has the same content.
 
-    Whether `original` is more recent than `copy` or not is determined by the last \
-    modification time.
+    Content, not modification time, decides: a `git checkout` restoring an \
+    older file, or a `touch`, then neither skips nor forces a copy.
 
     Args:
         original: Path of the file that you want to copy.
@@ -35,9 +35,10 @@ def copy_file_if_newer(original: Path, copy: Path) -> bool:
     Returns:
         True if the file was copied, False if it wasn't needed.
     """
+    from filecmp import cmp
     from shutil import copyfile
 
-    if copy.exists() and copy.stat().st_mtime > original.stat().st_mtime:
+    if copy.is_file() and cmp(original, copy, shallow=False):
         return False
     copy.parent.mkdir(parents=True, exist_ok=True)
     copyfile(original, copy)
