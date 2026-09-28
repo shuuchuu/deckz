@@ -26,6 +26,7 @@ from ..models import (
     Part,
     PartName,
     PartSlides,
+    ResolvedDeck,
     ResolvedPath,
     Section,
     Title,
@@ -108,7 +109,7 @@ class DependencyRef:
 
     resolved_path: ResolvedPath
     variables_fingerprint: str
-    variables: dict[str, Any] = field(compare=False)
+    variables: Mapping[str, Any] = field(compare=False)
 
 
 @dataclass(frozen=True)
@@ -123,7 +124,7 @@ class DeckBuilder(DeckBuilderProtocol):
     def __init__(
         self,
         variables: dict[str, Any],
-        deck: Deck,
+        deck: ResolvedDeck,
         build_presentation: bool,
         build_handout: bool,
         build_print: bool,
@@ -301,7 +302,7 @@ def copy_dependencies(
     basedirs: Iterable[Path],
     *,
     force: bool = False,
-) -> list[tuple[Path, dict[str, Any]]]:
+) -> list[tuple[Path, Mapping[str, Any]]]:
     copied = []
     for dependency in dependencies:
         relative_path = dependency_relative_path(
@@ -322,7 +323,7 @@ def copy_dependencies(
 def render_dependencies(
     renderer: RendererProtocol,
     markdown_converter: MarkdownConverterProtocol,
-    to_render: Iterable[tuple[Path, dict[str, Any]]],
+    to_render: Iterable[tuple[Path, Mapping[str, Any]]],
 ) -> None:
     for item_path, variables in to_render:
         rendered_path = item_path.with_suffix("")

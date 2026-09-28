@@ -1,9 +1,14 @@
+from dataclasses import FrozenInstanceError
+
 from pydantic import ValidationError
 from pytest import raises
 
 from deckz.models import (
+    Deck,
     DeckDefinition,
     LangMap,
+    Part,
+    PartName,
     SectionDefinition,
     is_lang_map,
     resolve_lang,
@@ -162,3 +167,27 @@ def test_variables_to_define_mapping_form_sets_allowed_values() -> None:
     (declaration,) = definition.variables_to_define
     assert declaration.name == "depth"
     assert declaration.allowed_values == ["shallow", "deep"]
+
+
+def _deck() -> Deck:
+    return Deck(
+        name="deck",
+        parts={PartName(name): Part(title=name, nodes=()) for name in ("a", "b", "c")},
+    )
+
+
+def test_deck_filter_returns_a_copy_keeping_part_order() -> None:
+    deck = _deck()
+    filtered = deck.filter([PartName("c"), PartName("a")])
+    assert list(filtered.parts) == ["a", "c"]
+    assert list(deck.parts) == ["a", "b", "c"]
+
+
+def test_deck_filter_rejects_unknown_parts() -> None:
+    with raises(ValueError, match="not in the deck"):
+        _deck().filter([PartName("z")])
+
+
+def test_deck_is_frozen() -> None:
+    with raises(FrozenInstanceError):
+        _deck().name = "other"  # ty: ignore[invalid-assignment]

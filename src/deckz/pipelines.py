@@ -31,12 +31,11 @@ def _build(
     basedirs: tuple[Path, ...] | None = None,
 ) -> None:
     variables = {**get_variables(settings, lang=lang), "lang": lang}
-    resolve_variables(deck, variables)
     factory = DeckSettingsFactory(settings, lang=lang)
     factory.assets_builder().build_assets()
     if not factory.deck_builder(
         variables=variables,
-        deck=deck,
+        deck=resolve_variables(deck, variables),
         build_handout=build_handout,
         build_presentation=build_presentation,
         build_print=build_print,
@@ -59,7 +58,7 @@ def run(
     parser = DeckSettingsFactory(settings, lang=lang).parser()
     deck = parser.from_deck_definition(settings.paths.deck_definition)
     if parts_whitelist is not None:
-        deck.filter(parts_whitelist)
+        deck = deck.filter(parts_whitelist)
     _build(
         deck=deck,
         settings=settings,

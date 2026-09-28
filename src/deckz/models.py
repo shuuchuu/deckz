@@ -54,6 +54,7 @@ There are several kinds of types defined in this module:
     definitions):
 
     - [`Deck`][deckz.models.Deck]
+    - [`ResolvedDeck`][deckz.models.ResolvedDeck]
     - [`Part`][deckz.models.Part]
     - [`Section`][deckz.models.Section]
     - [`File`][deckz.models.File]
@@ -88,8 +89,8 @@ There are several kinds of types defined in this module:
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
-from dataclasses import dataclass, field
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePath
 from typing import Annotated, Any, Literal, NewType, Protocol, TypeGuard
 
@@ -369,7 +370,7 @@ class NodeVisitor[**P, T](Protocol):
         ...
 
 
-@dataclass
+@dataclass(frozen=True)
 class Node(ABC):
     """Node in a section or part.
 
@@ -406,16 +407,17 @@ class Node(ABC):
         raise NotImplementedError
 
 
-@dataclass
+@dataclass(frozen=True)
 class File(Node):
     """File in a section or part."""
 
-    variables: dict[str, Any] = field(default_factory=dict)
+    variables: Mapping[str, Any] = field(default_factory=dict)
     """Variables effective when rendering this file: the deck-wide \
     `variables.yml`, cascaded down through every enclosing \
-    [`Section`][deckz.models.Section]'s own `variables`, deepest wins. Left \
-    at `{}` until [`resolve_variables`][deckz.configuring.variables.resolve_variables] \
-    walks the parsed [`Deck`][deckz.models.Deck]."""
+    [`Section`][deckz.models.Section]'s own `variables`, deepest wins. Always \
+    `{}` in a parsed [`Deck`][deckz.models.Deck], filled in the \
+    [`ResolvedDeck`][deckz.models.ResolvedDeck] returned by \
+    [`resolve_variables`][deckz.configuring.variables.resolve_variables]."""
 
     def accept[**P, T](
         self, visitor: NodeVisitor[P, T], *args: P.args, **kwargs: P.kwargs
@@ -435,22 +437,21 @@ class File(Node):
         return visitor.visit_file(self, *args, **kwargs)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Section(Node):
     """Section in a section or part."""
 
     flavor: FlavorName
     """Name of the flavor of the section."""
 
-    nodes: list[Node]
+    nodes: tuple[Node, ...]
     """Nodes included in the section."""
 
-    variables: dict[str, Any] = field(default_factory=dict)
-    """This flavor's own declared `variables`, until \
-    [`resolve_variables`][deckz.configuring.variables.resolve_variables] \
-    cascades ancestors into it in place, after which it holds the full \
-    effective dict at this point in the tree (also then propagated to every \
-    descendant [`File`][deckz.models.File]/[`Section`][deckz.models.Section])."""
+    variables: Mapping[str, Any] = field(default_factory=dict)
+    """This flavor's own declared `variables`, i.e. only what it adds to or \
+    overrides from its ancestors. The effective result of the cascade is on \
+    each descendant [`File`][deckz.models.File] of a \
+    [`ResolvedDeck`][deckz.models.ResolvedDeck]."""
 
     def accept[**P, T](
         self, visitor: NodeVisitor[P, T], *args: P.args, **kwargs: P.kwargs
@@ -470,43 +471,55 @@ class Section(Node):
         return visitor.visit_section(self, *args, **kwargs)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Part:
     """Part in a deck."""
 
     title: str | None
     """Title of the part."""
 
-    nodes: list[Node]
+    nodes: tuple[Node, ...]
     """Nodes included in the part."""
 
 
-@dataclass
+@dataclass(frozen=True)
 class Deck:
     """Top of the hierarchy for deck parsing."""
 
     name: str
     """The name of the deck. Will be a part of the output file name."""
 
-    parts: dict[PartName, Part]
+    parts: Mapping[PartName, Part]
     """Parts included in the deck."""
 
-    def filter(self, whitelist: Iterable[PartName]) -> None:
-        """Filter out the parts that don't have their name listed in `whitelist`.
+    def filter(self, whitelist: Iterable[PartName]) -> "Deck":
+        """Copy of the deck with only the parts listed in `whitelist`.
 
         Args:
             whitelist: Parts to keep.
+
+        Returns:
+            The copy, keeping the parts in their original order.
 
         Raises:
             ValueError: Raised if an element of `whitelist` matches no part name in \
                 the deck.
         """
-        if frozenset(whitelist).difference(self.parts):
+        kept = frozenset(whitelist)
+        if kept.difference(self.parts):
             msg = "provided whitelist has part names not in the deck"
             raise ValueError(msg)
-        to_remove = frozenset(self.parts).difference(whitelist)
-        for part_name in to_remove:
-            del self.parts[part_name]
+        return replace(
+            self,
+            parts={name: part for name, part in self.parts.items() if name in kept},
+        )
+
+
+ResolvedDeck = NewType("ResolvedDeck", Deck)
+"""A [`Deck`][deckz.models.Deck] whose [`File`][deckz.models.File]s carry their \
+effective `variables`, as returned by \
+[`resolve_variables`][deckz.configuring.variables.resolve_variables]. What the \
+deck builder and the analyses needing rendered content take."""
 
 
 ########################################################################################

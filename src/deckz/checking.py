@@ -12,6 +12,7 @@ typical machine has (Typst takes a few MB per page), and a compilation that \
 stops at its first error would hide every later section's errors.
 """
 
+from dataclasses import replace
 from pathlib import Path, PurePath
 
 from .components.factory import DeckSettingsFactory, GlobalSettingsFactory
@@ -106,7 +107,7 @@ def build_shared_deck(
         name=name,
         parts={
             _part_name(section_id): Part(
-                title=None, nodes=[parser.all_files_section(section_id)]
+                title=None, nodes=(parser.all_files_section(section_id),)
             )
             for section_id in shared_section_ids(content_dir)
         },
@@ -139,6 +140,7 @@ def build_all_deck(settings: GlobalSettings, lang: Lang) -> Deck:
     deck_settings = sorted(
         all_deck_settings(git_dir), key=lambda s: s.paths.current_dir.as_posix()
     )
+    parts = dict(deck.parts)
     for section_id, plain_section in plain_sections.items():
         if plain_section.parsing_error is not None:
             continue
@@ -154,12 +156,13 @@ def build_all_deck(settings: GlobalSettings, lang: Lang) -> Deck:
             if not overridden:
                 continue
             label = local_settings.paths.current_dir.relative_to(git_dir).as_posix()
-            candidate.unresolved_path = UnresolvedPath(
-                PurePath(f"{section_id}-{counter}")
+            renamed = replace(
+                candidate,
+                unresolved_path=UnresolvedPath(PurePath(f"{section_id}-{counter}")),
+                title=f"{candidate.title or section_id} [{label}]",
             )
-            candidate.title = f"{candidate.title or section_id} [{label}]"
-            deck.parts[_part_name(f"{section_id}-{counter}")] = Part(
-                title=None, nodes=[candidate]
+            parts[_part_name(f"{section_id}-{counter}")] = Part(
+                title=None, nodes=(renamed,)
             )
             counter += 1
-    return deck
+    return replace(deck, parts=parts)

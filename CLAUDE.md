@@ -113,8 +113,8 @@ see the module's header comment for why never in deckz's own process).
 `run_assets`, `watch`). The common path (`_build`) is: resolve variables →
 cascade them through the parsed `Deck` (`configuring/variables.py::resolve_variables`:
 deck-wide `variables.yml`, overridden by each section's own matched-flavor
-`variables`, deepest section wins, mutating every `Section`/`File`'s own
-`variables` attribute in place) → build assets via the assets builder (the
+`variables`, deepest section wins, returning a new `ResolvedDeck` whose
+every `File` carries its effective `variables`) → build assets via the assets builder (the
 target repo's own `templates/assets_builders.py`, e.g. generated plots) → build the deck
 (render Jinja2 → convert Markdown to Typst with pandoc → compile with Typst) via
 the deck builder; `_build` also takes an optional `basedirs` override, used
@@ -163,16 +163,21 @@ under `<git_dir>/.check/variables/` since it's a `check` command, not a `run` on
 `ResolvedPath`/`UnresolvedPath` distinction used when resolving shared vs.
 local content file/section references. `Parser` (`components/parser.py`)
 turns YAML deck/section definitions into this model; the rest of the
-pipeline operates on the model, not on YAML directly.
+pipeline operates on the model, not on YAML directly. The `Deck` tree
+(`Deck`/`Part`/`Section`/`File`) is frozen, with tuples of nodes: every
+transformation (`Deck.filter`, `resolve_variables`, the synthetic decks of
+`checking.py`) builds a new tree with `dataclasses.replace`.
 
 A `SectionDefinition` can declare `variables_to_define` (names every flavor
 below it must itself set in its own `variables`, optionally restricted to a
 fixed `allowed_values` list) -- a contract, not a default: `Parser` sets a
 `parsing_error` if a matched flavor is missing one or sets one out of range.
-`Section`/`File` each carry a `variables` attribute: at parse time it's just
-that section's own declared delta, and `resolve_variables` (see "Build
-pipeline" below) later overwrites it in place with the fully cascaded dict
-effective at that point in the tree.
+A `Section`'s `variables` is always just its flavor's own declared delta. A
+`File`'s `variables` is empty in a parsed `Deck` and holds the fully
+cascaded dict in the `ResolvedDeck` (a `NewType` over `Deck`) returned by
+`resolve_variables` (see "Build pipeline" above); the deck builder and
+`utils.all_decks` take/return a `ResolvedDeck`, so the type checker
+catches an unresolved deck reaching them.
 
 ### Analyzing
 

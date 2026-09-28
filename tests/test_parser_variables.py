@@ -5,7 +5,7 @@ from pytest import raises
 from deckz.components.parser import Parser
 from deckz.configuring.variables import resolve_variables
 from deckz.exceptions import DeckParsingError, DeckzError
-from deckz.models import File, FlavorName, PartName, Section
+from deckz.models import Deck, File, FlavorName, PartName, Section
 
 
 def _write(path: Path, content: str) -> None:
@@ -47,7 +47,29 @@ def _repo(tmp_path: Path) -> tuple[Path, Path]:
     return local, shared
 
 
+def _body(deck: Deck) -> File:
+    # The single file of an "outer" deck, nested under outer > inner.
+    (outer,) = deck.parts[PartName("part_name")].nodes
+    assert isinstance(outer, Section)
+    (inner,) = outer.nodes
+    assert isinstance(inner, Section)
+    (body,) = inner.nodes
+    assert isinstance(body, File)
+    return body
+
+
 def test_flavor_variables_cascade_into_nested_sections(tmp_path: Path) -> None:
+    local, shared = _repo(tmp_path)
+    parser = Parser(local, shared, (".md",))
+    deck = parser.from_section("outer", FlavorName("shallow"))
+    resolved = resolve_variables(deck, {"lang": "fr"})
+
+    # Nested section declared no variables of its own: its file gets the
+    # outer section's cascaded dict unchanged.
+    assert _body(resolved).variables == {"depth": "shallow", "lang": "fr"}
+
+
+def test_resolving_leaves_the_parsed_deck_untouched(tmp_path: Path) -> None:
     local, shared = _repo(tmp_path)
     parser = Parser(local, shared, (".md",))
     deck = parser.from_section("outer", FlavorName("shallow"))
@@ -55,46 +77,34 @@ def test_flavor_variables_cascade_into_nested_sections(tmp_path: Path) -> None:
 
     (outer,) = deck.parts[PartName("part_name")].nodes
     assert isinstance(outer, Section)
-    assert outer.variables == {"depth": "shallow", "lang": "fr"}
-
-    (inner,) = outer.nodes
-    assert isinstance(inner, Section)
-    (body,) = inner.nodes
-    # Nested section declared no variables of its own: it inherits its
-    # parent's cascaded dict unchanged.
-    assert isinstance(body, File)
-    assert body.variables == {"depth": "shallow", "lang": "fr"}
+    # A section only ever holds its own flavor's variables.
+    assert outer.variables == {"depth": "shallow"}
+    assert _body(deck).variables == {}
 
 
 def test_sibling_flavors_do_not_leak_into_each_other(tmp_path: Path) -> None:
     local, shared = _repo(tmp_path)
     parser = Parser(local, shared, (".md",))
 
-    shallow_deck = parser.from_section("outer", FlavorName("shallow"))
-    resolve_variables(shallow_deck, {})
-    deep_deck = parser.from_section("outer", FlavorName("deep"))
-    resolve_variables(deep_deck, {})
+    shallow = resolve_variables(parser.from_section("outer", FlavorName("shallow")), {})
+    deep = resolve_variables(parser.from_section("outer", FlavorName("deep")), {})
 
-    (shallow_outer,) = shallow_deck.parts[PartName("part_name")].nodes
-    (deep_outer,) = deep_deck.parts[PartName("part_name")].nodes
-    assert isinstance(shallow_outer, Section)
-    assert isinstance(deep_outer, Section)
-    assert shallow_outer.variables["depth"] == "shallow"
-    assert deep_outer.variables["depth"] == "deep"
+    assert _body(shallow).variables["depth"] == "shallow"
+    assert _body(deep).variables["depth"] == "deep"
 
 
 def test_nested_flavor_variables_override_ancestor(tmp_path: Path) -> None:
     local, shared = _repo(tmp_path)
+    _write(
+        shared / "outer" / "outer.yml",
+        "flavors:\n"
+        "  - name: shallow\n    variables: { depth: shallow }\n"
+        "    includes:\n      - $/inner@constrained\n",
+    )
     parser = Parser(local, shared, (".md",))
-    deck = parser.from_section("outer", FlavorName("shallow"))
-    resolve_variables(deck, {})
+    deck = resolve_variables(parser.from_section("outer", FlavorName("shallow")), {})
 
-    (outer,) = deck.parts[PartName("part_name")].nodes
-    assert isinstance(outer, Section)
-    (inner,) = outer.nodes
-    assert isinstance(inner, Section)
-    assert inner.flavor == FlavorName("plain")
-    assert inner.variables["depth"] == "shallow"
+    assert _body(deck).variables["depth"] == "deep"
 
 
 def test_variables_to_define_missing_is_a_parsing_error(tmp_path: Path) -> None:
@@ -166,11 +176,9 @@ def test_base_variables_are_overridden_by_flavor_variables(tmp_path: Path) -> No
     local, shared = _repo(tmp_path)
     parser = Parser(local, shared, (".md",))
     deck = parser.from_section("outer", FlavorName("deep"))
-    resolve_variables(deck, {"depth": "medium", "other": "kept"})
+    resolved = resolve_variables(deck, {"depth": "medium", "other": "kept"})
 
-    (outer,) = deck.parts[PartName("part_name")].nodes
-    assert isinstance(outer, Section)
-    assert outer.variables == {"depth": "deep", "other": "kept"}
+    assert _body(resolved).variables == {"depth": "deep", "other": "kept"}
 
 
 def test_invalid_section_yaml_is_a_parsing_error(tmp_path: Path) -> None:

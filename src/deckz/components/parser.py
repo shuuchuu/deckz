@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from dataclasses import replace
 from os.path import normpath
 from pathlib import Path, PurePath
 from typing import Literal
@@ -144,27 +145,26 @@ class Parser(ParserProtocol):
             resolved_path=ResolvedPath(section_dir),
             parsing_error=None,
             flavor=FlavorName("all"),
-            nodes=[],
+            nodes=(),
         )
         definition_path = section_dir / f"{unresolved_path.name}.yml"
         if not definition_path.is_file():
-            section.parsing_error = (
-                f"unresolvable section definition path {definition_path}"
+            return replace(
+                section,
+                parsing_error=(
+                    f"unresolvable section definition path {definition_path}"
+                ),
             )
-            return section
         try:
             content = load_yaml(definition_path)
         except (InvalidConfigurationError, OSError) as e:
-            section.parsing_error = f"{e}"
-            return section
+            return replace(section, parsing_error=f"{e}")
         try:
             section_definition = SectionDefinition.model_validate(
                 content, context={"lang": self._lang, "lenient": self._lenient}
             )
         except ValidationError as e:
-            section.parsing_error = f"{e}"
-            return section
-        section.title = section_definition.title
+            return replace(section, parsing_error=f"{e}")
         default_titles = section_definition.default_titles
         stems = sorted(
             {
@@ -173,7 +173,7 @@ class Parser(ParserProtocol):
                 if path.is_file() and path.suffix in self._file_extensions
             }
         )
-        section.nodes = [
+        nodes = tuple(
             self._parse_file(
                 base_unresolved_path=unresolved_path,
                 include_path=IncludePath(PurePath(stem)),
@@ -184,8 +184,8 @@ class Parser(ParserProtocol):
                 ),
             )
             for stem in stems
-        ]
-        return section
+        )
+        return replace(section, title=section_definition.title, nodes=nodes)
 
     def from_file(self, path: str) -> Deck:
         deck = Deck(
@@ -229,7 +229,7 @@ class Parser(ParserProtocol):
                     )
             parts[part_definition.name] = Part(
                 title=part_definition.title,
-                nodes=part_nodes,
+                nodes=tuple(part_nodes),
             )
         return parts
 
@@ -250,7 +250,7 @@ class Parser(ParserProtocol):
             resolved_path=ResolvedPath(Path()),
             parsing_error=None,
             flavor=flavor,
-            nodes=[],
+            nodes=(),
         )
         definition_logical_path = (unresolved_path / unresolved_path.name).with_suffix(
             ".yml"
@@ -259,46 +259,51 @@ class Parser(ParserProtocol):
             definition_logical_path.with_suffix(".yml"), "file", lang_aware=False
         )
         if definition_resolved_path is None:
-            section.parsing_error = (
-                f"unresolvable section definition path {definition_logical_path}"
+            return replace(
+                section,
+                parsing_error=(
+                    f"unresolvable section definition path {definition_logical_path}"
+                ),
             )
-            return section
-        section.resolved_path = definition_resolved_path.parent
+        section = replace(
+            section, resolved_path=ResolvedPath(definition_resolved_path.parent)
+        )
         try:
             content = load_yaml(definition_resolved_path)
         except (InvalidConfigurationError, OSError) as e:
-            section.parsing_error = f"{e}"
-            return section
+            return replace(section, parsing_error=f"{e}")
         try:
             section_definition = SectionDefinition.model_validate(
                 content, context={"lang": self._lang, "lenient": self._lenient}
             )
         except ValidationError as e:
-            section.parsing_error = f"{e}"
-            return section
+            return replace(section, parsing_error=f"{e}")
         for flavor_definition in section_definition.flavors:
             if flavor_definition.name == flavor:
                 break
         else:
-            section.parsing_error = f"flavor {flavor} not found"
-            return section
+            return replace(section, parsing_error=f"flavor {flavor} not found")
         if title_unset:
-            if "title" in flavor_definition.model_fields_set:
-                section.title = flavor_definition.title
-            else:
-                section.title = section_definition.title
-        section.variables = dict(flavor_definition.variables or {})
+            section = replace(
+                section,
+                title=flavor_definition.title
+                if "title" in flavor_definition.model_fields_set
+                else section_definition.title,
+            )
+        section = replace(section, variables=dict(flavor_definition.variables or {}))
         missing = [
             declaration.name
             for declaration in section_definition.variables_to_define
             if declaration.name not in section.variables
         ]
         if missing:
-            section.parsing_error = (
-                f"flavor {flavor} does not define variable(s): "
-                f"{', '.join(sorted(missing))}"
+            return replace(
+                section,
+                parsing_error=(
+                    f"flavor {flavor} does not define variable(s): "
+                    f"{', '.join(sorted(missing))}"
+                ),
             )
-            return section
         invalid = [
             f"{declaration.name}={section.variables[declaration.name]!r} "
             f"not in {declaration.allowed_values}"
@@ -307,25 +312,28 @@ class Parser(ParserProtocol):
             and section.variables[declaration.name] not in declaration.allowed_values
         ]
         if invalid:
-            section.parsing_error = (
-                f"flavor {flavor} has invalid variable value(s): {'; '.join(invalid)}"
+            return replace(
+                section,
+                parsing_error=(
+                    f"flavor {flavor} has invalid variable value(s): "
+                    f"{'; '.join(invalid)}"
+                ),
             )
-            return section
-        section.nodes.extend(
-            self._parse_nodes(
+        return replace(
+            section,
+            nodes=self._parse_nodes(
                 flavor_definition.includes,
                 default_titles=section_definition.default_titles,
                 base_unresolved_path=unresolved_path,
-            )
+            ),
         )
-        return section
 
     def _parse_nodes(
         self,
         node_includes: Iterable[NodeInclude],
         default_titles: dict[IncludePath, str] | None,
         base_unresolved_path: UnresolvedPath,
-    ) -> list[Node]:
+    ) -> tuple[Node, ...]:
         nodes: list[Node] = []
         for node_include in node_includes:
             if node_include.title:
@@ -356,7 +364,7 @@ class Parser(ParserProtocol):
                         flavor=node_include.flavor,
                     )
                 )
-        return nodes
+        return tuple(nodes)
 
     def _parse_file(
         self,
@@ -381,9 +389,11 @@ class Parser(ParserProtocol):
             if resolved_path:
                 break
         if resolved_path:
-            file.resolved_path = resolved_path
+            file = replace(file, resolved_path=resolved_path)
         else:
-            file.parsing_error = f"unresolvable file path {unresolved_path}"
+            file = replace(
+                file, parsing_error=f"unresolvable file path {unresolved_path}"
+            )
         return file
 
     @staticmethod

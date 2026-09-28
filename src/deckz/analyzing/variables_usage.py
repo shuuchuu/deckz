@@ -155,8 +155,8 @@ def _walk_deck(
 ) -> None:
     from ..configuring.variables import resolve_variables
 
-    resolve_variables(deck, base_variables)
-    for part in deck.parts.values():
+    resolved = resolve_variables(deck, base_variables)
+    for part in resolved.parts.values():
         for node in part.nodes:
             _walk_node(node, [], renderer, acc)
 

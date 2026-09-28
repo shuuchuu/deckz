@@ -2,6 +2,7 @@
 
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager, suppress
+from dataclasses import replace
 from multiprocessing import get_context
 from multiprocessing.pool import Pool
 from pathlib import Path
@@ -11,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .configuring.settings import DeckSettings
-    from .models import Deck, Lang, Node
+    from .models import Lang, Node, ResolvedDeck
 
 # Modules loaded by `import_module_from_path`, keyed by what makes a reload
 # necessary: a long-lived process (`--watch`) reuses an unchanged module --
@@ -180,7 +181,7 @@ def load_all_yamls(paths: Iterable[Path]) -> Iterator[Any]:
             yield load_yaml(path)
 
 
-def _parse_deck(settings: "DeckSettings", lang: "Lang") -> tuple[Path, "Deck"]:
+def _parse_deck(settings: "DeckSettings", lang: "Lang") -> tuple[Path, "ResolvedDeck"]:
     from .components.factory import DeckSettingsFactory
     from .configuring.variables import get_variables, resolve_variables
     from .exceptions import DeckParsingError
@@ -192,30 +193,33 @@ def _parse_deck(settings: "DeckSettings", lang: "Lang") -> tuple[Path, "Deck"]:
     except DeckParsingError as e:
         if lang == "fr":
             raise
-        deck = e.deck
-        for part in deck.parts.values():
-            part.nodes = _without_unresolved_files(part.nodes)
+        deck = replace(
+            e.deck,
+            parts={
+                name: replace(part, nodes=_without_unresolved_files(part.nodes))
+                for name, part in e.deck.parts.items()
+            },
+        )
     variables = get_variables(settings, lang, lenient=lang != "fr")
-    resolve_variables(deck, {**variables, "lang": lang})
     return (
         settings.paths.deck_definition.parent.relative_to(settings.paths.git_dir),
-        deck,
+        resolve_variables(deck, {**variables, "lang": lang}),
     )
 
 
-def _without_unresolved_files(nodes: list["Node"]) -> list["Node"]:
+def _without_unresolved_files(nodes: Iterable["Node"]) -> tuple["Node", ...]:
     from .models import File, Section
 
-    kept: list[Node] = []
-    for node in nodes:
-        if isinstance(node, Section):
-            node.nodes = _without_unresolved_files(node.nodes)
-        if not (isinstance(node, File) and node.parsing_error is not None):
-            kept.append(node)
-    return kept
+    return tuple(
+        replace(node, nodes=_without_unresolved_files(node.nodes))
+        if isinstance(node, Section)
+        else node
+        for node in nodes
+        if not (isinstance(node, File) and node.parsing_error is not None)
+    )
 
 
-def all_decks(git_dir: Path, lang: "Lang" = "fr") -> dict[Path, "Deck"]:
+def all_decks(git_dir: Path, lang: "Lang" = "fr") -> dict[Path, "ResolvedDeck"]:
     """Parse every deck of the repository, with variables resolved as in a build.
 
     Args:

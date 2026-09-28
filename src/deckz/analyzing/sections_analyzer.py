@@ -1,4 +1,4 @@
-from collections.abc import Iterable, MutableMapping, MutableSet
+from collections.abc import Iterable, Mapping, MutableMapping, MutableSet
 from functools import cached_property
 from pathlib import Path, PurePath
 from typing import cast, get_args
@@ -67,7 +67,7 @@ class SectionsAnalyzer:
         return using
 
     @cached_property
-    def _decks(self) -> dict[Path, Deck]:
+    def _decks(self) -> Mapping[Path, Deck]:
         return all_decks(self._git_dir)
 
     @cached_property

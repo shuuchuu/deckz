@@ -12,6 +12,7 @@ if TYPE_CHECKING:
         Deck,
         FlavorName,
         Lang,
+        ResolvedDeck,
         ResolvedPath,
         Section,
         UnresolvedPath,
@@ -167,7 +168,7 @@ class DeckFactoryProtocol(GlobalFactoryProtocol, Protocol):
     def deck_builder(
         self,
         variables: dict[str, Any],
-        deck: "Deck",
+        deck: "ResolvedDeck",
         build_presentation: bool,
         build_handout: bool,
         build_print: bool,
