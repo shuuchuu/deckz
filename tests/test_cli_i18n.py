@@ -161,8 +161,10 @@ def test_missing_en_reports_missing_file(
 ) -> None:
     (working_dir.parent.parent / "content/i18n-demo/en/hello.md").unlink()
 
-    main(("i18n", "missing-en"))
+    with raises(SystemExit) as exc_info:
+        main(("i18n", "missing-en"))
 
+    assert exc_info.value.code == 1
     (line,) = capsys.readouterr().out.splitlines()
     assert line.startswith("FILE\t")
     assert line.endswith("i18n-demo/en/hello.md")
@@ -177,8 +179,10 @@ def test_missing_en_reports_missing_translation_key(
         encoding="utf8",
     )
 
-    main(("i18n", "missing-en"))
+    with raises(SystemExit) as exc_info:
+        main(("i18n", "missing-en"))
 
+    assert exc_info.value.code == 1
     lines = capsys.readouterr().out.splitlines()
     assert any(
         line.startswith("TITLE\tmissing-en") and line.endswith("parts[p1].title")
@@ -198,7 +202,11 @@ def test_missing_en_reports_untranslated_plain_string(
         encoding="utf8",
     )
 
+    # Informational only: hidden by default, and never a failure.
     main(("i18n", "missing-en"))
+    assert capsys.readouterr().out == ""
+
+    main(("i18n", "missing-en", "--untranslated"))
 
     lines = capsys.readouterr().out.splitlines()
     assert any(
@@ -227,7 +235,8 @@ def test_search_sections_json(working_dir: Path, capsys: CaptureFixture[str]) ->
 def test_missing_en_json(working_dir: Path, capsys: CaptureFixture[str]) -> None:
     (working_dir.parent.parent / "content/i18n-demo/en/hello.md").unlink()
 
-    main(("i18n", "missing-en", "--json"))
+    with raises(SystemExit):
+        main(("i18n", "missing-en", "--json"))
 
     (record,) = loads(capsys.readouterr().out)
     assert record["kind"] == "file"

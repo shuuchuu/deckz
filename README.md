@@ -291,8 +291,9 @@ cover both languages, so an `en/` file counts as used whenever a
   both fail the build immediately, so a translation that was started but
   left incomplete can't accidentally ship untranslated. A plain string, on
   the other hand, is never a gap -- it means "the same in every language" by
-  design. `deckz i18n missing-en` audits a deck for both kinds of gap
-  (blocking and merely informational) without needing to actually compile it.
+  design. `deckz i18n missing-en` audits a deck for the blocking gaps
+  (and, with `--untranslated`, the merely informational plain strings)
+  without needing to actually compile it.
 - fr and `--en` builds write to separate output paths (an `en/` subdirectory
   under `.build`/`pdf`), so both can be built from the same checkout without
   clobbering each other.
@@ -435,7 +436,8 @@ Logs and progress bars go to stderr, so stdout only carries a command's
 results.
 
 Exit codes: 0 on success, 1 on a deckz error (e.g. a missing flavor or a
-failed compile) or on `deckz check variables` findings, 2 on a command-line
+failed compile), on `deckz check variables` findings or on blocking `deckz
+i18n missing-en` gaps, 2 on a command-line
 usage error, 130 when interrupted with Ctrl-C (which stops the compilations
 under way at once).
 
@@ -479,7 +481,9 @@ The main commands:
   resolved at that point sets (`UNDEFINED`), a `variables_to_define` name no
   fragment under its section ever reads (`UNUSED`), a fragment that fails to
   parse (`UNPARSABLE`), and a flavor/deck that fails to parse at all, e.g. a
-  `variables_to_define` contract violation (`STRUCTURAL`). Nothing is
+  `variables_to_define` contract violation (`STRUCTURAL`). A shared flavor
+  whose only failures are includes of deck-local files (one some deck's
+  own `content/` has) is skipped: the decks using it cover it. Nothing is
   compiled.
 - `deckz show` (alias for `deckz show tree`): show the resolved tree of
   sections and files for the current deck.
@@ -503,8 +507,10 @@ The main commands:
   directories, or unused shared/local content files (fr or `en/`). `deckz clean all` also
   removes the whole `<git_dir>/.run/` scratch tree (`run shared`/`run all`/
   `run file`/`run section`), and `<git_dir>/.check/` (`check variables`).
-- `deckz i18n missing-en [--all]`: report fr content/titles/variables with no
-  English counterpart, i.e. what a `deckz run --en` would currently fail on.
+- `deckz i18n missing-en [--all] [--untranslated]`: report fr
+  content/titles/variables with no English counterpart, i.e. what a `deckz
+  run --en` would currently fail on (and, with `--untranslated`, titles
+  that are a plain string).
 - `deckz generate-agent-notes`: print onboarding notes for an AI coding
   agent working in the repo (conventions not already covered by `--help`,
   e.g. the section/flavor syntax and local-override resolution). Prints to

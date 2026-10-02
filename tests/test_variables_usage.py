@@ -157,3 +157,25 @@ def test_check_variables_json_output(
         "section": str(git_dir / "content" / "greeting" / "greeting.yml"),
         "name": "format",
     } in records
+
+
+def test_check_variables_skips_flavors_including_deck_local_files(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    git_dir = _repo(tmp_path, monkeypatch)
+    # "about@deck" includes a file only the deck has: it can't resolve on its
+    # own, and the deck covers it. "about@typo" includes a file nothing has.
+    _write(
+        git_dir / "content" / "about" / "about.yml",
+        "flavors:\n"
+        "  - name: deck\n    includes:\n      - intro\n      - description\n"
+        "  - name: typo\n    includes:\n      - intro\n      - descriptoin\n",
+    )
+    _write(git_dir / "content" / "about" / "intro.md", "Hello.\n")
+    _write(git_dir / "company" / "content" / "about" / "description.md", "D.\n")
+
+    report = check_variables(GlobalSettings.from_yaml(git_dir))
+
+    contexts = {context for context, _ in report.structural}
+    assert "shared:about@deck" not in contexts
+    assert "shared:about@typo" in contexts

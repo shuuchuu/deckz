@@ -15,8 +15,13 @@ reports:
 - a flavor that fails to parse at all -- typically a `variables_to_define` \
     contract violation raised by `Parser` -- reported as a `structural` \
     finding instead of aborting the whole survey.
+
+A shared flavor whose only failures are includes of deck-local files (a \
+file some deck's own `content/` has, e.g. a per-deck description) can't be \
+resolved on its own, by design: it's skipped, the decks using it cover it.
 """
 
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -24,7 +29,7 @@ from typing import TYPE_CHECKING, Any
 from jinja2 import TemplateSyntaxError, nodes
 from pydantic import ValidationError
 
-from ..exceptions import DeckzError
+from ..exceptions import DeckParsingError, DeckzError
 from ..models import Deck, File, FlavorName, Lang, Node, Section, SectionDefinition
 from ..utils import all_deck_settings, load_yaml, shared_section_ids
 
@@ -156,6 +161,38 @@ def _walk_deck(
             _walk_node(node, [], renderer, acc)
 
 
+def _failed_nodes(nodes: Iterable[Node]) -> Iterator[Node]:
+    for node in nodes:
+        if node.parsing_error is not None:
+            yield node
+        if isinstance(node, Section):
+            yield from _failed_nodes(node.nodes)
+
+
+def _only_deck_local_gaps(
+    deck: Deck, local_content_dirs: list[Path], file_extensions: tuple[str, ...]
+) -> bool:
+    """Whether every failure of a shared flavor is a file only decks have.
+
+    Returns:
+        True if each failed node is a file that's missing from the shared \
+        content but present in some deck's local content directory.
+    """
+    failed = [
+        node for part in deck.parts.values() for node in _failed_nodes(part.nodes)
+    ]
+    return all(
+        isinstance(node, File)
+        and node.resolved_path is None
+        and any(
+            (content_dir / node.unresolved_path.with_suffix(extension)).is_file()
+            for content_dir in local_content_dirs
+            for extension in file_extensions
+        )
+        for node in failed
+    )
+
+
 def _shared_flavor_contexts(
     settings: "GlobalSettings",
 ) -> list[tuple[str, FlavorName, str]]:
@@ -189,18 +226,26 @@ def check_variables(settings: "GlobalSettings", lang: Lang = "fr") -> VariablesR
     renderer = GlobalSettingsFactory(settings).renderer()
     git_dir = settings.paths.git_dir
 
+    all_decks = list(all_deck_settings(git_dir))
+    local_content_dirs = [d.paths.local_content_dir for d in all_decks]
     scratch_settings = DeckSettings.from_yaml(check_scratch_dir(git_dir, "variables"))
     shared_base_variables = {**get_variables(scratch_settings, lang), "lang": lang}
     shared_parser = GlobalSettingsFactory(settings).shared_parser(lang, lenient=True)
     for section_id, flavor, context in _shared_flavor_contexts(settings):
         try:
             deck = shared_parser.from_section(section_id, flavor)
+        except DeckParsingError as e:
+            if not _only_deck_local_gaps(
+                e.deck, local_content_dirs, settings.file_extensions
+            ):
+                acc.report.structural.append((context, str(e)))
+            continue
         except DeckzError as e:
             acc.report.structural.append((context, str(e)))
             continue
         _walk_deck(deck, shared_base_variables, renderer, acc)
 
-    for deck_settings in all_deck_settings(git_dir):
+    for deck_settings in all_decks:
         deck_context = str(
             deck_settings.paths.deck_definition.parent.relative_to(git_dir)
         )

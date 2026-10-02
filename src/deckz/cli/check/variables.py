@@ -25,7 +25,9 @@ def check_variables(
     - `STRUCTURAL <context> <error>`: a flavor/deck fails to parse at all
         (commonly a flavor missing a `variables_to_define` entry, or one
         with a value outside its `allowed_values`) -- the detailed tree is
-        printed to stderr, same as any other parsing failure.
+        printed to stderr, same as any other parsing failure. A shared
+        flavor whose only failures are includes of deck-local files is
+        skipped: the decks using it cover it.
 
     With --json, prints one JSON array of objects instead, each with a
     "kind" (undefined/unused/unparsable/structural) and the same fields:
