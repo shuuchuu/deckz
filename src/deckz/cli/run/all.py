@@ -9,6 +9,7 @@ def all(  # ruff: ignore[builtin-variable-shadowing]
     handout: bool = False,
     presentation: bool = True,
     print: bool = False,  # ruff: ignore[builtin-argument-shadowing]
+    html: bool = False,
     en: bool = False,
     dry_run: bool = False,
     workdir: Path = Path(),
@@ -24,8 +25,9 @@ def all(  # ruff: ignore[builtin-variable-shadowing]
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
+        html: Produce an HTML deck (whole deck, with a table of contents)
         en: Compile the English variant
-        dry_run: Only print the PDFs that would be compiled and the content
+        dry_run: Only print the outputs that would be compiled and the content
             fragments each would re-render, without building anything
         workdir: Path to move into before running the command
 
@@ -34,7 +36,9 @@ def all(  # ruff: ignore[builtin-variable-shadowing]
     from .._presentation import RichProgress, print_plan_of
 
     lang = "en" if en else "fr"
-    outputs = OutputKinds(handout=handout, presentation=presentation, print=print)
+    outputs = OutputKinds(
+        handout=handout, presentation=presentation, print=print, html=html
+    )
     targets = all_targets(workdir, lang)
     if dry_run:
         print_plan_of(targets, lang, outputs)

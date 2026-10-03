@@ -38,9 +38,13 @@ def test_settings_are_frozen(tmp_path: Path) -> None:
 
 def test_with_output_dirs_leaves_the_original_untouched(tmp_path: Path) -> None:
     settings = DeckSettings.from_yaml(_deck_dir(tmp_path))
-    copy = settings.with_output_dirs(tmp_path / "build", tmp_path / "pdf")
+    copy = settings.with_output_dirs(
+        tmp_path / "build", tmp_path / "pdf", tmp_path / "html"
+    )
     assert copy.paths.pdf_dir == tmp_path / "pdf"
+    assert copy.paths.html_dir == tmp_path / "html"
     assert settings.paths.pdf_dir != tmp_path / "pdf"
+    assert settings.paths.html_dir == settings.paths.current_dir / "html"
 
 
 def test_unsupported_deckz_yml_schema_version_is_rejected(tmp_path: Path) -> None:

@@ -12,6 +12,7 @@ def run(
     handout: bool = True,
     presentation: bool = True,
     print: bool = True,  # ruff: ignore[builtin-argument-shadowing]
+    html: bool = False,
     en: bool = False,
     watch: bool = False,
     dry_run: bool = False,
@@ -24,11 +25,12 @@ def run(
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
+        html: Produce an HTML deck (whole deck, with a table of contents)
         en: Compile the English variant. Every resolved file, title and
             variable must have a complete English translation, or the build
             fails immediately
         watch: Recompile on file changes, instead of compiling once
-        dry_run: Only print the PDFs that would be compiled and the content
+        dry_run: Only print the outputs that would be compiled and the content
             fragments each would re-render (new or changed since its last
             build), without building anything, assets included
         workdir: Path to move into before running the command
@@ -41,7 +43,9 @@ def run(
 
     settings = DeckSettings.from_yaml(workdir)
     lang = "en" if en else "fr"
-    outputs = OutputKinds(handout=handout, presentation=presentation, print=print)
+    outputs = OutputKinds(
+        handout=handout, presentation=presentation, print=print, html=html
+    )
 
     if dry_run:
         print_plan_of(deck_targets(settings, lang, parts), lang, outputs)
@@ -66,7 +70,13 @@ def run(
         to_watch.append(settings.paths.user_config_dir)
     _watch(
         frozenset(to_watch),
-        frozenset([settings.paths.pdf_dir, settings.paths.build_dir]),
+        frozenset(
+            [
+                settings.paths.pdf_dir,
+                settings.paths.html_dir,
+                settings.paths.build_dir,
+            ]
+        ),
         _run,
         settings=settings,
         lang=lang,

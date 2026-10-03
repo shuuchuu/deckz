@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head><title>{{ variables.deck_title }}</title></head>
+<body>
+<h1>{{ variables.deck_title }}</h1>
+<img src="{{ variables.company_logo }}" alt="logo">
+{% for part in parts %}
+{% for item in part.sections %}
+{% if item is string %}
+<section>
+{{ fragment(item) }}
+</section>
+{% else %}
+<h{{ item.level + 2 }}>{{ item.title }}</h{{ item.level + 2 }}>
+{% endif %}
+{% endfor %}
+{% endfor %}
+</body>
+</html>

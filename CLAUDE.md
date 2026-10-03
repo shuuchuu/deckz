@@ -137,6 +137,24 @@ files living under any deck's directory, not just one
 `current_dir`/`content_dir` pair. `build` raises `CompilationError`, naming
 the target's label, when any PDF fails to compile, so every `run` command
 fails.
+
+Each compilation has an output `Format` (`components/deck_builder.py`):
+`CompileType`s `Handout`/`Presentation`/`PrintHandout` are `Typst`, and
+`Html` (`--html`, one whole-deck `{deck}-html` item) is `Html`. The factory
+hands the deck builder one `OutputFormat` per format (main template,
+fragment suffix, Markdown converter, "compiler", output dir): Typst is
+`main.typ` + `pandoc_command` + `TypstCompiler` → `pdf/`, HTML is
+`main.html` + `html_pandoc_command` + `HtmlPackager`
+(`components/html_packager.py`) → `html/<name>/`, a directory synced by
+`deck_builder.publish`/`utils.sync_tree`. The main template is rendered
+*after* its fragments and gets a `fragment(section)` callable returning a
+converted fragment's text: HTML has no `#include`, so `main.html` inlines
+them (in Python, never via Jinja `include`, which would re-template `{{`
+inside converted code). The packager copies the page as `index.html` plus
+every local file it references (attributes, `style`, CSS `url()`/`@import`,
+recursively) and the `html_static_dirs`, failing on a missing,
+root-absolute or out-of-tree reference. deckz knows nothing of reveal.js:
+that, and `FORMAT`-aware Lua filters, are the target repo's business.
 `deckz run file`/`deckz run section` get their `.run/` scratch output dirs
 from `checking.preview_settings`, a copy of the deck's settings; settings
 objects are never mutated after construction. `pipelines.plan` (backing

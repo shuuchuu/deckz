@@ -48,6 +48,7 @@ root (git repository)
 │   ├── assets_builders.py
 │   └── jinja2
 │       ├── main.typ
+│       ├── main.html
 │       └── env.py
 ├── content
 │   └── some-section
@@ -82,6 +83,9 @@ root (git repository)
   builders](#assets-builders).
 - `templates/jinja2/main.typ`: the Jinja2 template used to render every
   deck's main Typst file.
+- `templates/jinja2/main.html`: optional, the Jinja2 template of every
+  deck's HTML page, for `--html` builds -- see [HTML
+  output](#html-output).
 - `templates/jinja2/env.py`: the Python module that configures the Jinja2
   environment(s) used to render content files -- see [Content files and
   the Jinja2 environment](#content-files-and-the-jinja2-environment).
@@ -148,6 +152,12 @@ typst_ignore_system_fonts: true
   directory, so any path an argument needs (e.g. a `--lua-filter`) should be
   written as `{git_dir}` or `{templates_dir}`, substituted with the resolved
   absolute path -- a bare relative path would not resolve consistently.
+- `html_pandoc_command`: the same as `pandoc_command`, for `--html`
+  builds: converts each content file to an `.html` fragment instead (see
+  [HTML output](#html-output)). Defaults to none, and `--html` then fails.
+- `html_static_dirs`: directories of `assets` copied whole into every
+  HTML output, on top of the files its page references, for files only
+  scripts load (e.g. a math renderer's fonts). Defaults to none.
 - `file_extensions`: the extensions tried, in order, when resolving a file
   include. Defaults to `[".md"]`.
 
@@ -295,7 +305,7 @@ cover both languages, so an `en/` file counts as used whenever a
   (and, with `--untranslated`, the merely informational plain strings)
   without needing to actually compile it.
 - fr and `--en` builds write to separate output paths (an `en/` subdirectory
-  under `.build`/`pdf`), so both can be built from the same checkout without
+  under `.build`/`pdf`/`html`), so both can be built from the same checkout without
   clobbering each other.
 
 ### Content files and the Jinja2 environment
@@ -414,6 +424,40 @@ entirely up to how you write your Markdown and configure `pandoc_command`
 pointing at Lua filters you maintain in this repository, e.g. under
 `templates/pandoc/`) -- `deckz` only orchestrates the conversion.
 
+### HTML output
+
+`deckz run --html` (off by default, on every `run` command) also produces
+each deck as an HTML page, e.g. a reveal.js presentation: one per deck,
+covering every part, like the full handout. `deckz` has no opinion on what
+the page looks like: like a PDF, it's the repository's own main template,
+`templates/jinja2/main.html` (`paths.jinja2_html_main_template`), rendered
+with the same context as `main.typ`, fed with content files converted by
+`html_pandoc_command` instead of `pandoc_command`. Since HTML has no
+`#include`, the template inlines each converted fragment itself, with the
+`fragment` function it's given:
+
+```jinja
+{% for part in parts %}
+{% for item in part.sections %}
+{% if item is string %}{{ fragment(item) }}{% else %}<h2>{{ item.title }}</h2>{% endif %}
+{% endfor %}
+{% endfor %}
+```
+
+The page is rendered in the deck's build directory, where every `assets`
+subdirectory is linked, so it references assets relatively
+(`img/logo.png`, `fonts/...`). `deckz` then packages it into
+`html/<deck>-html/` (`html/en/...` for `--en`): the page as `index.html`,
+plus every local file it references (`src`, `href`, `poster`, `data-src`,
+`srcset`, ..., CSS `url()`/`@import`, recursively) and the
+`html_static_dirs`, ready to serve or copy anywhere. A reference to a
+missing file, a root-absolute one (`/img/...`) or one outside the build
+directory fails the build; URLs (`https:`, `data:`, ...) and anchors are
+left alone.
+
+Filters can tell the two conversions apart with pandoc's `FORMAT` (e.g.
+`typst` vs `revealjs`), so one Lua filter can handle a construct for both.
+
 ### Upgrading from 28.x (LaTeX removal)
 
 `deckz` no longer compiles LaTeX. In a repository still laid out for 28.x:
@@ -454,11 +498,12 @@ The main commands:
   `deckz run assets`: compile the deck in the current directory, a single
   content file, a specific section flavor, or the project's assets.
   Add `--en` to compile the English variant (see [Titles, variables and
-  `--en`](#titles-variables-and---en)), or `--watch` to recompile on file
+  `--en`](#titles-variables-and---en)), `--html` to also produce the HTML
+  deck (see [HTML output](#html-output)), or `--watch` to recompile on file
   changes instead of once. With `--dry-run`, every `deckz run` command
-  except `run assets` only prints the PDFs it would compile and, for each,
-  the content fragments it would re-render (new or changed since that
-  PDF's last build), without building anything.
+  except `run assets` only prints the outputs it would compile and, for
+  each, the content fragments it would re-render (new or changed since
+  that output's last build), without building anything.
   `run file`/`run section` write their output
   under `<git_dir>/.run/`, not the current deck's own `pdf`/`.build`, and
   open it once done (add `--no-open` for agentic/headless use, where only

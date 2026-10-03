@@ -13,7 +13,7 @@ from typing import Any
 from pytest import MonkeyPatch, raises
 
 from deckz.components import deck_builder
-from deckz.components.deck_builder import DeckBuilder
+from deckz.components.deck_builder import DeckBuilder, Format, OutputFormat
 from deckz.components.progress import NullProgress
 from deckz.models import (
     CompileResult,
@@ -39,10 +39,16 @@ class FakeRenderer:
     ) -> Any:
         if template_path.suffix == ".j2":
             self.fragments.append(template_path)
-        variables = kwargs.get("variables", {})
-        output_path.write_text(
-            f"{template_path.read_text(encoding='utf8')}{variables}", encoding="utf8"
-        )
+        text = template_path.read_text(encoding="utf8")
+        if template_path.suffix == ".html":
+            # An HTML main template inlines its fragments.
+            text += "".join(
+                kwargs["fragment"](section)
+                for part in kwargs["parts"]
+                for section in part.sections
+                if isinstance(section, str)
+            )
+        output_path.write_text(f"{text}{kwargs.get('variables', {})}", encoding="utf8")
         return {}
 
     def environment_for(self, suffix: str) -> Any:
@@ -73,6 +79,14 @@ class FakeCompiler:
         return CompileResult(ok=True)
 
 
+class FakePackager:
+    def compile(self, file: Path) -> CompileResult:
+        site = file.with_suffix(".site")
+        site.mkdir(exist_ok=True)
+        (site / "index.html").write_text(file.read_text(encoding="utf8"))
+        return CompileResult(ok=True)
+
+
 class Repo:
     def __init__(self, root: Path) -> None:
         self.root = root
@@ -80,9 +94,13 @@ class Repo:
         self.content.mkdir()
         self.template = root / "main.typ"
         self.template.write_text("main", encoding="utf8")
+        self.html_template = root / "main.html"
+        self.html_template.write_text("<main>", encoding="utf8")
         self.renderer = FakeRenderer()
         self.converter = FakeConverter()
+        self.html_converter = FakeConverter()
         self.compiler = FakeCompiler()
+        self.packager = FakePackager()
 
     def write(self, name: str, text: str) -> None:
         (self.content / name).write_text(text, encoding="utf8")
@@ -96,22 +114,41 @@ class Repo:
             variables=variables or {},
         )
 
-    def builder(self, *files: File) -> DeckBuilder:
+    def builder(
+        self, *files: File, handout: bool = True, html: bool = False
+    ) -> DeckBuilder:
         deck = Deck(name="deck", parts={PartName("p1"): Part(title=None, nodes=files)})
         return DeckBuilder(
             variables={},
             deck=ResolvedDeck(deck),
             build_presentation=False,
-            build_handout=True,
+            build_handout=handout,
             build_print=False,
-            output_dir=self.root / "pdf",
+            build_html=html,
+            formats={
+                Format.Typst: OutputFormat(
+                    template=self.template,
+                    fragment_suffix=".typ",
+                    markdown_converter=self.converter,
+                    compiler=self.compiler,
+                    output_dir=self.root / "pdf",
+                    artifact_suffix=".pdf",
+                    output_suffix=".pdf",
+                ),
+                Format.Html: OutputFormat(
+                    template=self.html_template,
+                    fragment_suffix=".html",
+                    markdown_converter=self.html_converter,
+                    compiler=self.packager,
+                    output_dir=self.root / "html",
+                    artifact_suffix=".site",
+                    output_suffix="",
+                ),
+            },
             build_dir=self.root / "build",
             dirs_to_link=(),
-            template=self.template,
             basedirs=(self.content,),
-            compiler=self.compiler,
             renderer=self.renderer,
-            markdown_converter=self.converter,
             progress=NullProgress(),
         )
 
@@ -192,6 +229,64 @@ def test_same_file_with_different_variables_renders_twice(tmp_path: Path) -> Non
         for path in (tmp_path / "build" / "deck-handout").glob("a-*.md")
     )
     assert rendered == ["A{'depth': 'deep'}", "A{'depth': 'shallow'}"]
+
+
+def test_html_inlines_converted_fragments_and_publishes_a_directory(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+
+    builder = repo.builder(
+        repo.file("a.md"), repo.file("b.md"), handout=False, html=True
+    )
+    planned = builder.plan()
+    assert builder.build_deck()
+
+    assert [p.output_path for p in planned] == [tmp_path / "html" / "deck-html"]
+    build_dir = tmp_path / "build" / "deck-html"
+    assert len(list(build_dir.glob("*.html"))) == 3  # the page, two fragments
+    assert not list(build_dir.glob("*.typ"))
+    assert repo.html_converter.converted
+    assert not repo.converter.converted
+    index = (tmp_path / "html" / "deck-html" / "index.html").read_text(encoding="utf8")
+    # The main template was rendered after the fragments it inlines.
+    assert index.startswith("<main>")
+    assert "A{}" in index
+    assert "B{}" in index
+
+
+def test_html_publishing_removes_stale_files(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    repo.builder(repo.file("a.md"), handout=False, html=True).build_deck()
+    stale = tmp_path / "html" / "deck-html" / "img" / "old.png"
+    stale.parent.mkdir()
+    stale.write_bytes(b"")
+
+    repo.builder(repo.file("a.md"), handout=False, html=True).build_deck()
+
+    assert not stale.parent.exists()
+    assert (tmp_path / "html" / "deck-html" / "index.html").is_file()
+
+
+def test_html_without_its_format_is_rejected(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    deck = Deck(name="deck", parts={PartName("p1"): Part(title=None, nodes=())})
+
+    with raises(ValueError, match="html"):
+        DeckBuilder(
+            variables={},
+            deck=ResolvedDeck(deck),
+            build_presentation=False,
+            build_handout=False,
+            build_print=False,
+            build_html=True,
+            formats={},
+            build_dir=tmp_path / "build",
+            dirs_to_link=(),
+            basedirs=(repo.content,),
+            renderer=repo.renderer,
+            progress=NullProgress(),
+        )
 
 
 def test_interrupt_does_not_wait_for_running_compilations(

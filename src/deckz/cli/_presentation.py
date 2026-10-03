@@ -22,6 +22,7 @@ from ..models import Deck, File, NodeVisitor, Part, PartName, Section, Unresolve
 
 if TYPE_CHECKING:
     from ..components.deck_builder import PlannedCompile
+    from ..configuring.settings import DeckSettings
     from ..models import Lang
     from ..pipelines import BuildTarget, OutputKinds
 
@@ -139,6 +140,33 @@ def open_path(path: Path) -> None:
     Popen([command, str(path)], stdout=DEVNULL, stderr=DEVNULL, stdin=DEVNULL)
 
 
+def show_output_dirs(
+    settings: "DeckSettings", outputs: "OutputKinds", *, open_dir: bool
+) -> None:
+    """Log where a `run file`/`run section` preview writes, and maybe open it.
+
+    Args:
+        settings: The preview's settings.
+        outputs: What the preview builds.
+        open_dir: Open the output directory: the HTML one when only HTML is \
+            built.
+    """
+    from logging import getLogger
+
+    logger = getLogger(__name__)
+    pdfs = outputs.handout or outputs.presentation or outputs.print
+    dirs = [settings.paths.pdf_dir] if pdfs or not outputs.html else []
+    if outputs.html:
+        dirs.append(settings.paths.html_dir)
+    for directory in dirs:
+        logger.info(
+            f"Output directory located at [link=file://{directory}]{directory}[/link]",
+            extra={"markup": True},
+        )
+    if open_dir:
+        open_path(dirs[0])
+
+
 def print_json(data: object) -> None:
     """Print `data` to stdout as JSON, for a command's `--json`.
 
@@ -205,7 +233,7 @@ def print_plan_of(
 
 
 def print_plan(planned: Iterable["PlannedCompile"], relative_to: Path) -> None:
-    """Print what a build would do, one PDF per line, then its changed fragments.
+    """Print what a build would do, one output per line, then its changed fragments.
 
     Args:
         planned: The build's plan.

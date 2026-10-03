@@ -19,6 +19,7 @@ from .protocols import (
 if TYPE_CHECKING:
     from ..configuring.settings import DeckSettings, GlobalSettings
     from ..models import Lang, ResolvedDeck
+    from .deck_builder import OutputFormat
 
 
 class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
@@ -53,6 +54,17 @@ class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
         )
 
     def markdown_converter(self) -> MarkdownConverterProtocol:
+        return self._pandoc_converter(self._settings.pandoc_command)
+
+    def html_markdown_converter(self) -> MarkdownConverterProtocol:
+        return self._pandoc_converter(self._settings.html_pandoc_command)
+
+    def html_packager(self) -> CompilerProtocol:
+        from .html_packager import HtmlPackager
+
+        return HtmlPackager(static_dirs=self._settings.html_static_dirs)
+
+    def _pandoc_converter(self, command: tuple[str, ...]) -> MarkdownConverterProtocol:
         from .markdown_converter import PandocConverter
 
         # PandocConverter runs pandoc with a cwd matching the content
@@ -64,7 +76,7 @@ class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
         paths = self._settings.paths
         pandoc_command = tuple(
             arg.format(git_dir=paths.git_dir, templates_dir=paths.templates_dir)
-            for arg in self._settings.pandoc_command
+            for arg in command
         )
         return PandocConverter(pandoc_command=pandoc_command)
 
@@ -154,24 +166,42 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
         build_presentation: bool,
         build_handout: bool,
         build_print: bool,
+        build_html: bool = False,
         basedirs: tuple[Path, ...] | None = None,
         progress: ProgressReporterProtocol | None = None,
     ) -> DeckBuilderProtocol:
-        from .deck_builder import DeckBuilder
+        from .deck_builder import DeckBuilder, Format, OutputFormat
         from .progress import NullProgress
 
-        output_dir = self._settings.paths.pdf_dir
-        build_dir = self._settings.paths.build_dir
+        paths = self._settings.paths
+        pdf_dir, html_dir, build_dir = paths.pdf_dir, paths.html_dir, paths.build_dir
         if self._lang == "en":
-            output_dir = output_dir / "en"
-            build_dir = build_dir / "en"
+            pdf_dir, html_dir, build_dir = (
+                pdf_dir / "en",
+                html_dir / "en",
+                build_dir / "en",
+            )
 
-        assets_dir = self._settings.paths.assets_dir
+        assets_dir = paths.assets_dir
         dirs_to_link = (
             tuple(d for d in assets_dir.iterdir() if d.is_dir())
             if assets_dir.is_dir()
             else ()
         )
+
+        formats = {
+            Format.Typst: OutputFormat(
+                template=paths.jinja2_main_template,
+                fragment_suffix=".typ",
+                markdown_converter=self.markdown_converter(),
+                compiler=self.compiler(),
+                output_dir=pdf_dir,
+                artifact_suffix=".pdf",
+                output_suffix=".pdf",
+            )
+        }
+        if build_html:
+            formats[Format.Html] = self._html_format(html_dir)
 
         return DeckBuilder(
             variables=variables,
@@ -179,19 +209,34 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
             build_presentation=build_presentation,
             build_handout=build_handout,
             build_print=build_print,
-            output_dir=output_dir,
+            build_html=build_html,
+            formats=formats,
             build_dir=build_dir,
             dirs_to_link=dirs_to_link,
-            template=self._settings.paths.jinja2_main_template,
             basedirs=basedirs
             if basedirs is not None
-            else (
-                self._settings.paths.content_dir,
-                assets_dir,
-                self._settings.paths.current_dir,
-            ),
+            else (paths.content_dir, assets_dir, paths.current_dir),
             renderer=self.renderer(),
-            compiler=self.compiler(),
-            markdown_converter=self.markdown_converter(),
             progress=progress if progress is not None else NullProgress(),
+        )
+
+    def _html_format(self, html_dir: Path) -> "OutputFormat":
+        from ..exceptions import InvalidConfigurationError
+        from .deck_builder import OutputFormat
+
+        template = self._settings.paths.jinja2_html_main_template
+        if not self._settings.html_pandoc_command:
+            msg = "HTML output needs an `html_pandoc_command` in deckz.yml"
+            raise InvalidConfigurationError(msg)
+        if not template.is_file():
+            msg = f"HTML output needs a main template, {template} not found"
+            raise InvalidConfigurationError(msg)
+        return OutputFormat(
+            template=template,
+            fragment_suffix=".html",
+            markdown_converter=self.html_markdown_converter(),
+            compiler=self.html_packager(),
+            output_dir=html_dir,
+            artifact_suffix=".site",
+            output_suffix="",
         )

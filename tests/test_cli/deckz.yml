@@ -6,3 +6,10 @@ pandoc_command:
   - typst
 # Typst's embedded fonts are enough here: skips a system font scan per PDF.
 typst_ignore_system_fonts: true
+# `--html` builds: fragments converted to HTML, inlined by main.html.
+html_pandoc_command:
+  - pandoc
+  - -f
+  - markdown-auto_identifiers
+  - -t
+  - html

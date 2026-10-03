@@ -104,11 +104,12 @@ class CompilerProtocol(Protocol):
 
 
 class MarkdownConverterProtocol(Protocol):
-    """Convert a rendered Markdown file to Typst.
+    """Convert a rendered Markdown file to Typst, or to HTML.
 
     Implementations shell out to `pandoc`; the actual command (binary, \
     `--lua-filter=...`, etc.) is entirely configured by the \
-    target repo via `deckz.yml`'s `pandoc_command`.
+    target repo via `deckz.yml`'s `pandoc_command` (or \
+    `html_pandoc_command`).
     """
 
     def convert(self, source: Path, destination: Path) -> None: ...
@@ -156,6 +157,10 @@ class GlobalFactoryProtocol(Protocol):
 
     def markdown_converter(self) -> MarkdownConverterProtocol: ...
 
+    def html_markdown_converter(self) -> MarkdownConverterProtocol: ...
+
+    def html_packager(self) -> CompilerProtocol: ...
+
     def assets_builder(self) -> AssetsBuilderProtocol: ...
 
     def assets_metadata_retriever(self) -> AssetsMetadataRetrieverProtocol: ...
@@ -177,6 +182,7 @@ class DeckFactoryProtocol(GlobalFactoryProtocol, Protocol):
         build_presentation: bool,
         build_handout: bool,
         build_print: bool,
+        build_html: bool = False,
         basedirs: tuple[Path, ...] | None = None,
         progress: ProgressReporterProtocol | None = None,
     ) -> DeckBuilderProtocol: ...

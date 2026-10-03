@@ -52,6 +52,7 @@ class GlobalPaths(BaseModel):
     templates_dir: _Path = cast("Path", "{git_dir}/templates")
     jinja2_dir: _Path = cast("Path", "{templates_dir}/jinja2")
     jinja2_main_template: _Path = cast("Path", "{jinja2_dir}/main.typ")
+    jinja2_html_main_template: _Path = cast("Path", "{jinja2_dir}/main.html")
     jinja2_env_module: _Path = cast("Path", "{jinja2_dir}/env.py")
     assets_builders_module: _Path = cast("Path", "{templates_dir}/assets_builders.py")
     github_issues: _Path = cast("Path", "{user_config_dir}/github-issues.yml")
@@ -65,6 +66,7 @@ class GlobalPaths(BaseModel):
 class DeckPaths(GlobalPaths):
     build_dir: _Path = cast("Path", "{current_dir}/.build")
     pdf_dir: _Path = cast("Path", "{current_dir}/pdf")
+    html_dir: _Path = cast("Path", "{current_dir}/html")
     local_content_dir: _Path = cast("Path", "{current_dir}/content")
     deck_definition: _Path = cast("Path", "{current_dir}/deck.yml")
 
@@ -93,6 +95,22 @@ class GlobalSettings(BaseModel):
     fonts, identical on every machine, and each PDF skips a system font scan.
     """
     pandoc_command: tuple[str, ...] = ()
+    """Command converting a rendered Markdown fragment to Typst.
+
+    deckz appends the fragment's name and `-o <output>`, and runs it from \
+    the fragment's directory. `{git_dir}` and `{templates_dir}` are \
+    substituted.
+    """
+    html_pandoc_command: tuple[str, ...] = ()
+    """Same as `pandoc_command`, converting to HTML for `--html` builds, \
+    whose main template is `paths.jinja2_html_main_template`."""
+    html_static_dirs: tuple[str, ...] = ()
+    """Directories of the build directory (i.e. of `assets/`) copied whole \
+    into every HTML output, on top of the files its page references.
+
+    For files only scripts load, which packaging can't find by itself, e.g. \
+    a math renderer's fonts and extensions.
+    """
     file_extensions: tuple[str, ...] = (".md",)
     paths: GlobalPaths = Field(default_factory=GlobalPaths)
 
@@ -140,17 +158,18 @@ class GlobalSettings(BaseModel):
 class DeckSettings(GlobalSettings):
     paths: DeckPaths = Field(default_factory=DeckPaths)
 
-    def with_output_dirs(self, build_dir: Path, pdf_dir: Path) -> Self:
-        """Copy of these settings writing to other build and PDF directories.
+    def with_output_dirs(self, build_dir: Path, pdf_dir: Path, html_dir: Path) -> Self:
+        """Copy of these settings writing to other build and output directories.
 
         Args:
             build_dir: Absolute path of the new build directory.
             pdf_dir: Absolute path of the new PDF directory.
+            html_dir: Absolute path of the new HTML directory.
 
         Returns:
             The copy. These settings are left untouched.
         """
         paths = self.paths.model_copy(
-            update={"build_dir": build_dir, "pdf_dir": pdf_dir}
+            update={"build_dir": build_dir, "pdf_dir": pdf_dir, "html_dir": html_dir}
         )
         return self.model_copy(update={"paths": paths})

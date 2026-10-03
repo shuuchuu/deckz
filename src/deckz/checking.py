@@ -69,7 +69,7 @@ def preview_settings(settings: DeckSettings, *parts: str) -> DeckSettings:
     """Copy of a deck's settings writing to a `deckz run file`/`section` scratch tree.
 
     The deck itself (its `current_dir`, local content dir, variables) stays \
-    the same: only the build and PDF directories move, under \
+    the same: only the build and output directories move, under \
     `<git_dir>/.run/<parts...>/`, so repeated previews don't clutter the \
     deck's own output.
 
@@ -82,7 +82,9 @@ def preview_settings(settings: DeckSettings, *parts: str) -> DeckSettings:
         The copy. `settings` is left untouched.
     """
     scratch_dir = settings.paths.git_dir.joinpath(".run", *parts)
-    return settings.with_output_dirs(scratch_dir / ".build", scratch_dir / "pdf")
+    return settings.with_output_dirs(
+        scratch_dir / ".build", scratch_dir / "pdf", scratch_dir / "html"
+    )
 
 
 def build_shared_deck(

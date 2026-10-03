@@ -33,7 +33,7 @@ from ..models import (
     Title,
     TitleOrContent,
 )
-from ..utils import copy_file_if_changed, file_changed
+from ..utils import copy_file_if_changed, file_changed, sync_tree
 from .protocols import (
     CompilerProtocol,
     DeckBuilderProtocol,
@@ -45,10 +45,45 @@ from .protocols import (
 _logger = getLogger(__name__)
 
 
+class Format(Enum):
+    """What a compilation produces: a PDF through Typst, or an HTML directory."""
+
+    Typst = "typst"
+    Html = "html"
+
+
 class CompileType(Enum):
     Handout = "handout"
     Presentation = "presentation"
     PrintHandout = "print-handout"
+    Html = "html"
+
+    @property
+    def format(self) -> Format:
+        return Format.Html if self is CompileType.Html else Format.Typst
+
+
+@dataclass(frozen=True)
+class OutputFormat:
+    """How to build one [`Format`][deckz.components.deck_builder.Format].
+
+    A compilation renders `template` to `<name><template suffix>` in its \
+    build dir, next to its fragments converted by `markdown_converter` to \
+    `fragment_suffix` files, then `compiler` turns it into an artifact next \
+    to it, `<name><artifact_suffix>`: a file (the PDF) or a directory (the \
+    packaged HTML), published to `output_dir` as `<name><output_suffix>`.
+    """
+
+    template: Path
+    fragment_suffix: str
+    markdown_converter: MarkdownConverterProtocol
+    compiler: CompilerProtocol
+    output_dir: Path
+    artifact_suffix: str
+    output_suffix: str
+
+    def output_path(self, name: str) -> Path:
+        return self.output_dir / f"{name}{self.output_suffix}"
 
 
 def variables_fingerprint(variables: Mapping[str, Any]) -> str:
@@ -117,23 +152,23 @@ class DependencyRef:
 
 @dataclass(frozen=True)
 class PlannedCompile:
-    """One PDF a build would produce, and what it would render first."""
+    """One PDF or HTML output a build would produce, and what it would render first."""
 
     name: str
     """Name of the compilation, e.g. `"abc-handout"`."""
 
     output_path: Path
-    """Where the PDF would be written."""
+    """Where the output would be written."""
 
     fragments: int
-    """How many content fragments the PDF includes."""
+    """How many content fragments the output includes."""
 
     full_render: bool
     """Whether every fragment would be rendered: on a first build, or after a \
     change of the Markdown converter's command or filters."""
 
     changed_fragments: tuple[ResolvedPath, ...]
-    """Fragments new or changed since this PDF's last build, rendered even \
+    """Fragments new or changed since this output's last build, rendered even \
     without `full_render`."""
 
 
@@ -153,33 +188,35 @@ class DeckBuilder(DeckBuilderProtocol):
         build_presentation: bool,
         build_handout: bool,
         build_print: bool,
-        output_dir: Path,
+        build_html: bool,
+        formats: Mapping[Format, OutputFormat],
         build_dir: Path,
         dirs_to_link: tuple[Path, ...],
-        template: Path,
         basedirs: tuple[Path, ...],
-        compiler: CompilerProtocol,
         renderer: RendererProtocol,
-        markdown_converter: MarkdownConverterProtocol,
         progress: ProgressReporterProtocol,
     ):
         self._variables = variables
         self._build_presentation = build_presentation
         self._build_handout = build_handout
         self._build_print = build_print
+        self._build_html = build_html
         self._deck_name = deck.name
         self._parts_slides = _SlidesNodeVisitor(basedirs).process(deck)
         self._dependencies = PartDependenciesNodeVisitor().process(deck)
-        self._output_dir = output_dir
+        self._formats = formats
         self._build_dir = build_dir
         self._dirs_to_link = dirs_to_link
-        self._template = template
         self._basedirs = basedirs
-        self._compiler = compiler
         self._renderer = renderer
-        self._markdown_converter = markdown_converter
         self._progress = progress
         self._logger = getLogger(__name__)
+        missing = {
+            item.compile_type.format for item in self._list_items().values()
+        } - formats.keys()
+        if missing:
+            msg = f"no output format configured for {sorted(f.value for f in missing)}"
+            raise ValueError(msg)
 
     def plan(self) -> list[PlannedCompile]:
         """What `build_deck` would compile and render, without doing any of it.
@@ -187,14 +224,15 @@ class DeckBuilder(DeckBuilderProtocol):
         Returns:
             One entry per PDF, in compilation order.
         """
-        markdown_fingerprint = self._markdown_converter.fingerprint()
         planned = []
         for name, item in self._list_items().items():
+            output_format = self._formats[item.compile_type.format]
             build_dir = self._build_dir / name
             fingerprint_path = build_dir / ".markdown-fingerprint"
             full_render = (
                 not fingerprint_path.is_file()
-                or fingerprint_path.read_text(encoding="utf8") != markdown_fingerprint
+                or fingerprint_path.read_text(encoding="utf8")
+                != output_format.markdown_converter.fingerprint()
             )
             changed = tuple(
                 sorted(
@@ -209,7 +247,7 @@ class DeckBuilder(DeckBuilderProtocol):
             planned.append(
                 PlannedCompile(
                     name=name,
-                    output_path=self._output_dir / f"{name}.pdf",
+                    output_path=output_format.output_path(name),
                     fragments=len(item.dependencies),
                     full_render=full_render,
                     changed_fragments=changed,
@@ -221,10 +259,14 @@ class DeckBuilder(DeckBuilderProtocol):
         items = self._list_items()
         if not items:
             self._logger.warning(
-                "Nothing to compile: handout, presentation and print are all disabled"
+                "Nothing to compile: handout, presentation, print and html are all "
+                "disabled"
             )
             return True
-        self._markdown_fingerprint = self._markdown_converter.fingerprint()
+        self._markdown_fingerprints = {
+            output_format: self._formats[output_format].markdown_converter.fingerprint()
+            for output_format in {item.compile_type.format for item in items.values()}
+        }
         results = []
         # Threads, not processes: rendering is cheap next to pandoc and the
         # compiler, which both run in subprocesses. Staying in this process
@@ -279,6 +321,10 @@ class DeckBuilder(DeckBuilderProtocol):
             to_compile[self._name_compile_item(CompileType.PrintHandout)] = CompileItem(
                 all_slides, all_dependencies, CompileType.PrintHandout, True
             )
+        if self._build_html:
+            to_compile[self._name_compile_item(CompileType.Html)] = CompileItem(
+                all_slides, all_dependencies, CompileType.Html, True
+            )
         for name, slides in self._parts_slides.items():
             dependencies = self._dependencies[name]
             if self._build_presentation:
@@ -293,11 +339,10 @@ class DeckBuilder(DeckBuilderProtocol):
 
     def _build_item(self, name: str, item: CompileItem) -> CompileResult:
         start = perf_counter()
+        output_format = self._formats[item.compile_type.format]
+        markdown_fingerprint = self._markdown_fingerprints[item.compile_type.format]
         build_dir = setup_build_dir(self._build_dir, name, self._dirs_to_link)
-        main_path = build_dir / f"{name}{self._template.suffix}"
-        build_pdf_path = main_path.with_suffix(".pdf")
-        output_pdf_path = self._output_dir / f"{name}.pdf"
-        self._render_main(item, main_path)
+        main_path = build_dir / f"{name}{output_format.template.suffix}"
         # `copy_dependencies` only re-copies (and so re-renders/re-converts) a
         # fragment whose source differs from its build copy, but a pandoc
         # command or filter change doesn't touch any source: force a full
@@ -306,7 +351,7 @@ class DeckBuilder(DeckBuilderProtocol):
         fingerprint_path = build_dir / ".markdown-fingerprint"
         markdown_stale = (
             not fingerprint_path.is_file()
-            or fingerprint_path.read_text(encoding="utf8") != self._markdown_fingerprint
+            or fingerprint_path.read_text(encoding="utf8") != markdown_fingerprint
         )
         if markdown_stale:
             self._logger.debug(
@@ -317,11 +362,18 @@ class DeckBuilder(DeckBuilderProtocol):
         copied = copy_dependencies(
             item.dependencies, build_dir, self._basedirs, force=markdown_stale
         )
-        render_dependencies(self._renderer, self._markdown_converter, copied)
+        render_dependencies(
+            self._renderer,
+            output_format.markdown_converter,
+            copied,
+            output_format.fragment_suffix,
+        )
         if markdown_stale:
-            fingerprint_path.write_text(self._markdown_fingerprint, encoding="utf8")
+            fingerprint_path.write_text(markdown_fingerprint, encoding="utf8")
+        # After the fragments: a main template may inline them (`fragment`).
+        self._render_main(item, output_format, main_path)
         rendered = perf_counter()
-        result = self._compiler.compile(main_path)
+        result = output_format.compiler.compile(main_path)
         self._logger.debug(
             "%s: rendered %d of %d fragments in %.2fs, compiled in %.2fs",
             name,
@@ -331,13 +383,23 @@ class DeckBuilder(DeckBuilderProtocol):
             perf_counter() - rendered,
         )
         if result.ok:
-            self._output_dir.mkdir(parents=True, exist_ok=True)
-            copyfile(build_pdf_path, output_pdf_path)
+            publish(
+                main_path.with_suffix(output_format.artifact_suffix),
+                output_format.output_path(name),
+            )
         return result
 
-    def _render_main(self, item: CompileItem, output_path: Path) -> None:
+    def _render_main(
+        self, item: CompileItem, output_format: OutputFormat, output_path: Path
+    ) -> None:
+        build_dir = output_path.parent
+
+        def fragment(section: str) -> str:
+            path = build_dir / f"{section}{output_format.fragment_suffix}"
+            return path.read_text(encoding="utf8")
+
         self._renderer.render_to_path(
-            self._template,
+            output_format.template,
             output_path,
             variables=self._variables,
             parts=item.parts,
@@ -345,7 +407,28 @@ class DeckBuilder(DeckBuilderProtocol):
             in [CompileType.Handout, CompileType.PrintHandout],
             toc=item.toc,
             print=item.compile_type is CompileType.PrintHandout,
+            fragment=fragment,
         )
+
+
+def publish(artifact: Path, output: Path) -> None:
+    """Copy a compilation's artifact, a file or a directory, to `output`.
+
+    A directory is synced: only changed files are copied, and files no \
+    longer in `artifact` are removed from `output`.
+    """
+    if not artifact.is_dir():
+        output.parent.mkdir(parents=True, exist_ok=True)
+        copyfile(artifact, output)
+        return
+    sync_tree(
+        {
+            PurePosixPath(path.relative_to(artifact).as_posix()): path
+            for path in artifact.rglob("*")
+            if path.is_file()
+        },
+        output,
+    )
 
 
 def setup_link(source: Path, target: Path) -> None:
@@ -419,12 +502,15 @@ def render_dependencies(
     renderer: RendererProtocol,
     markdown_converter: MarkdownConverterProtocol,
     to_render: Iterable[tuple[Path, Mapping[str, Any]]],
+    fragment_suffix: str,
 ) -> None:
     for item_path, variables in to_render:
         rendered_path = item_path.with_suffix("")
         renderer.render_to_path(item_path, rendered_path, variables=variables)
         if rendered_path.suffix == ".md":
-            markdown_converter.convert(rendered_path, rendered_path.with_suffix(".typ"))
+            markdown_converter.convert(
+                rendered_path, rendered_path.with_suffix(fragment_suffix)
+            )
 
 
 def _resolved_path(file: File) -> ResolvedPath:

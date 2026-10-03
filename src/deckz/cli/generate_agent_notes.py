@@ -63,6 +63,9 @@ or a declared variable nothing ever reads.
   anything.
 - Add `--watch` to `run`/`run file`/`run section`/`run assets` to
   recompile on file changes instead of once.
+- Add `--html` to any `run` command to also build the HTML deck (from
+  `templates/jinja2/main.html` and `deckz.yml`'s `html_pandoc_command`),
+  packaged under the deck's `html/` directory.
 - `deckz clean all` -- wipe every deck's build dir, plus the `.run`
   scratch directory above and `check variables`' `.check` one.
 

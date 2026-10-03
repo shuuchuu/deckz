@@ -1,11 +1,11 @@
 """Provide general utility functions that would not fit in other modules."""
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager, suppress
 from dataclasses import replace
 from multiprocessing import get_context
 from multiprocessing.pool import Pool
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from threading import Lock
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
@@ -53,6 +53,29 @@ def copy_file_if_changed(original: Path, copy: Path) -> bool:
     copy.parent.mkdir(parents=True, exist_ok=True)
     copyfile(original, copy)
     return True
+
+
+def sync_tree(files: Mapping[PurePosixPath, Path], destination: Path) -> None:
+    """Make `destination` hold exactly `files`, copying only what changed.
+
+    Args:
+        files: Source file of each path to create, relative to `destination`.
+        destination: Directory to sync. Files in it not in `files` are \
+            removed, and so are the directories left empty.
+    """
+    if destination.exists() and not destination.is_dir():
+        destination.unlink()
+    for relative, source in files.items():
+        copy_file_if_changed(source, destination / relative)
+    if not destination.is_dir():
+        destination.mkdir(parents=True)
+        return
+    for path in sorted(destination.rglob("*"), reverse=True):
+        if path.is_dir() and not path.is_symlink():
+            if not any(path.iterdir()):
+                path.rmdir()
+        elif PurePosixPath(path.relative_to(destination).as_posix()) not in files:
+            path.unlink()
 
 
 def import_module_from_path(path: Path, name: str) -> ModuleType:

@@ -48,11 +48,12 @@ class BuildTarget:
 
 @dataclass(frozen=True)
 class OutputKinds:
-    """Which PDFs to produce for each deck."""
+    """Which outputs to produce for each deck: PDFs, and an HTML directory."""
 
     handout: bool
     presentation: bool
     print: bool
+    html: bool = False
 
 
 def _deck_builder(
@@ -68,6 +69,7 @@ def _deck_builder(
         build_handout=outputs.handout,
         build_presentation=outputs.presentation,
         build_print=outputs.print,
+        build_html=outputs.html,
         basedirs=target.basedirs,
         progress=progress,
     )
@@ -113,7 +115,7 @@ def plan(
     the target repository's own code.
 
     Returns:
-        One entry per PDF `build` would produce, in order.
+        One entry per output `build` would produce, in order.
     """
     return [
         planned

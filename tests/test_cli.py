@@ -117,6 +117,44 @@ def test_run_section(working_dir: Path) -> None:
     assert "First section" in text
 
 
+_HTML_ONLY = ("--html", "--no-handout", "--no-presentation", "--no-print")
+
+
+def test_run_html(working_dir: Path, capsys: Any) -> None:
+    main(("run", *_HTML_ONLY, "--dry-run"))
+    assert capsys.readouterr().out.startswith("company/abc/html/abc-html: render all ")
+
+    main(("run", *_HTML_ONLY))
+
+    site = working_dir / "html" / "abc-html"
+    index = (site / "index.html").read_text(encoding="utf8")
+    assert "<h1>A Bold Case</h1>" in index
+    # Fragments converted by `html_pandoc_command`, inlined by `fragment`.
+    assert "<h1>Introduction</h1>" in index
+    assert "Would it save you a lot of time" in index
+    assert (site / "img" / "logo.png").is_file()
+    assert not (working_dir / "pdf").exists()
+
+
+def test_run_html_needs_its_pandoc_command(working_dir: Path) -> None:
+    deckz_yml = working_dir.parent.parent / "deckz.yml"
+    config = deckz_yml.read_text(encoding="utf8")
+    deckz_yml.write_text(config[: config.index("# `--html` builds")], encoding="utf8")
+
+    with raises(SystemExit) as exc_info:
+        main(("run", *_HTML_ONLY))
+
+    assert exc_info.value.code == 1
+
+
+def test_run_file_html(working_dir: Path) -> None:
+    main(("run", "file", "about", *_HTML_ONLY, "--no-open"))
+
+    git_dir = working_dir.parent.parent
+    index = git_dir / ".run" / "file" / "about" / "html" / "deck-html" / "index.html"
+    assert "A Bold Case" in index.read_text(encoding="utf8")
+
+
 def test_run_decks(working_dir: Path) -> None:
     main(("run", "decks"))
 
