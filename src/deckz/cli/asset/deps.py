@@ -73,7 +73,7 @@ def deps(
     settings = GlobalSettings.from_yaml(workdir)
     console = Console(highlight=False)
 
-    with console.status("Finding unlicensed assets"):
+    with Console(stderr=True).status("Finding unlicensed assets"):
         assets_analyzer = GlobalSettingsFactory(settings).assets_analyzer()
         unlicensed_assets = assets_analyzer.sections_unlicensed_images()
         sorted_unlicensed_assets = {

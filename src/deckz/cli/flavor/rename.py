@@ -38,7 +38,7 @@ def rename(
     settings = GlobalSettings.from_yaml(workdir)
     flavor_renamer = FlavorRenamer(settings.paths.git_dir, settings.paths.content_dir)
 
-    with console.status(f"Renaming {section}@{old}"):
+    with Console(stderr=True).status(f"Renaming {section}@{old}"):
         renamed = flavor_renamer.rename(
             UnresolvedPath(PurePath(section)),
             FlavorName(old),

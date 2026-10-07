@@ -70,13 +70,13 @@ def deps(
         return
 
     if unused:
-        with console.status("Processing decks"):
+        with Console(stderr=True).status("Processing decks"):
             _print_unused_report(sections_analyzer.unused_flavors(), console)
 
     if section is not None:
         if unused:
             console.print()
-        with console.status("Processing decks"):
+        with Console(stderr=True).status("Processing decks"):
             _print_section_report(
                 section,
                 flavor,

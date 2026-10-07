@@ -28,7 +28,7 @@ def content(*, dry_run: bool = False, workdir: Path = Path()) -> None:
         settings.file_extensions,
     )
 
-    with console.status("Finding unused content files"):
+    with Console(stderr=True).status("Finding unused content files"):
         unused_files = sections_analyzer.unused_files()
 
     if not unused_files:

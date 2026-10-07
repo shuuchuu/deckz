@@ -25,7 +25,7 @@ def search(asset: str, /, *, json: bool = False, workdir: Path = Path()) -> None
     console = Console(highlight=False)
 
     assets_searcher = GlobalSettingsFactory(settings).assets_searcher()
-    with console.status("Processing decks"):
+    with Console(stderr=True).status("Processing decks"):
         result = assets_searcher.search(asset)
 
     if json:
