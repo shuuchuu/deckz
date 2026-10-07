@@ -45,6 +45,22 @@ class CompilationError(DeckzError):
     pass
 
 
+class LabIdConflictError(DeckzError):
+    """`deckz labs ids` found a duplicate or already-taken notebook ID."""
+
+
+class LabPublishRefusedError(DeckzError):
+    """`deckz labs publish` refuses to publish.
+
+    Uncommitted changes, an invalid or duplicate ID, or it would drop an \
+    already-published notebook.
+    """
+
+
+class LabOutputsMismatchError(DeckzError):
+    """`deckz labs outputs` was given an executed copy with a different cell count."""
+
+
 class DeckParsingError(DeckzError):
     """Some nodes of `deck` failed to parse, each described in `errors`."""
 

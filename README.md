@@ -160,6 +160,29 @@ typst_ignore_system_fonts: true
   scripts load (e.g. a math renderer's fonts). Defaults to none.
 - `file_extensions`: the extensions tried, in order, when resolving a file
   include. Defaults to `[".md"]`.
+- `labs`: settings for the `deckz labs` commands, e.g.:
+
+  ```yaml
+  labs:
+    id_metadata_key: shuuchuu.id
+    id_pattern: '[a-z0-9]+(-[a-z0-9]+)*'
+    publish_remote: labs
+    publish_branch: main
+    solution_heading: Solution
+  ```
+
+  - `id_metadata_key`: dotted path, under a notebook's own `metadata`, of
+    its published ID (default `shuuchuu.id`).
+  - `id_pattern`: regex a notebook's published ID must fully match
+    (default `[a-z0-9]+(-[a-z0-9]+)*`).
+  - `publish_remote` / `publish_branch`: the git remote and branch
+    `deckz labs publish` force-pushes the published notebooks to (default
+    `labs`/`main`).
+  - `solution_heading`: the markdown heading text (case-insensitive)
+    marking a notebook's collapsed answer cells (default `Solution`).
+
+  The notebooks directory itself (default `{git_dir}/labs/notebooks`) is
+  `paths.labs_notebooks_dir`, set like any other path under `paths:`.
 
 `deckz.yml` files are merged, in order, from the git root, from the user's
 config directory (XDG-compliant, e.g.
@@ -556,6 +579,10 @@ The main commands:
   content/titles/variables with no English counterpart, i.e. what a `deckz
   run --en` would currently fail on (and, with `--untranslated`, titles
   that are a plain string).
+- `deckz i18n stale [PATHS...]`: report content files and lab notebooks
+  with changes not yet ported to their other-language sibling, computed
+  from git history alone (a `Lang-sync` commit trailer, not a stored
+  marker, exempts a one-sided change). `--plain` for a script or an agent.
 - `deckz generate-agent-notes`: print onboarding notes for an AI coding
   agent working in the repo (conventions not already covered by `--help`,
   e.g. the section/flavor syntax and local-override resolution). Prints to
@@ -566,11 +593,33 @@ The main commands:
 - `deckz extras issue TITLE [BODY]`: create a GitHub issue.
 - `deckz extras random REASON`: roll a dice and email the result (handy for
   arbitrary decision-making, e.g. picking who does a task).
-- `deckz extras labs NOTEBOOKS...`: normalize Jupyter notebooks (files, or
-  directories searched recursively for `*.ipynb`) to this project's Colab
-  conventions -- collapse every "Solution" markdown heading cell by
-  default, and disable Colab's generative AI features. `--dry-run` lists
-  what would change without writing.
+- `deckz labs normalize NOTEBOOKS...`: normalize Jupyter notebooks (files,
+  or directories searched recursively for `*.ipynb`) to their Colab
+  conventions -- collapse every solution markdown heading cell by default
+  (`labs.solution_heading`, "Solution" by default), and disable Colab's
+  generative AI features. `--dry-run` lists what would change without
+  writing.
+- `deckz labs fmt [NOTEBOOKS...] [--check]`: rewrite every notebook
+  (default: the configured notebooks directory) in deckz's canonical JSON
+  style, so every notebook diffs the same way regardless of what last
+  saved it. `--check` reports what would change without writing, and
+  exits nonzero if anything would.
+- `deckz labs ids [--dry-run]`: assign a published ID to every lab
+  notebook that doesn't have one yet, refusing a duplicate.
+- `deckz labs outputs EXECUTED NOTEBOOK`: write an executed copy's cell
+  outputs (and nothing else) back into a notebook, merging consecutive
+  stream outputs and resolving carriage returns.
+- `deckz labs check [--smoke] [--python INTERPRETER] [--timeout SECONDS]
+  NOTEBOOKS...`: structural checks (uncollapsed/empty solution sections,
+  stored error outputs) plus an execution of every code cell, in a
+  throwaway directory, reporting which cells raise.
+- `deckz labs compare [LAB_DIRS...]`: structural differences between
+  fr/en notebook pairs beyond what a translation changes.
+- `deckz labs missing`: every notebook present in only one language.
+- `deckz labs dump NOTEBOOKS...`: a compact, readable view of one or more
+  notebooks.
+- `deckz labs publish [--break-published-links]`: replace the labs
+  remote's branch with one commit of HEAD's lab notebooks, named by ID.
 
 ## Documentation
 

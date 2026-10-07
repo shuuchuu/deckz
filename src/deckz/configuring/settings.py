@@ -49,6 +49,7 @@ class GlobalPaths(BaseModel):
     settings: _Path = cast("Path", "{git_dir}/settings.yml")
     assets_dir: _Path = cast("Path", "{git_dir}/assets")
     content_dir: _Path = cast("Path", "{git_dir}/content")
+    labs_notebooks_dir: _Path = cast("Path", "{git_dir}/labs/notebooks")
     templates_dir: _Path = cast("Path", "{git_dir}/templates")
     jinja2_dir: _Path = cast("Path", "{templates_dir}/jinja2")
     jinja2_main_template: _Path = cast("Path", "{jinja2_dir}/main.typ")
@@ -69,6 +70,24 @@ class DeckPaths(GlobalPaths):
     html_dir: _Path = cast("Path", "{current_dir}/html")
     local_content_dir: _Path = cast("Path", "{current_dir}/content")
     deck_definition: _Path = cast("Path", "{current_dir}/deck.yml")
+
+
+class LabsSettings(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    id_metadata_key: str = "shuuchuu.id"
+    """Dotted path, under a notebook's own `metadata`, of its published ID.
+
+    `deckz labs ids`/`deckz labs publish` read and write it."""
+    id_pattern: str = r"[a-z0-9]+(-[a-z0-9]+)*"
+    """Regex a notebook's published ID must fully match."""
+    publish_remote: str = "labs"
+    """Git remote `deckz labs publish` force-pushes the published notebooks to."""
+    publish_branch: str = "main"
+    """Branch of `publish_remote` that `deckz labs publish` replaces."""
+    solution_heading: str = "Solution"
+    """Markdown heading text (case-insensitive) marking a notebook's collapsed \
+    answer cells, kept collapsed by `deckz labs normalize` and the \
+    `deckz.labs.Notebook` library."""
 
 
 class GlobalSettings(BaseModel):
@@ -112,6 +131,7 @@ class GlobalSettings(BaseModel):
     a math renderer's fonts and extensions.
     """
     file_extensions: tuple[str, ...] = (".md",)
+    labs: LabsSettings = Field(default_factory=LabsSettings)
     paths: GlobalPaths = Field(default_factory=GlobalPaths)
 
     @classmethod

@@ -59,7 +59,8 @@ def test_generate_agent_notes(capsys: Any) -> None:
     assert "deckz run shared" in output
 
 
-def test_extras_labs(tmp_path: Path) -> None:
+def test_labs_normalize(tmp_path: Path) -> None:
+    init_repository(str(tmp_path))
     notebook_path = tmp_path / "demo.ipynb"
     notebook = {
         "cells": [
@@ -71,7 +72,7 @@ def test_extras_labs(tmp_path: Path) -> None:
     }
     notebook_path.write_text(json.dumps(notebook))
 
-    main(("extras", "labs", str(notebook_path)))
+    main(("labs", "normalize", str(notebook_path), "--workdir", str(tmp_path)))
 
     written = json.loads(notebook_path.read_text())
     colab = written["metadata"]["colab"]

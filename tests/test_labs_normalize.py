@@ -2,7 +2,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from deckz.extras.labs import normalize_notebook, notebook_paths
+from deckz.labs.normalize import normalize_notebook
+from deckz.labs.notebook import notebook_paths
 
 
 def _write_notebook(path: Path, cells: list[dict[str, Any]], **metadata: Any) -> None:
