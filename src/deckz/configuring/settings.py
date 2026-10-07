@@ -56,6 +56,7 @@ class GlobalPaths(BaseModel):
     jinja2_html_main_template: _Path = cast("Path", "{jinja2_dir}/main.html")
     jinja2_env_module: _Path = cast("Path", "{jinja2_dir}/env.py")
     assets_builders_module: _Path = cast("Path", "{templates_dir}/assets_builders.py")
+    checks_module: _Path = cast("Path", "{templates_dir}/checks.py")
     github_issues: _Path = cast("Path", "{user_config_dir}/github-issues.yml")
     mails: _Path = cast("Path", "{user_config_dir}/mails.yml")
     gdrive_secrets: _Path = cast("Path", "{user_config_dir}/gdrive-secrets.json")

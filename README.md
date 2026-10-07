@@ -46,6 +46,7 @@ root (git repository)
 ├── variables.yml
 ├── templates
 │   ├── assets_builders.py
+│   ├── checks.py
 │   └── jinja2
 │       ├── main.typ
 │       ├── main.html
@@ -92,6 +93,9 @@ root (git repository)
 - `templates/assets_builders.py`: the Python module that builds this
   repo's assets (generated figures, or anything else) -- see [Assets
   builders](#assets-builders).
+- `templates/checks.py`: optional, the Python module adding this repo's
+  own `deckz check` checks -- see [Content checks
+  plugin](#content-checks-plugin).
 - Each deck is a directory containing a `deck.yml` (its definition) and
   optionally a `content` directory for files local to that deck.
 - `variables.yml` files can be placed at any level of the directory
@@ -414,9 +418,34 @@ layout](#repository-layout)). `watched_dirs` only matters for `deckz run
 assets --watch`: it tells the watch loop which source directories should
 trigger a rebuild.
 
+### Content checks plugin
+
+`deckz check` (alias for `deckz check content`) runs a few generic content
+checks of its own (lab notebook IDs and fr/en pairs, asset credit lines
+free of LaTeX, no raw LaTeX in content -- see [Usage](#usage)). A repo can
+add its own, theme- or content-specific checks (e.g. a slide frame
+pattern your Markdown conventions enforce) from an optional
+`templates/checks.py` module exposing:
+
+```python
+from collections.abc import Callable, Mapping
+
+from deckz.configuring.settings import GlobalSettings
+
+
+def checks(settings: GlobalSettings) -> Mapping[str, Callable[[], list[str]]]:
+    ...
+```
+
+called once, with the repository's settings, to obtain every extra check
+to run, each a zero-argument callable returning its problems (empty if
+none) the same way deckz's built-in checks do. A name colliding with a
+built-in check's is rejected.
+
 ### Python hooks: contract and trust
 
-`templates/jinja2/env.py` and `templates/assets_builders.py` are plain
+`templates/jinja2/env.py`, `templates/assets_builders.py` and
+`templates/checks.py` are plain
 Python modules that `deckz` imports and runs: running `deckz` on a
 repository executes its code with your permissions, like any build script,
 so only use it on repositories you trust. Whatever they import is your
@@ -424,8 +453,9 @@ repository's own dependency, to install alongside `deckz`.
 
 `deckz` checks each hook when loading it: the module must import cleanly
 and define the expected function, `environment_for` must return a
-`jinja2.Environment`, and each object `assets_builders` returns must have
-`build_assets` and `watched_dirs` methods. A module may declare which
+`jinja2.Environment`, each object `assets_builders` returns must have
+`build_assets` and `watched_dirs` methods, and `checks` must return a
+`{str: callable}` mapping. A module may declare which
 version of this contract it targets:
 
 ```python
@@ -503,16 +533,18 @@ Logs and progress bars go to stderr, so stdout only carries a command's
 results.
 
 Exit codes: 0 on success, 1 on a deckz error (e.g. a missing flavor or a
-failed compile), on `deckz check variables` findings or on blocking `deckz
-i18n missing-en` gaps, 2 on a command-line
+failed compile), on `deckz check variables`/`deckz check content` findings,
+on blocking `deckz i18n missing-en` gaps, or when a `deckz hooks`-installed
+git hook refuses a commit, 2 on a command-line
 usage error, 130 when interrupted with Ctrl-C (which stops the compilations
 under way at once).
 
 `deckz check variables`, `deckz search-sections` and `deckz i18n
-missing-en` print one tab-separated finding per line. With `--json`, they,
-as well as `deckz show tree`/`paths`/`settings`/`variables`, `deckz deps`
-and `deckz asset deps`/`search`, print a single JSON document instead (see
-each command's `--help` for its fields).
+missing-en` print one tab-separated finding per line; `deckz check content`
+does too with `--plain`. With `--json`, `deckz check content` and the
+above, as well as `deckz show tree`/`paths`/`settings`/`variables`, `deckz
+deps` and `deckz asset deps`/`search`, print a single JSON document
+instead (see each command's `--help` for its fields).
 
 The main commands:
 
@@ -553,6 +585,27 @@ The main commands:
   whose only failures are includes of deck-local files (one some deck's
   own `content/` has) is skipped: the decks using it cover it. Nothing is
   compiled.
+- `deckz check` (alias for `deckz check content`): run deckz's generic
+  content checks -- lab notebook IDs valid and unique (`lab-ids`), fr/en
+  lab notebook pairs present and in sync (`lab-pairs`), asset credit lines
+  (`title`/`author`/`license`, and their `_en`) free of LaTeX
+  (`asset-credits`), no raw LaTeX in content (`raw-latex`), no hand-written
+  link to the configured lab-publishing remote (`lab-urls`) -- plus, if
+  `templates/checks.py` defines a `checks(settings)` function, the target
+  repo's own, merged in under their own names (see
+  `GlobalPaths.checks_module`). `--staged` checks the git index's staged
+  version of every tracked file (exported to a scratch directory under
+  `<git_dir>/.check/staged/`) instead of the working tree, so another
+  session's unfinished edits neither block nor hide a check; a check
+  needing the repository's git history or remotes does nothing under
+  `--staged`. `--plain` for a script or an agent.
+- `deckz hooks install`: install deckz's `pre-commit` (`deckz check
+  --staged`) and `commit-msg` git hooks into the current repository.
+  The `commit-msg` hook refuses a commit that changes one side of a fr/en
+  content or lab notebook pair with no `Lang-sync` trailer (`fr-only
+  (<reason>)`/`en-only (<reason>)`/`pending`, see `deckz i18n stale`
+  above). Refuses to overwrite a hook file it didn't itself write, unless
+  `--force` is passed.
 - `deckz show` (alias for `deckz show tree`): show the resolved tree of
   sections and files for the current deck.
 - `deckz show settings` / `deckz show variables` / `deckz show paths`:

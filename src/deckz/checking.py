@@ -65,6 +65,45 @@ def run_scratch_dir(git_dir: Path, name: str) -> Path:
     return path
 
 
+def export_staged(git_dir: Path) -> Path:
+    """Export the git index's staged tree into a persistent scratch directory.
+
+    Used by `deckz check --staged`: it checks the commit, not the working
+    tree, since several sessions can share one checkout and an
+    in-progress, uncommitted edit must neither block a commit nor let a
+    broken one through. The export has no `.git` of its own: a check
+    needing one (e.g. a git remote lookup) is expected to fall back to
+    doing nothing when it can't find one.
+
+    Args:
+        git_dir: Root of the deckz-managed repository.
+
+    Returns:
+        The (freshly emptied) scratch directory, holding every tracked \
+        file at its staged content.
+    """
+    from shutil import rmtree
+    from subprocess import run
+
+    target = git_dir / ".check" / "staged"
+    if target.is_dir():
+        rmtree(target)
+    target.mkdir(parents=True)
+    listing = run(
+        ["git", "ls-files", "-z", "--cached"],
+        cwd=git_dir,
+        capture_output=True,
+        check=True,
+    ).stdout
+    run(
+        ["git", "checkout-index", "-z", "--stdin", f"--prefix={target}/"],
+        cwd=git_dir,
+        input=listing,
+        check=True,
+    )
+    return target
+
+
 def preview_settings(settings: DeckSettings, *parts: str) -> DeckSettings:
     """Copy of a deck's settings writing to a `deckz run file`/`section` scratch tree.
 

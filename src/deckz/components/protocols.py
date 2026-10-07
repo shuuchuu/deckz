@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
@@ -150,6 +150,12 @@ class AssetsAnalyzerProtocol(Protocol):
     def sections_unlicensed_images(self) -> dict["UnresolvedPath", frozenset[Path]]: ...
 
 
+class ChecksRunnerProtocol(Protocol):
+    """Every content check to run: deckz's own, merged with the target repo's."""
+
+    def checks(self) -> Mapping[str, Callable[[], list[str]]]: ...
+
+
 class GlobalFactoryProtocol(Protocol):
     def renderer(self) -> RendererProtocol: ...
 
@@ -168,6 +174,8 @@ class GlobalFactoryProtocol(Protocol):
     def assets_searcher(self) -> AssetsSearcherProtocol: ...
 
     def assets_analyzer(self) -> AssetsAnalyzerProtocol: ...
+
+    def checks_runner(self) -> ChecksRunnerProtocol: ...
 
     def shared_parser(
         self, lang: "Lang" = "fr", *, lenient: bool = False

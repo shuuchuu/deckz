@@ -41,6 +41,14 @@ class HookError(DeckzError):
     """A Python hook of the deckz-managed repo is missing, broken or misbehaves."""
 
 
+class HookInstallRefusedError(DeckzError):
+    """`deckz hooks install` refuses to overwrite a git hook it didn't write."""
+
+
+class CommitRefusedError(DeckzError):
+    """A git hook deckz installed (`deckz hooks check-commit-msg`) refuses a commit."""
+
+
 class CompilationError(DeckzError):
     pass
 

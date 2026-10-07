@@ -6,6 +6,7 @@ from .protocols import (
     AssetsBuilderProtocol,
     AssetsMetadataRetrieverProtocol,
     AssetsSearcherProtocol,
+    ChecksRunnerProtocol,
     CompilerProtocol,
     DeckBuilderProtocol,
     DeckFactoryProtocol,
@@ -110,6 +111,13 @@ class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
             assets_dir=self._settings.paths.assets_dir,
             git_dir=self._settings.paths.git_dir,
             renderer=self.renderer(),
+        )
+
+    def checks_runner(self) -> ChecksRunnerProtocol:
+        from .checks import ChecksRunner
+
+        return ChecksRunner(
+            settings=self._settings, checks_module=self._settings.paths.checks_module
         )
 
     def shared_parser(

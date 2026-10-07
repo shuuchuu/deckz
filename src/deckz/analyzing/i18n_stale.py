@@ -79,7 +79,7 @@ def _parse_trailers(message: str) -> dict[str, str]:
     return trailers
 
 
-def _lang_sync_kind(message: str) -> str | None:
+def lang_sync_kind(message: str) -> str | None:
     value = _parse_trailers(message).get("Lang-sync")
     if not value:
         return None
@@ -99,7 +99,7 @@ def _notebook_sibling(path: PurePosixPath) -> PurePosixPath | None:
     return None
 
 
-def _content_pairs(
+def content_pairs(
     settings: "GlobalSettings",
 ) -> Iterator[tuple[PurePosixPath, PurePosixPath]]:
     git_dir = settings.paths.git_dir
@@ -113,7 +113,7 @@ def _content_pairs(
             yield rel, _en_sibling(rel)
 
 
-def _notebook_pairs(
+def notebook_pairs(
     settings: "GlobalSettings",
 ) -> Iterator[tuple[PurePosixPath, PurePosixPath]]:
     git_dir = settings.paths.git_dir
@@ -166,7 +166,7 @@ def _changes_by_path(git_dir: Path, paths: set[str]) -> dict[str, list[_Change]]
             sha=str(commit.id),
             subject=commit.message.partition("\n")[0],
             ordinal=ordinal,
-            lang_sync=_lang_sync_kind(commit.message),
+            lang_sync=lang_sync_kind(commit.message),
         )
         for path in relevant:
             changes[path].append(change)
@@ -210,7 +210,7 @@ def stale_files(
         One entry per stale side of a pair, sorted by path.
     """
     git_dir = settings.paths.git_dir
-    pairs = [*_content_pairs(settings), *_notebook_pairs(settings)]
+    pairs = [*content_pairs(settings), *notebook_pairs(settings)]
     if targets:
         resolved = [target.resolve() for target in targets]
         pairs = [
@@ -226,3 +226,38 @@ def stale_files(
 
     stale = [finding for a, b in pairs for finding in _pair_staleness(a, b, changes)]
     return sorted(stale, key=lambda finding: finding.path)
+
+
+def staged_one_sided_pairs(
+    settings: "GlobalSettings",
+) -> list[tuple[PurePosixPath, PurePosixPath]]:
+    """Every fr/en pair with exactly one side in the git index's staged changes.
+
+    Used by the `commit-msg` hook (`deckz hooks check-commit-msg`): unlike
+    `stale_files`, which looks at the whole history, this only looks at
+    what's about to be committed, to ask for a `Lang-sync` trailer right
+    when it's needed.
+
+    Args:
+        settings: The repository's settings.
+
+    Returns:
+        `(fr_path, en_path)` for every pair where the staged changes touch \
+        one side but not the other.
+    """
+    from subprocess import run
+
+    git_dir = settings.paths.git_dir
+    staged = run(
+        ["git", "diff", "--cached", "--name-only", "-z"],
+        cwd=git_dir,
+        capture_output=True,
+        check=True,
+    ).stdout.decode()
+    staged_paths = {path for path in staged.split("\0") if path}
+    pairs = [*content_pairs(settings), *notebook_pairs(settings)]
+    return [
+        (fr, en)
+        for fr, en in pairs
+        if (str(fr) in staged_paths) != (str(en) in staged_paths)
+    ]

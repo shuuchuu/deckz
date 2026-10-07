@@ -48,12 +48,14 @@ Dependency management and running: this project uses `uv`; run tools via
 `@app.command()` as an import side effect (e.g. `src/deckz/cli/upload.py`).
 Related commands are grouped under sub-apps: most are their own package
 under `src/deckz/cli/` with one module per subcommand (`run`, `check`,
-`clean`, `show`, `flavor`, `asset`, `i18n`, `extras` — see `run/__init__.py`
-for the pattern: an `App(name=...)` registered onto the parent app). A
-sub-app may declare a default subcommand via `@app.default`
-(`run`/`show`/`clean` do; `check` deliberately doesn't, to keep its shape
-stable as more static analyses are added — it currently has a single
-subcommand, `variables`). Command functions
+`clean`, `show`, `flavor`, `asset`, `i18n`, `labs`, `hooks`, `extras` — see
+`run/__init__.py` for the pattern: an `App(name=...)` registered onto the
+parent app). A sub-app may declare a default subcommand via `@app.default`
+(`run`/`show`/`clean` do; `check`'s default is `content`, running
+every check — deckz's own content checks plus a `templates/checks.py`
+plugin's, see "Checking" below — `variables` stays its own, separate
+subcommand since it's a different, slower kind of analysis). Command
+functions
 themselves stay thin: they parse CLI args, build a `DeckSettings`/
 `GlobalSettings`, and delegate to `src/deckz/pipelines.py`,
 `src/deckz/checking.py`, or an `analyzing/*` module — no business logic
@@ -204,6 +206,34 @@ function or a `DECKZ_HOOKS_VERSION` other than `HOOKS_VERSION` into a
 Its module docstring documents the trust boundary (the hooks are arbitrary
 code from the target repo).
 
+### Checking
+
+`analyzing/content_checks.py` holds deckz's own generic content checks
+(`lab-ids`, `lab-pairs`, `asset-credits`, `raw-latex`, `lab-urls`), each a
+`(settings) -> list[str]` function in its `CHECKS` dict.
+`components/checks.py::ChecksRunner` merges those with the target repo's
+own, from an optional `templates/checks.py` module (`checks(settings) ->
+Mapping[str, Callable[[], list[str]]]`, loaded through
+`components/hooks.py::load_hook` like every other hook) — a name collision
+with a built-in is a `HookError`. `GlobalSettingsFactory.checks_runner()`
+is the construction point. `cli/check/content.py` is both `deckz check
+content` and (`@app.default`) `deckz check`: with `--staged`, it first
+exports the git index's staged tree to `<git_dir>/.check/staged/`
+(`checking.py::export_staged`, shelling out to `git ls-files`/
+`checkout-index`, no `.git` of its own) and runs the checks against that
+instead of the working tree, so another session's unfinished edits neither
+block nor hide a check.
+
+`hooks_install.py` writes deckz's own `pre-commit` (`deckz check --staged`)
+and `commit-msg` git hooks into `<git_dir>/.git/hooks/`, each a thin shell
+script shelling back out to `deckz`; refuses to overwrite a hook file
+without deckz's own marker line unless `--force` (`HookInstallRefusedError`).
+The commit-msg hook (`deckz hooks check-commit-msg`, `cli/hooks/`) reuses
+`analyzing/i18n_stale.py`'s fr/en pairing (`content_pairs`/
+`notebook_pairs`/`lang_sync_kind`) to refuse, via `CommitRefusedError`, a
+commit whose staged diff touches one side of a pair (`staged_one_sided_pairs`)
+without a `Lang-sync` trailer in the draft message.
+
 ### Data model
 
 `models.py` defines the deck domain model: `DeckDefinition`/`Deck`,
@@ -231,10 +261,12 @@ catches an unresolved deck reaching them.
 
 `analyzing/` holds repository-wide, read-only analyses that don't fit the
 build pipeline: flavor renaming/merging, section search, i18n
-(fr/en) consistency checks, and variable-usage checks. These back the
+(fr/en) consistency checks, variable-usage checks, and the generic content
+checks (see "Checking" below). These back the
 `deckz deps`, `deckz search-sections`, `deckz section-flavors`,
 `deckz section-files`, `deckz flavor rename`, `deckz flavor deduplicate`,
-`deckz i18n *`, and `deckz check variables` commands.
+`deckz i18n *`, `deckz check variables`, and `deckz check content`
+commands.
 
 `variables_usage.py` (backing `deckz check variables`) surveys every shared
 section's every named flavor -- via `Parser.from_section`, not the
@@ -251,15 +283,17 @@ doesn't abort the whole survey).
 ### Extras
 
 `src/deckz/extras/` holds the business logic for `deckz extras`'s
-subcommands (`github_querying.py` for `issue`, `mailing.py` for `random`,
-`labs.py` for `labs`) plus `uploading.py` for the top-level `deckz upload`
+subcommands (`github_querying.py` for `issue`, `mailing.py` for `random`)
+plus `uploading.py` for the top-level `deckz upload`
 — side commands unrelated to the build pipeline, each with its own thin
 `cli/extras/*.py` (or `cli/upload.py`) wrapper, same split as everywhere
 else in `cli/`. Their third-party clients (Google, GitHub, SendGrid,
 email-validator) are the `deckz[extras]` optional dependencies, installed
 by the `dev` group: the CLI wrappers import them inside
 `extras.extras_imports()`, which turns a missing one into a
-`MissingExtraError`.
+`MissingExtraError`. `deckz labs` is unrelated and not under `extras/`: its
+library (`src/deckz/labs/`) is plain deckz code with no optional
+dependency, backing the top-level `labs` sub-app (`cli/labs/`).
 
 ## Conventions
 
