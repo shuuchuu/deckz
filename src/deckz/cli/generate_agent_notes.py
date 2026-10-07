@@ -93,6 +93,10 @@ or a declared variable nothing ever reads.
   `publish` operate on `labs/notebooks` (see `deckz labs --help` for
   each). `fmt --check` and `ids --dry-run` report without writing;
   `publish` is for a human to run, never an agent.
+- `deckz videos render`/`list`/`publish` (needs `deckz[videos]`: Manim,
+  plus `ffmpeg`) operate on `@register_scene` classes under
+  `figures/scenes` (see `deckz videos --help`). `publish` is for a human
+  to run, never an agent, same as `labs publish`.
 - `deckz i18n stale [PATHS...]` -- content files and lab notebooks with
   changes not yet ported to their other-language sibling, computed from
   git history and `Lang-sync` commit trailers alone (no stored marker).

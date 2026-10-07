@@ -69,6 +69,19 @@ class LabOutputsMismatchError(DeckzError):
     """`deckz labs outputs` was given an executed copy with a different cell count."""
 
 
+class VideoSceneError(DeckzError):
+    """A `@register_scene` class is declared in a way deckz can't parse."""
+
+
+class VideoPublishRefusedError(DeckzError):
+    """`deckz videos publish` refuses to publish.
+
+    Uncommitted scene changes, a render missing/stale/at the wrong quality, \
+    one over the publish size limit, or it would drop an already-published \
+    video.
+    """
+
+
 class DeckParsingError(DeckzError):
     """Some nodes of `deck` failed to parse, each described in `errors`."""
 

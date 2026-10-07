@@ -30,7 +30,9 @@ pip install "deckz[extras]"
 (`pip install "deckz[labs]"`, lazily required only when a notebook has a
 large image output to shrink); `deckz check parity` needs Playwright and
 pypdfium2 (`pip install "deckz[parity]"`, then `playwright install
-chromium`).
+chromium`); `deckz videos render` needs Manim and `ffmpeg`
+(`pip install "deckz[videos]"`; `ffmpeg` itself isn't pip-installable,
+install it with your system's package manager).
 
 Whatever your `templates/assets_builders.py` imports (e.g. matplotlib or
 plotly) is your repository's own dependency: install it alongside deckz.
@@ -197,6 +199,30 @@ typst_ignore_system_fonts: true
 
   The notebooks directory itself (default `{git_dir}/labs/notebooks`) is
   `paths.labs_notebooks_dir`, set like any other path under `paths:`.
+- `videos`: settings for the `deckz videos` commands, e.g.:
+
+  ```yaml
+  videos:
+    publish_remote: videos
+    publish_branch: main
+    published_quality: h
+    max_publish_size_mb: 100
+    warn_publish_size_mb: 50
+  ```
+
+  - `publish_remote` / `publish_branch`: the git remote and branch
+    `deckz videos publish` force-pushes the published renders to (default
+    `videos`/`main`).
+  - `published_quality`: the Manim quality flag (`l` to `k`) a render must
+    be at to publish, and `deckz videos render`'s default `--quality`
+    (default `h`).
+  - `max_publish_size_mb` / `warn_publish_size_mb`: refuse, or just warn
+    about, publishing a render over this size in MB (defaults `100`/`50`,
+    GitHub's own limits).
+
+  The scenes and videos directories (default `{git_dir}/figures/scenes`
+  and `{assets_dir}/videos`) are `paths.scenes_dir`/`paths.videos_dir`,
+  set like any other path under `paths:`.
 
 `deckz.yml` files are merged, in order, from the git root, from the user's
 config directory (XDG-compliant, e.g.
@@ -757,6 +783,21 @@ The main commands:
   notebooks.
 - `deckz labs publish [--break-published-links]`: replace the labs
   remote's branch with one commit of HEAD's lab notebooks, named by ID.
+- `deckz videos render [SCENE] [--quality] [--force]` (extra: `deckz[videos]`,
+  Manim, plus `ffmpeg`): render every `@register_scene` class under
+  `videos.scenes_dir` that's missing, stale, or at another quality than
+  `--quality` (default `videos.published_quality`), in parallel. A scene
+  is marked with `deckz.videos.register_scene` (optionally
+  `languages=("fr", "en")` for one with on-screen text, rendered once per
+  language). SCENE restricts to one video (its path, as `deckz videos
+  list` prints it, or its class name); `--force` re-renders even what
+  looks up to date.
+- `deckz videos list`: list every registered scene's renders, one per
+  line (quality stamp or `-`, path under `videos.videos_dir`, class name).
+- `deckz videos publish [--break-published-links]`: replace the videos
+  remote's branch with one commit of every scene's current renders,
+  refusing one missing, stale, at the wrong quality, or over the publish
+  size limit, or that would drop an already-published render's path.
 
 ## Documentation
 

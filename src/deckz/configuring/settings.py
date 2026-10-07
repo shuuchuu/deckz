@@ -50,6 +50,8 @@ class GlobalPaths(BaseModel):
     assets_dir: _Path = cast("Path", "{git_dir}/assets")
     content_dir: _Path = cast("Path", "{git_dir}/content")
     labs_notebooks_dir: _Path = cast("Path", "{git_dir}/labs/notebooks")
+    scenes_dir: _Path = cast("Path", "{git_dir}/figures/scenes")
+    videos_dir: _Path = cast("Path", "{assets_dir}/videos")
     templates_dir: _Path = cast("Path", "{git_dir}/templates")
     jinja2_dir: _Path = cast("Path", "{templates_dir}/jinja2")
     jinja2_main_template: _Path = cast("Path", "{jinja2_dir}/main.typ")
@@ -90,6 +92,22 @@ class LabsSettings(BaseModel):
     """Markdown heading text (case-insensitive) marking a notebook's collapsed \
     answer cells, kept collapsed by `deckz labs normalize` and the \
     `deckz.labs.Notebook` library."""
+
+
+class VideosSettings(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    publish_remote: str = "videos"
+    """Git remote `deckz videos publish` force-pushes the published renders to."""
+    publish_branch: str = "main"
+    """Branch of `publish_remote` that `deckz videos publish` replaces."""
+    published_quality: str = "h"
+    """Manim quality flag (`l`, `m`, `h`, `p` or `k`) a render must be at to publish.
+
+    Also `deckz videos render`'s default `--quality`."""
+    max_publish_size_mb: int = 100
+    """Refuse to publish a render over this size, in MB (GitHub's own limit)."""
+    warn_publish_size_mb: int = 50
+    """Warn, but still publish, a render over this size, in MB."""
 
 
 class GlobalSettings(BaseModel):
@@ -142,6 +160,7 @@ class GlobalSettings(BaseModel):
     """
     file_extensions: tuple[str, ...] = (".md",)
     labs: LabsSettings = Field(default_factory=LabsSettings)
+    videos: VideosSettings = Field(default_factory=VideosSettings)
     paths: GlobalPaths = Field(default_factory=GlobalPaths)
 
     @classmethod

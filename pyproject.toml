@@ -43,12 +43,16 @@ parity = [
   "playwright >= 1, < 2",
   "pypdfium2 >= 5, < 6",
 ]
+videos = [
+  "manim >= 0.18, < 1",
+]
 
 [dependency-groups]
 dev = [
   "deckz[extras]",
   "deckz[labs]",
   "deckz[parity]",
+  "deckz[videos]",
   "bumpver >= 2025.1131",
   "doit >= 0.37",
   "mkdocs >= 1",
