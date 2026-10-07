@@ -22,7 +22,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from ..exceptions import VideoPublishRefusedError
-from .scenes import Scene, out_of_date, renders
+from .scenes import Scene, out_of_date, quality, renders
 
 
 def _git(
@@ -153,6 +153,53 @@ def published_paths(git_dir: Path, commit: str | None) -> set[str]:
     if commit is None:
         return set()
     return set(_git(git_dir, "ls-tree", "-r", "--name-only", commit).splitlines())
+
+
+def published_blobs(git_dir: Path, commit: str | None) -> dict[str, str]:
+    """The blob of each file a published `commit` holds.
+
+    Returns:
+        Each file's blob sha, by its site path; empty if `commit` is None.
+    """
+    if commit is None:
+        return {}
+    blobs = {}
+    for line in _git(git_dir, "ls-tree", "-r", commit).splitlines():
+        info, path = line.split("\t", 1)
+        blobs[path] = info.split()[2]
+    return blobs
+
+
+def unpublished_reason(
+    git_dir: Path,
+    videos_dir: Path,
+    file: Path,
+    published: dict[str, str],
+    *,
+    wanted_quality: str,
+) -> str | None:
+    """What keeps the render `file` from being the published one.
+
+    Args:
+        git_dir: Root of the repository (its git computes the render's blob).
+        videos_dir: `GlobalPaths.videos_dir`.
+        file: The render, under `videos_dir`.
+        published: `published_blobs` of the published commit.
+        wanted_quality: The quality a published render is at.
+
+    Returns:
+        The problem, or None if `file` is published exactly as rendered.
+    """
+    site = site_path(videos_dir, file)
+    if site not in published:
+        return f"{site} is not published"
+    if not file.is_file():
+        return f"{site} is not rendered"
+    if quality(file) != wanted_quality:
+        return f"{site} is a draft render"
+    if _git(git_dir, "hash-object", str(file)) != published[site]:
+        return f"{site} differs from its published version"
+    return None
 
 
 def publish(

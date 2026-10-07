@@ -4,7 +4,13 @@ from pathlib import Path
 from pytest import raises
 
 from deckz.exceptions import VideoPublishRefusedError
-from deckz.videos.publishing import publish, publishable
+from deckz.videos.publishing import (
+    fetch_published,
+    publish,
+    publishable,
+    published_blobs,
+    unpublished_reason,
+)
 from deckz.videos.scenes import Scene
 
 QUALITY = "h"
@@ -221,3 +227,29 @@ def test_publish_refuses_to_drop_a_published_link(tmp_path: Path) -> None:
     assert published is True
     names = set(_git(work, "ls-tree", "-r", "--name-only", "videos/main").split())
     assert names == {".nojekyll", "nn/other.mp4"}
+
+
+def _reason(work: Path, published: dict[str, str]) -> str | None:
+    videos = work / "assets" / "videos"
+    return unpublished_reason(
+        work, videos, videos / "nn" / "demo.mp4", published, wanted_quality=QUALITY
+    )
+
+
+def test_unpublished_reason_follows_the_render_and_its_published_blob(
+    tmp_path: Path,
+) -> None:
+    _remote, work = _make_repos(tmp_path)
+    assert published_blobs(work, None) == {}
+    assert _reason(work, {}) == "nn/demo.mp4 is not published"
+
+    _fake_render(work)
+    _publish(work, _preview(work))
+    published = published_blobs(work, fetch_published(work, "videos", "main"))
+    assert set(published) == {".nojekyll", "nn/demo.mp4"}
+    assert _reason(work, published) is None
+
+    _fake_render(work, size=2000)
+    assert _reason(work, published) == "nn/demo.mp4 differs from its published version"
+    _fake_render(work, quality="l")
+    assert _reason(work, published) == "nn/demo.mp4 is a draft render"

@@ -8,7 +8,15 @@ itself (`scenes`) never imports Manim, so listing or checking scenes needs
 no extra dependency.
 """
 
-from .publishing import PublishPreview, publish, publishable
+from .publishing import (
+    PublishPreview,
+    fetch_published,
+    publish,
+    publishable,
+    published_blobs,
+    site_path,
+    unpublished_reason,
+)
 from .rendering import render_all
 from .scenes import (
     Render,
@@ -25,13 +33,17 @@ __all__ = [
     "PublishPreview",
     "Render",
     "Scene",
+    "fetch_published",
     "out_of_date",
     "publish",
     "publishable",
+    "published_blobs",
     "quality",
     "register_scene",
     "render_all",
     "renders",
     "scenes",
+    "site_path",
+    "unpublished_reason",
     "video_file",
 ]
