@@ -23,6 +23,7 @@ from ..models import Deck, File, NodeVisitor, Part, PartName, Section, Unresolve
 if TYPE_CHECKING:
     from ..components.deck_builder import PlannedCompile
     from ..configuring.settings import DeckSettings
+    from ..labs.gpu import GpuStatus, RunReport
     from ..models import Lang
     from ..pipelines import BuildTarget, OutputKinds
 
@@ -258,3 +259,51 @@ def print_plan(planned: Iterable["PlannedCompile"], relative_to: Path) -> None:
         )
         for fragment in item.changed_fragments:
             print(f"  {display(fragment)}")
+
+
+def print_gpu_status(status: "GpuStatus") -> None:
+    """Print a `deckz labs gpu status` as a table, for a person."""
+    from rich.table import Table
+
+    console = Console(highlight=False)
+    instance = status.instance
+    if instance is None:
+        console.print("No machine rented.")
+        return
+    console.print(
+        f"Machine: [bold]{instance.status}[/bold], {instance.gpu or '?'},"
+        f" ${instance.price:.3f}/h"
+        + (f" ({instance.message})" if instance.message else "")
+    )
+    if not status.queue:
+        return
+    table = Table("Notebook", "State", "Exit", "Time")
+    for entry in status.queue:
+        color = {"done": "green", "running": "yellow"}.get(entry.state, "dim")
+        if entry.state == "done" and entry.exit_code:
+            color = "red"
+        table.add_row(
+            entry.name,
+            f"[{color}]{entry.state}[/{color}]",
+            "" if entry.exit_code is None else str(entry.exit_code),
+            "" if entry.seconds is None else f"{entry.seconds // 60} min",
+        )
+    console.print(table)
+
+
+def print_gpu_reports(reports: Iterable["RunReport"]) -> None:
+    """Print `deckz labs gpu report`'s runs as a table, for a person."""
+    from rich.table import Table
+
+    table = Table("Notebook", "Exit", "Time", "Peak RAM", "Cells", "Raised")
+    for run in reports:
+        table.add_row(
+            run.path.name,
+            "?" if run.exit_code is None else str(run.exit_code),
+            "?" if run.seconds is None else f"{run.seconds / 60:.1f} min",
+            "?" if run.peak_ram_gib is None else f"{run.peak_ram_gib:.1f} GiB",
+            f"{run.cells_ran}/{run.code_cells}",
+            "\n".join(f"[{e.index}] {e.name}" for e in run.errors)
+            or "[green]none[/green]",
+        )
+    Console(highlight=False).print(table)

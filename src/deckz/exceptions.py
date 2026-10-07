@@ -69,6 +69,10 @@ class LabOutputsMismatchError(DeckzError):
     """`deckz labs outputs` was given an executed copy with a different cell count."""
 
 
+class GpuRunError(DeckzError):
+    """`deckz labs gpu` failed: no machine rented or booted, or a remote step failed."""
+
+
 class VideoSceneError(DeckzError):
     """A `@register_scene` class is declared in a way deckz can't parse."""
 

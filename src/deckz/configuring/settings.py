@@ -50,6 +50,7 @@ class GlobalPaths(BaseModel):
     assets_dir: _Path = cast("Path", "{git_dir}/assets")
     content_dir: _Path = cast("Path", "{git_dir}/content")
     labs_notebooks_dir: _Path = cast("Path", "{git_dir}/labs/notebooks")
+    labs_gpu_dir: _Path = cast("Path", "{git_dir}/.run/gpu")
     scenes_dir: _Path = cast("Path", "{git_dir}/figures/scenes")
     videos_dir: _Path = cast("Path", "{assets_dir}/videos")
     templates_dir: _Path = cast("Path", "{git_dir}/templates")
@@ -76,6 +77,36 @@ class DeckPaths(GlobalPaths):
     deck_definition: _Path = cast("Path", "{current_dir}/deck.yml")
 
 
+class LabsGpuSettings(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    image: str = "us-docker.pkg.dev/colab-images/public/runtime"
+    """Docker image the rented machine boots: Colab's own runtime by default \
+    (the one Colab's local runtimes use), so the packages are Colab's."""
+    gpus: tuple[str, ...] = ("Tesla_T4", "RTX_A4000")
+    """GPU names `deckz labs gpu up` rents, the first one on offer winning.
+
+    A T4 is Colab's free GPU; any other runs faster than Colab does."""
+    offer_filter: str = (
+        "num_gpus=1 reliability>0.98 cpu_ram>=12 disk_space>=100 "
+        "cuda_max_good>=12.4 rentable=true verified=true"
+    )
+    """Vast.ai offer query, on top of the GPU name (`vastai search offers`): \
+    Colab's T4 runtime has 12.7 GB of RAM, and its image needs a recent CUDA \
+    driver."""
+    disk_gb: int = 100
+    """Disk size of the rented machine, in GB."""
+    boot_minutes: int = 30
+    """How long a machine may take to pull the image and start before it is \
+    destroyed and another one rented."""
+    cpus: int = 2
+    """CPUs each notebook runs on (Colab's T4 runtime has 2): hosts expose \
+    dozens, which hides what Colab would hit (e.g. a deadlock with as many \
+    worker processes as CPUs)."""
+    ssh_key: str = "~/.ssh/id_ed25519"
+    """Private SSH key whose public key is registered with Vast.ai \
+    (`vastai create ssh-key`)."""
+
+
 class LabsSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
     id_metadata_key: str = "shuuchuu.id"
@@ -92,6 +123,8 @@ class LabsSettings(BaseModel):
     """Markdown heading text (case-insensitive) marking a notebook's collapsed \
     answer cells, kept collapsed by `deckz labs normalize` and the \
     `deckz.labs.Notebook` library."""
+    gpu: LabsGpuSettings = Field(default_factory=LabsGpuSettings)
+    """Machines `deckz labs gpu` rents to run notebooks as Colab would."""
 
 
 class I18nSettings(BaseModel):

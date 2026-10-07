@@ -35,6 +35,9 @@ extras = [
   "niquests >= 3, < 4",
   "sendgrid >= 6, < 7",
 ]
+gpu = [
+  "vastai >= 1, < 2",
+]
 labs = [
   "pillow >= 11, < 12",
 ]

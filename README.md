@@ -30,7 +30,9 @@ pip install "deckz[extras]"
 (`pip install "deckz[labs]"`, lazily required only when a notebook has a
 large image output to shrink); `deckz check parity` needs Playwright and
 pypdfium2 (`pip install "deckz[parity]"`, then `playwright install
-chromium`); `deckz videos render` needs Manim and `ffmpeg`
+chromium`); `deckz labs gpu` needs the `vastai` CLI (`pip install
+"deckz[gpu]"`, then `vastai set api-key`); `deckz videos render` needs
+Manim and `ffmpeg`
 (`pip install "deckz[videos]"`; `ffmpeg` itself isn't pip-installable,
 install it with your system's package manager).
 
@@ -196,6 +198,12 @@ typst_ignore_system_fonts: true
     `labs`/`main`).
   - `solution_heading`: the markdown heading text (case-insensitive)
     marking a notebook's collapsed answer cells (default `Solution`).
+  - `gpu`: the machines `deckz labs gpu` rents: `image` (default Colab's
+    runtime image), `gpus` (names in order of preference, default
+    `[Tesla_T4, RTX_A4000]`), `offer_filter` (a Vast.ai offer query),
+    `disk_gb`, `boot_minutes`, `cpus` (each notebook's CPUs, default 2 as
+    on Colab's T4 runtime) and `ssh_key` (the private key whose public key
+    Vast.ai has, default `~/.ssh/id_ed25519`).
 
   The notebooks directory itself (default `{git_dir}/labs/notebooks`) is
   `paths.labs_notebooks_dir`, set like any other path under `paths:`.
@@ -800,6 +808,21 @@ The main commands:
   notebooks.
 - `deckz labs publish [--break-published-links]`: replace the labs
   remote's branch with one commit of HEAD's lab notebooks, named by ID.
+- `deckz labs gpu up|queue|run|status|fetch|report|down` (extra:
+  `deckz[gpu]`): run notebooks on a rented GPU machine the way Colab runs
+  them -- Colab's runtime image, `labs.gpu.cpus` CPUs per run, peak RAM
+  recorded (Colab's T4 runtime has 12.7 GB). `up` rents the cheapest
+  reliable offer (a machine that fails to boot is destroyed and avoided
+  from then on); `queue [--short] NOTEBOOKS...` sends notebooks (`--short`
+  sets their `SHORT_RUN = False` line to `True`); `run` starts the queue,
+  detached, each notebook saved after every cell; `status [--watch]`
+  follows it, fetching and appending each finished run's report to
+  `notes.md` under `--watch`; `fetch` copies the executed notebooks;
+  `report [--plain]` gives each one's exit code, run time, peak RAM, the
+  cells that raised and the slowest ones; `down` destroys the machine,
+  which bills until then. State and files live in `.run/gpu/`
+  (`paths.labs_gpu_dir`). Then `deckz labs outputs` writes a demo's
+  outputs back.
 - `deckz videos render [SCENE] [--quality] [--force]` (extra: `deckz[videos]`,
   Manim, plus `ffmpeg`): render every `@register_scene` class under
   `videos.scenes_dir` that's missing, stale, or at another quality than
