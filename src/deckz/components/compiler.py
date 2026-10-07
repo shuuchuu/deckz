@@ -111,6 +111,8 @@ class _Worker:
             self._process.start()
         child_connection.close()
         self.lock = Lock()
+        self._forget_lock = Lock()
+        self._forgotten = False
         with _live_lock:
             _live_workers.add(self)
             stopped = _stopped
@@ -145,12 +147,25 @@ class _Worker:
         self._forget()
 
     def kill(self) -> None:
-        """Stop at once, even mid-compilation: its `compile` then fails."""
+        """Stop at once, even mid-compilation: its `compile` then fails.
+
+        Doesn't wait for `self.lock`: a concurrent `compile()` may be
+        blocked waiting for a long Typst compilation to finish, and this
+        must interrupt it immediately, not once it's done.
+        """
         self._process.kill()
         self._process.join()
         self._forget()
 
     def _forget(self) -> None:
+        # `compile()`'s own cleanup on a dead worker (`close()`) can race
+        # with a concurrent `kill()` (e.g. Ctrl-C): guard against both
+        # closing `_connection` (not idempotent, unlike a plain file) so
+        # only the first one actually tears the worker down.
+        with self._forget_lock:
+            if self._forgotten:
+                return
+            self._forgotten = True
         with _live_lock:
             _live_workers.discard(self)
         self._connection.close()
