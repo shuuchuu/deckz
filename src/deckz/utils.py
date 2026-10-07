@@ -299,17 +299,17 @@ def all_deck_settings(git_dir: Path) -> Iterator["DeckSettings"]:
     Yields:
         Settings of each deck found.
     """
+    from os import walk
+
     from .configuring.settings import DeckSettings
 
-    for targets_path in git_dir.rglob("deck.yml"):
-        # Skip hidden directories: build directories (`.build`, `.run`) can
-        # hold a deck.yml (e.g. a symlink to their deck's), and aren't decks.
-        if any(
-            part.startswith(".")
-            for part in targets_path.relative_to(git_dir).parent.parts
-        ):
-            continue
-        yield DeckSettings.from_yaml(targets_path.parent, git_dir=git_dir)
+    for root, dirs, files in walk(git_dir):
+        # Skip hidden directories, pruned before descending into them: build
+        # directories (`.build`, `.run`) can hold a deck.yml (e.g. a symlink to
+        # their deck's) and aren't decks, and `.git`/`.venv` are large.
+        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+        if "deck.yml" in files:
+            yield DeckSettings.from_yaml(Path(root), git_dir=git_dir)
 
 
 def section_files(content_dirs: Iterator[Path]) -> Iterator[Path]:
