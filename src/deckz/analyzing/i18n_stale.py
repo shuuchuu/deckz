@@ -8,6 +8,10 @@ symmetrically (`en-only`). A `Lang-sync: pending` commit, or one with no
 trailer, doesn't exempt anything -- it leaves the file stale until a later
 commit touches the sibling. `.yml` files aren't tracked here (see
 `deckz.analyzing.i18n_coverage` for their titles).
+
+`deckz.yml`'s `i18n.synced_at` names a commit up to which every pair is
+known to be in sync: it and its ancestors are ignored, so history from
+before trailers were used doesn't count.
 """
 
 import re
@@ -16,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
+from ..exceptions import InvalidConfigurationError
 from ..utils import content_dirs
 
 if TYPE_CHECKING:
@@ -49,8 +54,8 @@ class StaleFile:
     path: PurePosixPath
     sibling: PurePosixPath
     since: str | None
-    """The sibling's last commit sha before `commits`, or None if the \
-    sibling was never touched."""
+    """The sibling's last commit sha before `commits`, else `i18n.synced_at` \
+    if set, else None (the sibling was never touched)."""
     commits: tuple[CommitRef, ...]
     """The qualifying commits, oldest first."""
 
@@ -135,22 +140,38 @@ def notebook_pairs(
             yield fr, en
 
 
-def _changes_by_path(git_dir: Path, paths: set[str]) -> dict[str, list[_Change]]:
+def _changes_by_path(
+    git_dir: Path, paths: set[str], synced_at: str | None = None
+) -> dict[str, list[_Change]]:
     """Walk the whole history once, recording every change to `paths`.
+
+    Args:
+        git_dir: Root of the repository.
+        paths: Repository-relative paths to record the changes of.
+        synced_at: A revision whose commit and ancestors are skipped, or None.
 
     Returns:
         Each path mapped to its changes, oldest first.
+
+    Raises:
+        InvalidConfigurationError: If `synced_at` names no commit.
     """
-    from pygit2 import Repository
+    from pygit2 import Commit, Repository
     from pygit2.enums import SortMode
 
     changes: dict[str, list[_Change]] = {path: [] for path in paths}
     repo = Repository(str(git_dir))
     if repo.is_empty or repo.head_is_unborn:
         return changes
-    for ordinal, commit in enumerate(
-        repo.walk(repo.head.target, SortMode.TOPOLOGICAL | SortMode.REVERSE)
-    ):
+    walker = repo.walk(repo.head.target, SortMode.TOPOLOGICAL | SortMode.REVERSE)
+    if synced_at is not None:
+        try:
+            synced = repo.revparse_single(synced_at).peel(Commit)
+        except (KeyError, ValueError) as error:
+            msg = f"i18n.synced_at: {synced_at!r} is no commit of {git_dir}"
+            raise InvalidConfigurationError(msg) from error
+        walker.hide(synced.id)
+    for ordinal, commit in enumerate(walker):
         if len(commit.parents) > 1:
             continue  # Merge commits: no diff attributed, as `git log` does by default.
         diff = (
@@ -174,7 +195,10 @@ def _changes_by_path(git_dir: Path, paths: set[str]) -> dict[str, list[_Change]]
 
 
 def _pair_staleness(
-    a: PurePosixPath, b: PurePosixPath, changes: dict[str, list[_Change]]
+    a: PurePosixPath,
+    b: PurePosixPath,
+    changes: dict[str, list[_Change]],
+    synced_at: str | None = None,
 ) -> Iterator[StaleFile]:
     for path, sibling, exempt in ((a, b, "fr-only"), (b, a, "en-only")):
         sibling_events = changes.get(str(sibling), [])
@@ -189,7 +213,7 @@ def _pair_staleness(
             yield StaleFile(
                 path=path,
                 sibling=sibling,
-                since=baseline.sha if baseline else None,
+                since=baseline.sha if baseline else synced_at,
                 commits=tuple(
                     CommitRef(change.sha, change.subject) for change in qualifying
                 ),
@@ -222,9 +246,14 @@ def stale_files(
             )
         ]
     paths = {str(path) for pair in pairs for path in pair}
-    changes = _changes_by_path(git_dir, paths)
+    synced_at = settings.i18n.synced_at
+    changes = _changes_by_path(git_dir, paths, synced_at)
 
-    stale = [finding for a, b in pairs for finding in _pair_staleness(a, b, changes)]
+    stale = [
+        finding
+        for a, b in pairs
+        for finding in _pair_staleness(a, b, changes, synced_at)
+    ]
     return sorted(stale, key=lambda finding: finding.path)
 
 

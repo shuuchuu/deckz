@@ -2,8 +2,11 @@ import subprocess
 from pathlib import Path
 from pathlib import PurePosixPath as P
 
+from pytest import raises
+
 from deckz.analyzing.i18n_stale import stale_files
-from deckz.configuring.settings import GlobalPaths, GlobalSettings
+from deckz.configuring.settings import GlobalPaths, GlobalSettings, I18nSettings
+from deckz.exceptions import InvalidConfigurationError
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -170,3 +173,38 @@ def test_no_sibling_ever_touched_reports_since_none(tmp_path: Path) -> None:
 
     assert len(findings) == 1
     assert findings[0].since is None
+
+
+def _synced_settings(git_dir: Path, synced_at: str) -> GlobalSettings:
+    return _settings(git_dir).model_copy(
+        update={"i18n": I18nSettings(synced_at=synced_at)}
+    )
+
+
+def test_synced_at_ignores_it_and_its_ancestors(tmp_path: Path) -> None:
+    repo = _init(tmp_path)
+    _write(repo / "content" / "topic" / "topic.md", "fr v1")
+    _write(repo / "content" / "topic" / "en" / "topic.md", "en v1")
+    _commit(repo, "Add topic")
+    _write(repo / "content" / "topic" / "topic.md", "fr v2")
+    _commit(repo, "Update fr, settled before trailers")
+    synced = _git(repo, "rev-parse", "HEAD").strip()
+
+    assert stale_files(_synced_settings(repo, synced)) == []
+
+    _write(repo / "content" / "topic" / "topic.md", "fr v3")
+    _commit(repo, "Update fr again")
+
+    findings = stale_files(_synced_settings(repo, synced))
+    assert [c.subject for f in findings for c in f.commits] == ["Update fr again"]
+    assert findings[0].since == synced
+
+
+def test_synced_at_must_name_a_commit(tmp_path: Path) -> None:
+    repo = _init(tmp_path)
+    _write(repo / "content" / "topic" / "topic.md", "fr v1")
+    _write(repo / "content" / "topic" / "en" / "topic.md", "en v1")
+    _commit(repo, "Add topic")
+
+    with raises(InvalidConfigurationError):
+        stale_files(_synced_settings(repo, "no-such-revision"))

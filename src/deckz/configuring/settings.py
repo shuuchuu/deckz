@@ -94,6 +94,17 @@ class LabsSettings(BaseModel):
     `deckz.labs.Notebook` library."""
 
 
+class I18nSettings(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    synced_at: str | None = None
+    """Commit (sha or any revision git resolves) up to which every fr/en \
+    pair is known to be in sync, e.g. where a repository moved to \
+    `Lang-sync` trailers from markers of its own.
+
+    `deckz i18n stale` ignores that commit and its ancestors: they carry \
+    no trailers, yet their one-sided changes were already settled."""
+
+
 class ChecksSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
     opt_in: tuple[str, ...] = ()
@@ -171,6 +182,7 @@ class GlobalSettings(BaseModel):
     file_extensions: tuple[str, ...] = (".md",)
     labs: LabsSettings = Field(default_factory=LabsSettings)
     checks: ChecksSettings = Field(default_factory=ChecksSettings)
+    i18n: I18nSettings = Field(default_factory=I18nSettings)
     videos: VideosSettings = Field(default_factory=VideosSettings)
     paths: GlobalPaths = Field(default_factory=GlobalPaths)
 

@@ -753,6 +753,10 @@ The main commands:
   with changes not yet ported to their other-language sibling, computed
   from git history alone (a `Lang-sync` commit trailer, not a stored
   marker, exempts a one-sided change). `--plain` for a script or an agent.
+  A repository moving to trailers from markers of its own (or with
+  one-sided commits it already settled) sets `i18n.synced_at` in
+  `deckz.yml` to the commit up to which every pair is in sync: that commit
+  and its ancestors are ignored.
 - `deckz generate-agent-notes`: print onboarding notes for an AI coding
   agent working in the repo (conventions not already covered by `--help`,
   e.g. the section/flavor syntax and local-override resolution). Prints to
