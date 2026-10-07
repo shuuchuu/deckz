@@ -1,2 +1,2 @@
 app_name = "deckz"
-__version__ = "30.1.1"
+__version__ = "30.2.0"
