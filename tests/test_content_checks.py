@@ -5,6 +5,7 @@ from pygit2 import init_repository
 from deckz.analyzing.content_checks import (
     asset_credits,
     lab_ids,
+    lab_outputs,
     lab_pairs,
     lab_urls,
     raw_latex,
@@ -76,6 +77,57 @@ def test_lab_pairs_flags_a_structural_difference(tmp_path: Path) -> None:
 
     assert len(problems) == 1
     assert "1 cells in fr, 0 in en" in problems[0]
+
+
+def test_lab_outputs_flags_a_hands_on_notebook_with_outputs(tmp_path: Path) -> None:
+    init_repository(str(tmp_path))
+    code_cell = (
+        '{"cell_type": "code", "source": ["1"], '
+        '"outputs": [{"output_type": "execute_result", "data": {}}]}'
+    )
+    _write(
+        tmp_path / "labs" / "notebooks" / "topic" / "hands-on-fr.ipynb",
+        f'{{"metadata": {{}}, "cells": [{code_cell}]}}',
+    )
+
+    problems = lab_outputs(_settings(tmp_path))
+
+    assert len(problems) == 1
+    assert "hands-on-fr.ipynb" in problems[0]
+    assert "stored outputs" in problems[0]
+
+
+def test_lab_outputs_flags_a_demo_notebook_without_outputs(tmp_path: Path) -> None:
+    init_repository(str(tmp_path))
+    _write(
+        tmp_path / "labs" / "notebooks" / "topic" / "demo-fr.ipynb",
+        '{"metadata": {}, "cells": [{"cell_type": "code", "source": ["1"], '
+        '"outputs": []}]}',
+    )
+
+    problems = lab_outputs(_settings(tmp_path))
+
+    assert len(problems) == 1
+    assert "demo-fr.ipynb" in problems[0]
+    assert "no stored outputs" in problems[0]
+
+
+def test_lab_outputs_accepts_a_hands_on_without_and_a_demo_with_outputs(
+    tmp_path: Path,
+) -> None:
+    init_repository(str(tmp_path))
+    _write(
+        tmp_path / "labs" / "notebooks" / "topic" / "hands-on-fr.ipynb",
+        '{"metadata": {}, "cells": [{"cell_type": "code", "source": ["1"], '
+        '"outputs": []}]}',
+    )
+    _write(
+        tmp_path / "labs" / "notebooks" / "topic" / "demo-fr.ipynb",
+        '{"metadata": {}, "cells": [{"cell_type": "code", "source": ["1"], '
+        '"outputs": [{"output_type": "execute_result", "data": {}}]}]}',
+    )
+
+    assert lab_outputs(_settings(tmp_path)) == []
 
 
 def test_asset_credits_flags_latex_in_a_credit_line(tmp_path: Path) -> None:

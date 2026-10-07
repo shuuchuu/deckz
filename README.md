@@ -26,6 +26,12 @@ optional dependencies (Google Drive, GitHub and SendGrid clients):
 pip install "deckz[extras]"
 ```
 
+`deckz labs outputs`' image recompression needs Pillow
+(`pip install "deckz[labs]"`, lazily required only when a notebook has a
+large image output to shrink); `deckz check parity` needs Playwright and
+pypdfium2 (`pip install "deckz[parity]"`, then `playwright install
+chromium`).
+
 Whatever your `templates/assets_builders.py` imports (e.g. matplotlib or
 plotly) is your repository's own dependency: install it alongside deckz.
 
@@ -162,6 +168,10 @@ typst_ignore_system_fonts: true
 - `html_static_dirs`: directories of `assets` copied whole into every
   HTML output, on top of the files its page references, for files only
   scripts load (e.g. a math renderer's fonts). Defaults to none.
+- `overflow_marker_label`: the Typst metadata label (default
+  `formation-overflow`) `deckz check overflow` queries for shrunk-to-fit
+  frames (`ratio`/`page` keys) -- only the label's name, the shrinking
+  mechanism itself stays your theme's.
 - `file_extensions`: the extensions tried, in order, when resolving a file
   include. Defaults to `[".md"]`.
 - `labs`: settings for the `deckz labs` commands, e.g.:
@@ -418,6 +428,11 @@ layout](#repository-layout)). `watched_dirs` only matters for `deckz run
 assets --watch`: it tells the watch loop which source directories should
 trigger a rebuild.
 
+`deckz` ships one ready-made builder, `TypstFiguresAssetsBuilder`
+(`deckz.components.typst_figures_builder`), for a Typst-themed repo whose
+figures are Typst sources compiled to SVG: wire it into your own
+`assets_builders()` alongside any other builder you need.
+
 ### Content checks plugin
 
 `deckz check` (alias for `deckz check content`) runs a few generic content
@@ -441,6 +456,48 @@ called once, with the repository's settings, to obtain every extra check
 to run, each a zero-argument callable returning its problems (empty if
 none) the same way deckz's built-in checks do. A name colliding with a
 built-in check's is rejected.
+
+### Claude Code hooks
+
+`deckz hooks install` also adds deckz's own Claude Code hooks to
+`.claude/settings.json` (Claude Code is treated as a requirement of a
+deckz-managed repository, like git): `deckz hooks pre-bash`/`post-edit`/
+`session-start`/`stop`, backed by `deckz.agent_hooks`. The generic rules
+they enforce need no repo-specific knowledge:
+
+- **PreToolUse/Bash**: deny staging everything (`git add -A`/`.`/`-u`),
+  `git commit -a`, `git clean` without `--dry-run`, and anything that
+  would discard uncommitted changes (`git checkout`/`restore` on a
+  changed file, `git reset --hard`, a bare `git stash`) -- several Claude
+  Code sessions may share one checkout.
+- **PostToolUse/Edit,Write,MultiEdit**: convert an edited content file
+  with this repo's own `pandoc_command` and run deckz's content checks
+  (built-ins plus `templates/checks.py`'s) against it, reporting any
+  problem back to the agent right away.
+- **SessionStart**/**Stop**: snapshot the repo's fr/en content and lab
+  notebook pairs when the session starts, and flag at `Stop` any pair
+  changed on one language side only since then (same pairing as `deckz
+  i18n stale`, but for the live session, not git history).
+
+A repo can add its own Bash denials (e.g. never publish, never push to a
+themed remote) from an optional `templates/hooks.py` module exposing:
+
+```python
+from collections.abc import Sequence
+from pathlib import Path
+
+from deckz.configuring.settings import GlobalSettings
+
+
+def deny_bash(
+    words: Sequence[str], cwd: Path, settings: GlobalSettings
+) -> str | None:
+    ...
+```
+
+called once per simple command of a Bash tool call, after deckz's own
+built-in denials; returning a reason denies the call, `None` lets it
+through (deckz's own reason wins if both would deny).
 
 ### Python hooks: contract and trust
 
@@ -587,8 +644,9 @@ The main commands:
   compiled.
 - `deckz check` (alias for `deckz check content`): run deckz's generic
   content checks -- lab notebook IDs valid and unique (`lab-ids`), fr/en
-  lab notebook pairs present and in sync (`lab-pairs`), asset credit lines
-  (`title`/`author`/`license`, and their `_en`) free of LaTeX
+  lab notebook pairs present and in sync (`lab-pairs`), hands-on notebooks
+  with no stored outputs and demos with some (`lab-outputs`), asset credit
+  lines (`title`/`author`/`license`, and their `_en`) free of LaTeX
   (`asset-credits`), no raw LaTeX in content (`raw-latex`), no hand-written
   link to the configured lab-publishing remote (`lab-urls`) -- plus, if
   `templates/checks.py` defines a `checks(settings)` function, the target
@@ -599,13 +657,33 @@ The main commands:
   session's unfinished edits neither block nor hide a check; a check
   needing the repository's git history or remotes does nothing under
   `--staged`. `--plain` for a script or an agent.
+- `deckz check overflow [DECK_DIR]`: report a built handout's shrunk-to-fit
+  frames (the `overflow_marker_label` Typst metadata marker, matching
+  `formation.typ`'s `<formation-overflow>` by default), worst first, with
+  the content file(s) building each one. Needs the handout already built
+  (`deckz run --handout`, or a `deckz run file`/`deckz run section`
+  preview); reads the PDF's text with poppler's `pdftotext`. Exits 1 if
+  any frame was shrunk.
+- `deckz check parity [DECK_DIR] [SLIDES...]` (extra: `deckz[parity]`,
+  then `playwright install chromium`): compare a built deck's PDF and HTML
+  slide by slide (`deckz run --handout --html`), reporting each pair's
+  mean grayscale difference, the frames a reveal.js theme shrank to fit (a
+  slide element carrying `dataset.ratio`/`dataset.overflow`), and anything
+  the page logged, failed to load or tried to fetch from the network (a
+  deck must work offline). By default writes an HTML report
+  (`.build/parity/report.html`, sortable by gap, shrunk frames flagged),
+  opened with `--open`; `--plain` instead prints a worst-first text report
+  (agent-friendly) and writes contact sheets (PDF left, HTML right).
 - `deckz hooks install`: install deckz's `pre-commit` (`deckz check
   --staged`) and `commit-msg` git hooks into the current repository.
   The `commit-msg` hook refuses a commit that changes one side of a fr/en
   content or lab notebook pair with no `Lang-sync` trailer (`fr-only
   (<reason>)`/`en-only (<reason>)`/`pending`, see `deckz i18n stale`
   above). Refuses to overwrite a hook file it didn't itself write, unless
-  `--force` is passed.
+  `--force` is passed. Also adds deckz's generic Claude Code hooks to
+  `.claude/settings.json` (safe to call repeatedly; every other key of
+  the file is left untouched) -- see [Claude Code
+  hooks](#claude-code-hooks).
 - `deckz show` (alias for `deckz show tree`): show the resolved tree of
   sections and files for the current deck.
 - `deckz show settings` / `deckz show variables` / `deckz show paths`:
@@ -659,9 +737,15 @@ The main commands:
   exits nonzero if anything would.
 - `deckz labs ids [--dry-run]`: assign a published ID to every lab
   notebook that doesn't have one yet, refusing a duplicate.
-- `deckz labs outputs EXECUTED NOTEBOOK`: write an executed copy's cell
-  outputs (and nothing else) back into a notebook, merging consecutive
-  stream outputs and resolving carriage returns.
+- `deckz labs outputs EXECUTED NOTEBOOK [--max-image-kb KB] [--no-recompress]`:
+  write an executed copy's cell outputs (and nothing else) back into a
+  notebook, merging consecutive stream outputs and resolving carriage
+  returns. A large `image/png` output (above `--max-image-kb`, default
+  200) is re-encoded as JPEG when that's at least twice smaller (the
+  common case for photos), or re-saved as an optimized PNG otherwise
+  (charts and line art); `--no-recompress` disables this and needs no
+  extra dependency, unlike the default, which needs Pillow
+  (`deckz[labs]`) only when an image actually needs recompressing.
 - `deckz labs check [--smoke] [--python INTERPRETER] [--timeout SECONDS]
   NOTEBOOKS...`: structural checks (uncollapsed/empty solution sections,
   stored error outputs) plus an execution of every code cell, in a

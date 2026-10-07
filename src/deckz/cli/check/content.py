@@ -17,9 +17,10 @@ def content(
     """Run deckz's generic content checks, plus the target repo's own plugin ones.
 
     Deckz's own checks need no repository-specific setup: lab notebook IDs
-    (`lab-ids`), fr/en lab notebook pairs (`lab-pairs`), asset credit lines
-    free of LaTeX (`asset-credits`), and no raw LaTeX in content
-    (`raw-latex`, `lab-urls`). A `templates/checks.py` module (see
+    (`lab-ids`), fr/en lab notebook pairs (`lab-pairs`), hands-on notebooks
+    carrying no stored outputs and demos carrying some (`lab-outputs`),
+    asset credit lines free of LaTeX (`asset-credits`), and no raw LaTeX in
+    content (`raw-latex`, `lab-urls`). A `templates/checks.py` module (see
     `GlobalPaths.checks_module`) can add the repository's own, merged in
     under their own names.
 

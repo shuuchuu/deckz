@@ -22,6 +22,7 @@ def test_without_a_plugin_module_only_builtin_checks_run(tmp_path: Path) -> None
     assert set(checks) == {
         "lab-ids",
         "lab-pairs",
+        "lab-outputs",
         "asset-credits",
         "raw-latex",
         "lab-urls",

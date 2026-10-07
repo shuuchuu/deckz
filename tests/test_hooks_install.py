@@ -1,10 +1,11 @@
+import json
 from pathlib import Path
 
 from pygit2 import init_repository
 from pytest import raises
 
 from deckz.exceptions import HookInstallRefusedError
-from deckz.hooks_install import install_hooks
+from deckz.hooks_install import install_claude_hooks, install_hooks
 
 
 def test_install_hooks_writes_both_hooks_executable(tmp_path: Path) -> None:
@@ -45,3 +46,59 @@ def test_install_hooks_reinstalls_its_own_hook_without_force(tmp_path: Path) -> 
 
     install_hooks(tmp_path)
     install_hooks(tmp_path)  # Should not raise.
+
+
+def test_install_claude_hooks_writes_every_event(tmp_path: Path) -> None:
+    path = install_claude_hooks(tmp_path)
+
+    settings = json.loads(path.read_text(encoding="utf-8"))
+    assert set(settings["hooks"]) == {
+        "PreToolUse",
+        "PostToolUse",
+        "SessionStart",
+        "Stop",
+    }
+    pre_bash = settings["hooks"]["PreToolUse"][0]
+    assert pre_bash["matcher"] == "Bash"
+    assert pre_bash["hooks"][0]["command"] == "deckz hooks pre-bash"
+
+
+def test_install_claude_hooks_is_idempotent(tmp_path: Path) -> None:
+    install_claude_hooks(tmp_path)
+
+    path = install_claude_hooks(tmp_path)
+
+    settings = json.loads(path.read_text(encoding="utf-8"))
+    assert len(settings["hooks"]["Stop"]) == 1
+
+
+def test_install_claude_hooks_keeps_other_settings_and_hooks(tmp_path: Path) -> None:
+    path = tmp_path / ".claude" / "settings.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps(
+            {
+                "permissions": {"allow": ["Bash(ls:*)"]},
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "Bash",
+                            "hooks": [{"type": "command", "command": "my-own-hook"}],
+                        }
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    install_claude_hooks(tmp_path)
+
+    settings = json.loads(path.read_text(encoding="utf-8"))
+    assert settings["permissions"] == {"allow": ["Bash(ls:*)"]}
+    commands = {
+        hook["command"]
+        for group in settings["hooks"]["PreToolUse"]
+        for hook in group["hooks"]
+    }
+    assert commands == {"my-own-hook", "deckz hooks pre-bash"}

@@ -25,3 +25,13 @@ def test_chained_import_error_is_a_user_error() -> None:
 def test_unrelated_import_error_is_reraised() -> None:
     with raises(ModuleNotFoundError), extras_imports():
         raise ModuleNotFoundError(name="deckz.nope")
+
+
+def test_missing_labs_module_is_a_user_error() -> None:
+    with raises(MissingExtraError, match=r"deckz\[labs\]"), extras_imports("labs"):
+        raise ModuleNotFoundError(name="PIL")
+
+
+def test_labs_extra_does_not_catch_extras_modules() -> None:
+    with raises(ModuleNotFoundError), extras_imports("labs"):
+        raise ModuleNotFoundError(name="sendgrid")

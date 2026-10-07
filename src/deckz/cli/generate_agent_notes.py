@@ -67,7 +67,45 @@ or a declared variable nothing ever reads.
   `templates/jinja2/main.html` and `deckz.yml`'s `html_pandoc_command`),
   packaged under the deck's `html/` directory.
 - `deckz clean all` -- wipe every deck's build dir, plus the `.run`
-  scratch directory above and `check variables`' `.check` one.
+  scratch directory above and `check variables`'/`check content
+  --staged`'s `.check` one.
+
+## Checks, lab notebooks and agent-facing output
+
+- `deckz check` (alias `deckz check content`) -- lab notebook IDs valid
+  and unique, fr/en lab notebook pairs present and in sync, hands-on
+  notebooks with no stored outputs and demos with some, asset credit
+  lines free of LaTeX, no raw LaTeX in content, no hand-written link to
+  the lab-publishing remote -- plus the repo's own `templates/checks.py`
+  checks, merged in under their own names. `--staged` checks the git
+  index's staged version of every tracked file instead of the working
+  tree (so it matches what's about to be committed, and another
+  session's unfinished edits don't block or hide a check).
+- `deckz check overflow DECK_DIR` -- a built handout's shrunk-to-fit
+  frames, worst first, with their source content file(s). Needs the
+  handout already built (`deckz run --handout`).
+- `deckz check parity DECK_DIR` (needs the `deckz[parity]` extra) --
+  compare a built deck's PDF and HTML slide by slide, needing both
+  already built (`deckz run --handout --html`). Writes an HTML report by
+  default; `--plain` instead prints a worst-first text report and
+  contact sheets, meant for an agent.
+- `deckz labs fmt`/`ids`/`outputs`/`check`/`compare`/`missing`/`dump`/
+  `publish` operate on `labs/notebooks` (see `deckz labs --help` for
+  each). `fmt --check` and `ids --dry-run` report without writing;
+  `publish` is for a human to run, never an agent.
+- `deckz i18n stale [PATHS...]` -- content files and lab notebooks with
+  changes not yet ported to their other-language sibling, computed from
+  git history and `Lang-sync` commit trailers alone (no stored marker).
+- Most analysis commands above (`check content`, `check variables`, `i18n
+  stale`, `search-sections`, ...) take `--plain` for a compact, stable,
+  colorless report meant for a script or an agent to parse, and some take
+  `--json` for a single parseable payload instead.
+- `deckz hooks install` wires up this repo's git hooks (pre-commit,
+  commit-msg) and Claude Code hooks (`.claude/settings.json`): denying a
+  Bash command that would stage everything or discard another session's
+  uncommitted work, checking an edited content file on the spot, and
+  flagging a fr/en pair changed on one language side only during the
+  session. Respect these: several sessions may share this checkout.
 
 ## English variant
 

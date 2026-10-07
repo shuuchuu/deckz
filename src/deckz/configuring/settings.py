@@ -57,6 +57,7 @@ class GlobalPaths(BaseModel):
     jinja2_env_module: _Path = cast("Path", "{jinja2_dir}/env.py")
     assets_builders_module: _Path = cast("Path", "{templates_dir}/assets_builders.py")
     checks_module: _Path = cast("Path", "{templates_dir}/checks.py")
+    hooks_module: _Path = cast("Path", "{templates_dir}/hooks.py")
     github_issues: _Path = cast("Path", "{user_config_dir}/github-issues.yml")
     mails: _Path = cast("Path", "{user_config_dir}/mails.yml")
     gdrive_secrets: _Path = cast("Path", "{user_config_dir}/gdrive-secrets.json")
@@ -113,6 +114,14 @@ class GlobalSettings(BaseModel):
 
     Builds then only depend on `typst_font_paths` and Typst's embedded \
     fonts, identical on every machine, and each PDF skips a system font scan.
+    """
+    overflow_marker_label: str = "formation-overflow"
+    """Typst label `deckz check overflow` queries for shrunk-to-fit frames.
+
+    The target repo's Typst theme emits one `<label>` metadata value per \
+    frame it had to shrink to fit the page, with `ratio` and `page` keys; \
+    this setting is only the label's name, not the shrinking mechanism \
+    itself, which stays entirely the theme's business.
     """
     pandoc_command: tuple[str, ...] = ()
     """Command converting a rendered Markdown fragment to Typst.

@@ -215,6 +215,22 @@ def load_all_yamls(paths: Iterable[Path]) -> Iterator[Any]:
             yield load_yaml(path)
 
 
+def deck_name_from_dir(current_dir: Path) -> str:
+    """The lowercased `name` a deck directory's own `deck.yml` declares.
+
+    A `deckz run file`/`deckz run section` preview has no `deck.yml` of its \
+    own (it's compiled as a synthetic deck, see `Parser.from_file`/ \
+    `from_section`): its directory gets the same fallback name they use.
+
+    Returns:
+        `deck.yml`'s `name`, lowercased, or `"deck"` if there's no `deck.yml`.
+    """
+    config = current_dir / "deck.yml"
+    if not config.is_file():
+        return "deck"
+    return str(load_yaml(config)["name"]).lower()
+
+
 def _parse_deck(settings: "DeckSettings", lang: "Lang") -> tuple[Path, "ResolvedDeck"]:
     from .components.factory import DeckSettingsFactory
     from .configuring.variables import get_variables, resolve_variables

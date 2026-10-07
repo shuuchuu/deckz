@@ -19,6 +19,7 @@ knows about (the content/labs directory layout, `labs.*` settings, the
 Markdown-to-Typst/HTML pipeline, asset metadata yaml files).
 """
 
+import json
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -27,6 +28,7 @@ from typing import TYPE_CHECKING
 from ..exceptions import LabIdConflictError
 from ..labs.comparison import compare_pairs, missing_notebooks
 from ..labs.ids import assign_ids
+from ..labs.notebook import notebook_paths
 from ..utils import content_dirs
 
 if TYPE_CHECKING:
@@ -70,6 +72,28 @@ def lab_pairs(settings: "GlobalSettings") -> list[str]:
     for stem, pair_problems in compare_pairs(notebooks_dir):
         where = _rel(notebooks_dir / stem, git_dir)
         problems += [f"{where}: {problem}" for problem in pair_problems]
+    return problems
+
+
+def lab_outputs(settings: "GlobalSettings") -> list[str]:
+    # A hands-on notebook never carries stored outputs (every learner runs
+    # it); a demo always does, each language's from its own run.
+    notebooks_dir = settings.paths.labs_notebooks_dir
+    git_dir = settings.paths.git_dir
+    problems = []
+    for path in notebook_paths([notebooks_dir]):
+        kind, _, _lang = path.stem.rpartition("-")
+        if kind not in {"hands-on", "demo"}:
+            continue
+        cells = json.loads(path.read_text(encoding="utf-8")).get("cells", [])
+        has_outputs = any(
+            cell.get("cell_type") == "code" and cell.get("outputs") for cell in cells
+        )
+        where = _rel(path, git_dir)
+        if kind == "hands-on" and has_outputs:
+            problems.append(f"{where}: hands-on notebook has stored outputs")
+        elif kind == "demo" and not has_outputs:
+            problems.append(f"{where}: demo notebook has no stored outputs")
     return problems
 
 
@@ -157,6 +181,7 @@ def lab_urls(settings: "GlobalSettings") -> list[str]:
 CHECKS: dict[str, Callable[["GlobalSettings"], list[str]]] = {
     "lab-ids": lab_ids,
     "lab-pairs": lab_pairs,
+    "lab-outputs": lab_outputs,
     "asset-credits": asset_credits,
     "raw-latex": raw_latex,
     "lab-urls": lab_urls,
