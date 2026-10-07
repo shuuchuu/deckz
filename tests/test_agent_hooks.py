@@ -9,7 +9,7 @@ from deckz.agent_hooks import (
     session_start,
     stop_report,
 )
-from deckz.configuring.settings import GlobalPaths, GlobalSettings
+from deckz.configuring.settings import ChecksSettings, GlobalPaths, GlobalSettings
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -240,6 +240,19 @@ def test_post_edit_report_flags_a_content_check_problem(tmp_path: Path) -> None:
     assert report is not None
     assert "raw-latex" in report
     assert "{=latex}" in report
+
+
+def test_post_edit_report_skips_opt_in_checks(tmp_path: Path) -> None:
+    repo = _init(tmp_path)
+    path = repo / "content" / "topic" / "topic.md"
+    _write(path, "before\n\n```{=latex}\nraw\n```\n")
+    settings = _settings(repo).model_copy(
+        update={"checks": ChecksSettings(opt_in=("raw-latex",))}
+    )
+
+    report = post_edit_report(settings, {"tool_input": {"file_path": str(path)}})
+
+    assert report is None
 
 
 # -- session_start / stop_report ------------------------------------------

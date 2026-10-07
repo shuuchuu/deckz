@@ -1,7 +1,8 @@
 """Write deckz's git hooks and Claude Code hooks into a repository.
 
-Each installed git hook (in `.git/hooks/`) is a thin shell script that
-shells back out to `deckz`: the pre-commit hook runs `deckz check
+Each installed git hook (in the repository's hooks directory: git's
+`core.hooksPath` when it is set, else `.git/hooks/`) is a thin shell script
+that shells back out to `deckz`: the pre-commit hook runs `deckz check
 --staged` (so the checks apply to the commit about to be made, not the
 unstaged working tree); the commit-msg hook runs `deckz hooks
 check-commit-msg`, refusing a commit that changes one side of a fr/en pair
@@ -12,53 +13,94 @@ A hook file deckz didn't write itself (no `_MARKER` line) is left alone
 unless `force` is passed, so installing never silently clobbers a repo's
 own pre-existing hook.
 
+Every installed command runs `deckz` from the `PATH` when it is there, else
+`uv run --quiet deckz` (deckz installed as a dependency of the repository's
+own uv project, run from outside its virtual environment, e.g. by a git GUI
+or a Claude Code session started without it).
+
 The Claude Code hooks (`deckz.agent_hooks`) are added to
 `.claude/settings.json` instead: unlike a git hook file, that file already
 supports several independent hook registrations side by side (a list of
 `{matcher, hooks: [...]}` groups per event), so there's nothing to refuse
-to overwrite -- `install_claude_hooks` just skips an event deckz already
-registered (matched by its exact `command` string) and leaves every other
-key of the file untouched.
+to overwrite -- `install_claude_hooks` just updates the command of an event
+deckz already registered (one calling `deckz hooks <name>`, whatever its
+form) and leaves every other key of the file untouched.
 """
 
 import json
 from pathlib import Path
 from typing import Any
 
+from pygit2 import Repository
+
 from .exceptions import HookInstallRefusedError
 
 _MARKER = "# deckz-managed hook: safe to overwrite (deckz hooks install)"
 
+
+def deckz_command(arguments: str) -> str:
+    """A shell command running `deckz <arguments>`, from the `PATH` or through uv.
+
+    Args:
+        arguments: The deckz arguments, already shell-quoted.
+
+    Returns:
+        The command, replacing the shell with deckz either way, so its exit \
+        code and output are deckz's own.
+    """
+    return (
+        f"if command -v deckz >/dev/null 2>&1; then exec deckz {arguments}; "
+        f"else exec uv run --quiet deckz {arguments}; fi"
+    )
+
+
+_COMMIT_MSG_ARGUMENTS = 'hooks check-commit-msg "$1"'
 HOOKS: dict[str, str] = {
-    "pre-commit": f"#!/bin/sh\n{_MARKER}\nexec deckz check --staged\n",
-    "commit-msg": f'#!/bin/sh\n{_MARKER}\nexec deckz hooks check-commit-msg "$1"\n',
+    "pre-commit": f"#!/bin/sh\n{_MARKER}\n{deckz_command('check --staged')}\n",
+    "commit-msg": f"#!/bin/sh\n{_MARKER}\n{deckz_command(_COMMIT_MSG_ARGUMENTS)}\n",
 }
 
 _CLAUDE_HOOKS: dict[str, dict[str, Any]] = {
     "PreToolUse": {
         "matcher": "Bash",
-        "command": "deckz hooks pre-bash",
+        "subcommand": "pre-bash",
         "timeout": 10,
     },
     "PostToolUse": {
         "matcher": "Edit|Write|MultiEdit",
-        "command": "deckz hooks post-edit",
+        "subcommand": "post-edit",
         "timeout": 60,
         "statusMessage": "Checking the content file",
     },
     "SessionStart": {
-        "command": "deckz hooks session-start",
+        "subcommand": "session-start",
         "timeout": 30,
     },
     "Stop": {
-        "command": "deckz hooks stop",
+        "subcommand": "stop",
         "timeout": 30,
     },
 }
 
 
+def hooks_dir(git_dir: Path) -> Path:
+    """The directory git runs `git_dir`'s hooks from.
+
+    Args:
+        git_dir: Root of the repository.
+
+    Returns:
+        Its `core.hooksPath` (relative to `git_dir` unless absolute) when \
+        set, else its `.git/hooks/`.
+    """
+    config = Repository(str(git_dir)).config
+    if "core.hooksPath" in config and (hooks_path := config["core.hooksPath"]):
+        return git_dir / Path(hooks_path).expanduser()
+    return git_dir / ".git" / "hooks"
+
+
 def install_hooks(git_dir: Path, *, force: bool = False) -> list[Path]:
-    """Write every hook in `HOOKS` into `git_dir`'s `.git/hooks/`.
+    """Write every hook in `HOOKS` into `git_dir`'s hooks directory (`hooks_dir`).
 
     Args:
         git_dir: Root of the deckz-managed repository.
@@ -71,11 +113,11 @@ def install_hooks(git_dir: Path, *, force: bool = False) -> list[Path]:
         HookInstallRefusedError: If an existing hook file doesn't carry \
             deckz's marker and `force` isn't set.
     """
-    hooks_dir = git_dir / ".git" / "hooks"
-    hooks_dir.mkdir(parents=True, exist_ok=True)
+    directory = hooks_dir(git_dir)
+    directory.mkdir(parents=True, exist_ok=True)
     written = []
     for name, body in HOOKS.items():
-        path = hooks_dir / name
+        path = directory / name
         if (
             path.exists()
             and not force
@@ -93,11 +135,12 @@ def install_claude_hooks(git_dir: Path) -> Path:
     """Add deckz's generic Claude Code hooks to `git_dir`'s `.claude/settings.json`.
 
     Adds one `{matcher, hooks: [...]}` group per event of `_CLAUDE_HOOKS`
-    missing from the file; an event already carrying deckz's own command
-    (matched exactly) is left as is, so calling this repeatedly, or after
-    the person edited the file by hand, never duplicates an entry. Every
-    other key of an existing file -- other hooks, permissions, anything
-    else -- is kept untouched.
+    missing from the file; a hook already calling `deckz hooks <name>` (in
+    any form, e.g. an older deckz's bare `deckz hooks stop`) gets the
+    current command instead, so calling this repeatedly, or after the
+    person edited the file by hand, never duplicates an entry. Every other
+    key of an existing file -- other hooks, permissions, anything else --
+    is kept untouched.
 
     Args:
         git_dir: Root of the deckz-managed repository.
@@ -112,15 +155,20 @@ def install_claude_hooks(git_dir: Path) -> Path:
     hooks = settings.setdefault("hooks", {})
     for event, spec in _CLAUDE_HOOKS.items():
         groups = hooks.setdefault(event, [])
-        if any(
-            hook.get("command") == spec["command"]
+        command = deckz_command(f"hooks {spec['subcommand']}")
+        ours = [
+            hook
             for group in groups
             for hook in group.get("hooks", [])
-        ):
+            if f"deckz hooks {spec['subcommand']}" in hook.get("command", "")
+        ]
+        for hook in ours:
+            hook["command"] = command
+        if ours:
             continue
         entry: dict[str, Any] = {
             "type": "command",
-            "command": spec["command"],
+            "command": command,
             "timeout": spec["timeout"],
         }
         if "statusMessage" in spec:

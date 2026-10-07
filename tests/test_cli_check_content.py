@@ -66,6 +66,21 @@ def test_check_content_rejects_an_unknown_check(
     assert exc_info.value.code == 2
 
 
+def test_check_content_skips_opt_in_checks_unless_named(
+    repo: Path, capsys: CaptureFixture[str]
+) -> None:
+    _write(repo / "deckz.yml", "checks:\n  opt_in: [raw-latex]\n")
+    _write(repo / "content" / "topic" / "notes.tex", r"\section{x}")
+
+    main(("check", "content"))
+    assert capsys.readouterr().out == ""
+
+    with raises(SystemExit) as exc_info:
+        main(("check", "content", "raw-latex"))
+    assert exc_info.value.code == 1
+    assert "notes.tex" in capsys.readouterr().out
+
+
 def test_check_content_staged_ignores_unstaged_changes(
     repo: Path, capsys: CaptureFixture[str]
 ) -> None:

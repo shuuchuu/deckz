@@ -24,8 +24,9 @@ def content(
     `GlobalPaths.checks_module`) can add the repository's own, merged in
     under their own names.
 
-    With no CHECKS given, runs every one, deckz's built-ins first. Exits 1
-    if any check reports a problem.
+    With no CHECKS given, runs every one, deckz's built-ins first, except
+    those `deckz.yml` lists under `checks.opt_in`, which run only when
+    named. Exits 1 if any check reports a problem.
 
     Args:
         checks: Only run these checks, by name, instead of every one
@@ -55,7 +56,11 @@ def content(
         settings = GlobalSettings.from_yaml(exported, git_dir=exported)
 
     available = GlobalSettingsFactory(settings).checks_runner().checks()
-    selected = checks if checks is not None else list(available)
+    selected = (
+        checks
+        if checks is not None
+        else [name for name in available if name not in settings.checks.opt_in]
+    )
     if unknown := [name for name in selected if name not in available]:
         print(f"unknown checks {unknown}: pick from {sorted(available)}", file=stderr)
         sys_exit(2)

@@ -225,9 +225,14 @@ instead of the working tree, so another session's unfinished edits neither
 block nor hide a check.
 
 `hooks_install.py` writes deckz's own `pre-commit` (`deckz check --staged`)
-and `commit-msg` git hooks into `<git_dir>/.git/hooks/`, each a thin shell
-script shelling back out to `deckz`; refuses to overwrite a hook file
-without deckz's own marker line unless `--force` (`HookInstallRefusedError`).
+and `commit-msg` git hooks into the repo's hooks directory (`core.hooksPath`
+if set, else `<git_dir>/.git/hooks/`), each a thin shell script shelling
+back out to `deckz` (from the `PATH`, else `uv run --quiet deckz`:
+`deckz_command`, also used for the Claude Code hooks' commands); refuses to
+overwrite a hook file without deckz's own marker line unless `--force`
+(`HookInstallRefusedError`). `deckz.yml`'s `checks.opt_in` lists checks that
+`deckz check`, the pre-commit hook and the post-edit Claude Code hook skip
+unless named (slow, networked, or not yet passing ones).
 The commit-msg hook (`deckz hooks check-commit-msg`, `cli/hooks/`) reuses
 `analyzing/i18n_stale.py`'s fr/en pairing (`content_pairs`/
 `notebook_pairs`/`lang_sync_kind`) to refuse, via `CommitRefusedError`, a

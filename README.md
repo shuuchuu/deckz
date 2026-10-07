@@ -483,6 +483,16 @@ to run, each a zero-argument callable returning its problems (empty if
 none) the same way deckz's built-in checks do. A name colliding with a
 built-in check's is rejected.
 
+Checks too slow, networked or not yet passing to run on every commit can
+be listed in `deckz.yml`, by name, under `checks.opt_in`: `deckz check`
+(hence the pre-commit hook) and the post-edit Claude Code hook skip them,
+and `deckz check <name>` still runs them:
+
+```yaml
+checks:
+  opt_in: [lab-outputs, published-videos]
+```
+
 ### Claude Code hooks
 
 `deckz hooks install` also adds deckz's own Claude Code hooks to
@@ -701,7 +711,10 @@ The main commands:
   opened with `--open`; `--plain` instead prints a worst-first text report
   (agent-friendly) and writes contact sheets (PDF left, HTML right).
 - `deckz hooks install`: install deckz's `pre-commit` (`deckz check
-  --staged`) and `commit-msg` git hooks into the current repository.
+  --staged`) and `commit-msg` git hooks into the current repository's
+  hooks directory (git's `core.hooksPath` when set, so a repo can commit
+  them, else `.git/hooks/`). Each hook, like each Claude Code hook
+  command, runs `deckz` from the `PATH`, else `uv run --quiet deckz`.
   The `commit-msg` hook refuses a commit that changes one side of a fr/en
   content or lab notebook pair with no `Lang-sync` trailer (`fr-only
   (<reason>)`/`en-only (<reason>)`/`pending`, see `deckz i18n stale`

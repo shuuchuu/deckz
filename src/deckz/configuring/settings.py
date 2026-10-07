@@ -94,6 +94,16 @@ class LabsSettings(BaseModel):
     `deckz.labs.Notebook` library."""
 
 
+class ChecksSettings(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    opt_in: tuple[str, ...] = ()
+    """Checks `deckz check` runs only when named, e.g. `deckz check lab-outputs`.
+
+    Built-in or plugin checks too slow, networked or not yet passing to \
+    run on every commit (the pre-commit hook runs `deckz check --staged`, \
+    i.e. every other check). A name no check has is ignored."""
+
+
 class VideosSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
     publish_remote: str = "videos"
@@ -160,6 +170,7 @@ class GlobalSettings(BaseModel):
     """
     file_extensions: tuple[str, ...] = (".md",)
     labs: LabsSettings = Field(default_factory=LabsSettings)
+    checks: ChecksSettings = Field(default_factory=ChecksSettings)
     videos: VideosSettings = Field(default_factory=VideosSettings)
     paths: GlobalPaths = Field(default_factory=GlobalPaths)
 

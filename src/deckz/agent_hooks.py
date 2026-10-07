@@ -224,6 +224,9 @@ def _convert_errors(settings: "GlobalSettings", path: Path) -> str:
 def post_edit_report(settings: "GlobalSettings", payload: dict[str, Any]) -> str | None:
     """Convert an edited content file and run deckz's content checks on it.
 
+    Runs every check `deckz check` runs by default, i.e. not those listed \
+    under `checks.opt_in`, and keeps the problems naming the edited file.
+
     Does nothing for a file that isn't one of `settings.file_extensions`,
     or that doesn't exist (e.g. later deleted in the same tool call batch).
 
@@ -248,6 +251,8 @@ def post_edit_report(settings: "GlobalSettings", payload: dict[str, Any]) -> str
     rel = path.relative_to(git_dir).as_posix()
     checks = GlobalSettingsFactory(settings).checks_runner().checks()
     for name, check in checks.items():
+        if name in settings.checks.opt_in:
+            continue
         matches = [problem for problem in check() if rel in problem]
         if matches:
             problems.append(f"{name}:\n" + "\n".join(matches))
