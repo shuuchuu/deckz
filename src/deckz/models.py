@@ -92,7 +92,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePath
-from typing import Annotated, Any, Literal, NewType, Protocol, TypeGuard
+from typing import Annotated, Any, Literal, NewType, Protocol, TypeGuard, get_args
 
 from pydantic import BaseModel, ValidationInfo
 from pydantic.functional_validators import AfterValidator, BeforeValidator
@@ -129,6 +129,21 @@ Lang = Literal["fr", "en"]
 
 LangMap = dict[Lang, str]
 """A translation map, e.g. `{"fr": "Bonjour", "en": "Hello"}`."""
+
+LANGS: tuple[Lang, ...] = get_args(Lang)
+"""Every [`Lang`][deckz.models.Lang], French first."""
+
+
+def lang_dir(directory: Path, lang: Lang) -> Path:
+    """Where `lang`'s outputs go within an output `directory`.
+
+    French outputs go to `directory` itself, the others to a subdirectory \
+    named after their language, so that languages never clobber each other.
+
+    Returns:
+        The language's directory.
+    """
+    return directory if lang == "fr" else directory / lang
 
 
 def is_lang_map(value: object) -> TypeGuard[LangMap]:

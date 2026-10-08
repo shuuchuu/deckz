@@ -195,12 +195,14 @@ class DeckBuilder(DeckBuilderProtocol):
         basedirs: tuple[Path, ...],
         renderer: RendererProtocol,
         progress: ProgressReporterProtocol,
+        build_part_handouts: bool = True,
     ):
         self._variables = variables
         self._build_presentation = build_presentation
         self._build_handout = build_handout
         self._build_print = build_print
         self._build_html = build_html
+        self._build_part_handouts = build_part_handouts
         self._deck_name = deck.name
         self._parts_slides = _SlidesNodeVisitor(basedirs).process(deck)
         self._dependencies = PartDependenciesNodeVisitor().process(deck)
@@ -217,6 +219,17 @@ class DeckBuilder(DeckBuilderProtocol):
         if missing:
             msg = f"no output format configured for {sorted(f.value for f in missing)}"
             raise ValueError(msg)
+
+    def output_paths(self) -> list[Path]:
+        """Where `build_deck` writes its outputs, PDFs and HTML directories.
+
+        Returns:
+            One path per output, in compilation order.
+        """
+        return [
+            self._formats[item.compile_type.format].output_path(name)
+            for name, item in self._list_items().items()
+        ]
 
     def plan(self) -> list[PlannedCompile]:
         """What `build_deck` would compile and render, without doing any of it.
@@ -331,7 +344,7 @@ class DeckBuilder(DeckBuilderProtocol):
                 to_compile[self._name_compile_item(CompileType.Presentation, name)] = (
                     CompileItem([slides], dependencies, CompileType.Presentation, False)
                 )
-            if self._build_handout:
+            if self._build_handout and self._build_part_handouts:
                 to_compile[self._name_compile_item(CompileType.Handout, name)] = (
                     CompileItem([slides], dependencies, CompileType.Handout, False)
                 )

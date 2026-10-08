@@ -149,7 +149,10 @@ the deck builder; a target's `basedirs` override is set only by
 files living under any deck's directory, not just one
 `current_dir`/`content_dir` pair. `build` raises `CompilationError`, naming
 the target's label, when any PDF fails to compile, so every `run` command
-fails.
+fails. Only after every target compiled, `OutputKinds.sync` (`--sync`)
+removes the `stale_pdfs`: the PDFs of the targets' output directories, in
+every language (`models.lang_dir`), that no target's
+`DeckBuilder.output_paths()` lists.
 
 Each compilation has an output `Format` (`components/deck_builder.py`):
 `CompileType`s `Handout`/`Presentation`/`PrintHandout` are `Typst`, and

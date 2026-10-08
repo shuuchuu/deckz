@@ -666,14 +666,16 @@ wins over both):
   them.
 
 `deckz <command> --help` lists the variables each option reads. For
-instance, a `.env` (typically git-ignored) building only handouts, in both
-languages, by default:
+instance, a `.env` (typically git-ignored) building only each deck's whole
+handout, in both languages, and removing any other PDF, by default:
 
 ```sh
 DECKZ_LANG="fr en"
 DECKZ_RUN_HANDOUT=true
+DECKZ_RUN_PART_HANDOUTS=false
 DECKZ_RUN_PRESENTATION=false
 DECKZ_RUN_PRINT=false
+DECKZ_RUN_SYNC=true
 ```
 
 Exit codes: 0 on success, 1 on a deckz error (e.g. a missing flavor or a
@@ -704,6 +706,16 @@ The main commands:
   except `run assets` only prints the outputs it would compile and, for
   each, the content fragments it would re-render (new or changed since
   that output's last build), without building anything.
+  A deck's handout comes whole and, unless `--no-part-handouts`, one per
+  part; its presentations come one per part only. `--parts` restricts
+  every output to the parts listed, the whole deck's handout included.
+  `--sync` makes the PDF directories hold exactly what the run produced:
+  once everything compiled, it removes every other PDF in them, in every
+  language (part handouts after `--no-part-handouts`, English PDFs after a
+  French-only run, other parts' PDFs under `--parts`), which keeps a
+  `deckz upload` from publishing stale ones. A failed build removes
+  nothing, nor does a run producing no PDF at all; `--dry-run --sync`
+  lists what would go.
   `run file`/`run section` write their output
   under `<git_dir>/.run/`, not the current deck's own `pdf`/`.build`, and
   open it once done (add `--no-open` for agentic/headless use, where only

@@ -25,7 +25,7 @@ from .components.protocols import DeckBuilderProtocol, ProgressReporterProtocol
 from .configuring.settings import DeckSettings, GlobalSettings
 from .configuring.variables import get_variables, resolve_variables
 from .exceptions import CompilationError, DeckzError
-from .models import Deck, FlavorName, Lang, PartName
+from .models import LANGS, Deck, FlavorName, Lang, PartName, lang_dir
 from .utils import all_deck_settings
 
 _logger = getLogger(__name__)
@@ -56,6 +56,11 @@ class OutputKinds:
     presentation: bool
     print: bool
     html: bool = False
+    part_handouts: bool = True
+    """One handout per part, besides the whole deck's (with `handout` only)."""
+    sync: bool = False
+    """Remove the PDFs of the decks' output directories, in every language, \
+    that the build doesn't produce (see `stale_pdfs`)."""
 
 
 def _deck_builder(
@@ -72,6 +77,7 @@ def _deck_builder(
         build_presentation=outputs.presentation,
         build_print=outputs.print,
         build_html=outputs.html,
+        build_part_handouts=outputs.part_handouts,
         basedirs=target.basedirs,
         progress=progress,
     )
@@ -84,7 +90,8 @@ def build(
 ) -> None:
     """Build the assets, then compile every target, stopping at the first failure.
 
-    A target failing to compile raises a `CompilationError` naming it.
+    A target failing to compile raises a `CompilationError` naming it. Only \
+    once every target compiled, `outputs.sync` removes the stale PDFs.
     """
     if not targets:
         return
@@ -94,6 +101,7 @@ def build(
     _logger.debug("Built assets in %.2fs", perf_counter() - start)
 
     several_langs = len({target.lang for target in targets}) > 1
+    produced: list[Path] = []
 
     def compile_target(target: BuildTarget) -> None:
         target_progress = (
@@ -101,7 +109,9 @@ def build(
             if several_langs
             else progress
         )
-        if not _deck_builder(target, outputs, target_progress).build_deck():
+        builder = _deck_builder(target, outputs, target_progress)
+        produced.extend(builder.output_paths())
+        if not builder.build_deck():
             msg = (
                 f"{target.label} failed to compile in {target.lang}, see the "
                 "errors above"
@@ -113,11 +123,46 @@ def build(
     if len({target.label for target in targets}) == 1:
         for target in targets:
             compile_target(target)
-        return
-    with progress.track("Building decks…", len(targets)) as advance:
-        for target in targets:
-            compile_target(target)
-            advance()
+    else:
+        with progress.track("Building decks…", len(targets)) as advance:
+            for target in targets:
+                compile_target(target)
+                advance()
+
+    if outputs.sync:
+        for pdf in stale_pdfs(targets, produced):
+            _logger.info("Removing %s, not produced by this build", pdf)
+            pdf.unlink()
+
+
+def stale_pdfs(targets: Iterable[BuildTarget], produced: Iterable[Path]) -> list[Path]:
+    """The PDFs of `targets`' output directories missing from `produced`.
+
+    Covers every language's directory, the languages `targets` don't build \
+    included: a synced build leaves exactly its own PDFs. Leaves alone a \
+    deck's directories when `produced` has no PDF in them at all (e.g. an \
+    HTML-only build), rather than emptying them.
+
+    Args:
+        targets: The build's targets.
+        produced: Every output path the build writes.
+
+    Returns:
+        The stale PDFs, sorted.
+    """
+    produced = set(produced)
+    stale = []
+    for pdf_dir in {target.settings.paths.pdf_dir for target in targets}:
+        dirs = {lang_dir(pdf_dir, lang) for lang in LANGS}
+        if not any(path.suffix == ".pdf" and path.parent in dirs for path in produced):
+            continue
+        stale.extend(
+            pdf
+            for directory in dirs
+            for pdf in directory.glob("*.pdf")
+            if pdf not in produced
+        )
+    return sorted(stale)
 
 
 def plan(targets: Iterable[BuildTarget], outputs: OutputKinds) -> list[PlannedCompile]:

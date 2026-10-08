@@ -437,6 +437,9 @@ def test_run_fr_and_en_in_one_pass(bilingual_dir: Path) -> None:
     assert "Hello everyone!" in en_text
 
 
+_HANDOUT_ONLY = ("--handout", "--no-presentation", "--no-print")
+
+
 class _RecordingProgress:
     def __init__(self) -> None:
         self.tracked: list[tuple[str, int]] = []
@@ -536,6 +539,79 @@ def test_single_view_commands_ignore_deckz_lang(
     main(("show", "paths"))
 
     assert "/en/" not in capsys.readouterr().out
+
+
+def test_run_without_part_handouts_plans_the_whole_handout_only(
+    bilingual_dir: Path, capsys: Any
+) -> None:
+    main(("run", *_HANDOUT_ONLY, "--no-part-handouts", "--dry-run"))
+
+    assert _planned_pdfs(capsys) == {"company/bilingual/pdf/bilingual-handout.pdf"}
+
+
+def _stale_pdfs(bilingual_dir: Path) -> list[Path]:
+    # A part handout, both languages' leftovers, and an unrelated PDF.
+    pdf_dir = bilingual_dir / "pdf"
+    stale = [
+        pdf_dir / "bilingual-p1-handout.pdf",
+        pdf_dir / "en" / "bilingual-handout.pdf",
+        pdf_dir / "en" / "old.pdf",
+    ]
+    for pdf in stale:
+        pdf.parent.mkdir(parents=True, exist_ok=True)
+        pdf.write_bytes(b"%PDF-1.4 stale")
+    return stale
+
+
+def test_run_sync_dry_run_lists_the_pdfs_it_would_remove(
+    bilingual_dir: Path, capsys: Any
+) -> None:
+    stale = _stale_pdfs(bilingual_dir)
+
+    main(("run", *_HANDOUT_ONLY, "--no-part-handouts", "--sync", "--dry-run"))
+
+    removals = {
+        line.split(":")[0]
+        for line in capsys.readouterr().out.splitlines()
+        if line.endswith(": remove (not produced by this build)")
+    }
+    assert removals == {
+        "company/bilingual/pdf/bilingual-p1-handout.pdf",
+        "company/bilingual/pdf/en/bilingual-handout.pdf",
+        "company/bilingual/pdf/en/old.pdf",
+    }
+    assert all(pdf.exists() for pdf in stale)
+
+
+def test_run_sync_removes_the_pdfs_it_did_not_produce(bilingual_dir: Path) -> None:
+    stale = _stale_pdfs(bilingual_dir)
+
+    main(("run", *_HANDOUT_ONLY, "--no-part-handouts", "--sync"))
+
+    assert not any(pdf.exists() for pdf in stale)
+    assert [pdf.name for pdf in (bilingual_dir / "pdf").glob("**/*.pdf")] == [
+        "bilingual-handout.pdf"
+    ]
+
+
+def test_run_sync_keeps_every_pdf_of_the_languages_built(
+    bilingual_dir: Path,
+) -> None:
+    main(("run", *_HANDOUT_ONLY, "--lang", "fr", "en"))
+    built = sorted((bilingual_dir / "pdf").glob("**/*.pdf"))
+
+    main(("run", *_HANDOUT_ONLY, "--lang", "fr", "en", "--sync"))
+
+    assert sorted((bilingual_dir / "pdf").glob("**/*.pdf")) == built
+    assert len(built) == 4
+
+
+def test_run_sync_without_any_pdf_leaves_the_pdfs_alone(bilingual_dir: Path) -> None:
+    _stale_pdfs(bilingual_dir)
+
+    main(("run", "--no-handout", "--no-presentation", "--no-print", "--sync"))
+
+    assert len(list((bilingual_dir / "pdf").glob("**/*.pdf"))) == 3
 
 
 def test_run_en_missing_file_fails_loudly(

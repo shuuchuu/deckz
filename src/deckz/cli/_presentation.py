@@ -18,7 +18,16 @@ from rich.progress import BarColumn, Progress
 from rich.tree import Tree
 
 from ..components.protocols import ProgressReporterProtocol
-from ..models import Deck, File, NodeVisitor, Part, PartName, Section, UnresolvedPath
+from ..models import (
+    Deck,
+    File,
+    NodeVisitor,
+    Part,
+    PartName,
+    Section,
+    UnresolvedPath,
+    lang_dir,
+)
 
 if TYPE_CHECKING:
     from ..components.deck_builder import PlannedCompile
@@ -179,12 +188,10 @@ def show_output_dirs(
 
     logger = getLogger(__name__)
     pdfs = outputs.handout or outputs.presentation or outputs.print
-    # English outputs go to an `en` subdirectory (see
-    # `DeckSettingsFactory.deck_builder`).
     bases = [settings.paths.pdf_dir] if pdfs or not outputs.html else []
     if outputs.html:
         bases.append(settings.paths.html_dir)
-    dirs = [base / "en" if lang == "en" else base for base in bases for lang in langs]
+    dirs = [lang_dir(base, lang) for base in bases for lang in langs]
     for directory in dirs:
         logger.info(
             f"Output directory located at [link=file://{directory}]{directory}[/link]",
@@ -251,18 +258,30 @@ def print_plan_of(targets: "Sequence[BuildTarget]", outputs: "OutputKinds") -> N
 
     Paths are printed relative to the repository root.
     """
-    from ..pipelines import plan
+    from ..pipelines import plan, stale_pdfs
 
-    if targets:
-        print_plan(plan(targets, outputs), targets[0].settings.paths.git_dir)
+    if not targets:
+        return
+    planned = plan(targets, outputs)
+    removed = (
+        stale_pdfs(targets, (item.output_path for item in planned))
+        if outputs.sync
+        else []
+    )
+    print_plan(planned, targets[0].settings.paths.git_dir, removed)
 
 
-def print_plan(planned: Iterable["PlannedCompile"], relative_to: Path) -> None:
+def print_plan(
+    planned: Iterable["PlannedCompile"],
+    relative_to: Path,
+    removed: Iterable[Path] = (),
+) -> None:
     """Print what a build would do, one output per line, then its changed fragments.
 
     Args:
         planned: The build's plan.
         relative_to: Directory paths are printed relative to, when inside it.
+        removed: PDFs the build would then remove, printed last.
     """
 
     def display(path: Path) -> str:
@@ -283,6 +302,8 @@ def print_plan(planned: Iterable["PlannedCompile"], relative_to: Path) -> None:
         )
         for fragment in item.changed_fragments:
             print(f"  {display(fragment)}")
+    for path in removed:
+        print(f"{display(path)}: remove (not produced by this build)")
 
 
 def print_gpu_status(status: "GpuStatus") -> None:

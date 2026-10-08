@@ -159,6 +159,18 @@ def test_compile_error_is_reported(working_dir: Path, caplog: Any) -> None:
     assert not (working_dir / "pdf" / "abc-handout.pdf").exists()
 
 
+def test_failed_sync_run_removes_nothing(working_dir: Path) -> None:
+    stale = working_dir / "pdf" / "abc-old.pdf"
+    stale.parent.mkdir(exist_ok=True)
+    stale.write_bytes(b"%PDF-1.4 stale")
+    _break(working_dir / "content" / "about.md")
+
+    with raises(SystemExit):
+        main((*_RUN_ARGS, "--sync"))
+
+    assert stale.exists()
+
+
 def test_run_decks_fails_on_a_compile_error(working_dir: Path, caplog: Any) -> None:
     _break(working_dir / "content" / "about.md")
 

@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 import yaml
 
 from ..exceptions import DeckzError
+from ..models import lang_dir
 from ..utils import deck_name_from_dir
 
 if TYPE_CHECKING:
@@ -142,11 +143,9 @@ def _locate(settings: "DeckSettings", label: str, *, lang: "Lang") -> list[_Loca
 
     paths = settings.paths
     name = deck_name_from_dir(paths.current_dir)
-    # English builds and PDFs go to an `en` subdirectory.
-    lang_dir = "en" if lang == "en" else ""
-    build_dir = paths.build_dir / lang_dir / f"{name}-handout"
+    build_dir = lang_dir(paths.build_dir, lang) / f"{name}-handout"
     main_typ = build_dir / f"{name}-handout.typ"
-    pdf = paths.pdf_dir / lang_dir / f"{name}-handout.pdf"
+    pdf = lang_dir(paths.pdf_dir, lang) / f"{name}-handout.pdf"
     if not pdf.is_file():
         msg = (
             f"{pdf} is missing: build the deck's handout first "

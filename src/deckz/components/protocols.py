@@ -85,6 +85,10 @@ class ProgressReporterProtocol(Protocol):
 
 
 class DeckBuilderProtocol(Protocol):
+    def output_paths(self) -> list[Path]:
+        """Where `build_deck` writes its outputs, PDFs and HTML directories."""
+        ...
+
     def plan(self) -> list["PlannedCompile"]:
         """What `build_deck` would compile and render, without doing any of it."""
         ...
@@ -191,6 +195,7 @@ class DeckFactoryProtocol(GlobalFactoryProtocol, Protocol):
         build_handout: bool,
         build_print: bool,
         build_html: bool = False,
+        build_part_handouts: bool = True,
         basedirs: tuple[Path, ...] | None = None,
         progress: ProgressReporterProtocol | None = None,
     ) -> DeckBuilderProtocol: ...

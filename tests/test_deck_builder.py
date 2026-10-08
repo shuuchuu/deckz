@@ -115,7 +115,11 @@ class Repo:
         )
 
     def builder(
-        self, *files: File, handout: bool = True, html: bool = False
+        self,
+        *files: File,
+        handout: bool = True,
+        html: bool = False,
+        part_handouts: bool = True,
     ) -> DeckBuilder:
         deck = Deck(name="deck", parts={PartName("p1"): Part(title=None, nodes=files)})
         return DeckBuilder(
@@ -150,6 +154,7 @@ class Repo:
             basedirs=(self.content,),
             renderer=self.renderer,
             progress=NullProgress(),
+            build_part_handouts=part_handouts,
         )
 
 
@@ -172,6 +177,17 @@ def test_build_renders_converts_and_publishes(tmp_path: Path) -> None:
     # Two PDFs, each with its own build dir and so its own two fragments.
     assert len(repo.renderer.fragments) == 4
     assert len(repo.converter.converted) == 4
+
+
+def test_build_without_part_handouts_only_publishes_the_whole_deck(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    builder = repo.builder(repo.file("a.md"), part_handouts=False)
+
+    assert builder.output_paths() == [tmp_path / "pdf" / "deck-handout.pdf"]
+    assert builder.build_deck()
+    assert [p.name for p in (tmp_path / "pdf").iterdir()] == ["deck-handout.pdf"]
 
 
 def test_failed_compile_publishes_nothing(tmp_path: Path) -> None:

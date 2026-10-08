@@ -175,20 +175,20 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
         build_handout: bool,
         build_print: bool,
         build_html: bool = False,
+        build_part_handouts: bool = True,
         basedirs: tuple[Path, ...] | None = None,
         progress: ProgressReporterProtocol | None = None,
     ) -> DeckBuilderProtocol:
+        from ..models import lang_dir
         from .deck_builder import DeckBuilder, Format, OutputFormat
         from .progress import NullProgress
 
         paths = self._settings.paths
-        pdf_dir, html_dir, build_dir = paths.pdf_dir, paths.html_dir, paths.build_dir
-        if self._lang == "en":
-            pdf_dir, html_dir, build_dir = (
-                pdf_dir / "en",
-                html_dir / "en",
-                build_dir / "en",
-            )
+        pdf_dir, html_dir, build_dir = (
+            lang_dir(paths.pdf_dir, self._lang),
+            lang_dir(paths.html_dir, self._lang),
+            lang_dir(paths.build_dir, self._lang),
+        )
 
         assets_dir = paths.assets_dir
         dirs_to_link = (
@@ -218,6 +218,7 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
             build_handout=build_handout,
             build_print=build_print,
             build_html=build_html,
+            build_part_handouts=build_part_handouts,
             formats=formats,
             build_dir=build_dir,
             dirs_to_link=dirs_to_link,

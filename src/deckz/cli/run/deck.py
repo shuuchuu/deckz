@@ -14,6 +14,8 @@ def run(
     presentation: bool = True,
     print: bool = True,  # ruff: ignore[builtin-argument-shadowing]
     html: bool = False,
+    part_handouts: bool = True,
+    sync: bool = False,
     langs: Langs = ("fr",),
     watch: bool = False,
     dry_run: bool = False,
@@ -27,6 +29,12 @@ def run(
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
         html: Produce an HTML deck (whole deck, with a table of contents)
+        part_handouts: With --handout, also produce one handout per part,
+            besides the whole deck's
+        sync: Once everything compiled, remove the PDFs of the output
+            directories that this run didn't produce, in every language:
+            e.g. part handouts after --no-part-handouts, English PDFs
+            after a French-only run, or other parts' PDFs with --parts
         langs: Languages to compile, each to its own output paths
             (English under an `en/` subdirectory). English is strict: every
             resolved file, title and variable must have a complete English
@@ -46,7 +54,12 @@ def run(
     settings = DeckSettings.from_yaml(workdir)
     langs = unique(langs)
     outputs = OutputKinds(
-        handout=handout, presentation=presentation, print=print, html=html
+        handout=handout,
+        presentation=presentation,
+        print=print,
+        html=html,
+        part_handouts=part_handouts,
+        sync=sync,
     )
 
     if dry_run:
