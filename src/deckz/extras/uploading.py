@@ -38,7 +38,7 @@ class Uploader:
         self._settings = settings
         self._service = self._build_service()
         folder_id, folder_link = self._check_folders()
-        self._upload(folder_id)
+        self._upload_all(folder_id)
         print(f"Online folder: {folder_link}")
 
     @staticmethod
@@ -93,22 +93,22 @@ class Uploader:
         )
         parent = "root"
         for folder in folders:
-            folder_info = self._get(folder=True, parents=[parent], name=folder)
-            if folder_info is None:
-                folder_id, folder_link = self._create_folder(parent, folder)
-                self._logger.debug(f"“{folder}” folder was created")
-            else:
-                folder_id, folder_link = (
-                    folder_info.get("id"),
-                    folder_info.get("webViewLink"),
-                )
-                self._logger.debug(f"“{folder}” folder was present")
+            folder_id, folder_link = self._get_or_create_folder(parent, folder)
             parent = folder_id
         self._logger.debug(f"Setting permissions for {folder}")
         self._service.permissions().create(
             fileId=folder_id, body={"type": "anyone", "role": "reader"}
         ).execute()
         return folder_id, folder_link
+
+    def _get_or_create_folder(self, parent: str, name: str) -> tuple[str, str]:
+        folder_info = self._get(folder=True, parents=[parent], name=name)
+        if folder_info is None:
+            created = self._create_folder(parent, name)
+            self._logger.debug(f"“{name}” folder was created")
+            return created
+        self._logger.debug(f"“{name}” folder was present")
+        return folder_info.get("id"), folder_info.get("webViewLink")
 
     def _existing_files_by_name(self, folder_id: str) -> dict[str, _RemoteFile]:
         existing: dict[str, _RemoteFile] = {}
@@ -135,11 +135,20 @@ class Uploader:
                 hasher.update(chunk)
         return hasher.hexdigest()
 
-    def _upload(self, folder_id: str) -> dict[Path, str]:
-        self._logger.info("Uploading pdfs")
-        pdfs = sorted(
-            (self._settings.paths.pdf_dir).glob("*.pdf"), key=lambda p: p.name
-        )
+    def _upload_all(self, folder_id: str) -> dict[Path, str]:
+        # English builds land in pdf/en/ under the same names as the French
+        # ones, so they go to a mirroring "en" subfolder of the remote folder.
+        pdf_dir = self._settings.paths.pdf_dir
+        links = self._upload(folder_id, pdf_dir)
+        en_pdf_dir = pdf_dir / "en"
+        if any(en_pdf_dir.glob("*.pdf")):
+            en_folder_id, _ = self._get_or_create_folder(folder_id, "en")
+            links |= self._upload(en_folder_id, en_pdf_dir)
+        return links
+
+    def _upload(self, folder_id: str, pdf_dir: Path) -> dict[Path, str]:
+        self._logger.info(f"Uploading pdfs from {pdf_dir}")
+        pdfs = sorted(pdf_dir.glob("*.pdf"), key=lambda p: p.name)
         existing_by_name = self._existing_files_by_name(folder_id)
         remaining_remote_names = set(existing_by_name)
         links: dict[Path, str] = {}

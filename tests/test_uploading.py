@@ -51,7 +51,7 @@ def test_upload_creates_new_file(tmp_path: Path) -> None:
     service = build_service(existing_files=[])
     uploader = build_uploader(pdf_dir, service)
 
-    uploader._upload(FOLDER_ID)
+    uploader._upload(FOLDER_ID, pdf_dir)
 
     service.files.return_value.create.assert_called_once()
     _, kwargs = service.files.return_value.create.call_args
@@ -68,7 +68,7 @@ def test_upload_updates_existing_file(tmp_path: Path) -> None:
     )
     uploader = build_uploader(pdf_dir, service)
 
-    uploader._upload(FOLDER_ID)
+    uploader._upload(FOLDER_ID, pdf_dir)
 
     service.files.return_value.update.assert_called_once()
     _, kwargs = service.files.return_value.update.call_args
@@ -86,7 +86,7 @@ def test_upload_deletes_orphaned_remote_file(tmp_path: Path) -> None:
     )
     uploader = build_uploader(pdf_dir, service)
 
-    uploader._upload(FOLDER_ID)
+    uploader._upload(FOLDER_ID, pdf_dir)
 
     service.files.return_value.delete.assert_called_once_with(fileId="orphan-id")
 
@@ -103,7 +103,7 @@ def test_upload_mixed_scenario(tmp_path: Path) -> None:
     )
     uploader = build_uploader(pdf_dir, service)
 
-    uploader._upload(FOLDER_ID)
+    uploader._upload(FOLDER_ID, pdf_dir)
 
     _, create_kwargs = service.files.return_value.create.call_args
     assert create_kwargs["body"] == {"name": "a.pdf", "parents": [FOLDER_ID]}
@@ -129,7 +129,7 @@ def test_upload_skips_unchanged_file(tmp_path: Path) -> None:
     )
     uploader = build_uploader(pdf_dir, service)
 
-    links = uploader._upload(FOLDER_ID)
+    links = uploader._upload(FOLDER_ID, pdf_dir)
 
     service.files.return_value.update.assert_not_called()
     service.files.return_value.create.assert_not_called()
@@ -152,7 +152,7 @@ def test_upload_updates_changed_file_despite_matching_name(tmp_path: Path) -> No
     )
     uploader = build_uploader(pdf_dir, service)
 
-    uploader._upload(FOLDER_ID)
+    uploader._upload(FOLDER_ID, pdf_dir)
 
     service.files.return_value.update.assert_called_once()
     _, kwargs = service.files.return_value.update.call_args
@@ -167,7 +167,7 @@ def test_upload_empty_local_dir_skips_deletion(tmp_path: Path) -> None:
     )
     uploader = build_uploader(pdf_dir, service)
 
-    uploader._upload(FOLDER_ID)
+    uploader._upload(FOLDER_ID, pdf_dir)
 
     service.files.return_value.delete.assert_not_called()
 
@@ -192,3 +192,44 @@ def test_existing_files_by_name_paginates(tmp_path: Path) -> None:
         "a.pdf": _RemoteFile(id="id-1", web_view_link="...", md5_checksum=None),
         "b.pdf": _RemoteFile(id="id-2", web_view_link="...", md5_checksum=None),
     }
+
+
+def test_upload_all_uploads_english_pdfs_to_en_subfolder(tmp_path: Path) -> None:
+    pdf_dir = tmp_path / "pdf"
+    write_pdf(pdf_dir, "a.pdf")
+    write_pdf(pdf_dir / "en", "a.pdf")
+    service = build_service(existing_files=[])
+    service.files.return_value.create.return_value.execute.return_value = {
+        "id": "en-folder",
+        "webViewLink": "...",
+    }
+    uploader = build_uploader(pdf_dir, service)
+
+    links = uploader._upload_all(FOLDER_ID)
+
+    bodies = [
+        kwargs["body"] for _, kwargs in service.files.return_value.create.call_args_list
+    ]
+    assert bodies == [
+        {"name": "a.pdf", "parents": [FOLDER_ID]},
+        {
+            "name": "en",
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": [FOLDER_ID],
+        },
+        {"name": "a.pdf", "parents": ["en-folder"]},
+    ]
+    assert set(links) == {pdf_dir / "a.pdf", pdf_dir / "en" / "a.pdf"}
+
+
+def test_upload_all_without_english_pdfs_skips_en_subfolder(tmp_path: Path) -> None:
+    pdf_dir = tmp_path / "pdf"
+    write_pdf(pdf_dir, "a.pdf")
+    service = build_service(existing_files=[])
+    uploader = build_uploader(pdf_dir, service)
+
+    uploader._upload_all(FOLDER_ID)
+
+    service.files.return_value.create.assert_called_once()
+    _, kwargs = service.files.return_value.create.call_args
+    assert kwargs["body"] == {"name": "a.pdf", "parents": [FOLDER_ID]}
