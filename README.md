@@ -176,6 +176,11 @@ typst_ignore_system_fonts: true
   `formation-overflow`) `deckz check overflow` queries for shrunk-to-fit
   frames (`ratio`/`page` keys) -- only the label's name, the shrinking
   mechanism itself stays your theme's.
+- `table_marker_label`: the Typst metadata label (default
+  `formation-table`) `deckz check overflow --tables` queries for tables
+  (`page`, `wrap`: the table's height over its height with no cell
+  wrapped, as a percentage, and `overflow`: whether its longest words
+  alone are wider than the frame) -- the table layout stays your theme's.
 - `file_extensions`: the extensions tried, in order, when resolving a file
   include. Defaults to `[".md"]`.
 - `labs`: settings for the `deckz labs` commands, e.g.:
@@ -707,7 +712,11 @@ The main commands:
   the content file(s) building each one. Needs the handout already built
   (`deckz run --handout`, or a `deckz run file`/`deckz run section`
   preview); reads the PDF's text with poppler's `pdftotext`. Exits 1 if
-  any frame was shrunk.
+  any frame was shrunk. `--en` checks the English build (`deckz run
+  --en`, kept under `en/` in the build and PDF directories). `--tables`
+  reports the tables instead (the
+  `table_marker_label` marker), most wrapped first, flagging those whose
+  longest words alone are wider than the frame; exits 1 if any is.
 - `deckz check parity [DECK_DIR] [SLIDES...]` (extra: `deckz[parity]`,
   then `playwright install chromium`): compare a built deck's PDF and HTML
   slide by slide (`deckz run --handout --html`), reporting each pair's

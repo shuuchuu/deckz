@@ -83,7 +83,10 @@ or a declared variable nothing ever reads.
   session's unfinished edits don't block or hide a check).
 - `deckz check overflow DECK_DIR` -- a built handout's shrunk-to-fit
   frames, worst first, with their source content file(s). Needs the
-  handout already built (`deckz run --handout`).
+  handout already built (`deckz run --handout`, and `--en` on both for
+  the English build). `--tables` lists the
+  tables instead, most wrapped first: a high wrap usually means cells with
+  too much text for a slide.
 - `deckz check parity DECK_DIR` (needs the `deckz[parity]` extra) --
   compare a built deck's PDF and HTML slide by slide, needing both
   already built (`deckz run --handout --html`). Writes an HTML report by

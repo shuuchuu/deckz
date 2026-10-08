@@ -195,6 +195,15 @@ class GlobalSettings(BaseModel):
     this setting is only the label's name, not the shrinking mechanism \
     itself, which stays entirely the theme's business.
     """
+    table_marker_label: str = "formation-table"
+    """Typst label `deckz check overflow --tables` queries for tables.
+
+    The target repo's Typst theme emits one `<label>` metadata value per \
+    table, with `page`, `wrap` (the table's height over its height with no \
+    cell wrapped, as a percentage) and `overflow` (whether its longest words \
+    alone are wider than the frame) keys; the table layout itself stays \
+    the theme's.
+    """
     pandoc_command: tuple[str, ...] = ()
     """Command converting a rendered Markdown fragment to Typst.
 
