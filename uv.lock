@@ -833,7 +833,7 @@ wheels = [
 
 [[package]]
 name = "deckz"
-version = "31.2.0"
+version = "31.2.1"
 source = { editable = "." }
 dependencies = [
     { name = "appdirs" },
