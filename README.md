@@ -208,7 +208,10 @@ typst_ignore_system_fonts: true
     `[Tesla_T4, RTX_A4000]`), `offer_filter` (a Vast.ai offer query),
     `disk_gb`, `boot_minutes`, `cpus` (each notebook's CPUs, default 2 as
     on Colab's T4 runtime), `ssh_key` (the private key whose public key
-    Vast.ai has, default `~/.ssh/id_ed25519`), `metadata_key` (where a
+    Vast.ai has, default `~/.ssh/id_ed25519`), `fresh_dirs` (directories
+    `up` snapshots and the queue restores before each notebook, so each
+    one starts from the image's state as on a fresh Colab VM, default
+    `[/usr/local]`, where pip installs), `metadata_key` (where a
     notebook's own metadata says what its runs need, default
     `shuuchuu.gpu`) and `hooks` (shell commands by name, run from the
     repository's root before and after the run of a notebook naming one).
@@ -899,8 +902,10 @@ The main commands:
   reliable offer (a machine that fails to boot is destroyed and avoided
   from then on); `queue [--short] NOTEBOOKS...` sends notebooks (`--short`
   sets their `SHORT_RUN = False` line to `True`; a notebook's metadata can
-  ask for variables, secrets and a hook, see `labs.gpu` above); `run`
-  starts the queue, detached, each notebook saved after every cell;
+  ask for variables, secrets and a hook, see `labs.gpu` above; queueing a
+  notebook again reruns it); `run` starts the queue, detached, each
+  notebook saved after every cell, `labs.gpu.fresh_dirs` restored before
+  each one;
   `status [--watch]` follows it, fetching, appending each finished run's
   report to `notes.md`, running the hooks of finished runs and sending
   the notebooks held for them, until done under `--watch`; `fetch` copies

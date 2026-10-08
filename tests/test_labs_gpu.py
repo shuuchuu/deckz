@@ -179,9 +179,17 @@ def test_start_pins_the_cpus_and_sets_the_timeout(repo: Path) -> None:
 
     gpu_run.start(timeout=600)
 
-    queue = (gpu_run.directory / "scripts" / "queue.sh").read_text()
+    queue = (gpu_run.directory / "scripts" / "queue.sh.new").read_text()
     assert "PYTHON_CPU_COUNT=2 taskset -c 0,1 timeout 600" in queue
+    assert "for dir in /usr/local; do" in queue
     assert "@" not in queue
+    assert json.loads((gpu_run.directory / "queue.json").read_text()) == {
+        "timeout": 600
+    }
+    # The scripts are renamed into place, never rewritten under a running queue.
+    assert runner.commands("ssh")[-1][-1].startswith(
+        "cd /work && mv -f execute.py.new execute.py && mv -f queue.sh.new queue.sh"
+    )
 
 
 def test_status_parses_the_machine_queue(repo: Path) -> None:
@@ -203,6 +211,30 @@ def test_status_parses_the_machine_queue(repo: Path) -> None:
 def test_commands_needing_a_machine_refuse_without_one(repo: Path) -> None:
     with raises(GpuRunError):
         _gpu_run(repo, FakeRunner()).fetch()
+
+
+def test_up_snapshots_the_fresh_dirs_before_any_run(repo: Path) -> None:
+    runner = FakeRunner()
+    runner.instances = [_running()]
+
+    _gpu_run(repo, runner).up()
+
+    snapshot = runner.commands("ssh")[-1][-1]
+    assert "for dir in /usr/local; do" in snapshot
+    assert 'rsync -a --delete "$dir/" "$snapshot/"' in snapshot
+
+
+def test_up_snapshots_nothing_without_fresh_dirs(repo: Path) -> None:
+    runner = FakeRunner()
+    runner.instances = [_running()]
+    settings = GlobalSettings(
+        paths=GlobalPaths(current_dir=repo, git_dir=repo),
+        labs=LabsSettings(gpu=LabsGpuSettings(fresh_dirs=())),
+    )
+
+    GpuRun(settings, VastBackend(settings, runner), run=runner, sleep=_no_sleep).up()
+
+    assert not any("pristine" in call[-1] for call in runner.commands("ssh"))
 
 
 def test_down_destroys_and_forgets_the_machine(repo: Path) -> None:
@@ -431,6 +463,8 @@ def test_hooked_notebooks_run_one_at_a_time_across_machines(repo: Path) -> None:
 
     # Once after the first run, not again before the second one.
     assert hook_runs() == 2
+    # The held notebook's machine runs its queue again, with its last timeout.
+    assert "setsid nohup bash /work/queue.sh" in runner.commands("ssh")[-1][-1]
     assert not light.hooks_pending()
     assert heavy.hooks_pending()
     assert (heavy.directory / "in" / "demo-en.full.ipynb").is_file()

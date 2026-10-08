@@ -105,6 +105,11 @@ class LabsGpuSettings(BaseModel):
     ssh_key: str = "~/.ssh/id_ed25519"
     """Private SSH key whose public key is registered with Vast.ai \
     (`vastai create ssh-key`)."""
+    fresh_dirs: tuple[str, ...] = ("/usr/local",)
+    """Directories `up` copies once the machine booted, before any notebook \
+    runs, and the queue restores before each one, so every notebook starts \
+    from the image's state, as on a fresh Colab VM, whatever the ones before \
+    it installed or removed (pip installs into `/usr/local`)."""
     metadata_key: str = "shuuchuu.gpu"
     """Dotted path, under a notebook's own `metadata`, of what its runs need.
 

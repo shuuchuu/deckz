@@ -124,6 +124,11 @@ while true; do
   name=$(basename "$path")
   echo "$(date -Is) start $name"
   start=$(date +%s)
+  # Each notebook starts from the image's state, as on a fresh Colab VM.
+  for dir in @FRESH@; do
+    snapshot=/work/pristine/$(echo "${dir#/}" | tr / _)
+    [ -e "$snapshot.ok" ] && rsync -a --delete "$snapshot/" "$dir/"
+  done
   rm -rf /content && mkdir -p /content && cp "$path" /content/
   (cd /content && PYTHON_CPU_COUNT=@CPUS@ taskset -c @CPU_LIST@ timeout @TIMEOUT@ \\
     python3 /work/execute.py "$name" "/work/out/$name") > "out/$name.log" 2>&1
@@ -133,6 +138,19 @@ done
 echo "$(date -Is) queue finished"
 """
 """The machine's queue: each staged notebook not run yet, one after the other."""
+
+SNAPSHOT = """\
+set -e
+mkdir -p /work/pristine
+for dir in @FRESH@; do
+  snapshot=/work/pristine/$(echo "${dir#/}" | tr / _)
+  [ -e "$snapshot.ok" ] && continue
+  rsync -a --delete "$dir/" "$snapshot/"
+  touch "$snapshot.ok"
+done
+"""
+"""Copies `labs.gpu.fresh_dirs` once, before any notebook runs, for the \
+queue to restore before each one."""
 
 _STATUS = (
     'cd /work 2>/dev/null || exit 0; for f in in/*.ipynb; do [ -e "$f" ] || continue;'
@@ -594,9 +612,16 @@ class GpuRun:
             if self._ssh_ready():
                 break
             self._sleep(15)
-        return self._ssh(
+        gpu = self._ssh(
             "nvidia-smi -L; mkdir -p /work/in /work/out; python3 -c 'import nbclient'"
         )
+        if self._gpu.fresh_dirs:
+            _logger.info("Snapshotting %s", ", ".join(self._gpu.fresh_dirs))
+            self._ssh(SNAPSHOT.replace("@FRESH@", self._fresh_dirs()))
+        return gpu
+
+    def _fresh_dirs(self) -> str:
+        return " ".join(quote(path.rstrip("/")) for path in self._gpu.fresh_dirs)
 
     def _ssh_ready(self) -> bool:
         state = self._connected()
@@ -861,6 +886,7 @@ class GpuRun:
                 entry["waiting"].pop(0)
                 entry["active"] = {"machine": target.machine, "name": name}
                 self._write_json(self._hooks_file, hooks)
+                target.ensure_running()
                 done.append(f"queued {name} on {target.machine}")
         for line in done:
             _logger.info("%s", line)
@@ -878,18 +904,31 @@ class GpuRun:
         scripts = self._dir / "scripts"
         scripts.mkdir(parents=True, exist_ok=True)
         cpus = self._gpu.cpus
-        (scripts / "execute.py").write_text(EXECUTE, encoding="utf-8")
-        (scripts / "queue.sh").write_text(
+        (scripts / "execute.py.new").write_text(EXECUTE, encoding="utf-8")
+        (scripts / "queue.sh.new").write_text(
             QUEUE.replace("@TIMEOUT@", str(timeout))
             .replace("@CPUS@", str(cpus))
-            .replace("@CPU_LIST@", ",".join(map(str, range(cpus)))),
+            .replace("@CPU_LIST@", ",".join(map(str, range(cpus))))
+            .replace("@FRESH@", self._fresh_dirs()),
             encoding="utf-8",
         )
-        self._scp([scripts / "execute.py", scripts / "queue.sh"], "/work/")
+        self._write_json(self._dir / "queue.json", {"timeout": timeout})
+        self._scp([scripts / "execute.py.new", scripts / "queue.sh.new"], "/work/")
+        # Renamed into place: a queue running keeps reading its own script.
         return self._ssh(
-            "setsid nohup bash /work/queue.sh >> /work/queue.log 2>&1 < /dev/null &"
-            " sleep 2; tail -3 /work/queue.log"
+            "cd /work && mv -f execute.py.new execute.py && mv -f queue.sh.new"
+            " queue.sh && (setsid nohup bash /work/queue.sh >> /work/queue.log 2>&1"
+            " < /dev/null &) && sleep 2 && tail -3 /work/queue.log"
         )
+
+    def ensure_running(self) -> str:
+        """Start the queue again, with its last timeout, unless it runs.
+
+        Returns:
+            The queue log's last lines.
+        """
+        timeout = self._read_json(self._dir / "queue.json", {}).get("timeout")
+        return self.start(timeout=timeout or 3 * 3600)
 
     def status(self) -> GpuStatus:
         """The machine's state, and each queued notebook's.
