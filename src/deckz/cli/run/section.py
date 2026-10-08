@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from ...models import FlavorName
+from .._options import Langs, unique
 from . import app
 
 
@@ -14,7 +15,7 @@ def run_section(
     presentation: bool = True,
     print: bool = True,  # ruff: ignore[builtin-argument-shadowing]
     html: bool = False,
-    en: bool = False,
+    langs: Langs = ("fr",),
     watch: bool = False,
     open: bool = True,  # ruff: ignore[builtin-argument-shadowing]
     dry_run: bool = False,
@@ -33,7 +34,10 @@ def run_section(
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
         html: Produce an HTML deck (whole deck, with a table of contents)
-        en: Compile the English variant
+        langs: Languages to compile, each to its own output paths
+            (English under an `en/` subdirectory). English is strict: every
+            resolved file, title and variable must have a complete English
+            translation, or the build fails before compiling anything
         watch: Recompile on file changes, instead of compiling once
         open: Open the output directory once compiled. Disable for
             agentic/headless use, where only the printed path is useful
@@ -54,20 +58,20 @@ def run_section(
     settings = preview_settings(
         DeckSettings.from_yaml(workdir), "section", section, flavor
     )
-    lang = "en" if en else "fr"
+    langs = unique(langs)
     outputs = OutputKinds(
         handout=handout, presentation=presentation, print=print, html=html
     )
 
     if dry_run:
-        print_plan_of(section_targets(section, flavor, settings, lang), lang, outputs)
+        print_plan_of(section_targets(section, flavor, settings, langs), outputs)
         return
 
     if watch:
         from ...pipelines import watch as _watch
 
         logger.info("Watching the content, assets, current and user directories")
-        show_output_dirs(settings, outputs, open_dir=open)
+        show_output_dirs(settings, langs, outputs, open_dir=open)
         to_watch = [
             settings.paths.content_dir,
             settings.paths.assets_dir,
@@ -88,16 +92,11 @@ def run_section(
             section=section,
             flavor=flavor,
             settings=settings,
-            lang=lang,
+            langs=langs,
             outputs=outputs,
             progress=RichProgress(),
         )
         return
 
-    build(
-        section_targets(section, flavor, settings, lang),
-        lang,
-        outputs,
-        RichProgress(),
-    )
-    show_output_dirs(settings, outputs, open_dir=open)
+    build(section_targets(section, flavor, settings, langs), outputs, RichProgress())
+    show_output_dirs(settings, langs, outputs, open_dir=open)

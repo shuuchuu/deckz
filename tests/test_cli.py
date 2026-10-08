@@ -410,7 +410,7 @@ def test_run_fr_default(bilingual_dir: Path) -> None:
 
 
 def test_run_en(bilingual_dir: Path) -> None:
-    main(("run", "--en"))
+    main(("run", "--lang", "en"))
 
     _, text = extract_info(
         bilingual_dir / "pdf" / "en" / "bilingual-p1-presentation.pdf"
@@ -419,8 +419,94 @@ def test_run_en(bilingual_dir: Path) -> None:
     assert "Hello everyone!" in text
     assert "Cas Bilingue" not in text
     assert "Bonjour" not in text
-    # fr output lives at its own, unsuffixed path -- --en never touches it.
+    # fr output lives at its own, unsuffixed path -- --lang en never touches it.
     assert not (bilingual_dir / "pdf" / "bilingual-p1-presentation.pdf").exists()
+
+
+def test_run_fr_and_en_in_one_pass(bilingual_dir: Path) -> None:
+    main(("run", "--lang", "fr", "en", "--no-handout", "--no-print"))
+
+    _, fr_text = extract_info(bilingual_dir / "pdf" / "bilingual-p1-presentation.pdf")
+    _, en_text = extract_info(
+        bilingual_dir / "pdf" / "en" / "bilingual-p1-presentation.pdf"
+    )
+    assert "Bonjour tout le monde!" in fr_text
+    assert "Hello everyone!" in en_text
+
+
+def _planned_pdfs(capsys: Any) -> set[str]:
+    return {
+        line.split(":")[0]
+        for line in capsys.readouterr().out.splitlines()
+        if not line.startswith(" ")
+    }
+
+
+def test_run_defaults_come_from_the_environment(
+    bilingual_dir: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    monkeypatch.setenv("DECKZ_LANG", "fr en")
+    monkeypatch.setenv("DECKZ_RUN_PRESENTATION", "false")
+    monkeypatch.setenv("DECKZ_RUN_PRINT", "false")
+
+    main(("run", "--dry-run"))
+
+    # The whole deck's handout, and its single part's.
+    assert _planned_pdfs(capsys) == {
+        "company/bilingual/pdf/bilingual-handout.pdf",
+        "company/bilingual/pdf/bilingual-p1-handout.pdf",
+        "company/bilingual/pdf/en/bilingual-handout.pdf",
+        "company/bilingual/pdf/en/bilingual-p1-handout.pdf",
+    }
+
+
+def test_run_options_override_the_environment(
+    bilingual_dir: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    monkeypatch.setenv("DECKZ_LANG", "fr en")
+    monkeypatch.setenv("DECKZ_RUN_PRESENTATION", "false")
+    monkeypatch.setenv("DECKZ_RUN_HANDOUT", "false")
+    monkeypatch.setenv("DECKZ_RUN_PRINT", "false")
+
+    main(("run", "deck", "--lang", "en", "--presentation", "--dry-run"))
+
+    assert _planned_pdfs(capsys) == {
+        "company/bilingual/pdf/en/bilingual-p1-presentation.pdf"
+    }
+
+
+def test_run_defaults_come_from_a_dotenv_file(
+    bilingual_dir: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    from dotenv import main as dotenv_main
+
+    # conftest stubs the lookup out: restore it for this test only.
+    monkeypatch.setattr("dotenv.find_dotenv", dotenv_main.find_dotenv)
+    # Registers the variables with monkeypatch, so that it unsets the ones
+    # load_dotenv sets once the test is done.
+    for name in ("DECKZ_LANG", "DECKZ_RUN_HANDOUT", "DECKZ_RUN_PRINT"):
+        monkeypatch.setenv(name, "")
+        monkeypatch.delenv(name)
+    (bilingual_dir.parent.parent / ".env").write_text(
+        'DECKZ_LANG="en"\nDECKZ_RUN_HANDOUT=false\nDECKZ_RUN_PRINT=false\n',
+        encoding="utf8",
+    )
+
+    main(("run", "--dry-run"))
+
+    assert _planned_pdfs(capsys) == {
+        "company/bilingual/pdf/en/bilingual-p1-presentation.pdf"
+    }
+
+
+def test_single_view_commands_ignore_deckz_lang(
+    bilingual_dir: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    monkeypatch.setenv("DECKZ_LANG", "en")
+
+    main(("show", "paths"))
+
+    assert "/en/" not in capsys.readouterr().out
 
 
 def test_run_en_missing_file_fails_loudly(
@@ -429,7 +515,7 @@ def test_run_en_missing_file_fails_loudly(
     (bilingual_dir / "content" / "en" / "hello.md").unlink()
 
     with raises(SystemExit) as exc_info:
-        main(("run", "--en"))
+        main(("run", "--lang", "en"))
 
     assert exc_info.value.code == 1
     assert "deck parsing failed" in caplog.text
@@ -446,7 +532,7 @@ def test_run_en_missing_title_translation_fails_loudly(
     )
 
     with raises(SystemExit) as exc_info:
-        main(("run", "--en"))
+        main(("run", "--lang", "en"))
 
     assert exc_info.value.code == 1
     assert "is not a valid deck definition" in caplog.text
@@ -495,7 +581,7 @@ def test_run_en_plain_string_title_used_as_is(bilingual_dir: Path) -> None:
         encoding="utf8",
     )
 
-    main(("run", "--en"))
+    main(("run", "--lang", "en"))
 
     _, text = extract_info(
         bilingual_dir / "pdf" / "en" / "bilingual-p1-presentation.pdf"

@@ -1,15 +1,16 @@
 from pathlib import Path
 
+from ...models import Lang
 from . import app
 
 
 @app.command()
 @app.default
-def tree(workdir: Path = Path(), *, en: bool = False, json: bool = False) -> None:
+def tree(workdir: Path = Path(), *, lang: Lang = "fr", json: bool = False) -> None:
     """Show the WORKDIR's deck tree (default).
 
     Args:
-        en: Resolve the English variant, as `deckz run --en` would
+        lang: Language to resolve the deck in, as `deckz run` would
         json: Print the tree as one JSON object instead: the deck's "name"
             and "parts", each with its "name", "title" and nested "nodes"
             (with "kind", "path", "resolved_path", "title", "error", and for
@@ -24,7 +25,7 @@ def tree(workdir: Path = Path(), *, en: bool = False, json: bool = False) -> Non
 
     settings = DeckSettings.from_yaml(workdir)
     deck = (
-        DeckSettingsFactory(settings, lang="en" if en else "fr")
+        DeckSettingsFactory(settings, lang=lang)
         .parser()
         .from_deck_definition(settings.paths.deck_definition)
     )

@@ -26,6 +26,10 @@ def main(args: Iterable[str] | None = None) -> None:
     `--debug` (or set `DECKZ_DEBUG=1`) to get the traceback of a deckz error
     instead.
 
+    Environment variables (e.g. `DECKZ_LANG`, `DECKZ_RUN_PRINT`) are also
+    read from the closest `.env` file, looked up from the current directory
+    upwards. Variables already set in the environment take precedence.
+
     Args:
         args: Command-line arguments, defaults to `sys.argv[1:]`.
 
@@ -33,9 +37,12 @@ def main(args: Iterable[str] | None = None) -> None:
         SystemExit: With code 2 on a command-line usage error.
     """
     from cyclopts import CycloptsError
+    from dotenv import find_dotenv, load_dotenv
 
     from ..utils import import_module_and_submodules
 
+    # `usecwd`: without it, the lookup starts from deckz's own installed code.
+    load_dotenv(find_dotenv(usecwd=True))
     import_module_and_submodules(__name__)
     try:
         app.meta(args, result_action="return_none", exit_on_error=False)

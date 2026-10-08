@@ -330,7 +330,7 @@ def test_watch_survives_a_compile_error(working_dir: Path, caplog: Any) -> None:
         "done",
         run,
         settings=DeckSettings.from_yaml(working_dir),
-        lang="fr",
+        langs=("fr",),
         outputs=_HANDOUT_ONLY,
     )
 
@@ -400,7 +400,7 @@ def test_build_reports_progress_through_the_reporter(working_dir: Path) -> None:
 
     run(
         settings=DeckSettings.from_yaml(working_dir),
-        lang="fr",
+        langs=("fr",),
         outputs=_HANDOUT_ONLY,
         progress=progress,
     )

@@ -33,6 +33,7 @@ from ..utils import deck_name_from_dir
 
 if TYPE_CHECKING:
     from ..configuring.settings import DeckSettings
+    from ..models import Lang
 
 _INCLUDE = re.compile(r'^#include "(.+)\.typ"$', re.MULTILINE)
 _FRAGMENT_HASH = re.compile(r"-[0-9a-f]{16}$")
@@ -128,7 +129,7 @@ def _headings(
     return found
 
 
-def _locate(settings: "DeckSettings", label: str, *, en: bool) -> list[_Located]:
+def _locate(settings: "DeckSettings", label: str, *, lang: "Lang") -> list[_Located]:
     """Every `label` marker of the built handout, with its frame and sources.
 
     Returns:
@@ -141,15 +142,15 @@ def _locate(settings: "DeckSettings", label: str, *, en: bool) -> list[_Located]
 
     paths = settings.paths
     name = deck_name_from_dir(paths.current_dir)
-    # `deckz run --en` writes its build and PDFs under an `en` subdirectory.
-    lang_dir = "en" if en else ""
+    # English builds and PDFs go to an `en` subdirectory.
+    lang_dir = "en" if lang == "en" else ""
     build_dir = paths.build_dir / lang_dir / f"{name}-handout"
     main_typ = build_dir / f"{name}-handout.typ"
     pdf = paths.pdf_dir / lang_dir / f"{name}-handout.pdf"
     if not pdf.is_file():
         msg = (
             f"{pdf} is missing: build the deck's handout first "
-            f"(`deckz run --handout{' --en' if en else ''}`)"
+            f"(`deckz run --handout --lang {lang}`)"
         )
         raise DeckzError(msg)
 
@@ -196,11 +197,13 @@ def _percent(value: str) -> float:
     return float(value.rstrip("%"))
 
 
-def shrunk_frames(settings: "DeckSettings", *, en: bool = False) -> list[ShrunkFrame]:
+def shrunk_frames(
+    settings: "DeckSettings", *, lang: "Lang" = "fr"
+) -> list[ShrunkFrame]:
     """Every shrunk frame of `settings`' deck's built handout, worst first.
 
     Needs `deckz run --handout` (or a `deckz run file`/`deckz run section`
-    preview), with `--en` for `en`, to have already run: this only reads its
+    preview), in `lang`, to have already run: this only reads its
     build output.
 
     Returns:
@@ -215,16 +218,18 @@ def shrunk_frames(settings: "DeckSettings", *, en: bool = False) -> list[ShrunkF
             title=found.title,
             sources=found.sources,
         )
-        for found in _locate(settings, settings.overflow_marker_label, en=en)
+        for found in _locate(settings, settings.overflow_marker_label, lang=lang)
     ]
     return sorted(frames, key=lambda frame: _percent(frame.ratio))
 
 
-def wrapped_tables(settings: "DeckSettings", *, en: bool = False) -> list[WrappedTable]:
+def wrapped_tables(
+    settings: "DeckSettings", *, lang: "Lang" = "fr"
+) -> list[WrappedTable]:
     """Every table of `settings`' deck's built handout, most wrapped first.
 
     Needs `deckz run --handout` (or a `deckz run file`/`deckz run section`
-    preview), with `--en` for `en`, to have already run: this only reads its
+    preview), in `lang`, to have already run: this only reads its
     build output.
 
     Returns:
@@ -240,6 +245,6 @@ def wrapped_tables(settings: "DeckSettings", *, en: bool = False) -> list[Wrappe
             title=found.title,
             sources=found.sources,
         )
-        for found in _locate(settings, settings.table_marker_label, en=en)
+        for found in _locate(settings, settings.table_marker_label, lang=lang)
     ]
     return sorted(tables, key=lambda table: -_percent(table.wrap))

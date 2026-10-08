@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from .._options import Langs, unique
 from . import app
 
 
@@ -10,7 +11,7 @@ def run_decks(
     presentation: bool = True,
     print: bool = False,  # ruff: ignore[builtin-argument-shadowing]
     html: bool = False,
-    en: bool = False,
+    langs: Langs = ("fr",),
     dry_run: bool = False,
     workdir: Path = Path(),
 ) -> None:
@@ -26,9 +27,10 @@ def run_decks(
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
         html: Produce an HTML deck (whole deck, with a table of contents)
-        en: Compile the English variant of every deck. Strict across the
-            whole repository: the first deck missing any translation aborts
-            the whole run
+        langs: Languages to compile every deck in, each to its own output
+            paths. English is strict across the whole repository: the first
+            deck missing any translation aborts the whole run, before
+            anything is compiled
         dry_run: Only print the outputs that would be compiled and the content
             fragments each would re-render, without building anything
         workdir: Path to move into before running the command
@@ -37,12 +39,12 @@ def run_decks(
     from ...pipelines import OutputKinds, build, decks_targets
     from .._presentation import RichProgress, print_plan_of
 
-    lang = "en" if en else "fr"
+    langs = unique(langs)
     outputs = OutputKinds(
         handout=handout, presentation=presentation, print=print, html=html
     )
-    targets = decks_targets(workdir, lang)
+    targets = decks_targets(workdir, langs)
     if dry_run:
-        print_plan_of(targets, lang, outputs)
+        print_plan_of(targets, outputs)
     else:
-        build(targets, lang, outputs, RichProgress())
+        build(targets, outputs, RichProgress())

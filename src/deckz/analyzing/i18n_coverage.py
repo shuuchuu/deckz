@@ -1,7 +1,7 @@
 """Report fr content, titles and variables with no English counterpart.
 
-Everything here resolves the deck as deckz would resolve it *without* `--en` \
-(i.e. the fr side), then reports what an actual `deckz run --en` would \
+Everything here resolves the deck as deckz would resolve it in fr, then \
+reports what an actual `deckz run --lang en` would \
 currently fail on: a resolved file with no `en/` sibling, or a `{fr, en}` \
 translation map that's missing its `en` key. A plain string title/variable is \
 always valid (it's used as-is in every language) but is also reported, \
@@ -26,7 +26,7 @@ def _audit_deck(settings: "DeckSettings") -> Deck:
 
     A coverage check must be able to walk a deck's whole tree precisely to \
     report the translation gaps that would otherwise make a real build fail \
-    -- so, unlike an actual `deckz run`/`deckz run --en`, this never raises \
+    -- so, unlike an actual `deckz run`/`deckz run --lang en`, this never raises \
     on an incomplete translation map, it just falls back within the walk.
 
     Returns:
@@ -41,7 +41,7 @@ def _audit_deck(settings: "DeckSettings") -> Deck:
 def missing_en_files(settings: "DeckSettings") -> list[tuple[Path, Path]]:
     """Resolved fr files of a deck that have no `en/` sibling on disk.
 
-    Reuses the exact rule `Parser` applies under `--en`, so results are \
+    Reuses the exact rule `Parser` applies in en, so results are \
     guaranteed consistent with actual build behavior.
 
     Returns:
@@ -118,7 +118,7 @@ def title_gaps(settings: "DeckSettings") -> list[tuple[Path, str, str]]:
     A title is a gap either because it's a plain string (informational only -- \
     this doesn't block a build, but commonly means "not yet localized"), or \
     because it's a `{fr, en}` map missing its `en` key (this one does block a \
-    `deckz run --en`).
+    `deckz run --lang en`).
 
     Returns:
         `(yml_path, field_descriptor, status)` triples, `status` one of \

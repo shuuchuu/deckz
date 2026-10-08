@@ -97,7 +97,7 @@ class SectionsAnalyzer:
 
     @cached_property
     def _used_files(self) -> frozenset[ResolvedPath]:
-        """Files some deck resolves to, in fr or under `--en`."""
+        """Files some deck resolves to, in fr or in en."""
         files_usage_processor = _FilesUsageNodeVisitor()
         used: set[ResolvedPath] = set()
         for lang in get_args(Lang):

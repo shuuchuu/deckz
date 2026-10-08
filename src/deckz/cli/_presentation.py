@@ -142,23 +142,31 @@ def open_path(path: Path) -> None:
 
 
 def show_output_dirs(
-    settings: "DeckSettings", outputs: "OutputKinds", *, open_dir: bool
+    settings: "DeckSettings",
+    langs: "Sequence[Lang]",
+    outputs: "OutputKinds",
+    *,
+    open_dir: bool,
 ) -> None:
     """Log where a `run file`/`run section` preview writes, and maybe open it.
 
     Args:
         settings: The preview's settings.
+        langs: The languages the preview builds, each written apart.
         outputs: What the preview builds.
-        open_dir: Open the output directory: the HTML one when only HTML is \
-            built.
+        open_dir: Open the first output directory: an HTML one when only \
+            HTML is built.
     """
     from logging import getLogger
 
     logger = getLogger(__name__)
     pdfs = outputs.handout or outputs.presentation or outputs.print
-    dirs = [settings.paths.pdf_dir] if pdfs or not outputs.html else []
+    # English outputs go to an `en` subdirectory (see
+    # `DeckSettingsFactory.deck_builder`).
+    bases = [settings.paths.pdf_dir] if pdfs or not outputs.html else []
     if outputs.html:
-        dirs.append(settings.paths.html_dir)
+        bases.append(settings.paths.html_dir)
+    dirs = [base / "en" if lang == "en" else base for base in bases for lang in langs]
     for directory in dirs:
         logger.info(
             f"Output directory located at [link=file://{directory}]{directory}[/link]",
@@ -220,9 +228,7 @@ class _JsonNodeVisitor(NodeVisitor[[], dict[str, object]]):
         }
 
 
-def print_plan_of(
-    targets: "Sequence[BuildTarget]", lang: "Lang", outputs: "OutputKinds"
-) -> None:
+def print_plan_of(targets: "Sequence[BuildTarget]", outputs: "OutputKinds") -> None:
     """Print what building `targets` would do, for a `run` command's `--dry-run`.
 
     Paths are printed relative to the repository root.
@@ -230,7 +236,7 @@ def print_plan_of(
     from ..pipelines import plan
 
     if targets:
-        print_plan(plan(targets, lang, outputs), targets[0].settings.paths.git_dir)
+        print_plan(plan(targets, outputs), targets[0].settings.paths.git_dir)
 
 
 def print_plan(planned: Iterable["PlannedCompile"], relative_to: Path) -> None:

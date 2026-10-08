@@ -1,12 +1,12 @@
 from pathlib import Path
 
-from ..models import FlavorName
+from ..models import FlavorName, Lang
 from . import app
 
 
 @app.command()
 def section_files(
-    section: str, flavor: str, /, *, en: bool = False, workdir: Path = Path()
+    section: str, flavor: str, /, *, lang: Lang = "fr", workdir: Path = Path()
 ) -> None:
     """Print the files a shared section+flavor resolves to.
 
@@ -17,7 +17,7 @@ def section_files(
     Args:
         section: Shared/content-relative section id, e.g. python/basics
         flavor: Flavor name to resolve
-        en: Resolve the English files, as `deckz run --en` would
+        lang: Language to resolve the files in, as `deckz run` would
         workdir: Path to move into before running the command
 
     """
@@ -30,7 +30,7 @@ def section_files(
             settings,
             section,
             FlavorName(flavor),
-            lang="en" if en else "fr",
+            lang=lang,
         )
     ):
         print(path)

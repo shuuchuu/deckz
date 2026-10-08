@@ -1,17 +1,18 @@
 from pathlib import Path
 
+from ...models import Lang
 from . import app
 
 
 @app.command()
-def paths(*, en: bool = False, json: bool = False, workdir: Path = Path()) -> None:
+def paths(*, lang: Lang = "fr", json: bool = False, workdir: Path = Path()) -> None:
     """Print the resolved absolute file paths of the WORKDIR's deck tree.
 
     One path per line, sorted -- for scripting/scoping reads, not for human
     inspection.
 
     Args:
-        en: Resolve the English variant, as `deckz run --en` would
+        lang: Language to resolve the deck in, as `deckz run` would
         json: Print one JSON array of paths instead
         workdir: Path to move into before running the command
     """
@@ -21,7 +22,7 @@ def paths(*, en: bool = False, json: bool = False, workdir: Path = Path()) -> No
 
     settings = DeckSettings.from_yaml(workdir)
     deck = (
-        DeckSettingsFactory(settings, lang="en" if en else "fr")
+        DeckSettingsFactory(settings, lang=lang)
         .parser()
         .from_deck_definition(settings.paths.deck_definition)
     )

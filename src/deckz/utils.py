@@ -275,7 +275,7 @@ def all_decks(git_dir: Path, lang: "Lang" = "fr") -> dict[Path, "ResolvedDeck"]:
     Args:
         git_dir: Root of the repository.
         lang: Language to resolve the decks in. Under "en", files resolve \
-            exactly as with `--en`, except a file with no `en/` counterpart \
+            exactly as with `--lang en`, except a file with no `en/` counterpart \
             is left out of the tree instead of failing the parse, so \
             analyses see every translation that does exist.
 

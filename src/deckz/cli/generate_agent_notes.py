@@ -83,8 +83,9 @@ or a declared variable nothing ever reads.
   session's unfinished edits don't block or hide a check).
 - `deckz check overflow DECK_DIR` -- a built handout's shrunk-to-fit
   frames, worst first, with their source content file(s). Needs the
-  handout already built (`deckz run --handout`, and `--en` on both for
-  the English build). `--tables` lists the
+  handout already built (`deckz run --handout`, with the same `--lang`
+  on both: `--lang en` for the English build, `--lang fr en` for both).
+  `--tables` lists the
   tables instead, most wrapped first: a high wrap usually means cells with
   too much text for a slide.
 - `deckz check parity DECK_DIR` (needs the `deckz[parity]` extra) --
@@ -116,14 +117,16 @@ or a declared variable nothing ever reads.
 
 ## English variant
 
-Add `--en` to `run`/`check variables` to compile the English variant (and to
-`show`/`show paths`/`show variables`/`section-files`/`search-sections` to
-inspect it). There
-is never a separate English deck or section: it's the same
-`deck.yml`/section `.yml`, with any title given as `{fr: ..., en: ...}`
-instead of a plain string, and `en/` sibling files for translated bodies.
-`--en` is strict: the first missing translation aborts the build. Run
-`deckz i18n missing-en` to see every gap without aborting.
+Add `--lang en` to `run`/`check variables`/`check overflow`/`search-sections`
+to work on the English variant, or `--lang fr en` for both in one pass
+(their default is `fr`, or the `DECKZ_LANG` environment variable, which a
+`.env` file may set). `show`/`show paths`/`show variables`/`section-files`
+take a single `--lang en` to inspect it. There is never a separate English
+deck or section: it's the same `deck.yml`/section `.yml`, with any title
+given as `{fr: ..., en: ...}` instead of a plain string, and `en/` sibling
+files for translated bodies. English is strict: the first missing
+translation aborts the build. Run `deckz i18n missing-en` to see every gap
+without aborting.
 """
 
 

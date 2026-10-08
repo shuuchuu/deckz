@@ -65,7 +65,7 @@ def test_show_paths(working_dir: Path, capsys: CaptureFixture[str]) -> None:
 
 
 def test_show_paths_en(working_dir: Path, capsys: CaptureFixture[str]) -> None:
-    main(("show", "paths", "--en"))
+    main(("show", "paths", "--lang", "en"))
 
     out = capsys.readouterr().out.splitlines()
     assert out == [str(working_dir.parent.parent / "content/i18n-demo/en/hello.md")]
@@ -76,7 +76,7 @@ def test_show_tree_en_flags_missing_translation(working_dir: Path) -> None:
     main(("show", "tree"))
 
     with raises(SystemExit) as exc_info:
-        main(("show", "tree", "--en"))
+        main(("show", "tree", "--lang", "en"))
 
     assert exc_info.value.code == 1
 
@@ -84,7 +84,7 @@ def test_show_tree_en_flags_missing_translation(working_dir: Path) -> None:
 def test_show_variables_en(working_dir: Path, capsys: CaptureFixture[str]) -> None:
     _write(working_dir / "variables.yml", "greeting:\n  fr: Bonjour\n  en: Hello\n")
 
-    main(("show", "variables", "--en"))
+    main(("show", "variables", "--lang", "en"))
 
     assert "Hello" in capsys.readouterr().out
 
@@ -96,7 +96,7 @@ def test_show_json(working_dir: Path, capsys: CaptureFixture[str]) -> None:
     main(("show", "paths", "--json"))
     assert loads(capsys.readouterr().out) == [hello]
 
-    main(("show", "variables", "--en", "--json"))
+    main(("show", "variables", "--lang", "en", "--json"))
     assert loads(capsys.readouterr().out)["greeting"] == "Hello"
 
     main(("show", "settings", "--json"))
@@ -136,14 +136,14 @@ def test_section_files(working_dir: Path, capsys: CaptureFixture[str]) -> None:
 
 
 def test_section_files_en(working_dir: Path, capsys: CaptureFixture[str]) -> None:
-    main(("section-files", "i18n-demo", "hello", "--en"))
+    main(("section-files", "i18n-demo", "hello", "--lang", "en"))
 
     (line,) = capsys.readouterr().out.splitlines()
     assert line.endswith("i18n-demo/en/hello.md")
 
 
 def test_search_sections_en(working_dir: Path, capsys: CaptureFixture[str]) -> None:
-    main(("search-sections", "hello", "--en"))
+    main(("search-sections", "hello", "--lang", "en"))
 
     out = capsys.readouterr().out
     assert "SECTION" not in out
@@ -219,7 +219,7 @@ def test_search_sections(working_dir: Path, capsys: CaptureFixture[str]) -> None
     main(("search-sections", "bonjour"))
 
     (line,) = capsys.readouterr().out.splitlines()
-    assert line.startswith("FRAME i18n-demo\t")
+    assert line.startswith("FRAME fr i18n-demo\t")
     assert line.endswith("\tBonjour")
 
 
@@ -228,8 +228,21 @@ def test_search_sections_json(working_dir: Path, capsys: CaptureFixture[str]) ->
 
     (record,) = loads(capsys.readouterr().out)
     assert record["kind"] == "frame"
+    assert record["lang"] == "fr"
     assert record["section"] == "i18n-demo"
     assert record["title"] == "Bonjour"
+
+
+def test_search_sections_in_both_langs(
+    working_dir: Path, capsys: CaptureFixture[str]
+) -> None:
+    main(("search-sections", "bonjour", "hello", "--lang", "fr", "en", "--json"))
+
+    records = loads(capsys.readouterr().out)
+    assert {(record["lang"], record["title"]) for record in records} == {
+        ("fr", "Bonjour"),
+        ("en", "Hello"),
+    }
 
 
 def test_missing_en_json(working_dir: Path, capsys: CaptureFixture[str]) -> None:

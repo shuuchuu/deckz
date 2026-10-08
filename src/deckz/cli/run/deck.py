@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from ...models import PartName
+from .._options import Langs, unique
 from . import app
 
 
@@ -13,7 +14,7 @@ def run(
     presentation: bool = True,
     print: bool = True,  # ruff: ignore[builtin-argument-shadowing]
     html: bool = False,
-    en: bool = False,
+    langs: Langs = ("fr",),
     watch: bool = False,
     dry_run: bool = False,
     workdir: Path = Path(),
@@ -26,9 +27,10 @@ def run(
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
         html: Produce an HTML deck (whole deck, with a table of contents)
-        en: Compile the English variant. Every resolved file, title and
-            variable must have a complete English translation, or the build
-            fails immediately
+        langs: Languages to compile, each to its own output paths
+            (English under an `en/` subdirectory). English is strict: every
+            resolved file, title and variable must have a complete English
+            translation, or the build fails before compiling anything
         watch: Recompile on file changes, instead of compiling once
         dry_run: Only print the outputs that would be compiled and the content
             fragments each would re-render (new or changed since its last
@@ -42,17 +44,17 @@ def run(
     from .._presentation import RichProgress, print_plan_of
 
     settings = DeckSettings.from_yaml(workdir)
-    lang = "en" if en else "fr"
+    langs = unique(langs)
     outputs = OutputKinds(
         handout=handout, presentation=presentation, print=print, html=html
     )
 
     if dry_run:
-        print_plan_of(deck_targets(settings, lang, parts), lang, outputs)
+        print_plan_of(deck_targets(settings, langs, parts), outputs)
         return
 
     if not watch:
-        build(deck_targets(settings, lang, parts), lang, outputs, RichProgress())
+        build(deck_targets(settings, langs, parts), outputs, RichProgress())
         return
 
     from logging import getLogger
@@ -79,7 +81,7 @@ def run(
         ),
         _run,
         settings=settings,
-        lang=lang,
+        langs=langs,
         outputs=outputs,
         parts=parts,
         progress=RichProgress(),

@@ -417,7 +417,7 @@ class Parser(ParserProtocol):
         shared_path = self._shared_content_dir / unresolved_path
         existence_tester = Path.is_file if resolve_target == "file" else Path.is_dir
         if lang_aware and resolve_target == "file" and self._lang == "en":
-            # No fr fallback: a missing en/ sibling under --en must fail loudly
+            # No fr fallback: a missing en/ sibling in en must fail loudly
             # rather than silently compiling fr content under an English label.
             candidates = [
                 local_path.parent / "en" / local_path.name,

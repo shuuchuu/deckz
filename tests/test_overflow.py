@@ -1,7 +1,8 @@
+from json import loads
 from pathlib import Path
 
 from pygit2 import init_repository
-from pytest import raises
+from pytest import CaptureFixture, raises
 
 from deckz.analyzing.overflow import (
     _headings,
@@ -10,6 +11,7 @@ from deckz.analyzing.overflow import (
     shrunk_frames,
     wrapped_tables,
 )
+from deckz.cli import main
 from deckz.configuring.settings import DeckPaths, DeckSettings
 from deckz.exceptions import DeckzError
 
@@ -217,7 +219,7 @@ def test_wrapped_tables_reports_most_wrapped_first(tmp_path: Path) -> None:
     assert tables[0].sources == ("deck/content/topic.md",)
 
 
-def test_wrapped_tables_reads_the_english_build_with_en(tmp_path: Path) -> None:
+def test_wrapped_tables_reads_the_english_build_in_en(tmp_path: Path) -> None:
     settings = _deck_settings(tmp_path)
     current_dir = settings.paths.current_dir
     build_dir = current_dir / ".build" / "en" / "deck-handout"
@@ -237,4 +239,53 @@ def test_wrapped_tables_reads_the_english_build_with_en(tmp_path: Path) -> None:
 
     with raises(DeckzError, match="handout"):
         wrapped_tables(settings)
-    assert [table.wrap for table in wrapped_tables(settings, en=True)] == ["150%"]
+    assert [table.wrap for table in wrapped_tables(settings, lang="en")] == ["150%"]
+
+
+def _fake_handout(build_dir: Path, pdf: Path, wrap: str) -> None:
+    import typst
+
+    build_dir.mkdir(parents=True)
+    (build_dir / "deck-handout.typ").write_text(
+        f'#metadata((page: 1, wrap: "{wrap}", overflow: false)) <formation-table>\n'
+        "Hello\n",
+        encoding="utf8",
+    )
+    pdf.parent.mkdir(parents=True, exist_ok=True)
+    typst.Compiler(str(build_dir / "deck-handout.typ")).compile(output=str(pdf))
+
+
+def test_check_overflow_reports_every_lang(
+    tmp_path: Path, capsys: CaptureFixture[str]
+) -> None:
+    settings = _deck_settings(tmp_path)
+    current_dir = settings.paths.current_dir
+    _fake_handout(
+        current_dir / ".build" / "deck-handout",
+        current_dir / "pdf" / "deck-handout.pdf",
+        "120%",
+    )
+    _fake_handout(
+        current_dir / ".build" / "en" / "deck-handout",
+        current_dir / "pdf" / "en" / "deck-handout.pdf",
+        "150%",
+    )
+
+    main(
+        (
+            "check",
+            "overflow",
+            str(current_dir),
+            "--tables",
+            "--lang",
+            "fr",
+            "en",
+            "--json",
+        )
+    )
+
+    records = loads(capsys.readouterr().out)
+    assert [(record["lang"], record["wrap"]) for record in records] == [
+        ("fr", "120%"),
+        ("en", "150%"),
+    ]

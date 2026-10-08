@@ -1,8 +1,8 @@
 """Build pipelines behind the `deckz run` commands.
 
 Each command first computes its build targets (`*_targets`): the decks to \
-compile, parsed, with the settings to compile each with. `build` then \
-compiles them, and `plan` (behind `--dry-run`) reports what `build` would \
+compile, parsed once per language, with the settings to compile each with. \
+`build` then compiles them, and `plan` (behind `--dry-run`) reports what `build` would \
 do without doing any of it. The `run*` functions are `build` applied to \
 their command's targets.
 """
@@ -38,6 +38,8 @@ class BuildTarget:
 
     deck: Deck
     settings: DeckSettings
+    lang: Lang
+    """The language `deck` was parsed in, and is to be compiled in."""
     label: str
     """Names the target in a compilation failure, e.g. the file previewed."""
     basedirs: tuple[Path, ...] | None = None
@@ -58,10 +60,10 @@ class OutputKinds:
 
 def _deck_builder(
     target: BuildTarget,
-    lang: Lang,
     outputs: OutputKinds,
     progress: ProgressReporterProtocol,
 ) -> DeckBuilderProtocol:
+    lang = target.lang
     variables = {**get_variables(target.settings, lang=lang), "lang": lang}
     return DeckSettingsFactory(target.settings, lang=lang).deck_builder(
         variables=variables,
@@ -77,7 +79,6 @@ def _deck_builder(
 
 def build(
     targets: Sequence[BuildTarget],
-    lang: Lang,
     outputs: OutputKinds,
     progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
@@ -89,12 +90,15 @@ def build(
         return
     # Every target belongs to the same repository, so to the same assets.
     start = perf_counter()
-    DeckSettingsFactory(targets[0].settings, lang=lang).assets_builder().build_assets()
+    DeckSettingsFactory(targets[0].settings).assets_builder().build_assets()
     _logger.debug("Built assets in %.2fs", perf_counter() - start)
 
     def compile_target(target: BuildTarget) -> None:
-        if not _deck_builder(target, lang, outputs, progress).build_deck():
-            msg = f"{target.label} failed to compile, see the errors above"
+        if not _deck_builder(target, outputs, progress).build_deck():
+            msg = (
+                f"{target.label} failed to compile in {target.lang}, see the "
+                "errors above"
+            )
             raise CompilationError(msg)
 
     if len(targets) == 1:
@@ -106,9 +110,7 @@ def build(
             advance()
 
 
-def plan(
-    targets: Iterable[BuildTarget], lang: Lang, outputs: OutputKinds
-) -> list[PlannedCompile]:
+def plan(targets: Iterable[BuildTarget], outputs: OutputKinds) -> list[PlannedCompile]:
     """What `build` would compile and render, without building anything.
 
     Assets builders aren't run either: what they would regenerate is up to \
@@ -120,147 +122,182 @@ def plan(
     return [
         planned
         for target in targets
-        for planned in _deck_builder(target, lang, outputs, _NULL_PROGRESS).plan()
+        for planned in _deck_builder(target, outputs, _NULL_PROGRESS).plan()
     ]
 
 
 def deck_targets(
-    settings: DeckSettings, lang: Lang, parts: Iterable[PartName] | None = None
+    settings: DeckSettings,
+    langs: Iterable[Lang],
+    parts: Iterable[PartName] | None = None,
 ) -> list[BuildTarget]:
     """The deck of `settings`, restricted to `parts` if given.
 
     Returns:
-        The single target.
+        One target per language.
     """
-    parser = DeckSettingsFactory(settings, lang=lang).parser()
-    deck = parser.from_deck_definition(settings.paths.deck_definition)
-    if parts is not None:
-        deck = deck.filter(parts)
-    return [BuildTarget(deck, settings, deck.name)]
+    parts = None if parts is None else tuple(parts)
+    targets = []
+    for lang in langs:
+        parser = DeckSettingsFactory(settings, lang=lang).parser()
+        deck = parser.from_deck_definition(settings.paths.deck_definition)
+        if parts is not None:
+            deck = deck.filter(parts)
+        targets.append(BuildTarget(deck, settings, lang, deck.name))
+    return targets
 
 
-def file_targets(path: str, settings: DeckSettings, lang: Lang) -> list[BuildTarget]:
+def file_targets(
+    path: str, settings: DeckSettings, langs: Iterable[Lang]
+) -> list[BuildTarget]:
     """A synthetic deck holding the single content file `path`.
 
     Returns:
-        The single target.
+        One target per language.
     """
-    deck = DeckSettingsFactory(settings, lang=lang).parser().from_file(path)
-    return [BuildTarget(deck, settings, path)]
+    return [
+        BuildTarget(
+            DeckSettingsFactory(settings, lang=lang).parser().from_file(path),
+            settings,
+            lang,
+            path,
+        )
+        for lang in langs
+    ]
 
 
 def section_targets(
-    section: str, flavor: FlavorName, settings: DeckSettings, lang: Lang
+    section: str, flavor: FlavorName, settings: DeckSettings, langs: Iterable[Lang]
 ) -> list[BuildTarget]:
     """A synthetic deck holding `flavor` of `section`.
 
     Returns:
-        The single target.
+        One target per language.
     """
-    parser = DeckSettingsFactory(settings, lang=lang).parser()
-    deck = parser.from_section(section, flavor)
-    return [BuildTarget(deck, settings, f"{section}@{flavor}")]
+    return [
+        BuildTarget(
+            DeckSettingsFactory(settings, lang=lang)
+            .parser()
+            .from_section(section, flavor),
+            settings,
+            lang,
+            f"{section}@{flavor}",
+        )
+        for lang in langs
+    ]
 
 
-def decks_targets(directory: Path, lang: Lang) -> list[BuildTarget]:
+def decks_targets(directory: Path, langs: Iterable[Lang]) -> list[BuildTarget]:
     """Every deck of the repository containing `directory`.
 
-    All are parsed up front, so a broken deck fails the command before any \
-    compilation starts.
+    All are parsed up front, in every language, so a broken deck fails the \
+    command before any compilation starts.
 
     Returns:
-        One target per deck.
+        One target per deck and language.
     """
     git_dir = GlobalSettings.from_yaml(directory).paths.git_dir
+    all_settings = list(all_deck_settings(git_dir))
     targets = []
-    for settings in all_deck_settings(git_dir):
-        parser = DeckSettingsFactory(settings, lang=lang).parser()
-        deck = parser.from_deck_definition(settings.paths.deck_definition)
-        label = str(settings.paths.current_dir.relative_to(git_dir))
-        targets.append(BuildTarget(deck, settings, label))
+    for lang in langs:
+        for settings in all_settings:
+            parser = DeckSettingsFactory(settings, lang=lang).parser()
+            deck = parser.from_deck_definition(settings.paths.deck_definition)
+            label = str(settings.paths.current_dir.relative_to(git_dir))
+            targets.append(BuildTarget(deck, settings, lang, label))
     return targets
 
 
-def shared_targets(directory: Path, lang: Lang) -> list[BuildTarget]:
+def shared_targets(directory: Path, langs: Iterable[Lang]) -> list[BuildTarget]:
     """Every shared section, each expanded to all its files (`run shared`).
 
     Returns:
-        The single target, built under `<git_dir>/.run/shared/`.
+        One target per language, built under `<git_dir>/.run/shared/`.
     """
     git_dir = GlobalSettings.from_yaml(directory).paths.git_dir
     settings = DeckSettings.from_yaml(run_scratch_dir(git_dir, "shared"))
-    deck = build_shared_deck(settings, lang)
-    return [BuildTarget(deck, settings, deck.name, basedirs=(git_dir,))]
+    targets = []
+    for lang in langs:
+        deck = build_shared_deck(settings, lang)
+        targets.append(
+            BuildTarget(deck, settings, lang, deck.name, basedirs=(git_dir,))
+        )
+    return targets
 
 
-def all_targets(directory: Path, lang: Lang) -> list[BuildTarget]:
+def all_targets(directory: Path, langs: Iterable[Lang]) -> list[BuildTarget]:
     """`shared_targets`' deck plus every deck-local override (`run all`).
 
     Returns:
-        The single target, built under `<git_dir>/.run/all/`.
+        One target per language, built under `<git_dir>/.run/all/`.
     """
     git_dir = GlobalSettings.from_yaml(directory).paths.git_dir
     settings = DeckSettings.from_yaml(run_scratch_dir(git_dir, "all"))
-    deck = build_all_deck(settings, lang)
-    return [BuildTarget(deck, settings, deck.name, basedirs=(git_dir,))]
+    targets = []
+    for lang in langs:
+        deck = build_all_deck(settings, lang)
+        targets.append(
+            BuildTarget(deck, settings, lang, deck.name, basedirs=(git_dir,))
+        )
+    return targets
 
 
 def run(
     settings: DeckSettings,
-    lang: Lang,
+    langs: Iterable[Lang],
     outputs: OutputKinds,
     parts: Iterable[PartName] | None = None,
     progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
-    build(deck_targets(settings, lang, parts), lang, outputs, progress)
+    build(deck_targets(settings, langs, parts), outputs, progress)
 
 
 def run_file(
     path: str,
     settings: DeckSettings,
-    lang: Lang,
+    langs: Iterable[Lang],
     outputs: OutputKinds,
     progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
-    build(file_targets(path, settings, lang), lang, outputs, progress)
+    build(file_targets(path, settings, langs), outputs, progress)
 
 
 def run_section(
     section: str,
     flavor: FlavorName,
     settings: DeckSettings,
-    lang: Lang,
+    langs: Iterable[Lang],
     outputs: OutputKinds,
     progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
-    build(section_targets(section, flavor, settings, lang), lang, outputs, progress)
+    build(section_targets(section, flavor, settings, langs), outputs, progress)
 
 
 def run_decks(
     directory: Path,
-    lang: Lang,
+    langs: Iterable[Lang],
     outputs: OutputKinds,
     progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
-    build(decks_targets(directory, lang), lang, outputs, progress)
+    build(decks_targets(directory, langs), outputs, progress)
 
 
 def run_shared(
     directory: Path,
-    lang: Lang,
+    langs: Iterable[Lang],
     outputs: OutputKinds,
     progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
-    build(shared_targets(directory, lang), lang, outputs, progress)
+    build(shared_targets(directory, langs), outputs, progress)
 
 
 def run_all(
     directory: Path,
-    lang: Lang,
+    langs: Iterable[Lang],
     outputs: OutputKinds,
     progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
-    build(all_targets(directory, lang), lang, outputs, progress)
+    build(all_targets(directory, langs), outputs, progress)
 
 
 def run_assets(directory: Path) -> None:

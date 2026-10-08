@@ -81,6 +81,16 @@ Logs and progress bars go to stderr, stdout carries only results
 Tests driving `main(...)` therefore assert `raises(SystemExit)` with code
 1, not the `DeckzError` itself.
 
+`main()` also loads the closest `.env` (python-dotenv) before parsing, so
+option defaults can come from environment variables: the shared `Langs`
+option (`cli/_options.py`, `--lang fr en`) reads `DECKZ_LANG` on the
+commands that process several languages in one pass, and the `run`
+sub-app's `Env("DECKZ_RUN_", command=False)` config gives every `run`
+subcommand's options a `DECKZ_RUN_<OPTION>` default (one name for all of
+them, so `deckz run` and `deckz run deck` agree). Commands showing a
+single resolved view take a plain `lang: Lang` instead. Tests clear
+`DECKZ_*` and stub out the `.env` lookup (`tests/conftest.py`).
+
 ### Settings resolution
 
 `configuring/settings.py` defines `GlobalPaths`/`DeckSettings`/`GlobalSettings`
@@ -121,8 +131,9 @@ see the module's header comment for why never in deckz's own process).
 `pipelines.py` holds the orchestration the CLI commands call. Planning is
 separate from execution: each `run` command first computes its
 `BuildTarget`s (`deck_targets`, `file_targets`, `section_targets`,
-`decks_targets`, `shared_targets`, `all_targets`: parsed decks plus the
-settings, failure label and optional `basedirs` to build each with), then
+`decks_targets`, `shared_targets`, `all_targets`: one parsed deck per
+requested language, plus the language, settings, failure label and
+optional `basedirs` to build each with), then
 either `build`s them or, under `--dry-run`, prints their `plan`. The
 `run`/`run_file`/…/`run_all` functions are `build` over those targets, kept
 for `watch()` to re-run (reparsing on each change). `build` builds the

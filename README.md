@@ -292,7 +292,7 @@ given flavor (`$path/to/section@flavor`); either form can be given a custom
 title with `path: My title` / `$path@flavor: My title` (or, as with `p2`'s
 title above, a `{fr: ..., en: ...}` map instead of a plain string, when the
 text actually differs by language -- see [Titles, variables and
-`--en`](#titles-variables-and---en)).
+`--lang`](#titles-variables-and---lang)).
 
 ### Shared sections
 
@@ -351,16 +351,19 @@ itself: a fragment reading a `variables.xxx` name nothing resolved at that
 point ever sets, and a declared name no fragment anywhere under its section
 ever reads.
 
-### Titles, variables and `--en`
+### Titles, variables and `--lang`
 
 There is only ever one `deck.yml`/section `.yml` -- English is never a
-separate deck or a duplicated section, only a `--en` flag on `deckz run`
-(and on `deckz check variables`, `deckz show`/`show paths`/`show variables`,
-`deckz section-files` and `deckz search-sections`, to inspect the English
-variant the same way). Commands that act on the whole repository --
-`deckz clean content`, `deckz asset search`, `deckz asset deps` -- always
-cover both languages, so an `en/` file counts as used whenever a
-`deckz run --en` would pick it:
+separate deck or a duplicated section, only a `--lang en` option on `deckz
+run`. `--lang fr en` (or `--lang fr --lang en`) handles both languages in
+one pass, and so do `deckz check variables`, `deckz check overflow` and
+`deckz search-sections`, which tag each finding with its language. `deckz
+show`/`show paths`/`show variables` and `deckz section-files` show a single
+resolved view, so they take a single `--lang en` to inspect the English
+variant. Commands that act on the whole repository -- `deckz clean
+content`, `deckz asset search`, `deckz asset deps` -- always cover both
+languages, so an `en/` file counts as used whenever a `deckz run --lang en`
+would pick it:
 
 - Any title (`deck.yml` part/include titles, a section's `title`,
   `default_titles` values, a flavor's title) and any `variables.yml` value
@@ -372,7 +375,7 @@ cover both languages, so an `en/` file counts as used whenever a
   the French file, whatever `parent-dir` is -- a shared section directory, a
   deck's local `content` directory, or any nested subdirectory of either.
   Section/flavor structure itself is never duplicated for English.
-- `--en` never silently falls back to French for a `{fr: ..., en: ...}` map
+- English never silently falls back to French for a `{fr: ..., en: ...}` map
   that's missing its `en` key, or for a resolved file with no `en/` sibling:
   both fail the build immediately, so a translation that was started but
   left incomplete can't accidentally ship untranslated. A plain string, on
@@ -380,7 +383,7 @@ cover both languages, so an `en/` file counts as used whenever a
   design. `deckz i18n missing-en` audits a deck for the blocking gaps
   (and, with `--untranslated`, the merely informational plain strings)
   without needing to actually compile it.
-- fr and `--en` builds write to separate output paths (an `en/` subdirectory
+- fr and en builds write to separate output paths (an `en/` subdirectory
   under `.build`/`pdf`/`html`), so both can be built from the same checkout without
   clobbering each other.
 
@@ -606,7 +609,7 @@ with the same context as `main.typ`, fed with content files converted by
 The page is rendered in the deck's build directory, where every `assets`
 subdirectory is linked, so it references assets relatively
 (`img/logo.png`, `fonts/...`). `deckz` then packages it into
-`html/<deck>-html/` (`html/en/...` for `--en`): the page as `index.html`,
+`html/<deck>-html/` (`html/en/...` for `--lang en`): the page as `index.html`,
 plus every local file it references (`src`, `href`, `poster`, `data-src`,
 `srcset`, ..., CSS `url()`/`@import`, recursively) and the
 `html_static_dirs`, ready to serve or copy anywhere. A reference to a
@@ -616,6 +619,15 @@ left alone.
 
 Filters can tell the two conversions apart with pandoc's `FORMAT` (e.g.
 `typst` vs `revealjs`), so one Lua filter can handle a construct for both.
+
+### Upgrading from 30.x (`--lang`)
+
+`--en` is gone: use `--lang en` instead, or `--lang fr en` to handle both
+languages in one pass where a command accepts several (see [Titles,
+variables and `--lang`](#titles-variables-and---lang)). The text and JSON
+outputs of `deckz check variables`, `deckz check overflow` and `deckz
+search-sections` now carry each finding's language (a `<lang>` column, or
+a `"lang"` field).
 
 ### Upgrading from 28.x (LaTeX removal)
 
@@ -638,6 +650,32 @@ also shows the traceback of a deckz error (as does `DECKZ_DEBUG=1`).
 Logs and progress bars go to stderr, so stdout only carries a command's
 results.
 
+Option defaults can come from the environment, or from the closest `.env`
+file above the current directory (a variable already set in the
+environment wins over the file, and an option given on the command line
+wins over both):
+
+- `DECKZ_LANG`: the languages `deckz run`, `deckz check variables`, `deckz
+  check overflow` and `deckz search-sections` process when `--lang` isn't
+  given, space-separated, e.g. `DECKZ_LANG="fr en"`.
+- `DECKZ_RUN_<OPTION>`: any option of every `deckz run` command, e.g.
+  `DECKZ_RUN_PRINT=false` or `DECKZ_RUN_OPEN=false`. The same variable
+  applies to every `run` subcommand, whose own defaults differ (`run
+  decks`/`shared`/`all` only build presentations): set `HANDOUT`,
+  `PRESENTATION` and `PRINT` together to get the same outputs from all of
+  them.
+
+`deckz <command> --help` lists the variables each option reads. For
+instance, a `.env` (typically git-ignored) building only handouts, in both
+languages, by default:
+
+```sh
+DECKZ_LANG="fr en"
+DECKZ_RUN_HANDOUT=true
+DECKZ_RUN_PRESENTATION=false
+DECKZ_RUN_PRINT=false
+```
+
 Exit codes: 0 on success, 1 on a deckz error (e.g. a missing flavor or a
 failed compile), on `deckz check variables`/`deckz check content` findings,
 on blocking `deckz i18n missing-en` gaps, or when a `deckz hooks`-installed
@@ -658,8 +696,9 @@ The main commands:
   `--parts`) / `deckz run file PATH` / `deckz run section SECTION FLAVOR` /
   `deckz run assets`: compile the deck in the current directory, a single
   content file, a specific section flavor, or the project's assets.
-  Add `--en` to compile the English variant (see [Titles, variables and
-  `--en`](#titles-variables-and---en)), `--html` to also produce the HTML
+  Add `--lang en` to compile the English variant, or `--lang fr en` for
+  both (see [Titles, variables and `--lang`](#titles-variables-and---lang)),
+  `--html` to also produce the HTML
   deck (see [HTML output](#html-output)), or `--watch` to recompile on file
   changes instead of once. With `--dry-run`, every `deckz run` command
   except `run assets` only prints the outputs it would compile and, for
@@ -677,8 +716,8 @@ The main commands:
   every file in its directory (not just the ones some named flavor lists) --
   fast enough to run while editing shared content. `run all` does the same
   plus one extra copy of a section for every deck that locally overrides one
-  of its files. `--en` is strict: the first gap in translation coverage
-  aborts the run. `run shared`/`run all` write their throwaway output
+  of its files. English is strict: the first gap in translation coverage
+  aborts the run, before anything is compiled. `run shared`/`run all` write their throwaway output
   under `<git_dir>/.run/`.
 - `deckz check variables`: statically survey every shared section's every
   named flavor (not just the ones some deck currently uses) plus every real
@@ -712,8 +751,9 @@ The main commands:
   the content file(s) building each one. Needs the handout already built
   (`deckz run --handout`, or a `deckz run file`/`deckz run section`
   preview); reads the PDF's text with poppler's `pdftotext`. Exits 1 if
-  any frame was shrunk. `--en` checks the English build (`deckz run
-  --en`, kept under `en/` in the build and PDF directories). `--tables`
+  any frame was shrunk. `--lang en` checks the English build (`deckz run
+  --lang en`, kept under `en/` in the build and PDF directories), `--lang
+  fr en` both, each frame tagged with its language. `--tables`
   reports the tables instead (the
   `table_marker_label` marker), most wrapped first, flagging those whose
   longest words alone are wider than the frame; exits 1 if any is.
@@ -764,7 +804,7 @@ The main commands:
   `run file`/`run section`), and `<git_dir>/.check/` (`check variables`).
 - `deckz i18n missing-en [--all] [--untranslated]`: report fr
   content/titles/variables with no English counterpart, i.e. what a `deckz
-  run --en` would currently fail on (and, with `--untranslated`, titles
+  run --lang en` would currently fail on (and, with `--untranslated`, titles
   that are a plain string).
 - `deckz i18n stale [PATHS...]`: report content files and lab notebooks
   with changes not yet ported to their other-language sibling, computed

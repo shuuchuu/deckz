@@ -154,6 +154,7 @@ def test_check_variables_json_output(
     }
     assert {
         "kind": "unused",
+        "lang": "fr",
         "section": str(git_dir / "content" / "greeting" / "greeting.yml"),
         "name": "format",
     } in records

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from .._options import Langs, unique
 from . import app
 
 
@@ -10,7 +11,7 @@ def all(  # ruff: ignore[builtin-variable-shadowing]
     presentation: bool = True,
     print: bool = False,  # ruff: ignore[builtin-argument-shadowing]
     html: bool = False,
-    en: bool = False,
+    langs: Langs = ("fr",),
     dry_run: bool = False,
     workdir: Path = Path(),
 ) -> None:
@@ -26,7 +27,10 @@ def all(  # ruff: ignore[builtin-variable-shadowing]
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
         html: Produce an HTML deck (whole deck, with a table of contents)
-        en: Compile the English variant
+        langs: Languages to compile, each to its own output paths
+            (English under an `en/` subdirectory). English is strict: every
+            resolved file, title and variable must have a complete English
+            translation, or the build fails before compiling anything
         dry_run: Only print the outputs that would be compiled and the content
             fragments each would re-render, without building anything
         workdir: Path to move into before running the command
@@ -35,12 +39,12 @@ def all(  # ruff: ignore[builtin-variable-shadowing]
     from ...pipelines import OutputKinds, all_targets, build
     from .._presentation import RichProgress, print_plan_of
 
-    lang = "en" if en else "fr"
+    langs = unique(langs)
     outputs = OutputKinds(
         handout=handout, presentation=presentation, print=print, html=html
     )
-    targets = all_targets(workdir, lang)
+    targets = all_targets(workdir, langs)
     if dry_run:
-        print_plan_of(targets, lang, outputs)
+        print_plan_of(targets, outputs)
     else:
-        build(targets, lang, outputs, RichProgress())
+        build(targets, outputs, RichProgress())

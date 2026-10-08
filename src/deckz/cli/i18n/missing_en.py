@@ -13,12 +13,12 @@ def missing_en(
 ) -> None:
     """Report fr content/titles/variables with no en counterpart.
 
-    Resolves the deck at WORKDIR as deckz would without --en, then reports:
+    Resolves the deck at WORKDIR as deckz would in fr, then reports:
 
     - `FILE <fr_path> <expected_en_path>`: fr file with no en/ sibling on disk.
-        Blocks `deckz run --en`.
+        Blocks `deckz run --lang en`.
     - `TITLE <status> <yml_path> <field>`: title that is a `{fr, en}` map
-        missing its "en" key ("missing-en" -- blocks `deckz run --en`),
+        missing its "en" key ("missing-en" -- blocks `deckz run --lang en`),
         or, with --untranslated, a plain string ("untranslated" --
         informational only, a plain string is always valid, used as-is in
         every language, but commonly means "not yet localized")
@@ -26,7 +26,7 @@ def missing_en(
         for a translation map declared in variables.yml (plain scalars are
         never flagged)
 
-    Running this lets you audit gaps -- what would block `deckz run --en`,
+    Running this lets you audit gaps -- what would block `deckz run --lang en`,
     and with --untranslated what's merely unlocalized -- without compiling
     anything. Exits 1 when a blocking gap (FILE, or "missing-en") is
     reported; "untranslated" titles never fail it.

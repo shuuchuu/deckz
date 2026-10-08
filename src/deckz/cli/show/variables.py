@@ -1,14 +1,15 @@
 from pathlib import Path
 
+from ...models import Lang
 from . import app
 
 
 @app.command()
-def variables(*, en: bool = False, json: bool = False, workdir: Path = Path()) -> None:
+def variables(*, lang: Lang = "fr", json: bool = False, workdir: Path = Path()) -> None:
     """Print the resolved variables.
 
     Args:
-        en: Resolve translation maps to English, as `deckz run --en` would
+        lang: Language to resolve translation maps to, as `deckz run` would
         json: Print them as one JSON object instead
         workdir: Path to move into before running the command
 
@@ -18,7 +19,7 @@ def variables(*, en: bool = False, json: bool = False, workdir: Path = Path()) -
     from ...configuring.settings import DeckSettings
     from ...configuring.variables import get_variables
 
-    resolved = get_variables(DeckSettings.from_yaml(workdir), "en" if en else "fr")
+    resolved = get_variables(DeckSettings.from_yaml(workdir), lang)
     if json:
         from .._presentation import print_json
 
