@@ -182,6 +182,7 @@ def test_start_pins_the_cpus_and_sets_the_timeout(repo: Path) -> None:
     queue = (gpu_run.directory / "scripts" / "queue.sh.new").read_text()
     assert "PYTHON_CPU_COUNT=2 taskset -c 0,1 timeout 600" in queue
     assert "for dir in /usr/local; do" in queue
+    assert "CONTAINER_*|VAST_*" in queue
     assert "@" not in queue
     assert json.loads((gpu_run.directory / "queue.json").read_text()) == {
         "timeout": 600

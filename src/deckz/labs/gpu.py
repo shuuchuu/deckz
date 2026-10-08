@@ -111,6 +111,14 @@ flock -n 9 || exit 0
 # The image's environment (CUDA paths...) is the container's, PID 1's: SSH
 # sessions don't have all of it.
 while IFS= read -r -d '' var; do export "$var"; done < /proc/1/environ
+# Minus the rental's own variables, which Colab never sets: Spark, for one,
+# takes CONTAINER_ID for a YARN container and fails to start.
+for var in $(compgen -e); do
+  case $var in
+    CONTAINER_*|VAST_*|OPEN_BUTTON_*|PUBLIC_IPADDR|SSH_PUBLIC_KEY|GPU_COUNT|JUPYTER_TOKEN)
+      unset "$var";;
+  esac
+done
 cd /work
 shopt -s nullglob
 # Until nothing is left: notebooks queued while it runs are picked up too.
