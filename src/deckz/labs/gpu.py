@@ -42,6 +42,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from logging import getLogger
 from pathlib import Path
+from shlex import quote
 from shutil import which
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -57,6 +58,9 @@ Runner = Callable[..., subprocess.CompletedProcess[str]]
 
 DEFAULT_MACHINE = "main"
 _MACHINE_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
+
+_RESULT_EXTS = (".done", ".log", ".maxrss")
+"""What a run leaves next to its executed notebook in `out/`."""
 
 REDACTED = "[deckz: redacted {}]"
 """What a secret's value is replaced with in the fetched files."""
@@ -730,7 +734,10 @@ class GpuRun:
         """Write a staged copy to `in/` and copy it to the machine.
 
         A copy with secrets is redacted once sent, so they never stay on
-        disk here, and its name noted for `fetch` to redact its results.
+        disk here, and its name noted for `fetch` to redact its results. A
+        name queued before runs again: its earlier results are removed, on
+        the machine (once the new copy is there, so the queue never runs the
+        old one) and here.
 
         Returns:
             Its queued name.
@@ -748,6 +755,16 @@ class GpuRun:
                 secrets = self._read_json(self._secrets_file, {})
                 secrets[staged.name] = list(staged.secrets)
                 self._write_json(self._secrets_file, secrets)
+        results = [staged.name, *(f"{staged.name}{ext}" for ext in _RESULT_EXTS)]
+        self._ssh("cd /work/out 2>/dev/null && rm -f " + " ".join(map(quote, results)))
+        for result in results:
+            (self._dir / "out" / result).unlink(missing_ok=True)
+        noted_file = self._dir / "noted.json"
+        noted = self._read_json(noted_file, [])
+        if staged.name in noted:
+            self._write_json(
+                noted_file, [name for name in noted if name != staged.name]
+            )
         return staged.name
 
     def send_held(self, notebook: Path, *, short: bool) -> str:

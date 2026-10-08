@@ -456,3 +456,25 @@ def test_queue_refuses_an_unknown_hook(repo: Path) -> None:
 
     with raises(GpuRunError, match="nope"):
         gpu_run.queue([notebook])
+
+
+def test_queue_again_clears_the_earlier_results(repo: Path) -> None:
+    runner = FakeRunner()
+    gpu_run = _up(repo, runner, "main")
+    notebook = repo / "demo-fr.ipynb"
+    notebook.write_text(json.dumps({"cells": [], "metadata": {}}))
+    out = _executed(gpu_run.directory / "out", "demo-fr.full.ipynb")
+    gpu_run.note_finished()
+
+    gpu_run.queue([notebook])
+
+    assert not out.exists()
+    assert not out.with_name("demo-fr.full.ipynb.done").exists()
+    assert json.loads((gpu_run.directory / "noted.json").read_text()) == []
+    scp_at = runner.calls.index(runner.commands("scp")[-1])
+    clear = runner.calls[scp_at + 1]
+    assert clear[0] == "ssh"
+    assert clear[-1].endswith(
+        "rm -f demo-fr.full.ipynb demo-fr.full.ipynb.done"
+        " demo-fr.full.ipynb.log demo-fr.full.ipynb.maxrss"
+    )
