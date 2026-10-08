@@ -29,16 +29,34 @@ if TYPE_CHECKING:
 
 
 class RichProgress(ProgressReporterProtocol):
+    def __init__(self) -> None:
+        self._progress: Progress | None = None
+
     @contextmanager
     def track(self, description: str, total: int) -> Iterator[Callable[[], None]]:
+        # A task tracked within another (a deck's compilations within `run
+        # decks`) is one more bar of the same display, not a display of its
+        # own: two live displays at once overwrite each other, and flicker.
+        if self._progress is not None:
+            progress = self._progress
+            task_id = progress.add_task(description, total=total)
+            try:
+                yield lambda: progress.update(task_id, advance=1)
+            finally:
+                progress.remove_task(task_id)
+            return
         with Progress(
             "[progress.description]{task.description}",
             BarColumn(),
             "[progress.percentage]{task.percentage:>3.0f}%",
             console=Console(stderr=True),
         ) as progress:
-            task_id = progress.add_task(description, total=total)
-            yield lambda: progress.update(task_id, advance=1)
+            self._progress = progress
+            try:
+                task_id = progress.add_task(description, total=total)
+                yield lambda: progress.update(task_id, advance=1)
+            finally:
+                self._progress = None
 
 
 def render_parse_errors(deck: Deck) -> None:

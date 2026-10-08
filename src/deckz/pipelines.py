@@ -20,7 +20,7 @@ from .checking import build_all_deck, build_shared_deck, run_scratch_dir
 from .components.compiler import keep_warm
 from .components.deck_builder import PlannedCompile
 from .components.factory import DeckSettingsFactory, GlobalSettingsFactory
-from .components.progress import NullProgress
+from .components.progress import NullProgress, PrefixedProgress
 from .components.protocols import DeckBuilderProtocol, ProgressReporterProtocol
 from .configuring.settings import DeckSettings, GlobalSettings
 from .configuring.variables import get_variables, resolve_variables
@@ -93,16 +93,26 @@ def build(
     DeckSettingsFactory(targets[0].settings).assets_builder().build_assets()
     _logger.debug("Built assets in %.2fs", perf_counter() - start)
 
+    several_langs = len({target.lang for target in targets}) > 1
+
     def compile_target(target: BuildTarget) -> None:
-        if not _deck_builder(target, outputs, progress).build_deck():
+        target_progress = (
+            PrefixedProgress(progress, f"{target.lang}: ")
+            if several_langs
+            else progress
+        )
+        if not _deck_builder(target, outputs, target_progress).build_deck():
             msg = (
                 f"{target.label} failed to compile in {target.lang}, see the "
                 "errors above"
             )
             raise CompilationError(msg)
 
-    if len(targets) == 1:
-        compile_target(targets[0])
+    # One deck, if in several languages, shows its compilations one language
+    # after the other.
+    if len({target.label for target in targets}) == 1:
+        for target in targets:
+            compile_target(target)
         return
     with progress.track("Building decks…", len(targets)) as advance:
         for target in targets:

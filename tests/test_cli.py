@@ -1,5 +1,7 @@
 import json
 import sys  # ruff: ignore[unused-import]
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from json import loads
 from pathlib import Path
 from shutil import copytree, move
@@ -13,6 +15,7 @@ from pytest import fixture, raises
 from deckz.checking import preview_settings
 from deckz.cli import main
 from deckz.configuring.settings import DeckSettings
+from deckz.pipelines import OutputKinds, run
 
 
 def _make_repo(tmp_path: Path, monkeypatch: Any) -> Path:
@@ -432,6 +435,32 @@ def test_run_fr_and_en_in_one_pass(bilingual_dir: Path) -> None:
     )
     assert "Bonjour tout le monde!" in fr_text
     assert "Hello everyone!" in en_text
+
+
+class _RecordingProgress:
+    def __init__(self) -> None:
+        self.tracked: list[tuple[str, int]] = []
+
+    @contextmanager
+    def track(self, description: str, total: int) -> Iterator[Callable[[], None]]:
+        self.tracked.append((description, total))
+        yield lambda: None
+
+
+def test_one_deck_in_two_langs_tracks_each_lang_on_its_own(
+    bilingual_dir: Path,
+) -> None:
+    progress = _RecordingProgress()
+
+    run(
+        settings=DeckSettings.from_yaml(bilingual_dir),
+        langs=("fr", "en"),
+        outputs=OutputKinds(handout=False, presentation=True, print=False),
+        progress=progress,
+    )
+
+    # No "Building decks…" around them: there is a single deck.
+    assert progress.tracked == [("fr: Compiling…", 1), ("en: Compiling…", 1)]
 
 
 def _planned_pdfs(capsys: Any) -> set[str]:
