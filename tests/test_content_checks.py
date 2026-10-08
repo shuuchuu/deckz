@@ -112,6 +112,16 @@ def test_lab_outputs_flags_a_demo_notebook_without_outputs(tmp_path: Path) -> No
     assert "no stored outputs" in problems[0]
 
 
+def test_lab_outputs_accepts_a_demo_with_no_code_cells(tmp_path: Path) -> None:
+    init_repository(str(tmp_path))
+    _write(
+        tmp_path / "labs" / "notebooks" / "topic" / "demo-fr.ipynb",
+        '{"metadata": {}, "cells": [{"cell_type": "markdown", "source": ["# A"]}]}',
+    )
+
+    assert lab_outputs(_settings(tmp_path)) == []
+
+
 def test_lab_outputs_accepts_a_hands_on_without_and_a_demo_with_outputs(
     tmp_path: Path,
 ) -> None:

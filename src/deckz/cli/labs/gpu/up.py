@@ -4,7 +4,9 @@ from . import app
 
 
 @app.command()
-def up(*, gpu: list[str] | None = None, workdir: Path = Path()) -> None:
+def up(
+    *, gpu: list[str] | None = None, machine: str = "main", workdir: Path = Path()
+) -> None:
     """Rent a machine, wait for it to boot and accept SSH, and check its GPU.
 
     Rents the cheapest reliable single-GPU offer of the first GPU of
@@ -14,10 +16,12 @@ def up(*, gpu: list[str] | None = None, workdir: Path = Path()) -> None:
 
     Args:
         gpu: GPU names to rent instead of `labs.gpu.gpus`, e.g. RTX_A4000
+        machine: Name of the machine, to run several at once
         workdir: Path to move into before running the command
 
     """
     from ....configuring.settings import GlobalSettings
     from ....labs.gpu import GpuRun
 
-    print(GpuRun(GlobalSettings.from_yaml(workdir)).up(gpu or ()))
+    settings = GlobalSettings.from_yaml(workdir)
+    print(GpuRun(settings, machine=machine).up(gpu or ()))

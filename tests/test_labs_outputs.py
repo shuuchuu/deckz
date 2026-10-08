@@ -213,3 +213,21 @@ def test_write_outputs_saves_notebook_in_canonical_style(tmp_path: Path) -> None
     written = json.loads(notebook_path.read_text())
     assert written["cells"][0]["execution_count"] == 2
     assert notebook_path.read_text() == canonical_dump(written)
+
+
+def test_apply_executed_outputs_drops_an_output_showing_a_redacted_secret(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "demo.ipynb"
+    path.write_text(canonical_dump(_notebook([_code_cell()])))
+    notebook = Notebook(path)
+    shown = {"output_type": "stream", "name": "stdout", "text": ["ok\n"]}
+    secret = {
+        "output_type": "execute_result",
+        "data": {"text/plain": ["'[deckz: redacted LAB_TOKEN]'"]},
+    }
+    executed = _notebook([_code_cell(execution_count=1, outputs=[shown, secret])])
+
+    apply_executed_outputs(notebook, executed)
+
+    assert notebook.cells[0]["outputs"] == [shown]

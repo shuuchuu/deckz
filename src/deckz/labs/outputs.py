@@ -5,7 +5,8 @@ copy with every code cell's `outputs` and `execution_count` filled in, plus
 run metadata deckz never wants to store (timestamps, widget state). This
 copies only the outputs themselves, merging each cell's consecutive stream
 writes into one and resolving carriage returns, so a progress bar is stored
-once, as its final state, as Colab shows it.
+once, as its final state, as Colab shows it. An output showing a secret
+`deckz labs gpu fetch` redacted (`deckz.labs.gpu.REDACTED`) is dropped.
 """
 
 import json
@@ -13,8 +14,11 @@ from pathlib import Path
 from typing import Any
 
 from ..exceptions import LabOutputsMismatchError
+from .gpu import REDACTED
 from .images import recompress_output_images
 from .notebook import Notebook, cell_source
+
+_REDACTED_MARK = REDACTED.partition("{")[0]
 
 
 def _resolve_carriage_returns(text: str) -> str:
@@ -71,7 +75,8 @@ def apply_executed_outputs(
 
     Only `outputs` and `execution_count` are copied, cell by cell, no run
     metadata. Consecutive stream outputs are merged and carriage returns
-    resolved (see the module docstring).
+    resolved, and an output showing a redacted secret is dropped (see the
+    module docstring).
 
     Args:
         notebook: The notebook to update, mutated in place; call `save()` \
@@ -97,7 +102,11 @@ def apply_executed_outputs(
         if target_cell.get("cell_type") != "code":
             continue
         target_cell["execution_count"] = executed_cell.get("execution_count")
-        outputs = _merge_stream_outputs(executed_cell.get("outputs", []))
+        outputs = [
+            output
+            for output in _merge_stream_outputs(executed_cell.get("outputs", []))
+            if _REDACTED_MARK not in json.dumps(output, ensure_ascii=False)
+        ]
         if recompress_images:
             recompress_output_images(outputs, max_image_kb=max_image_kb)
         target_cell["outputs"] = outputs

@@ -105,6 +105,19 @@ class LabsGpuSettings(BaseModel):
     ssh_key: str = "~/.ssh/id_ed25519"
     """Private SSH key whose public key is registered with Vast.ai \
     (`vastai create ssh-key`)."""
+    metadata_key: str = "shuuchuu.gpu"
+    """Dotted path, under a notebook's own `metadata`, of what its runs need.
+
+    `variables` and `secrets` each map a variable of the notebook, assigned \
+    `""` on a line of its own, to the environment variable (or `.env` entry) \
+    `deckz labs gpu queue` fills it from in the copy it sends; a secret's \
+    value is also redacted from what `fetch` copies back, and `deckz labs \
+    outputs` stores no output that showed it. `hook` names one of `hooks`."""
+    hooks: dict[str, str] = Field(default_factory=dict)
+    """Shell commands, by name, run from the repository's root before a \
+    notebook naming one is queued and once its run is done, e.g. to reset a \
+    server the notebook writes to. Notebooks naming the same hook run one at \
+    a time, across machines: the next one is held until then."""
 
 
 class LabsSettings(BaseModel):

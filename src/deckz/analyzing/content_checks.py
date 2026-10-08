@@ -77,7 +77,8 @@ def lab_pairs(settings: "GlobalSettings") -> list[str]:
 
 def lab_outputs(settings: "GlobalSettings") -> list[str]:
     # A hands-on notebook never carries stored outputs (every learner runs
-    # it); a demo always does, each language's from its own run.
+    # it); a demo always does, each language's from its own run, unless it
+    # has no code to run.
     notebooks_dir = settings.paths.labs_notebooks_dir
     git_dir = settings.paths.git_dir
     problems = []
@@ -86,13 +87,12 @@ def lab_outputs(settings: "GlobalSettings") -> list[str]:
         if kind not in {"hands-on", "demo"}:
             continue
         cells = json.loads(path.read_text(encoding="utf-8")).get("cells", [])
-        has_outputs = any(
-            cell.get("cell_type") == "code" and cell.get("outputs") for cell in cells
-        )
+        code_cells = [cell for cell in cells if cell.get("cell_type") == "code"]
+        has_outputs = any(cell.get("outputs") for cell in code_cells)
         where = _rel(path, git_dir)
         if kind == "hands-on" and has_outputs:
             problems.append(f"{where}: hands-on notebook has stored outputs")
-        elif kind == "demo" and not has_outputs:
+        elif kind == "demo" and code_cells and not has_outputs:
             problems.append(f"{where}: demo notebook has no stored outputs")
     return problems
 

@@ -207,8 +207,31 @@ typst_ignore_system_fonts: true
     runtime image), `gpus` (names in order of preference, default
     `[Tesla_T4, RTX_A4000]`), `offer_filter` (a Vast.ai offer query),
     `disk_gb`, `boot_minutes`, `cpus` (each notebook's CPUs, default 2 as
-    on Colab's T4 runtime) and `ssh_key` (the private key whose public key
-    Vast.ai has, default `~/.ssh/id_ed25519`).
+    on Colab's T4 runtime), `ssh_key` (the private key whose public key
+    Vast.ai has, default `~/.ssh/id_ed25519`), `metadata_key` (where a
+    notebook's own metadata says what its runs need, default
+    `shuuchuu.gpu`) and `hooks` (shell commands by name, run from the
+    repository's root before and after the run of a notebook naming one).
+
+    What a notebook's runs need, in its metadata:
+
+    ```json
+    "shuuchuu": {
+      "gpu": {
+        "variables": {"username": "DAGSHUB_USERNAME"},
+        "secrets": {"token": "DAGSHUB_TOKEN"},
+        "hook": "reset-server"
+      }
+    }
+    ```
+
+    `variables` and `secrets` map a variable the notebook assigns `""` on
+    a line of its own to the environment variable (or `.env` entry) whose
+    value `deckz labs gpu queue` puts there, in the copy it sends only; a
+    secret's value is then redacted from every file kept locally, and
+    `deckz labs outputs` stores no output that showed it. `hook` runs
+    before the notebook is sent and once its run is done; notebooks naming
+    the same hook run one at a time, even on different machines.
 
   The notebooks directory itself (default `{git_dir}/labs/notebooks`) is
   `paths.labs_notebooks_dir`, set like any other path under `paths:`.
@@ -745,8 +768,8 @@ The main commands:
 - `deckz check` (alias for `deckz check content`): run deckz's generic
   content checks -- lab notebook IDs valid and unique (`lab-ids`), fr/en
   lab notebook pairs present and in sync (`lab-pairs`), hands-on notebooks
-  with no stored outputs and demos with some (`lab-outputs`), asset credit
-  lines (`title`/`author`/`license`, and their `_en`) free of LaTeX
+  with no stored outputs and demos with code with some (`lab-outputs`),
+  asset credit lines (`title`/`author`/`license`, and their `_en`) free of LaTeX
   (`asset-credits`), no raw LaTeX in content (`raw-latex`), no hand-written
   link to the configured lab-publishing remote (`lab-urls`) -- plus, if
   `templates/checks.py` defines a `checks(settings)` function, the target
@@ -875,15 +898,19 @@ The main commands:
   recorded (Colab's T4 runtime has 12.7 GB). `up` rents the cheapest
   reliable offer (a machine that fails to boot is destroyed and avoided
   from then on); `queue [--short] NOTEBOOKS...` sends notebooks (`--short`
-  sets their `SHORT_RUN = False` line to `True`); `run` starts the queue,
-  detached, each notebook saved after every cell; `status [--watch]`
-  follows it, fetching and appending each finished run's report to
-  `notes.md` under `--watch`; `fetch` copies the executed notebooks;
-  `report [--plain]` gives each one's exit code, run time, peak RAM, the
-  cells that raised and the slowest ones; `down` destroys the machine,
-  which bills until then. State and files live in `.run/gpu/`
-  (`paths.labs_gpu_dir`). Then `deckz labs outputs` writes a demo's
-  outputs back.
+  sets their `SHORT_RUN = False` line to `True`; a notebook's metadata can
+  ask for variables, secrets and a hook, see `labs.gpu` above); `run`
+  starts the queue, detached, each notebook saved after every cell;
+  `status [--watch]` follows it, fetching, appending each finished run's
+  report to `notes.md`, running the hooks of finished runs and sending
+  the notebooks held for them, until done under `--watch`; `fetch` copies
+  the executed notebooks; `report [--plain]` gives each one's exit code,
+  run time, peak RAM, the cells that raised and the slowest ones; `down`
+  destroys the machine, which bills until then. `--machine NAME` (default
+  `main`) runs several machines at once; `status`, `report` and `down`
+  without it act on every one. Each machine's state and files live in
+  `.run/gpu/<name>/` (`paths.labs_gpu_dir`). Then `deckz labs outputs`
+  writes a demo's outputs back.
 - `deckz videos render [SCENE] [--quality] [--force]` (extra: `deckz[videos]`,
   Manim, plus `ffmpeg`): render every `@register_scene` class under
   `videos.scenes_dir` that's missing, stale, or at another quality than

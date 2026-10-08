@@ -313,10 +313,11 @@ def print_gpu_status(status: "GpuStatus") -> None:
     console = Console(highlight=False)
     instance = status.instance
     if instance is None:
-        console.print("No machine rented.")
+        console.print(f"Machine {status.machine}: not rented.")
         return
     console.print(
-        f"Machine: [bold]{instance.status}[/bold], {instance.gpu or '?'},"
+        f"Machine {status.machine}: [bold]{instance.status}[/bold],"
+        f" {instance.gpu or '?'},"
         f" ${instance.price:.3f}/h"
         + (f" ({instance.message})" if instance.message else "")
     )

@@ -7,9 +7,14 @@ from pygit2 import init_repository
 from pytest import CaptureFixture, MonkeyPatch, fixture, raises
 
 from deckz.cli import main
-from deckz.configuring.settings import GlobalPaths, GlobalSettings
+from deckz.configuring.settings import (
+    GlobalPaths,
+    GlobalSettings,
+    LabsGpuSettings,
+    LabsSettings,
+)
 from deckz.exceptions import GpuRunError, MissingExtraError
-from deckz.labs.gpu import GpuRun, VastBackend, format_report, report
+from deckz.labs.gpu import GpuRun, VastBackend, format_report, machines, report
 
 _OFFER = {
     "id": 7,
@@ -68,17 +73,31 @@ def repo(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _settings(repo: Path) -> GlobalSettings:
-    return GlobalSettings(paths=GlobalPaths(current_dir=repo, git_dir=repo))
+def _settings(repo: Path, hooks: dict[str, str] | None = None) -> GlobalSettings:
+    return GlobalSettings(
+        paths=GlobalPaths(current_dir=repo, git_dir=repo),
+        labs=LabsSettings(gpu=LabsGpuSettings(hooks=hooks or {})),
+    )
 
 
 def _no_sleep(_: float) -> None:
     pass
 
 
-def _gpu_run(repo: Path, runner: FakeRunner) -> GpuRun:
-    settings = _settings(repo)
-    return GpuRun(settings, VastBackend(settings, runner), run=runner, sleep=_no_sleep)
+def _gpu_run(
+    repo: Path,
+    runner: FakeRunner,
+    machine: str = "main",
+    hooks: dict[str, str] | None = None,
+) -> GpuRun:
+    settings = _settings(repo, hooks)
+    return GpuRun(
+        settings,
+        VastBackend(settings, runner),
+        run=runner,
+        sleep=_no_sleep,
+        machine=machine,
+    )
 
 
 def test_up_rents_boots_and_records_the_ssh_address(repo: Path) -> None:
@@ -116,7 +135,7 @@ def test_up_avoids_a_machine_that_failed_to_boot(repo: Path) -> None:
     searches = [call for call in vastai if call[1] == "search"]
     assert "machine_id!=42" not in searches[0][3]
     assert "machine_id!=42" in searches[1][3]
-    assert json.loads((gpu_run.directory / "avoid.json").read_text()) == [42]
+    assert json.loads((gpu_run.directory.parent / "avoid.json").read_text()) == [42]
     state = gpu_run.state()
     assert state is not None
     assert state.id == 101
@@ -132,9 +151,9 @@ def test_queue_stages_named_notebooks_and_short_flips_short_run(repo: Path) -> N
     cell = {"cell_type": "code", "source": ["SHORT_RUN = False\n"], "metadata": {}}
     notebook.write_text(json.dumps({"cells": [cell], "metadata": {}}))
 
-    names = gpu_run.queue([notebook], short=True)
+    names, held = gpu_run.queue([notebook], short=True)
 
-    assert names == ["nn__cnn__demo-fr.short.ipynb"]
+    assert (names, held) == (["nn__cnn__demo-fr.short.ipynb"], [])
     staged = json.loads((gpu_run.directory / "in" / names[0]).read_text())
     assert staged["cells"][0]["source"] == ["SHORT_RUN = True\n"]
     assert runner.commands("scp")[-1][-1].endswith(":/work/in/")
@@ -272,10 +291,168 @@ def test_cli_report_plain(
 
     monkeypatch.setattr(appdirs, "user_config_dir", lambda _: str(repo))
     monkeypatch.chdir(repo)
-    _executed(repo / ".run" / "gpu" / "out")
+    _executed(repo / ".run" / "gpu" / "main" / "out")
 
     main(("labs", "gpu", "report", "--plain"))
 
     out = capsys.readouterr().out
     assert out.startswith("#### nn__demo-fr.full.ipynb: exit 0, 95 s")
     assert "[1] raised ZeroDivisionError" in out
+
+
+def _notebook(path: Path, gpu: dict[str, Any], source: list[str]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    cell = {"cell_type": "code", "source": source, "metadata": {}, "outputs": []}
+    path.write_text(
+        json.dumps({"cells": [cell], "metadata": {"shuuchuu": {"gpu": gpu}}})
+    )
+    return path
+
+
+def _up(repo: Path, runner: FakeRunner, machine: str, **kwargs: Any) -> GpuRun:
+    runner.instances = [_running()]
+    gpu_run = _gpu_run(repo, runner, machine, **kwargs)
+    gpu_run.up()
+    return gpu_run
+
+
+def test_machines_keep_their_own_state(repo: Path) -> None:
+    runner = FakeRunner()
+    first = _up(repo, runner, "light")
+    second = _up(repo, runner, "heavy")
+
+    assert machines(_settings(repo)) == ["heavy", "light"]
+    first_state, second_state = first.state(), second.state()
+    assert first_state is not None
+    assert second_state is not None
+    assert (first_state.id, second_state.id) == (100, 101)
+    assert first.directory.name == "light"
+    with raises(GpuRunError):
+        _gpu_run(repo, runner, "Not a name")
+
+
+def test_queue_fills_variables_and_secrets_and_redacts_the_staged_copy(
+    repo: Path, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LAB_USER", "jeanne")
+    monkeypatch.setenv("LAB_TOKEN", "s3cr3t-t0ken")
+    runner = FakeRunner()
+    gpu_run = _up(repo, runner, "main")
+    notebook = _notebook(
+        repo / "demo-fr.ipynb",
+        {"variables": {"username": "LAB_USER"}, "secrets": {"token": "LAB_TOKEN"}},
+        ['username = ""\n', '  token = ""\n', "print(token)"],
+    )
+    sent: list[str] = []
+
+    def scp_reads_the_copy(args: list[str], **kwargs: Any) -> Any:
+        if args[0] == "scp":
+            sent.append(Path(args[-2]).read_text())
+        return runner(args, **kwargs)
+
+    gpu_run = GpuRun(
+        _settings(repo),
+        VastBackend(_settings(repo), runner),
+        run=scp_reads_the_copy,
+        sleep=_no_sleep,
+    )
+    (name,), _ = gpu_run.queue([notebook])
+
+    assert json.loads(sent[0])["cells"][0]["source"] == [
+        'username = "jeanne"\n',
+        '  token = "s3cr3t-t0ken"\n',
+        "print(token)",
+    ]
+    staged = (gpu_run.directory / "in" / name).read_text()
+    assert "s3cr3t-t0ken" not in staged
+    assert "[deckz: redacted LAB_TOKEN]" in staged
+    assert "jeanne" in staged
+
+
+def test_queue_refuses_an_unset_variable_before_sending(
+    repo: Path, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.delenv("LAB_TOKEN", raising=False)
+    runner = FakeRunner()
+    gpu_run = _up(repo, runner, "main")
+    notebook = _notebook(
+        repo / "demo-fr.ipynb", {"secrets": {"token": "LAB_TOKEN"}}, ['token = ""']
+    )
+
+    with raises(GpuRunError, match="LAB_TOKEN"):
+        gpu_run.queue([notebook])
+    assert runner.commands("scp") == []
+
+
+def test_fetch_redacts_the_secrets_of_the_executed_copies(
+    repo: Path, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LAB_TOKEN", "s3cr3t-t0ken")
+    runner = FakeRunner()
+    gpu_run = _up(repo, runner, "main")
+    notebook = _notebook(
+        repo / "demo-fr.ipynb", {"secrets": {"token": "LAB_TOKEN"}}, ['token = ""']
+    )
+    (name,), _ = gpu_run.queue([notebook])
+    out = gpu_run.directory / "out"
+    out.mkdir()
+    (out / name).write_text('{"text": "env: PASSWORD=s3cr3t-t0ken"}')
+    (out / f"{name}.log").write_text("token s3cr3t-t0ken\n")
+
+    gpu_run.fetch()
+
+    assert "s3cr3t-t0ken" not in (out / name).read_text()
+    assert (out / f"{name}.log").read_text() == "token [deckz: redacted LAB_TOKEN]\n"
+
+
+def test_hooked_notebooks_run_one_at_a_time_across_machines(repo: Path) -> None:
+    runner = FakeRunner()
+    hooks = {"reset": "reset-server"}
+    light = _up(repo, runner, "light", hooks=hooks)
+    heavy = _up(repo, runner, "heavy", hooks=hooks)
+    fr = _notebook(repo / "demo-fr.ipynb", {"hook": "reset"}, ["1"])
+    en = _notebook(repo / "demo-en.ipynb", {"hook": "reset"}, ["1"])
+
+    def hook_runs() -> int:
+        return runner.calls.count(["sh", "-c", "reset-server"])
+
+    assert light.queue([fr]) == (["demo-fr.full.ipynb"], [])
+    assert heavy.queue([en]) == ([], [en])
+    assert hook_runs() == 1
+    assert heavy.hooks_pending()
+    assert light.finish_hooks() == []
+
+    (light.directory / "out").mkdir()
+    (light.directory / "out" / "demo-fr.full.ipynb.done").write_text("0 60\n")
+    assert light.finish_hooks() == [
+        "ran hook reset after demo-fr.full.ipynb",
+        "queued demo-en.full.ipynb on heavy",
+    ]
+
+    # Once after the first run, not again before the second one.
+    assert hook_runs() == 2
+    assert not light.hooks_pending()
+    assert heavy.hooks_pending()
+    assert (heavy.directory / "in" / "demo-en.full.ipynb").is_file()
+
+
+def test_down_runs_the_hook_and_drops_the_notebooks_held_for_it(repo: Path) -> None:
+    runner = FakeRunner()
+    hooks = {"reset": "reset-server"}
+    gpu_run = _up(repo, runner, "main", hooks=hooks)
+    fr = _notebook(repo / "demo-fr.ipynb", {"hook": "reset"}, ["1"])
+    en = _notebook(repo / "demo-en.ipynb", {"hook": "reset"}, ["1"])
+    gpu_run.queue([fr, en])
+
+    gpu_run.down()
+
+    assert runner.calls.count(["sh", "-c", "reset-server"]) == 2
+    assert not gpu_run.hooks_pending()
+
+
+def test_queue_refuses_an_unknown_hook(repo: Path) -> None:
+    gpu_run = _up(repo, FakeRunner(), "main")
+    notebook = _notebook(repo / "demo-fr.ipynb", {"hook": "nope"}, ["1"])
+
+    with raises(GpuRunError, match="nope"):
+        gpu_run.queue([notebook])

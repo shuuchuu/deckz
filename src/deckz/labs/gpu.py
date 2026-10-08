@@ -10,10 +10,17 @@ A machine bills until it is destroyed.
 
 Renting goes through a `GpuBackend`; `VastBackend` (Vast.ai, through the
 `vastai` CLI of the `deckz[gpu]` extra) is the only one. Everything else is
-plain `ssh`/`scp`/`rsync` to the machine, whose state (ID, address) lives in
-`GlobalPaths.labs_gpu_dir` (`state.json`), next to the staged and executed
-notebooks (`in/`, `out/`), the notes on finished runs (`notes.md`) and the
-machines that failed to boot (`avoid.json`, never rented again).
+plain `ssh`/`scp`/`rsync` to the machine. Several machines can run at once,
+each under its own name (`main` by default): a machine's state (ID, address)
+lives in `GlobalPaths.labs_gpu_dir/<name>/` (`state.json`), next to its staged
+and executed notebooks (`in/`, `out/`) and the notes on its finished runs
+(`notes.md`); the machines that failed to boot (`avoid.json`, never rented
+again) and the hooks' state (`hooks.json`) are shared.
+
+A notebook's metadata (`labs.gpu.metadata_key`) can ask for `variables` and
+`secrets` filled from the environment in the copy sent to the machine (a
+secret is redacted from what comes back), and for a `hook`, a command of
+`labs.gpu.hooks` run locally before and after its run: see `RunNeeds`.
 
 Lessons the defaults and scripts below encode, from runs on Vast.ai with
 Colab's image: the image has no SSH host keys and its sshd listens on
@@ -26,6 +33,8 @@ notebooks queued while it runs.
 """
 
 import json
+import os
+import re
 import subprocess
 import time
 from collections.abc import Callable, Collection, Sequence
@@ -45,6 +54,12 @@ _logger = getLogger(__name__)
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 """`subprocess.run`'s signature: tests pass a fake one."""
+
+DEFAULT_MACHINE = "main"
+_MACHINE_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
+
+REDACTED = "[deckz: redacted {}]"
+"""What a secret's value is replaced with in the fetched files."""
 
 ATTEMPTS = 3
 """Machines rented in a row before `up` gives up on booting one."""
@@ -169,6 +184,62 @@ class QueueEntry:
 class GpuStatus:
     instance: InstanceInfo | None
     queue: tuple[QueueEntry, ...] = ()
+    machine: str = DEFAULT_MACHINE
+
+
+@dataclass(frozen=True)
+class _Staged:
+    name: str
+    text: str
+    """The copy's JSON, needs filled: secrets in clear."""
+    secrets: tuple[str, ...] = ()
+    """The environment variables of its secrets."""
+
+
+@dataclass(frozen=True)
+class RunNeeds:
+    """What a notebook's runs need, from its metadata (`labs.gpu.metadata_key`).
+
+    `variables` and `secrets` map a variable of the notebook, assigned `""` on
+    a line of its own, to the environment variable whose value `queue` puts
+    there in the copy it sends; a secret's value is replaced with `REDACTED`
+    in the staged copy once sent and in what `fetch` copies back. `hook`
+    names a command of `labs.gpu.hooks`.
+    """
+
+    variables: dict[str, str] = field(default_factory=dict)
+    secrets: dict[str, str] = field(default_factory=dict)
+    hook: str | None = None
+
+
+def run_needs(nb: dict[str, Any], metadata_key: str) -> RunNeeds:
+    """Read a notebook's `RunNeeds` from its metadata.
+
+    Returns:
+        Them, empty if the notebook has none.
+    """
+    node: Any = nb.get("metadata", {})
+    for part in metadata_key.split("."):
+        node = node.get(part, {}) if isinstance(node, dict) else {}
+    return RunNeeds(
+        variables=dict(node.get("variables", {})),
+        secrets=dict(node.get("secrets", {})),
+        hook=node.get("hook"),
+    )
+
+
+def machines(settings: "GlobalSettings") -> list[str]:
+    """The names of the machines rented, as their `state.json` files say.
+
+    Returns:
+        The names, sorted.
+    """
+    root = settings.paths.labs_gpu_dir
+    if not root.is_dir():
+        return []
+    return sorted(
+        path.name for path in root.iterdir() if (path / "state.json").is_file()
+    )
 
 
 @dataclass(frozen=True)
@@ -342,7 +413,7 @@ class VastBackend:
 
 
 class GpuRun:
-    """One pass of notebooks on a rented machine, kept in `labs_gpu_dir`."""
+    """One pass of notebooks on a rented machine, kept in `labs_gpu_dir/<machine>`."""
 
     def __init__(
         self,
@@ -350,10 +421,17 @@ class GpuRun:
         backend: GpuBackend | None = None,
         run: Runner = subprocess.run,
         sleep: Callable[[float], None] = time.sleep,
+        *,
+        machine: str = DEFAULT_MACHINE,
     ) -> None:
+        if not _MACHINE_NAME.fullmatch(machine):
+            msg = f"machine name {machine!r}: use lowercase letters, digits and -"
+            raise GpuRunError(msg)
         self._settings = settings
         self._gpu = settings.labs.gpu
-        self._dir = settings.paths.labs_gpu_dir
+        self._root = settings.paths.labs_gpu_dir
+        self._dir = self._root / machine
+        self.machine = machine
         self._backend = backend if backend is not None else VastBackend(settings, run)
         self._run = run
         self._sleep = sleep
@@ -370,7 +448,24 @@ class GpuRun:
 
     @property
     def _avoid_file(self) -> Path:
-        return self._dir / "avoid.json"
+        return self._root / "avoid.json"
+
+    @property
+    def _hooks_file(self) -> Path:
+        return self._root / "hooks.json"
+
+    @property
+    def _secrets_file(self) -> Path:
+        return self._dir / "secrets.json"
+
+    def _read_json(self, path: Path, default: Any) -> Any:
+        if not path.is_file():
+            return default
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def _write_json(self, path: Path, value: Any) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(value, indent=1), encoding="utf-8")
 
     def state(self) -> GpuState | None:
         """The rented machine, as `state.json` keeps it.
@@ -478,10 +573,7 @@ class GpuRun:
             info = self._boot(state)
             if info is not None:
                 break
-            self._dir.mkdir(parents=True, exist_ok=True)
-            self._avoid_file.write_text(
-                json.dumps([*self._avoided(), state.machine]), encoding="utf-8"
-            )
+            self._write_json(self._avoid_file, [*self._avoided(), state.machine])
             self._backend.destroy(state.id)
             self._save(None)
             _logger.warning(
@@ -540,44 +632,222 @@ class GpuRun:
         )
         return None
 
-    def queue(self, notebooks: Sequence[Path], *, short: bool = False) -> list[str]:
+    def queue(
+        self, notebooks: Sequence[Path], *, short: bool = False
+    ) -> tuple[list[str], list[Path]]:
         """Stage notebooks and send them to the machine's queue.
 
         Each is named after its path under the notebooks directory,
         `<topic>__<lab>__<file>.<full|short>.ipynb`. With `short`, the
-        notebook's one `SHORT_RUN = False` line is set to `True`.
+        notebook's one `SHORT_RUN = False` line is set to `True`. Its
+        `RunNeeds` are met: variables and secrets filled from the
+        environment, and its hook run first, unless a run naming the same
+        hook isn't done yet: the notebook is then held, and sent once that
+        run's closing hook ran (see `finish_hooks`).
 
         Returns:
-            The queued names.
+            The queued names, and the notebooks held.
 
         Raises:
             GpuRunError: If `short` and a notebook hasn't exactly one \
-                `SHORT_RUN = False` line.
+                `SHORT_RUN = False` line, if a variable or secret can't be \
+                filled, or if a hook is unknown or fails.
         """
-        staged = self._dir / "in"
-        staged.mkdir(parents=True, exist_ok=True)
-        root = self._settings.paths.labs_notebooks_dir.resolve()
-        paths = []
+        queued: list[str] = []
+        held: list[Path] = []
         for notebook in notebooks:
             nb = json.loads(notebook.read_text(encoding="utf-8"))
-            if short and _set_short_run(nb) != 1:
-                msg = f"{notebook}: expected exactly one `SHORT_RUN = False` line"
+            needs = run_needs(nb, self._gpu.metadata_key)
+            if needs.hook is None:
+                queued.append(self._send(self._stage(notebook, nb, needs, short)))
+                continue
+            if needs.hook not in self._gpu.hooks:
+                msg = f"{notebook}: hook {needs.hook!r} is not in labs.gpu.hooks"
                 raise GpuRunError(msg)
-            resolved = notebook.resolve()
-            parts = (
-                resolved.relative_to(root).parts
-                if resolved.is_relative_to(root)
-                else (resolved.name,)
+            hooks = self._read_json(self._hooks_file, {})
+            entry = hooks.setdefault(needs.hook, {"active": None, "waiting": []})
+            if entry["active"] is not None or entry["waiting"]:
+                entry["waiting"].append(
+                    {
+                        "machine": self.machine,
+                        "notebook": str(notebook.resolve()),
+                        "short": short,
+                    }
+                )
+                self._write_json(self._hooks_file, hooks)
+                held.append(notebook)
+                continue
+            staged = self._stage(notebook, nb, needs, short)
+            self._run_hook(needs.hook)
+            name = self._send(staged)
+            entry["active"] = {"machine": self.machine, "name": name}
+            self._write_json(self._hooks_file, hooks)
+            queued.append(name)
+        return queued, held
+
+    def _stage(
+        self, notebook: Path, nb: dict[str, Any], needs: RunNeeds, short: bool
+    ) -> "_Staged":
+        """Prepare one notebook's copy for the machine, its needs filled.
+
+        Returns:
+            The copy, not written yet.
+
+        Raises:
+            GpuRunError: If it can't be prepared as asked.
+        """
+        if short and _set_short_run(nb) != 1:
+            msg = f"{notebook}: expected exactly one `SHORT_RUN = False` line"
+            raise GpuRunError(msg)
+        filled = {**needs.variables, **needs.secrets}
+        unset = sorted(env for env in filled.values() if not os.environ.get(env))
+        if unset:
+            msg = f"{notebook}: set {', '.join(unset)} (in the environment or .env)"
+            raise GpuRunError(msg)
+        unfilled = _fill_variables(
+            nb, {variable: os.environ[env] for variable, env in filled.items()}
+        )
+        if unfilled:
+            lines = ", ".join(f'`{variable} = ""`' for variable in unfilled)
+            msg = f"{notebook}: expected exactly one line {lines}"
+            raise GpuRunError(msg)
+        root = self._settings.paths.labs_notebooks_dir.resolve()
+        resolved = notebook.resolve()
+        parts = (
+            resolved.relative_to(root).parts
+            if resolved.is_relative_to(root)
+            else (resolved.name,)
+        )
+        name = "__".join(parts).removesuffix(".ipynb")
+        name += ".short.ipynb" if short else ".full.ipynb"
+        return _Staged(
+            name=name,
+            text=json.dumps(nb, ensure_ascii=False, indent=1),
+            secrets=tuple(sorted(needs.secrets.values())),
+        )
+
+    def _send(self, staged: "_Staged") -> str:
+        """Write a staged copy to `in/` and copy it to the machine.
+
+        A copy with secrets is redacted once sent, so they never stay on
+        disk here, and its name noted for `fetch` to redact its results.
+
+        Returns:
+            Its queued name.
+        """
+        target = self._dir / "in" / staged.name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(staged.text, encoding="utf-8")
+        try:
+            self._scp([target], "/work/in/")
+        finally:
+            if staged.secrets:
+                target.write_text(
+                    _redact(staged.text, staged.secrets), encoding="utf-8"
+                )
+                secrets = self._read_json(self._secrets_file, {})
+                secrets[staged.name] = list(staged.secrets)
+                self._write_json(self._secrets_file, secrets)
+        return staged.name
+
+    def send_held(self, notebook: Path, *, short: bool) -> str:
+        """Send a notebook held for its hook, its hook already run.
+
+        Returns:
+            Its queued name.
+        """
+        nb = json.loads(notebook.read_text(encoding="utf-8"))
+        needs = run_needs(nb, self._gpu.metadata_key)
+        return self._send(self._stage(notebook, nb, needs, short))
+
+    # -- hooks ----------------------------------------------------------------
+
+    def _run_hook(self, hook: str) -> None:
+        command = self._gpu.hooks[hook]
+        _logger.info("Running hook %s: %s", hook, command)
+        proc = self._run(
+            ["sh", "-c", command],
+            cwd=self._settings.paths.git_dir,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        for line in (proc.stdout or "").splitlines():
+            _logger.info("%s: %s", hook, line)
+        if proc.returncode:
+            msg = (
+                f"hook {hook} failed ({proc.returncode}): {command}\n"
+                f"{proc.stdout or ''}{proc.stderr or ''}"
             )
-            name = "__".join(parts).removesuffix(".ipynb")
-            name += ".short.ipynb" if short else ".full.ipynb"
-            target = staged / name
-            target.write_text(
-                json.dumps(nb, ensure_ascii=False, indent=1), encoding="utf-8"
-            )
-            paths.append(target)
-        self._scp(paths, "/work/in/")
-        return [path.name for path in paths]
+            raise GpuRunError(msg)
+
+    def hooks_pending(self) -> bool:
+        """Whether a hooked run of this machine isn't closed, or one is held.
+
+        Returns:
+            True while `finish_hooks` still has something to do here.
+        """
+        for entry in self._read_json(self._hooks_file, {}).values():
+            active = entry["active"]
+            if active is not None and active["machine"] == self.machine:
+                return True
+            if any(held["machine"] == self.machine for held in entry["waiting"]):
+                return True
+        return False
+
+    def finish_hooks(self, *, machine_down: bool = False) -> list[str]:
+        """Close this machine's finished hooked runs, then send the held ones.
+
+        A hooked run is finished once its `.done` file was fetched, or when
+        its machine is down: its hook then runs again. Then the first
+        notebook held for each hook with no run is sent to its own machine,
+        the hook run first unless it just ran. With `machine_down`, the
+        notebooks held for this machine are dropped.
+
+        Returns:
+            What was done, one line each.
+        """
+        hooks = self._read_json(self._hooks_file, {})
+        done: list[str] = []
+        for hook, entry in hooks.items():
+            if machine_down:
+                dropped = [h for h in entry["waiting"] if h["machine"] == self.machine]
+                done += [f"dropped {h['notebook']}: machine down" for h in dropped]
+                entry["waiting"] = [h for h in entry["waiting"] if h not in dropped]
+                self._write_json(self._hooks_file, hooks)
+            active = entry["active"]
+            just_ran = False
+            if active is not None and active["machine"] == self.machine:
+                finished = (self._dir / "out" / f"{active['name']}.done").is_file()
+                if finished or machine_down:
+                    self._run_hook(hook)
+                    just_ran = True
+                    entry["active"] = None
+                    self._write_json(self._hooks_file, hooks)
+                    done.append(f"ran hook {hook} after {active['name']}")
+            if entry["active"] is None and entry["waiting"]:
+                held = entry["waiting"][0]
+                target = (
+                    self
+                    if held["machine"] == self.machine
+                    else GpuRun(
+                        self._settings,
+                        self._backend,
+                        self._run,
+                        self._sleep,
+                        machine=held["machine"],
+                    )
+                )
+                if not just_ran:
+                    self._run_hook(hook)
+                name = target.send_held(Path(held["notebook"]), short=held["short"])
+                entry["waiting"].pop(0)
+                entry["active"] = {"machine": target.machine, "name": name}
+                self._write_json(self._hooks_file, hooks)
+                done.append(f"queued {name} on {target.machine}")
+        for line in done:
+            _logger.info("%s", line)
+        return done
 
     def start(self, *, timeout: int = 3 * 3600) -> str:
         """Start the machine's queue, detached; a no-op while it already runs.
@@ -612,10 +882,10 @@ class GpuRun:
         """
         state = self.state()
         if state is None:
-            return GpuStatus(instance=None)
+            return GpuStatus(instance=None, machine=self.machine)
         info = self._backend.info(state.id)
         if info is None or info.status != "running" or state.host is None:
-            return GpuStatus(instance=info)
+            return GpuStatus(instance=info, machine=self.machine)
         entries = []
         for line in self._ssh(_STATUS).splitlines():
             name, entry_state, done = [*line.split("\t"), "", ""][:3]
@@ -628,7 +898,7 @@ class GpuRun:
                     seconds=int(seconds) if seconds is not None else None,
                 )
             )
-        return GpuStatus(instance=info, queue=tuple(entries))
+        return GpuStatus(instance=info, queue=tuple(entries), machine=self.machine)
 
     def fetch(self) -> Path:
         """Copy what changed in the machine's executed notebooks to `out/`.
@@ -660,6 +930,16 @@ class GpuRun:
         if proc.returncode:
             msg = f"rsync failed:\n{proc.stderr}"
             raise GpuRunError(msg)
+        for name, envs in self._read_json(self._secrets_file, {}).items():
+            for path in (out / name, out / f"{name}.log"):
+                if not path.is_file():
+                    continue
+                text = path.read_text(encoding="utf-8", errors="surrogateescape")
+                redacted = _redact(text, envs)
+                if redacted != text:
+                    path.write_text(
+                        redacted, encoding="utf-8", errors="surrogateescape"
+                    )
         return out
 
     def note_finished(self, *, slowest: int = 5) -> list[RunReport]:
@@ -706,6 +986,7 @@ class GpuRun:
             return None
         self._backend.destroy(state.id)
         self._save(None)
+        self.finish_hooks(machine_down=True)
         return state.id
 
 
@@ -722,6 +1003,51 @@ def _set_short_run(nb: dict[str, Any]) -> int:
                 found += 1
         cell["source"] = lines
     return found
+
+
+def _fill_variables(nb: dict[str, Any], values: dict[str, str]) -> list[str]:
+    """Set each `name = ""` line of `nb`'s code cells to `values[name]`.
+
+    Returns:
+        The names whose line wasn't found exactly once.
+    """
+    found = dict.fromkeys(values, 0)
+    for cell in nb["cells"]:
+        if cell["cell_type"] != "code":
+            continue
+        source = cell["source"]
+        lines = source if isinstance(source, list) else source.splitlines(True)
+        for i, line in enumerate(lines):
+            for name, value in values.items():
+                if line.strip() == f'{name} = ""':
+                    indent = line[: len(line) - len(line.lstrip())]
+                    newline = "\n" if line.endswith("\n") else ""
+                    lines[i] = f"{indent}{name} = {json.dumps(value)}{newline}"
+                    found[name] += 1
+        cell["source"] = lines
+    return [name for name, count in found.items() if count != 1]
+
+
+def _redact(text: str, envs: Sequence[str]) -> str:
+    """Replace the values of the environment variables `envs` in `text`.
+
+    Both as is and as escaped in a JSON string.
+
+    Returns:
+        The redacted text.
+
+    Raises:
+        GpuRunError: If one of `envs` isn't set: its value can't be found.
+    """
+    for env in envs:
+        value = os.environ.get(env)
+        if not value:
+            msg = f"set {env} to redact its value from the fetched notebooks"
+            raise GpuRunError(msg)
+        escaped = json.dumps(value, ensure_ascii=False)[1:-1]
+        for form in sorted({value, escaped}, key=len, reverse=True):
+            text = text.replace(form, REDACTED.format(env))
+    return text
 
 
 def _cell_seconds(cell: dict[str, Any]) -> float:
