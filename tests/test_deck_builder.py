@@ -3,6 +3,7 @@
 No pandoc or Typst needed: the fakes only record calls and write files.
 """
 
+import gc
 from collections.abc import Mapping
 from pathlib import Path, PurePath
 from signal import SIGINT, pthread_kill
@@ -316,9 +317,11 @@ def test_interrupt_does_not_wait_for_running_compilations(
 
     def ctrl_c_during_compilation(file: Path) -> CompileResult:
         # Ctrl-C reaches the main thread while this compilation still runs,
-        # the part's PDF still queued behind it.
+        # the part's PDF still queued behind it. Only once: should the queued
+        # one run, it must fail the test, not interrupt the whole session.
+        if not compiled:
+            pthread_kill(main_thread, SIGINT)
         compiled.append(file)
-        pthread_kill(main_thread, SIGINT)
         release.wait(timeout=10)
         finished.set()
         return CompileResult(ok=True)
@@ -327,8 +330,16 @@ def test_interrupt_does_not_wait_for_running_compilations(
     # One thread, so that the part's PDF waits in the queue.
     monkeypatch.setattr(deck_builder, "cpu_count", lambda: 1)
 
-    with raises(KeyboardInterrupt):
-        repo.builder(repo.file("a.md")).build_deck()
+    # A Ctrl-C landing while the main thread runs a finalizer (`__del__`) is
+    # lost, Python can't raise from there: collect beforehand the garbage
+    # earlier tests left, and start no collection meanwhile.
+    gc.collect()
+    gc.disable()
+    try:
+        with raises(KeyboardInterrupt):
+            repo.builder(repo.file("a.md")).build_deck()
+    finally:
+        gc.enable()
 
     # Raised without waiting for the running compilation, which the CLI then
     # stops, and without starting the queued one.
