@@ -26,7 +26,7 @@ license-files = ["LICENSE"]
 name = "deckz"
 readme = "README.md"
 requires-python = ">= 3.12"
-version = "31.3.1"
+version = "31.3.2"
 
 [project.optional-dependencies]
 extras = [
@@ -96,7 +96,7 @@ commit = true
 tag = true
 push = true
 commit_message = "Bump version to {new_version}"
-current_version = "31.3.1"
+current_version = "31.3.2"
 pre_commit_hook = "scripts/bumpver_pre_commit.sh"
 tag_message = "{new_version}"
 version_pattern = "MAJOR.MINOR.PATCH"
