@@ -38,6 +38,18 @@ Dependency management and running: this project uses `uv`; run tools via
 - Version bumps: `bumpver` (see `[bumpver]` in `pyproject.toml`); do not hand-edit
   the version strings it manages in `pyproject.toml` / `src/deckz/__init__.py`.
 
+### This working tree is live
+
+shuuchuu/slides installs deckz as an editable dependency from `../deckz`, so this
+working tree is the deckz every slides session runs: its `deckz` commands, its git
+hooks and its Claude Code hooks. A half-done edit (an import error, a changed default)
+breaks or changes them at once, for sessions you can't see. So change code in a git
+worktree (`git worktree add ../deckz-<topic>`), test it there, try it on slides from a
+scratch environment that has slides' dependencies and the worktree's deckz, and merge
+into this checkout only a finished change. Before merging one that changes behavior
+(what a build deletes, a check's verdict), tell the running slides sessions
+(`ListAgents`, `SendMessage`). Docs-only edits can be made here directly.
+
 ## Architecture
 
 ### CLI wiring
