@@ -14,7 +14,16 @@ from deckz.configuring.settings import (
     LabsSettings,
 )
 from deckz.exceptions import GpuRunError, MissingExtraError
-from deckz.labs.gpu import GpuRun, VastBackend, format_report, machines, report
+from deckz.labs.gpu import (
+    GpuRun,
+    GpuStatus,
+    InstanceInfo,
+    QueueEntry,
+    VastBackend,
+    format_report,
+    machines,
+    report,
+)
 
 _OFFER = {
     "id": 7,
@@ -513,3 +522,55 @@ def test_queue_again_clears_the_earlier_results(repo: Path) -> None:
         "rm -f demo-fr.full.ipynb demo-fr.full.ipynb.done"
         " demo-fr.full.ipynb.log demo-fr.full.ipynb.maxrss"
     )
+
+
+def _watched(repo: Path, monkeypatch: MonkeyPatch, polls: list[Any]) -> None:
+    import appdirs
+
+    monkeypatch.setattr(appdirs, "user_config_dir", lambda _: str(repo))
+    monkeypatch.chdir(repo)
+    machine_dir = repo / ".run" / "gpu" / "main"
+    machine_dir.mkdir(parents=True)
+    (machine_dir / "state.json").write_text(
+        json.dumps({"id": 1, "gpu": "T4", "machine": 2, "host": "h", "port": 22})
+    )
+    remaining = iter(polls)
+
+    def status(_: GpuRun) -> GpuStatus:
+        polled = next(remaining)
+        if isinstance(polled, Exception):
+            raise polled
+        return polled
+
+    monkeypatch.setattr(GpuRun, "status", status)
+    monkeypatch.setattr(GpuRun, "fetch", lambda self: self.directory / "out")
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    main(("labs", "gpu", "status", "--watch", "--plain", "--interval", "0"))
+
+
+def test_cli_status_watch_keeps_polling_an_unreachable_machine(
+    repo: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    done = GpuStatus(
+        instance=InstanceInfo(status="running"),
+        queue=(QueueEntry("a.full.ipynb", "done", 0, 60),),
+    )
+
+    _watched(
+        repo,
+        monkeypatch,
+        [GpuRunError("ssh failed"), GpuStatus(instance=None), done],
+    )
+
+    out = capsys.readouterr().out
+    assert "main: unreachable (ssh failed)" in out
+    assert out.count("machine\tmain\t") == 2
+    assert out.rstrip().endswith("a.full.ipynb\tdone\t0\t60")
+
+
+def test_cli_status_watch_gives_up_on_a_machine_unreachable_three_times(
+    repo: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    _watched(repo, monkeypatch, [GpuRunError("ssh failed")] * 3)
+
+    assert "main: unreachable 3 times, given up" in capsys.readouterr().out

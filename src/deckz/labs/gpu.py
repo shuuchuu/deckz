@@ -130,13 +130,13 @@ while true; do
   [ -n "$next" ] || break
   path=$next
   name=$(basename "$path")
-  echo "$(date -Is) start $name"
-  start=$(date +%s)
   # Each notebook starts from the image's state, as on a fresh Colab VM.
   for dir in @FRESH@; do
     snapshot=/work/pristine/$(echo "${dir#/}" | tr / _)
     [ -e "$snapshot.ok" ] && rsync -a --delete "$snapshot/" "$dir/"
   done
+  echo "$(date -Is) start $name"
+  start=$(date +%s)
   rm -rf /content && mkdir -p /content && cp "$path" /content/
   (cd /content && PYTHON_CPU_COUNT=@CPUS@ taskset -c @CPU_LIST@ timeout @TIMEOUT@ \\
     python3 /work/execute.py "$name" "/work/out/$name") > "out/$name.log" 2>&1

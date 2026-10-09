@@ -4,7 +4,9 @@ from typing import TYPE_CHECKING
 from . import app
 
 if TYPE_CHECKING:
-    from ....labs.gpu import GpuRun
+    from collections.abc import Callable
+
+    from ....labs.gpu import GpuRun, GpuStatus
 
 
 @app.command()
@@ -48,21 +50,49 @@ def status(
     if not runs:
         print("machine\tnone" if plain else "No machine rented.")
         return
+    # Polls in a row a machine couldn't be reached, given up on at _MAX_MISSES.
+    misses = dict.fromkeys(range(len(runs)), 0)
     while True:
-        busy = [_poll(gpu_run, plain=plain) for gpu_run in runs]
-        if not watch or not any(busy):
+        busy = False
+        for i, gpu_run in enumerate(runs):
+            if misses[i] >= _MAX_MISSES:
+                continue
+            polled = _poll(gpu_run, plain=plain)
+            misses[i] = misses[i] + 1 if polled is None else 0
+            if misses[i] == _MAX_MISSES:
+                print(f"{gpu_run.machine}: unreachable {_MAX_MISSES} times, given up")
+            busy = busy or polled is not False
+        if not watch or not busy:
             return
         sleep(interval)
 
 
-def _poll(gpu_run: "GpuRun", *, plain: bool) -> bool:
+_MAX_MISSES = 3
+"""Polls in a row a machine may be unreachable (a network outage, the backend's \
+API not answering) before --watch stops following it."""
+
+
+def _poll(gpu_run: "GpuRun", *, plain: bool) -> bool | None:
     """Print a machine's status, fetch, note and close what finished.
 
     Returns:
-        Whether the machine still has something to run or a hook to close.
+        Whether the machine still has something to run or a hook to close, \
+        None if it couldn't be reached.
     """
-    from ....labs.gpu import format_report
+    from ....exceptions import GpuRunError
     from ..._presentation import print_gpu_status
+
+    try:
+        return _poll_reachable(gpu_run, plain=plain, print_status=print_gpu_status)
+    except GpuRunError as e:
+        print(f"{gpu_run.machine}: unreachable ({str(e).splitlines()[0]})")
+        return None
+
+
+def _poll_reachable(
+    gpu_run: "GpuRun", *, plain: bool, print_status: "Callable[[GpuStatus], None]"
+) -> bool | None:
+    from ....labs.gpu import format_report
 
     current = gpu_run.status()
     instance = current.instance
@@ -74,8 +104,11 @@ def _poll(gpu_run: "GpuRun", *, plain: bool) -> bool:
             seconds = "" if entry.seconds is None else entry.seconds
             print(f"{entry.name}\t{entry.state}\t{code}\t{seconds}")
     else:
-        print_gpu_status(current)
-    if instance is None or instance.status != "running":
+        print_status(current)
+    if instance is None:
+        # Rented, as its state says, but the backend doesn't list it: unknown.
+        return None if gpu_run.state() is not None else False
+    if instance.status != "running":
         return False
     if current.queue:
         gpu_run.fetch()
