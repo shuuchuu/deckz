@@ -78,7 +78,8 @@ def lab_pairs(settings: "GlobalSettings") -> list[str]:
 def lab_outputs(settings: "GlobalSettings") -> list[str]:
     # A hands-on notebook never carries stored outputs (every learner runs
     # it); a demo always does, each language's from its own run, unless it
-    # has no code to run.
+    # has no code to run, and never sets Colab's private outputs ("Omit code
+    # cell output when saving"), which also hides them when Colab opens it.
     notebooks_dir = settings.paths.labs_notebooks_dir
     git_dir = settings.paths.git_dir
     problems = []
@@ -86,7 +87,8 @@ def lab_outputs(settings: "GlobalSettings") -> list[str]:
         kind, _, _lang = path.stem.rpartition("-")
         if kind not in {"hands-on", "demo"}:
             continue
-        cells = json.loads(path.read_text(encoding="utf-8")).get("cells", [])
+        notebook = json.loads(path.read_text(encoding="utf-8"))
+        cells = notebook.get("cells", [])
         code_cells = [cell for cell in cells if cell.get("cell_type") == "code"]
         has_outputs = any(cell.get("outputs") for cell in code_cells)
         where = _rel(path, git_dir)
@@ -94,6 +96,12 @@ def lab_outputs(settings: "GlobalSettings") -> list[str]:
             problems.append(f"{where}: hands-on notebook has stored outputs")
         elif kind == "demo" and code_cells and not has_outputs:
             problems.append(f"{where}: demo notebook has no stored outputs")
+        colab = notebook.get("metadata", {}).get("colab", {})
+        if kind == "demo" and colab.get("private_outputs"):
+            problems.append(
+                f"{where}: demo notebook sets Colab's private_outputs, which "
+                "hides its stored outputs"
+            )
     return problems
 
 

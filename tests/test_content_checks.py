@@ -112,6 +112,22 @@ def test_lab_outputs_flags_a_demo_notebook_without_outputs(tmp_path: Path) -> No
     assert "no stored outputs" in problems[0]
 
 
+def test_lab_outputs_flags_a_demo_with_colab_private_outputs(tmp_path: Path) -> None:
+    init_repository(str(tmp_path))
+    _write(
+        tmp_path / "labs" / "notebooks" / "topic" / "demo-fr.ipynb",
+        '{"metadata": {"colab": {"private_outputs": true}}, "cells": '
+        '[{"cell_type": "code", "source": ["1"], '
+        '"outputs": [{"output_type": "execute_result", "data": {}}]}]}',
+    )
+
+    problems = lab_outputs(_settings(tmp_path))
+
+    assert len(problems) == 1
+    assert "demo-fr.ipynb" in problems[0]
+    assert "private_outputs" in problems[0]
+
+
 def test_lab_outputs_accepts_a_demo_with_no_code_cells(tmp_path: Path) -> None:
     init_repository(str(tmp_path))
     _write(

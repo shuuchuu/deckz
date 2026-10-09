@@ -771,7 +771,8 @@ The main commands:
 - `deckz check` (alias for `deckz check content`): run deckz's generic
   content checks -- lab notebook IDs valid and unique (`lab-ids`), fr/en
   lab notebook pairs present and in sync (`lab-pairs`), hands-on notebooks
-  with no stored outputs and demos with code with some (`lab-outputs`),
+  with no stored outputs and demos with code with some, shown by Colab (no
+  `private_outputs`) (`lab-outputs`),
   asset credit lines (`title`/`author`/`license`, and their `_en`) free of LaTeX
   (`asset-credits`), no raw LaTeX in content (`raw-latex`), no hand-written
   link to the configured lab-publishing remote (`lab-urls`) -- plus, if
