@@ -320,3 +320,42 @@ dependency, backing the top-level `labs` sub-app (`cli/labs/`).
   `pyproject.toml`) with `preview = true`; docstrings follow Google
   convention and undocumented-code rules (`D1`) are ignored.
 - Type checking is done with `ty` (not mypy), scoped to `src/deckz tests`.
+
+## Operability guidelines
+
+deckz is how people run a deckz-managed repository, with or without an AI
+agent: a contributor who never uses one must be able to do every routine
+task from `deckz --help` and the docs (`operability-plan.md` holds the
+work in progress). Keep new tooling in line with that:
+
+- **One path for people and agents.** An agent runs the same commands a
+  person would. A workflow that exists only as a skill's list of steps is a
+  missing command.
+- **Where a rule goes**, in this order: a check that fails
+  (`analyzing/content_checks.py`, or the repo's `templates/checks.py`) or a
+  refusal at the point of harm (as `labs publish` refuses to drop a
+  published ID); otherwise a safe default, or a task-level command that does
+  the right thing; otherwise the human docs. A skill holds only judgment and
+  orchestration, and points to the docs instead of restating them. An
+  agent's memory never holds a repository rule.
+- **Protect the repository where every contributor passes:** the git hooks
+  and CI. Claude Code hooks are for the risks only agents create (several
+  sessions sharing one checkout), never the only guard.
+- **No destructive default, no silent setting.** An option that deletes,
+  overwrites or publishes is off by default, or limited to what the run
+  itself made obsolete. A value taken from the environment or `.env` is
+  announced.
+- **Every failure names its fix**: the command to run, or the edit to make.
+- **No "remember to" steps.** A manual step that must follow a command
+  becomes part of it, or a hook the repository declares in `deckz.yml` (like
+  `labs.gpu.hooks`).
+- **Rationale lives next to the thing.** An intentional oddity is explained
+  where it is (a comment, a notebook cell, the config key), so nobody,
+  person or agent, "fixes" it.
+- **Generic in deckz, specific in the repository.** deckz knows the
+  conventions it owns (layout, sections, labs, i18n, checks); a repository's
+  own tools, theme and house rules come in through `deckz.yml` and the
+  `templates/` plugins.
+- **Shipping a command** means: its place in a task group of `--help`, its
+  page in the docs, `--plain`/`--json` when a script or an agent reads its
+  output, and tests.
