@@ -119,6 +119,38 @@ def test_install_hooks_writes_into_core_hooks_path(tmp_path: Path) -> None:
     assert {path.parent for path in written} == {tmp_path / ".githooks"}
 
 
+def test_hooks_dir_of_a_linked_worktree_is_the_main_checkouts(tmp_path: Path) -> None:
+    # A linked worktree's `.git` is a file: git runs the shared hooks.
+    import subprocess
+
+    main = tmp_path / "main"
+    subprocess.run(["git", "init", "-q", "-b", "main", str(main)], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(main),
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@e.com",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "Initial",
+        ],
+        check=True,
+    )
+    worktree = tmp_path / "worktree"
+    subprocess.run(
+        ["git", "-C", str(main), "worktree", "add", "-q", str(worktree)], check=True
+    )
+
+    assert hooks_dir(worktree) == (main / ".git" / "hooks").resolve()
+    assert install_hooks(worktree)[0].parent == (main / ".git" / "hooks").resolve()
+
+
 def test_hooks_fall_back_to_uv_when_deckz_is_not_on_the_path(tmp_path: Path) -> None:
     init_repository(str(tmp_path))
 

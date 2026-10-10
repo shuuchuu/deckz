@@ -94,12 +94,19 @@ def hooks_dir(git_dir: Path) -> Path:
 
     Returns:
         Its `core.hooksPath` (relative to `git_dir` unless absolute) when \
-        set, else its `.git/hooks/`.
+        set, else the `hooks/` of its git directory: `.git/hooks/`, or in a \
+        linked worktree (whose `.git` is a file), the main checkout's.
     """
-    config = Repository(str(git_dir)).config
+    repository = Repository(str(git_dir))
+    config = repository.config
     if "core.hooksPath" in config and (hooks_path := config["core.hooksPath"]):
         return git_dir / Path(hooks_path).expanduser()
-    return git_dir / ".git" / "hooks"
+    # A linked worktree's own git directory names the shared one in `commondir`.
+    private = Path(repository.path)
+    common = private / "commondir"
+    if common.is_file():
+        return (private / common.read_text(encoding="utf8").strip()).resolve() / "hooks"
+    return private / "hooks"
 
 
 def install_hooks(git_dir: Path, *, force: bool = False) -> list[Path]:
