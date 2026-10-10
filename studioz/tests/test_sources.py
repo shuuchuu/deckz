@@ -114,8 +114,8 @@ def test_frames_from_what_the_build_recorded(
     (build / "abc-handout.pdf").write_bytes(b"%PDF-1.4")
     (deck / "pdf").mkdir()
     (deck / "pdf" / "abc-handout.pdf").write_bytes(b"%PDF-1.4")
-    markers = [{"fragment": str(fragment), "index": 0, "page": 3}]
-    (build / "abc-handout.frames.json").write_text(json.dumps(markers), "utf8")
+    markers = {"deckz-frame": [{"fragment": str(fragment), "index": 0, "page": 3}]}
+    (build / "abc-handout.markers.json").write_text(json.dumps(markers), "utf8")
 
     hello = {"title": "Hello", "file": "content/greeting/hello.md", "line": 2}
     assert client.get(url).json() == {"frames": [{"page": 3, **hello}]}

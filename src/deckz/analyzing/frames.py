@@ -17,7 +17,8 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from ..components.frame_markers import LABEL, frame_headings, frames_record
+from ..components import marker_records
+from ..components.frame_markers import LABEL, frame_headings
 from ..exceptions import DeckzError
 
 if TYPE_CHECKING:
@@ -69,11 +70,12 @@ def frames(settings: "DeckSettings", pdf: Path, *, query: bool = True) -> list[F
     if not pdf.is_file() or not main.is_file():
         msg = f"{pdf} or its build {main} is missing: build it first (`deckz run`)"
         raise DeckzError(msg)
-    recorded = _recorded(main)
-    if recorded is None and not query:
-        msg = f"{pdf}'s build recorded no frames: build it again with this deckz"
-        raise DeckzError(msg)
-    markers = yaml.safe_load(recorded or _query(settings, main))
+    markers = marker_records.recorded(main, LABEL)
+    if markers is None:
+        if not query:
+            msg = f"{pdf}'s build recorded no frames: build it again with this deckz"
+            raise DeckzError(msg)
+        markers = query_markers(settings, main, LABEL)
     if not markers:
         msg = f"{pdf} has no frame markers: build it again with this deckz"
         raise DeckzError(msg)
@@ -91,30 +93,28 @@ def frames(settings: "DeckSettings", pdf: Path, *, query: bool = True) -> list[F
     return sorted(found, key=lambda frame: frame.page)
 
 
-def _recorded(main: Path) -> str | None:
-    """The markers the last compilation of `main` recorded, if they match its PDF.
+def query_markers(settings: "DeckSettings", main: Path, label: str) -> list:
+    """The `label` markers of `main`'s document, by compiling it in this process.
+
+    For a build no compilation recorded (`marker_records`): compiled with
+    the build's fonts, so that it lays out as the build did.
 
     Returns:
-        The JSON text, or None when there's none or it's older than the PDF.
+        Their values, in document order.
     """
-    record = frames_record(main)
-    try:
-        if record.stat().st_mtime_ns >= main.with_suffix(".pdf").stat().st_mtime_ns:
-            return record.read_text(encoding="utf8")
-    except FileNotFoundError:
-        pass
-    return None
-
-
-def _query(settings: "DeckSettings", main: Path) -> str:
     import typst
 
-    return typst.Compiler(
-        str(main),
-        root=str(main.parent),
-        font_paths=[str(path) for path in _font_paths(settings)],
-        ignore_system_fonts=settings.typst_ignore_system_fonts,
-    ).query(f"<{LABEL}>", field="value")
+    return (
+        yaml.safe_load(
+            typst.Compiler(
+                str(main),
+                root=str(main.parent),
+                font_paths=[str(path) for path in _font_paths(settings)],
+                ignore_system_fonts=settings.typst_ignore_system_fonts,
+            ).query(f"<{label}>", field="value")
+        )
+        or []
+    )
 
 
 def _font_paths(settings: "DeckSettings") -> list[Path]:

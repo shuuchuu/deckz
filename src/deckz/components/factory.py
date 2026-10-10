@@ -37,6 +37,7 @@ class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
 
     def compiler(self) -> CompilerProtocol:
         from .compiler import TypstCompiler
+        from .frame_markers import LABEL as FRAME_LABEL
         from .machine_slots import MachineSlots
 
         # Relative to the git root, whatever deckz's own working directory.
@@ -58,6 +59,11 @@ class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
                 None
                 if self._settings.typst_machine_compilations is None
                 else MachineSlots(self._settings.typst_machine_compilations)
+            ),
+            recorded_labels=(
+                FRAME_LABEL,
+                self._settings.overflow_marker_label,
+                self._settings.table_marker_label,
             ),
         )
 

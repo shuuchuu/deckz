@@ -8,15 +8,18 @@ percentage, and `overflow`: whether its longest words alone are wider than the
 frame). deckz's business is only to query and report them, not to produce
 them: the shrinking and the table layout stay the theme's. This reads the
 handout already built by `deckz run --handout` (or a `deckz run file`/`deckz
-run section` preview) -- the Typst metadata (`typst.Compiler.query`), every
-page's frame title (the line under the header's breadcrumb, from poppler's
-`pdftotext`), and the `# Title` heading among the content fragments the build
-included -- it doesn't build anything itself.
+run section` preview) -- the markers its compilation recorded
+(`deckz.components.marker_records`), and each page's frame, content file and
+line (`deckz.analyzing.frames`) -- it doesn't build anything itself.
 
-A frame is one page, so the n-th page with a title shared by several frames
-(e.g. "Quiz") is the n-th heading with that title. When the counts disagree
-(a heading rendered on no page, or a PDF title differing from its heading's
-text), every candidate source is listed.
+A build no compilation recorded (an older deckz's) is queried instead, a
+whole compilation; one with no frame markers either is matched by title:
+every page's frame title (the line under the header's breadcrumb, from
+poppler's `pdftotext`) against the `# Title` headings among the content
+fragments the build included. A frame is one page, so the n-th page with a
+title shared by several frames (e.g. "Quiz") is the n-th heading with that
+title. When the counts disagree (a heading rendered on no page, or a PDF
+title differing from its heading's text), every candidate source is listed.
 """
 
 import re
@@ -26,11 +29,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import yaml
-
+from ..components import marker_records
 from ..exceptions import DeckzError
 from ..models import lang_dir
 from ..utils import deck_name_from_dir
+from .frames import frames, query_markers
 
 if TYPE_CHECKING:
     from ..configuring.settings import DeckSettings
@@ -46,6 +49,7 @@ class _Located:
     page: int
     title: str
     sources: tuple[str, ...]
+    line: int | None
 
 
 @dataclass(frozen=True)
@@ -57,6 +61,8 @@ class ShrunkFrame:
     title: str
     sources: tuple[str, ...]
     """The content file(s) building this frame, or `("?",)` if none matched."""
+    line: int | None = None
+    """The frame's `# Title` line in its only source, if known."""
 
 
 @dataclass(frozen=True)
@@ -71,6 +77,8 @@ class WrappedTable:
     title: str
     sources: tuple[str, ...]
     """The content file(s) building its frame, or `("?",)` if none matched."""
+    line: int | None = None
+    """Its frame's `# Title` line in its only source, if known."""
 
 
 def _normalize(title: str) -> str:
@@ -130,17 +138,18 @@ def _headings(
     return found
 
 
-def _locate(settings: "DeckSettings", label: str, *, lang: "Lang") -> list[_Located]:
+def _locate(
+    settings: "DeckSettings", label: str, *, lang: "Lang", query: bool
+) -> list[_Located]:
     """Every `label` marker of the built handout, with its frame and sources.
 
     Returns:
         One `_Located` per marker, in document order.
 
     Raises:
-        DeckzError: If the deck's handout hasn't been built.
+        DeckzError: If the deck's handout hasn't been built, or, without \
+            `query`, if its build recorded no markers.
     """
-    import typst
-
     paths = settings.paths
     name = deck_name_from_dir(paths.current_dir)
     build_dir = lang_dir(paths.build_dir, lang) / f"{name}-handout"
@@ -153,17 +162,42 @@ def _locate(settings: "DeckSettings", label: str, *, lang: "Lang") -> list[_Loca
         )
         raise DeckzError(msg)
 
-    markers = (
-        yaml.safe_load(
-            typst.Compiler(str(main_typ), root=str(build_dir)).query(
-                f"<{label}>", field="value"
-            )
-        )
-        or []
-    )
+    markers = marker_records.recorded(main_typ, label)
+    if markers is None:
+        if not query:
+            msg = f"{pdf}'s build recorded no markers: build it again with this deckz"
+            raise DeckzError(msg)
+        markers = query_markers(settings, main_typ, label)
     if not markers:
         return []
+    try:
+        by_page = {frame.page: frame for frame in frames(settings, pdf, query=query)}
+    except DeckzError:
+        # Built before deckz marked frames.
+        return _locate_by_title(settings, markers, build_dir, main_typ, pdf)
+    located = []
+    for marker in markers:
+        frame = by_page.get(marker["page"])
+        located.append(
+            _Located(
+                marker=marker,
+                page=marker["page"],
+                title=_normalize(frame.title) if frame else "",
+                sources=(frame.file or "?",) if frame else ("?",),
+                line=frame.line if frame else None,
+            )
+        )
+    return located
 
+
+def _locate_by_title(
+    settings: "DeckSettings",
+    markers: list[dict],
+    build_dir: Path,
+    main_typ: Path,
+    pdf: Path,
+) -> list[_Located]:
+    paths = settings.paths
     sources_of = _headings(
         build_dir,
         main_typ,
@@ -187,6 +221,7 @@ def _locate(settings: "DeckSettings", label: str, *, lang: "Lang") -> list[_Loca
                 page=page,
                 title=title,
                 sources=tuple(dict.fromkeys(sources)),
+                line=None,
             )
         )
     return located
@@ -197,13 +232,14 @@ def _percent(value: str) -> float:
 
 
 def shrunk_frames(
-    settings: "DeckSettings", *, lang: "Lang" = "fr"
+    settings: "DeckSettings", *, lang: "Lang" = "fr", query: bool = True
 ) -> list[ShrunkFrame]:
     """Every shrunk frame of `settings`' deck's built handout, worst first.
 
     Needs `deckz run --handout` (or a `deckz run file`/`deckz run section`
     preview), in `lang`, to have already run: this only reads its
-    build output.
+    build output. Without `query`, a build no compilation recorded (an
+    older deckz's) is an error rather than compiled again in this process.
 
     Returns:
         One `ShrunkFrame` per `settings.overflow_marker_label` marker, \
@@ -216,20 +252,23 @@ def shrunk_frames(
             page=found.page,
             title=found.title,
             sources=found.sources,
+            line=found.line,
         )
-        for found in _locate(settings, settings.overflow_marker_label, lang=lang)
+        for found in _locate(
+            settings, settings.overflow_marker_label, lang=lang, query=query
+        )
     ]
     return sorted(frames, key=lambda frame: _percent(frame.ratio))
 
 
 def wrapped_tables(
-    settings: "DeckSettings", *, lang: "Lang" = "fr"
+    settings: "DeckSettings", *, lang: "Lang" = "fr", query: bool = True
 ) -> list[WrappedTable]:
     """Every table of `settings`' deck's built handout, most wrapped first.
 
     Needs `deckz run --handout` (or a `deckz run file`/`deckz run section`
     preview), in `lang`, to have already run: this only reads its
-    build output.
+    build output (see `shrunk_frames` for `query`).
 
     Returns:
         One `WrappedTable` per `settings.table_marker_label` marker, sorted \
@@ -243,7 +282,10 @@ def wrapped_tables(
             page=found.page,
             title=found.title,
             sources=found.sources,
+            line=found.line,
         )
-        for found in _locate(settings, settings.table_marker_label, lang=lang)
+        for found in _locate(
+            settings, settings.table_marker_label, lang=lang, query=query
+        )
     ]
     return sorted(tables, key=lambda table: -_percent(table.wrap))

@@ -366,8 +366,8 @@ def test_warm_rebuild_sees_content_edit(working_dir: Path) -> None:
     assert "Edited content." in text
     assert "the answer is 42" not in text
     # The frames it records follow the edits too.
-    record = working_dir / ".build" / "abc-handout" / "abc-handout.frames.json"
-    assert len(json.loads(record.read_text(encoding="utf8"))) == 3
+    record = working_dir / ".build" / "abc-handout" / "abc-handout.markers.json"
+    assert len(json.loads(record.read_text(encoding="utf8"))["deckz-frame"]) == 3
 
 
 def test_one_shot_build_leaves_no_worker_process(working_dir: Path) -> None:
@@ -450,14 +450,17 @@ def test_show_frames_reads_what_the_build_recorded(
 ) -> None:
     main(_RUN_ARGS)
     build = working_dir / ".build" / "abc-handout"
-    record = build / "abc-handout.frames.json"
-    markers = json.loads(record.read_text(encoding="utf8"))
+    record = build / "abc-handout.markers.json"
+    recorded = json.loads(record.read_text(encoding="utf8"))
+    # Every label deckz reads, even those no marker has.
+    assert recorded.keys() == {"deckz-frame", "formation-overflow", "formation-table"}
+    markers = recorded["deckz-frame"]
     assert [marker["index"] for marker in markers] == [0, 0]
     # A record is only read while it's as new as the PDF: shift its pages
     # to tell it from a query.
     for marker in markers:
         marker["page"] += 100
-    record.write_text(json.dumps(markers), encoding="utf8")
+    record.write_text(json.dumps(recorded), encoding="utf8")
     capsys.readouterr()
 
     main(("show", "frames", "--json"))
@@ -467,6 +470,37 @@ def test_show_frames_reads_what_the_build_recorded(
     utime(record, ns=(0, pdf.stat().st_mtime_ns - 1))
     main(("show", "frames", "--json"))
     assert all(f["page"] < 100 for f in json.loads(capsys.readouterr().out))
+
+
+def test_check_overflow_names_the_shrunk_frame_s_line(
+    working_dir: Path, capsys: CaptureFixture[str]
+) -> None:
+    main(_RUN_ARGS)
+    record = working_dir / ".build" / "abc-handout" / "abc-handout.markers.json"
+    recorded = json.loads(record.read_text(encoding="utf8"))
+    hello = next(
+        marker["page"]
+        for marker in recorded["deckz-frame"]
+        if "greeting" in marker["fragment"]
+    )
+    # What the theme would record for a frame it shrank.
+    recorded["formation-overflow"] = [{"ratio": "90%", "page": hello}]
+    record.write_text(json.dumps(recorded), encoding="utf8")
+    capsys.readouterr()
+
+    with raises(SystemExit):
+        main(("check", "overflow", "--json"))
+
+    assert json.loads(capsys.readouterr().out) == [
+        {
+            "lang": "fr",
+            "ratio": "90%",
+            "page": hello,
+            "title": "Hello",
+            "sources": ["content/greeting/hello.md"],
+            "line": 1,
+        }
+    ]
 
 
 def test_show_frames_needs_a_build(working_dir: Path) -> None:

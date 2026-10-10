@@ -25,14 +25,16 @@ def check_overflow(
     Needs the handout already built (`deckz run --workdir DECK_DIR --handout
     --no-presentation --no-print`, or a `deckz run file`/`deckz run section`
     preview, e.g. `.run/section/<section>/<flavor>`), in every language
-    checked: this only reads that build's Typst metadata and the PDF's text
-    (poppler's `pdftotext`), it doesn't build anything itself.
+    checked: this only reads the Typst metadata markers its compilation
+    recorded, it doesn't build anything itself (a build by an older deckz
+    is queried, a whole compilation, and matched by title with the PDF's
+    text, from poppler's `pdftotext`).
 
     For each `overflow_marker_label` Typst metadata marker (see
     `GlobalSettings.overflow_marker_label`), prints its language, shrink
-    ratio, page, frame title and the content file(s) building it (several
-    when the title is ambiguous, "?" when none matched), one language after
-    the other. Exits 1 if any frame was shrunk.
+    ratio, page, frame title and the content file and line of its `# Title`
+    (with an older build, every file a title matches, "?" when none did),
+    one language after the other. Exits 1 if any frame was shrunk.
 
     With `--tables`, reports the tables instead, from the
     `table_marker_label` markers (see `GlobalSettings.table_marker_label`),
@@ -78,6 +80,7 @@ def check_overflow(
                     "page": frame.page,
                     "title": frame.title,
                     "sources": list(frame.sources),
+                    "line": frame.line,
                 }
                 for lang, frame in frames
             ]
@@ -86,11 +89,15 @@ def check_overflow(
         print("no shrunk frame")
     else:
         for lang, frame in frames:
-            sources = ", ".join(frame.sources)
+            sources = _sources(frame.sources, frame.line)
             print(f"{lang}  {frame.ratio:>7}  p.{frame.page}  {frame.title}  {sources}")
 
     if frames:
         sys_exit(1)
+
+
+def _sources(sources: tuple[str, ...], line: int | None) -> str:
+    return f"{sources[0]}:{line}" if line else ", ".join(sources)
 
 
 def _report_tables(
@@ -116,6 +123,7 @@ def _report_tables(
                     "page": table.page,
                     "title": table.title,
                     "sources": list(table.sources),
+                    "line": table.line,
                 }
                 for lang, table in tables
             ]
@@ -124,7 +132,7 @@ def _report_tables(
         print("no table")
     else:
         for lang, table in tables:
-            sources = ", ".join(table.sources)
+            sources = _sources(table.sources, table.line)
             flag = "  overflow" if table.overflow else ""
             print(
                 f"{lang}  {table.wrap:>7}  p.{table.page}  {table.title}  "

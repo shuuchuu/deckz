@@ -8,7 +8,7 @@ from threading import BoundedSemaphore, Lock
 from typing import TYPE_CHECKING
 
 from ..models import CompileResult
-from .frame_markers import LABEL, frames_record
+from . import marker_records
 from .protocols import CompilerProtocol
 
 if TYPE_CHECKING:
@@ -66,6 +66,7 @@ def _serve(
     main: str,
     font_paths: list[str],
     ignore_system_fonts: bool,
+    labels: tuple[str, ...],
 ) -> None:
     """Child process loop: compile `main` on each request, until told to stop."""
     from signal import SIG_IGN, SIGINT, signal
@@ -82,28 +83,28 @@ def _serve(
         ignore_system_fonts=ignore_system_fonts,
     )
     output = str(Path(main).with_suffix(".pdf"))
-    record = frames_record(Path(main))
     # The parent going away closes the pipe: stop quietly then too.
     while _next_request(connection):
-        markers = _frames(compiler)
+        markers = _markers(compiler, labels) if labels else None
         try:
             _, warnings = compiler.compile_with_warnings(output=output)
         except typst.TypstError as e:
             connection.send((False, e.diagnostic or str(e)))
         else:
-            _record(record, markers)
+            if labels:
+                marker_records.write(Path(main), labels, markers)
             connection.send((True, "".join(w.diagnostic for w in warnings)))
     connection.close()
 
 
-def _frames(compiler: "typst.Compiler") -> str | None:
-    """The frame markers of the document about to be compiled.
+def _markers(compiler: "typst.Compiler", labels: tuple[str, ...]) -> str | None:
+    """The `labels` markers of the document about to be compiled.
 
     Queried before compiling, not after: with typst 0.15, a compilation
     after a query reads the files as the query did, and one before a query
     makes the next compilation miss the edits made since (a stale PDF). The
     compilation then reuses the query's work: ~50 ms on a 90-page deck, where
-    `deckz show frames` would compile it all again.
+    reading them later would compile it all again (`marker_records`).
 
     Returns:
         Typst's JSON query result, None if the document doesn't compile.
@@ -111,18 +112,9 @@ def _frames(compiler: "typst.Compiler") -> str | None:
     import typst
 
     try:
-        return compiler.query(f"<{LABEL}>", field="value")
+        return compiler.query(marker_records.selector(labels))
     except (typst.TypstError, RuntimeError):
         return None
-
-
-def _record(record: Path, markers: str | None) -> None:
-    if markers is None:
-        record.unlink(missing_ok=True)
-        return
-    partial = record.with_name(f".{record.name}.partial")
-    partial.write_text(markers, encoding="utf8")
-    partial.replace(record)
 
 
 def _next_request(connection: Connection) -> bool:
@@ -158,6 +150,7 @@ class _Worker:
         font_paths: tuple[Path, ...],
         ignore_system_fonts: bool,
         memory_max: int | None = None,
+        labels: tuple[str, ...] = (),
     ) -> None:
         self._memory_max = memory_max
         self._connection, child_connection = get_context("spawn").Pipe()
@@ -168,6 +161,7 @@ class _Worker:
                 str(main),
                 [str(path) for path in font_paths],
                 ignore_system_fonts,
+                labels,
             ),
             daemon=True,
         )
@@ -320,6 +314,10 @@ class TypstCompiler(CompilerProtocol):
     is stopped and fails, instead of the machine running out of memory. \
     It's checked every half second, on Linux only (`/proc`).
 
+    Each compilation records the metadata markers with one of \
+    `recorded_labels` next to its PDF (see \
+    [`marker_records`][deckz.components.marker_records]).
+
     Typst finds fonts in `font_paths`, in its own embedded fonts, and, \
     unless `ignore_system_fonts`, in the system's. Scanning the system's \
     fonts costs every child process a fixed ~0.2s with a thousand fonts \
@@ -334,8 +332,10 @@ class TypstCompiler(CompilerProtocol):
         ignore_system_fonts: bool = False,
         memory_max: int | None = None,
         machine_slots: "MachineSlots | None" = None,
+        recorded_labels: tuple[str, ...] = (),
     ) -> None:
         self._slots = BoundedSemaphore(max_parallel)
+        self._labels = recorded_labels
         self._machine_slots = machine_slots
         self._font_paths = font_paths
         self._ignore_system_fonts = ignore_system_fonts
@@ -352,7 +352,11 @@ class TypstCompiler(CompilerProtocol):
 
     def _worker(self, main: Path) -> _Worker:
         return _Worker(
-            main, self._font_paths, self._ignore_system_fonts, self._memory_max
+            main,
+            self._font_paths,
+            self._ignore_system_fonts,
+            self._memory_max,
+            self._labels,
         )
 
     def compile(self, file: Path) -> CompileResult:

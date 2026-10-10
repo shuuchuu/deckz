@@ -907,10 +907,11 @@ The main commands:
 - `deckz check overflow [DECK_DIR]`: report a built handout's shrunk-to-fit
   frames (the `overflow_marker_label` Typst metadata marker, matching
   `formation.typ`'s `<formation-overflow>` by default), worst first, with
-  the content file(s) building each one. Needs the handout already built
-  (`deckz run --handout`, or a `deckz run file`/`deckz run section`
-  preview); reads the PDF's text with poppler's `pdftotext`. Exits 1 if
-  any frame was shrunk. `--lang en` checks the English build (`deckz run
+  the content file and line of each one's `# Title`. Needs the handout
+  already built (`deckz run --handout`, or a `deckz run file`/`deckz run
+  section` preview), and reads what its compilation recorded (a build by
+  an older deckz is queried again and matched by title with the PDF's
+  text, from poppler's `pdftotext`). Exits 1 if any frame was shrunk. `--lang en` checks the English build (`deckz run
   --lang en`, kept under `en/` in the build and PDF directories), `--lang
   fr en` both, each frame tagged with its language. `--tables`
   reports the tables instead (the
@@ -958,9 +959,10 @@ The main commands:
   pages aren't listed. A deck build adds an invisible `<deckz-frame>`
   Typst marker after each frame heading for it (on the converted copy,
   never the content file), and each compilation records where they landed
-  next to its PDF (`<pdf>.frames.json` in the build directory), which this
-  reads at once (it queries the build, a whole compilation, after a build
-  by an older deckz): it builds nothing itself.
+  next to its PDF (`<pdf>.markers.json` in the build directory, with the
+  theme's shrunk-frame and table markers), which this reads at once (it
+  queries the build, a whole compilation, after a build by an older
+  deckz): it builds nothing itself.
 - `deckz deps [SECTION] [FLAVOR]`: show shared sections/flavors usage
   across the repository, including unused ones.
 - `deckz search-sections KEYWORDS...`: search shared sections by title or
