@@ -23,6 +23,8 @@ def test_without_a_plugin_module_only_builtin_checks_run(tmp_path: Path) -> None
         "lab-ids",
         "lab-pairs",
         "lab-outputs",
+        "lab-secrets",
+        "lab-format",
         "asset-credits",
         "raw-latex",
         "lab-urls",

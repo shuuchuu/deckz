@@ -105,6 +105,43 @@ def lab_outputs(settings: "GlobalSettings") -> list[str]:
     return problems
 
 
+def _notebooks(settings: "GlobalSettings") -> list[Path]:
+    # A repository may have no labs at all.
+    notebooks_dir = settings.paths.labs_notebooks_dir
+    return list(notebook_paths([notebooks_dir])) if notebooks_dir.is_dir() else []
+
+
+def lab_secrets(settings: "GlobalSettings") -> list[str]:
+    # The labs are published to a public repository: no token in a cell's
+    # source, nor printed in its stored outputs.
+    from ..labs.secrets import find_secrets
+
+    git_dir = settings.paths.git_dir
+    problems = []
+    for path in _notebooks(settings):
+        notebook = json.loads(path.read_text(encoding="utf-8"))
+        problems += [
+            f"{_rel(path, git_dir)}: {finding}: remove it, revoke it if it was "
+            "real, and list it in labs.not_secrets if it isn't a secret"
+            for finding in find_secrets(notebook, settings.labs.not_secrets)
+        ]
+    return problems
+
+
+def lab_format(settings: "GlobalSettings") -> list[str]:
+    # Every notebook is in deckz's canonical JSON style, so that a small edit
+    # stays a small diff (a notebook saved from Colab comes back compact).
+    from ..labs.notebook import fmt_notebook
+
+    git_dir = settings.paths.git_dir
+    return [
+        f"{_rel(path, git_dir)}: not in deckz's notebook format: run "
+        f"`deckz labs fmt {_rel(path, git_dir)}`"
+        for path in _notebooks(settings)
+        if fmt_notebook(path, heading=settings.labs.solution_heading, dry_run=True)
+    ]
+
+
 def asset_credits(settings: "GlobalSettings") -> list[str]:
     # Asset credit lines (title/author/license, and their _en) are Markdown,
     # rendered through the same pipeline as content, which drops LaTeX.
@@ -190,6 +227,8 @@ CHECKS: dict[str, Callable[["GlobalSettings"], list[str]]] = {
     "lab-ids": lab_ids,
     "lab-pairs": lab_pairs,
     "lab-outputs": lab_outputs,
+    "lab-secrets": lab_secrets,
+    "lab-format": lab_format,
     "asset-credits": asset_credits,
     "raw-latex": raw_latex,
     "lab-urls": lab_urls,

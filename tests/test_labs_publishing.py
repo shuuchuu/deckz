@@ -118,3 +118,16 @@ def test_publish_refuses_to_drop_published_links(tmp_path: Path) -> None:
     assert published is True
     names = _git(work, "ls-tree", "-r", "--name-only", "labs/main").split()
     assert names == ["topic-other-fr.ipynb"]
+
+
+def test_publish_refuses_a_notebook_holding_a_token(tmp_path: Path) -> None:
+    _remote, work = _make_repos(tmp_path)
+    notebook = work / "labs" / "notebooks" / "topic" / "demo-fr.ipynb"
+    content = json.loads(notebook.read_text())
+    token = "ghp_" + "A1b2" * 9
+    content["cells"] = [{"cell_type": "code", "source": f'Github("{token}")'}]
+    notebook.write_text(json.dumps(content))
+    _git(work, "commit", "-am", "Leak a token")
+
+    with raises(LabPublishRefusedError, match="looks like a credential"):
+        _publish(work)

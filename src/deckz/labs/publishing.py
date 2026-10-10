@@ -15,6 +15,7 @@ pygit2, which deckz otherwise relies on for read-only repository discovery.
 import json
 import re
 import subprocess
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -39,7 +40,12 @@ def _metadata_id(metadata: dict[str, object], key: str) -> str:
 
 
 def _published_notebooks(
-    git_dir: Path, notebooks_dir: Path, *, id_metadata_key: str, id_pattern: str
+    git_dir: Path,
+    notebooks_dir: Path,
+    *,
+    id_metadata_key: str,
+    id_pattern: str,
+    not_secrets: Iterable[str] = (),
 ) -> dict[str, str]:
     """The notebooks committed at HEAD, by ID.
 
@@ -47,9 +53,11 @@ def _published_notebooks(
         The blob sha of each ID's notebook.
 
     Raises:
-        LabPublishRefusedError: If a committed notebook has no valid ID, or \
-            two notebooks share one.
+        LabPublishRefusedError: If a committed notebook has no valid ID, two \
+            notebooks share one, or one holds what looks like a credential.
     """
+    from .secrets import find_secrets
+
     valid_id = re.compile(id_pattern)
     notebooks_rel = notebooks_dir.relative_to(git_dir).as_posix()
     published: dict[str, str] = {}
@@ -62,8 +70,12 @@ def _published_notebooks(
         if not path.endswith(".ipynb"):
             problems.append(f"not a notebook: {path}")
             continue
-        metadata = json.loads(_git(git_dir, "cat-file", "blob", sha))["metadata"]
-        lab_id = _metadata_id(metadata, id_metadata_key)
+        notebook = json.loads(_git(git_dir, "cat-file", "blob", sha))
+        problems += [
+            f"looks like a credential, in {path}: {finding}"
+            for finding in find_secrets(notebook, not_secrets)
+        ]
+        lab_id = _metadata_id(notebook["metadata"], id_metadata_key)
         if not valid_id.fullmatch(lab_id):
             problems.append(f"no valid ID (run `deckz labs ids`): {path}")
         elif lab_id in published:
@@ -86,6 +98,7 @@ def publish(
     remote: str,
     branch: str,
     break_published_links: bool = False,
+    not_secrets: Iterable[str] = (),
 ) -> bool:
     """Replace `remote`'s `branch` with one commit of HEAD's lab notebooks.
 
@@ -95,7 +108,8 @@ def publish(
 
     Raises:
         LabPublishRefusedError: If the notebooks directory has uncommitted \
-            changes, a committed notebook has no valid or unique ID, or the \
+            changes, a committed notebook has no valid or unique ID or holds \
+            what looks like a credential (see `labs.secrets`), or the \
             publish would drop an already-published notebook (unless \
             `break_published_links`).
     """
@@ -113,7 +127,11 @@ def publish(
         check=False,
     )
     published = _published_notebooks(
-        git_dir, notebooks_dir, id_metadata_key=id_metadata_key, id_pattern=id_pattern
+        git_dir,
+        notebooks_dir,
+        id_metadata_key=id_metadata_key,
+        id_pattern=id_pattern,
+        not_secrets=not_secrets,
     )
     tree = _git(
         git_dir,

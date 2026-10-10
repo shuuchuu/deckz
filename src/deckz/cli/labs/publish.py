@@ -9,7 +9,8 @@ def publish(*, break_published_links: bool = False, workdir: Path = Path()) -> N
 
     Refuses to publish if the notebooks directory has uncommitted changes,
     a committed notebook has no valid or unique ID (run `deckz labs ids`
-    first), or doing so would drop an already-published notebook's name.
+    first) or holds what looks like a credential (see the `lab-secrets`
+    check), or doing so would drop an already-published notebook's name.
 
     Args:
         break_published_links: Allow removing an already-published
@@ -29,6 +30,7 @@ def publish(*, break_published_links: bool = False, workdir: Path = Path()) -> N
         remote=settings.labs.publish_remote,
         branch=settings.labs.publish_branch,
         break_published_links=break_published_links,
+        not_secrets=settings.labs.not_secrets,
     )
     print(
         "Published."

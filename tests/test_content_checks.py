@@ -1,9 +1,11 @@
+import json
 from pathlib import Path
 
 from pygit2 import init_repository
 
 from deckz.analyzing.content_checks import (
     asset_credits,
+    lab_format,
     lab_ids,
     lab_outputs,
     lab_pairs,
@@ -221,3 +223,15 @@ def test_lab_urls_flags_a_hand_written_link(tmp_path: Path) -> None:
 
     assert len(problems) == 1
     assert "topic.md:1" in problems[0]
+
+
+def test_lab_format_flags_a_compact_notebook(tmp_path: Path) -> None:
+    notebook = tmp_path / "labs" / "notebooks" / "topic" / "lab" / "demo-fr.ipynb"
+    notebook.parent.mkdir(parents=True)
+    notebook.write_text(json.dumps({"cells": [], "metadata": {}, "nbformat": 4}))
+    settings = GlobalSettings(paths=GlobalPaths(current_dir=tmp_path, git_dir=tmp_path))
+
+    problems = lab_format(settings)
+
+    assert len(problems) == 1
+    assert "deckz labs fmt" in problems[0]

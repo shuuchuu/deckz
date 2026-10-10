@@ -74,7 +74,8 @@ or a declared variable nothing ever reads.
 
 - `deckz check` (alias `deckz check content`) -- lab notebook IDs valid
   and unique, fr/en lab notebook pairs present and in sync, hands-on
-  notebooks with no stored outputs and demos with some, asset credit
+  notebooks with no stored outputs and demos with some, no credential in
+  a notebook, notebooks in canonical JSON (`deckz labs fmt`), asset credit
   lines free of LaTeX, no raw LaTeX in content, no hand-written link to
   the lab-publishing remote -- plus the repo's own `templates/checks.py`
   checks, merged in under their own names. `--staged` checks the git

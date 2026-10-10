@@ -209,6 +209,9 @@ typst_ignore_system_fonts: true
     `labs`/`main`).
   - `solution_heading`: the markdown heading text (case-insensitive)
     marking a notebook's collapsed answer cells (default `Solution`).
+  - `not_secrets`: values the `lab-secrets` check (and `deckz labs
+    publish`, which refuses a notebook holding a credential) would take for
+    one but aren't, e.g. a public dataset's read-only key.
   - `gpu`: the machines `deckz labs gpu` rents: `image` (default Colab's
     runtime image), `gpus` (names in order of preference, default
     `[Tesla_T4, RTX_A4000]`), `offer_filter` (a Vast.ai offer query),
@@ -809,7 +812,10 @@ The main commands:
   content checks -- lab notebook IDs valid and unique (`lab-ids`), fr/en
   lab notebook pairs present and in sync (`lab-pairs`), hands-on notebooks
   with no stored outputs and demos with code with some, shown by Colab (no
-  `private_outputs`) (`lab-outputs`),
+  `private_outputs`) (`lab-outputs`), nothing that looks like a credential
+  in a notebook's cells or stored text outputs (`lab-secrets`; the labs
+  are public), notebooks in deckz's canonical JSON (`lab-format`, fixed by
+  `deckz labs fmt`),
   asset credit lines (`title`/`author`/`license`, and their `_en`) free of LaTeX
   (`asset-credits`), no raw LaTeX in content (`raw-latex`), no hand-written
   link to the configured lab-publishing remote (`lab-urls`) -- plus, if
