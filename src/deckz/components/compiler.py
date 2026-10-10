@@ -8,10 +8,13 @@ from threading import BoundedSemaphore, Lock
 from typing import TYPE_CHECKING
 
 from ..models import CompileResult
+from .frame_markers import LABEL, frames_record
 from .protocols import CompilerProtocol
 
 if TYPE_CHECKING:
     from multiprocessing.process import BaseProcess
+
+    import typst
 
     from .machine_slots import MachineSlots
 
@@ -79,15 +82,47 @@ def _serve(
         ignore_system_fonts=ignore_system_fonts,
     )
     output = str(Path(main).with_suffix(".pdf"))
+    record = frames_record(Path(main))
     # The parent going away closes the pipe: stop quietly then too.
     while _next_request(connection):
+        markers = _frames(compiler)
         try:
             _, warnings = compiler.compile_with_warnings(output=output)
         except typst.TypstError as e:
             connection.send((False, e.diagnostic or str(e)))
         else:
+            _record(record, markers)
             connection.send((True, "".join(w.diagnostic for w in warnings)))
     connection.close()
+
+
+def _frames(compiler: "typst.Compiler") -> str | None:
+    """The frame markers of the document about to be compiled.
+
+    Queried before compiling, not after: with typst 0.15, a compilation
+    after a query reads the files as the query did, and one before a query
+    makes the next compilation miss the edits made since (a stale PDF). The
+    compilation then reuses the query's work: ~50 ms on a 90-page deck, where
+    `deckz show frames` would compile it all again.
+
+    Returns:
+        Typst's JSON query result, None if the document doesn't compile.
+    """
+    import typst
+
+    try:
+        return compiler.query(f"<{LABEL}>", field="value")
+    except (typst.TypstError, RuntimeError):
+        return None
+
+
+def _record(record: Path, markers: str | None) -> None:
+    if markers is None:
+        record.unlink(missing_ok=True)
+        return
+    partial = record.with_name(f".{record.name}.partial")
+    partial.write_text(markers, encoding="utf8")
+    partial.replace(record)
 
 
 def _next_request(connection: Connection) -> bool:

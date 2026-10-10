@@ -1,8 +1,9 @@
 """Which frame, content file and line each page of a built deck PDF shows.
 
 Reads the `<deckz-frame>` markers a deck build puts after each frame heading
-(`deckz.components.frame_markers`), by querying the built document: it builds
-nothing itself, and needs the PDF built first. Each marker names its fragment
+(`deckz.components.frame_markers`), as the compilation recorded them, or by
+querying the built document when it didn't: it builds nothing itself, and
+needs the PDF built first. Each marker names its fragment
 in the build directory and the heading's index there: the fragment's name
 gives its content file (the deck's own `content/` or the shared one), and the
 heading's index gives the line, as the n-th frame heading of the source file
@@ -16,7 +17,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from ..components.frame_markers import LABEL, frame_headings
+from ..components.frame_markers import LABEL, frame_headings, frames_record
 from ..exceptions import DeckzError
 
 if TYPE_CHECKING:
@@ -37,13 +38,16 @@ class Frame:
     """The heading's line in `file` (from 1); None if not found."""
 
 
-def frames(settings: "DeckSettings", pdf: Path) -> list[Frame]:
+def frames(settings: "DeckSettings", pdf: Path, *, query: bool = True) -> list[Frame]:
     """Every frame page of `pdf`, a PDF built from `settings`' deck.
 
     Args:
         settings: The deck's settings.
         pdf: A Typst PDF the deck's build wrote (handout, presentation or \
             print handout, in any language).
+        query: Whether to query the built document, a whole compilation in \
+            this process, when its build recorded no markers (an older \
+            deckz's build); if not, that's an error.
 
     Returns:
         One `Frame` per marked page, in page order; title, divider and \
@@ -51,10 +55,8 @@ def frames(settings: "DeckSettings", pdf: Path) -> list[Frame]:
 
     Raises:
         DeckzError: If `pdf` or its build isn't there, or was built before \
-            deckz marked frames.
+            deckz marked frames (or recorded them, without `query`).
     """
-    import typst
-
     paths = settings.paths
     pdf = pdf.resolve()
     try:
@@ -67,14 +69,11 @@ def frames(settings: "DeckSettings", pdf: Path) -> list[Frame]:
     if not pdf.is_file() or not main.is_file():
         msg = f"{pdf} or its build {main} is missing: build it first (`deckz run`)"
         raise DeckzError(msg)
-    markers = yaml.safe_load(
-        typst.Compiler(
-            str(main),
-            root=str(build_dir),
-            font_paths=[str(path) for path in _font_paths(settings)],
-            ignore_system_fonts=settings.typst_ignore_system_fonts,
-        ).query(f"<{LABEL}>", field="value")
-    )
+    recorded = _recorded(main)
+    if recorded is None and not query:
+        msg = f"{pdf}'s build recorded no frames: build it again with this deckz"
+        raise DeckzError(msg)
+    markers = yaml.safe_load(recorded or _query(settings, main))
     if not markers:
         msg = f"{pdf} has no frame markers: build it again with this deckz"
         raise DeckzError(msg)
@@ -90,6 +89,32 @@ def frames(settings: "DeckSettings", pdf: Path) -> list[Frame]:
         line = lines[index] if index < len(lines) else None
         found.append(Frame(marker["page"], title, file, line))
     return sorted(found, key=lambda frame: frame.page)
+
+
+def _recorded(main: Path) -> str | None:
+    """The markers the last compilation of `main` recorded, if they match its PDF.
+
+    Returns:
+        The JSON text, or None when there's none or it's older than the PDF.
+    """
+    record = frames_record(main)
+    try:
+        if record.stat().st_mtime_ns >= main.with_suffix(".pdf").stat().st_mtime_ns:
+            return record.read_text(encoding="utf8")
+    except FileNotFoundError:
+        pass
+    return None
+
+
+def _query(settings: "DeckSettings", main: Path) -> str:
+    import typst
+
+    return typst.Compiler(
+        str(main),
+        root=str(main.parent),
+        font_paths=[str(path) for path in _font_paths(settings)],
+        ignore_system_fonts=settings.typst_ignore_system_fonts,
+    ).query(f"<{LABEL}>", field="value")
 
 
 def _font_paths(settings: "DeckSettings") -> list[Path]:

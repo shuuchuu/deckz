@@ -957,8 +957,10 @@ The main commands:
   of its frame's `# Title`, and its title; title, outline and divider
   pages aren't listed. A deck build adds an invisible `<deckz-frame>`
   Typst marker after each frame heading for it (on the converted copy,
-  never the content file), which this queries in the build: it builds
-  nothing itself.
+  never the content file), and each compilation records where they landed
+  next to its PDF (`<pdf>.frames.json` in the build directory), which this
+  reads at once (it queries the build, a whole compilation, after a build
+  by an older deckz): it builds nothing itself.
 - `deckz deps [SECTION] [FLAVOR]`: show shared sections/flavors usage
   across the repository, including unused ones.
 - `deckz search-sections KEYWORDS...`: search shared sections by title or

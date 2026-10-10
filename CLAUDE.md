@@ -145,8 +145,9 @@ see the module's header comment for why never in deckz's own process;
 A deck's Typst fragments go through `FrameMarkingConverter`
 (`components/frame_markers.py`): an invisible `<deckz-frame>` marker after
 each `# Title`, recording the fragment, the heading's index and its page,
-which `deckz show frames` (`analyzing/frames.py`) queries in the build to map
-pages to content files and lines.
+which each compilation queries (before compiling: see `_frames` for why) and
+records next to its PDF (`<main>.frames.json`), so that `deckz show frames`
+(`analyzing/frames.py`) maps pages to content files and lines at once.
 `typst_memory_max` makes it stop a worker whose resident memory, read from
 `/proc` every half second, goes over the limit; `typst_machine_compilations`
 makes each compilation hold one of a few `flock`ed slot files shared by every

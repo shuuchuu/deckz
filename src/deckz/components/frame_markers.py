@@ -6,6 +6,9 @@ The marker records the fragment, the heading's index in it, and the page it
 lands on. `deckz show frames` (`deckz.analyzing.frames`) queries them in the
 built document and maps each one back to its content file and line. A frame
 shown on several pages (a presentation's steps) has one marker per page.
+
+Each compilation also records the markers it laid out next to its PDF
+(`frames_record`), so that reading them takes no compilation.
 """
 
 import json
@@ -24,6 +27,15 @@ _VERSION = "1"
 that every fragment is converted again."""
 
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+
+
+def frames_record(main: Path) -> Path:
+    """Where compiling `main` records its frame markers, as Typst's JSON query result.
+
+    Returns:
+        `<main's stem>.frames.json` next to it, written after the PDF.
+    """
+    return main.with_name(f"{main.stem}.frames.json")
 
 
 def frame_headings(text: str) -> list[tuple[int, str]]:

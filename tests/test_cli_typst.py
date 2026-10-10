@@ -1,3 +1,4 @@
+import json
 import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
@@ -356,13 +357,17 @@ def test_warm_rebuild_sees_content_edit(working_dir: Path) -> None:
     with keep_warm():
         main(_RUN_ARGS)
         _write_newer(
-            working_dir / "content" / "about.md", "# About\n\nEdited content.\n"
+            working_dir / "content" / "about.md",
+            "# About\n\nEdited content.\n\n# Added\n\nA frame.\n",
         )
         main(_RUN_ARGS)
 
     text = _handout_text(working_dir)
     assert "Edited content." in text
     assert "the answer is 42" not in text
+    # The frames it records follow the edits too.
+    record = working_dir / ".build" / "abc-handout" / "abc-handout.frames.json"
+    assert len(json.loads(record.read_text(encoding="utf8"))) == 3
 
 
 def test_one_shot_build_leaves_no_worker_process(working_dir: Path) -> None:
@@ -425,8 +430,6 @@ def test_build_reports_progress_through_the_reporter(working_dir: Path) -> None:
 def test_show_frames_maps_pages_to_content_files(
     working_dir: Path, capsys: CaptureFixture[str]
 ) -> None:
-    import json
-
     main(_RUN_ARGS)
     capsys.readouterr()
 
@@ -440,6 +443,30 @@ def test_show_frames_maps_pages_to_content_files(
     assert all(isinstance(f["page"], int) and f["page"] >= 1 for f in found)
     # The marked copies converted in place of the fragments are gone.
     assert not list((working_dir / ".build").rglob(".*.frames.md"))
+
+
+def test_show_frames_reads_what_the_build_recorded(
+    working_dir: Path, capsys: CaptureFixture[str]
+) -> None:
+    main(_RUN_ARGS)
+    build = working_dir / ".build" / "abc-handout"
+    record = build / "abc-handout.frames.json"
+    markers = json.loads(record.read_text(encoding="utf8"))
+    assert [marker["index"] for marker in markers] == [0, 0]
+    # A record is only read while it's as new as the PDF: shift its pages
+    # to tell it from a query.
+    for marker in markers:
+        marker["page"] += 100
+    record.write_text(json.dumps(markers), encoding="utf8")
+    capsys.readouterr()
+
+    main(("show", "frames", "--json"))
+    assert all(f["page"] > 100 for f in json.loads(capsys.readouterr().out))
+
+    pdf = build / "abc-handout.pdf"
+    utime(record, ns=(0, pdf.stat().st_mtime_ns - 1))
+    main(("show", "frames", "--json"))
+    assert all(f["page"] < 100 for f in json.loads(capsys.readouterr().out))
 
 
 def test_show_frames_needs_a_build(working_dir: Path) -> None:
