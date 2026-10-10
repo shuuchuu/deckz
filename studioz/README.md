@@ -19,5 +19,6 @@ It only answers requests naming a local host, and only accepts changes from its 
 pages (`studioz.local_only`).
 
 The JavaScript it serves is pinned in `package.json` and copied into
-`src/studioz/static/vendor/`, which is committed, so that installing studioz needs no
+`src/studioz/static/vendor/` (CodeMirror as one bundle of what `codemirror.mjs`
+exports), which is committed, so that installing studioz needs no
 npm: `uv run doit vendor` (at the deckz root) refreshes it after a version change.

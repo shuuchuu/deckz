@@ -91,6 +91,9 @@ tr.closed td { color: var(--muted); }
 
 @media (max-width: 700px) {
   .workspace { grid-template-columns: 1fr; height: auto; }
+  .deck-body { flex-direction: column; }
+  .viewer-area { min-height: 60vh; }
+  .editor-pane { min-height: 60vh; border-left: 0; border-top: 1px solid var(--line); }
   .workspaces th:nth-child(n+3):nth-child(-n+6), .workspaces td:nth-child(n+3):nth-child(-n+6) { display: none; }
 }
 .files { margin: 0.2rem 0 0.6rem; padding-left: 1.2rem; }
@@ -110,12 +113,52 @@ tr.closed td { color: var(--muted); }
 .build[data-state="building"] { color: var(--muted); }
 .build[data-state="built"] { color: #2e7d32; border-color: currentcolor; }
 .build[data-state="failed"], .build[data-state="stopped"], .build[data-state="disconnected"] { color: var(--danger); border-color: currentcolor; }
-.page-number { color: var(--muted); font-size: 0.85em; margin-left: auto; }
+.notice { color: var(--muted); font-size: 0.85em; }
+.page-number { color: var(--muted); font-size: 0.85em; margin-left: auto; white-space: nowrap; }
 .errors { background: var(--error-bg); padding: 0.5rem 1rem; max-height: 30vh; overflow: auto; }
 .errors p { margin: 0 0 0.3rem; }
 .errors pre { margin: 0; }
-.viewer-area { position: relative; flex: 1; min-height: 60vh; background: #525659; }
+.deck-body { display: flex; flex: 1; min-height: 60vh; }
+.viewer-area { position: relative; flex: 1; min-width: 0; background: #525659; }
 /* pdf.js requires an absolutely positioned container. */
 .viewer-container { position: absolute; inset: 0; overflow: auto; }
+.viewer-container .page { cursor: pointer; }
+.viewer-container .page:hover { outline: 3px solid var(--accent); }
 .waiting { position: absolute; inset: 2rem 1rem auto; text-align: center; color: #e8e7e3; }
 .waiting[hidden] { display: none; }
+
+/* The source editor, beside the PDF. */
+.editor-pane { display: flex; flex-direction: column; flex: 1; min-width: 0; border-left: 1px solid var(--line); background: var(--panel); }
+.editor-pane[hidden] { display: none; }
+.editor-bar { display: flex; gap: 0.6rem; align-items: center; padding: 0.3rem 0.6rem; border-bottom: 1px solid var(--line); }
+.editor-file { font-family: var(--mono); font-size: 0.85em; overflow-wrap: anywhere; margin-right: auto; }
+.editor-status { font-size: 0.85em; color: var(--muted); white-space: nowrap; }
+.editor-status[data-status="modified"] { color: var(--accent); }
+.editor-status[data-status="conflict"], .editor-status[data-status="failed"] { color: var(--danger); }
+#editor-save:disabled { cursor: default; }
+.editor-message { margin: 0; padding: 0.4rem 0.6rem; background: var(--error-bg); }
+.editor-message[hidden] { display: none; }
+.editor { flex: 1; min-height: 0; }
+.editor .cm-editor { height: 100%; }
+.editor .cm-scroller { font-family: var(--mono); font-size: 0.85rem; line-height: 1.5; }
+.editor .cm-gutters { background: var(--panel); color: var(--muted); border-right: 1px solid var(--line); }
+.editor .cm-activeLine, .editor .cm-activeLineGutter { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.editor .cm-cursor { border-left-color: var(--text); }
+.editor .cm-selectionBackground, .editor .cm-focused .cm-selectionBackground { background: color-mix(in srgb, var(--accent) 25%, transparent) !important; }
+/* @lezer/highlight's classHighlighter. */
+.editor .tok-heading { font-weight: 700; color: var(--accent); }
+.editor .tok-emphasis { font-style: italic; }
+.editor .tok-strong { font-weight: 700; }
+.editor .tok-link, .editor .tok-url { color: var(--accent); text-decoration: underline; }
+.editor .tok-monospace, .editor .tok-string { color: #8a4b08; }
+.editor .tok-meta, .editor .tok-comment, .editor .tok-processingInstruction { color: var(--muted); }
+.editor .tok-keyword, .editor .tok-atom, .editor .tok-bool { color: #7a3e9d; }
+.editor .tok-number { color: #2e7d32; }
+.editor .tok-propertyName, .editor .tok-variableName { color: #23577a; }
+.editor .cm-jinja { color: #7a3e9d; background: color-mix(in srgb, #7a3e9d 8%, transparent); border-radius: 2px; }
+@media (prefers-color-scheme: dark) {
+  .editor .tok-monospace, .editor .tok-string { color: #e0a96d; }
+  .editor .tok-keyword, .editor .tok-atom, .editor .tok-bool, .editor .cm-jinja { color: #c49be0; }
+  .editor .tok-number { color: #8fd18f; }
+  .editor .tok-propertyName, .editor .tok-variableName { color: #7db3d8; }
+}

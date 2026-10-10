@@ -4,7 +4,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from importlib.resources import files
 from pathlib import Path
@@ -12,16 +12,23 @@ from typing import Annotated, Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from deckz.configuring.settings import GlobalSettings
+from deckz.analyzing.frames import frames
+from deckz.configuring.settings import DeckSettings, GlobalSettings
 from deckz.exceptions import DeckzError, WorktreeError
 from deckz.models import Lang
 from deckz.worktrees import main_checkout, remove
 
-from . import __version__, workspaces
+from . import __version__, sources, workspaces
 from .local_only import local_only
 from .watches import Snapshot, Watch, Watches, handout
 
@@ -50,6 +57,13 @@ class Studio:
         if directory is None:
             raise HTTPException(404, f"Pas de formation « {deck} » dans « {name} »")
         return found, directory
+
+    def source(self, name: str, file: str) -> Path:
+        found = self.workspace(name)
+        path = sources.source(found.worktree.path, file)
+        if path is None:
+            raise HTTPException(404, f"Pas de fichier modifiable « {file} »")
+        return path
 
 
 def _studio(request: Request) -> Studio:
@@ -130,6 +144,24 @@ def pdf(studio: StudioDep, name: str, deck: str, lang: Lang = "fr") -> Response:
     return FileResponse(
         path, media_type="application/pdf", headers={"Cache-Control": "no-store"}
     )
+
+
+@router.get("/espaces/{name}/formations/{deck:path}/cadres")
+def deck_frames(studio: StudioDep, name: str, deck: str, lang: Lang = "fr") -> Response:
+    """Each page of the deck's handout with its frame's source.
+
+    Returns:
+        `{"frames": [{page, title, file, line}...]}`, or no frames and the \
+        reason, from what the last build recorded (`deckz show frames`).
+    """
+    _, directory = studio.deck(name, deck)
+    try:
+        found = frames(
+            DeckSettings.from_yaml(directory), handout(directory, lang), query=False
+        )
+    except DeckzError as error:
+        return JSONResponse({"frames": [], "error": str(error)})
+    return JSONResponse({"frames": [asdict(frame) for frame in found]})
 
 
 _POLL = 0.25
@@ -214,6 +246,45 @@ def deck_page(
         deck=deck,
         lang=lang,
     )
+
+
+@router.get("/espaces/{name}/fichiers/{file:path}")
+def read_source(studio: StudioDep, name: str, file: str) -> Response:
+    """A file to edit.
+
+    Returns:
+        `{"text", "version"}`, the version to name when saving it.
+
+    Raises:
+        HTTPException: 415 if it isn't UTF-8 text.
+    """
+    try:
+        text, version = sources.read(studio.source(name, file))
+    except UnicodeDecodeError:
+        raise HTTPException(415, f"« {file} » n'est pas du texte UTF-8") from None
+    return JSONResponse({"text": text, "version": version})
+
+
+@router.post("/espaces/{name}/fichiers/{file:path}")
+def save_source(
+    studio: StudioDep,
+    name: str,
+    file: str,
+    version: Annotated[str, Form()],
+    # An empty field counts as missing.
+    text: Annotated[str, Form()] = "",
+) -> Response:
+    """Save a file, unless it changed on disk since its `version`.
+
+    Returns:
+        `{"version"}`, the new one; on a conflict, a 409 with the file's \
+        version now.
+    """
+    try:
+        saved = sources.save(studio.source(name, file), text, version)
+    except sources.ChangedOnDiskError as error:
+        return JSONResponse({"version": error.version}, status_code=409)
+    return JSONResponse({"version": saved})
 
 
 @router.get("/espaces/{name}/taille", response_class=HTMLResponse)

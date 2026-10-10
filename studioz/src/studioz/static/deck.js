@@ -1,5 +1,7 @@
 // The deck page: its handout in pdf.js, reloaded at the same place each time
 // the workspace's `deckz run --watch` finishes a build (server-sent events).
+// A click on a page opens its frame's source in the editor beside it.
+import { SourceEditor } from "/static/editor.js";
 import * as pdfjsLib from "/static/vendor/pdfjs/pdf.min.mjs";
 
 globalThis.pdfjsLib = pdfjsLib;
@@ -25,6 +27,7 @@ const errorDetails = document.getElementById("error-details");
 const errorLines = document.getElementById("error-lines");
 const waiting = document.getElementById("waiting");
 const pageNumber = document.getElementById("page-number");
+const notice = document.getElementById("notice");
 
 const eventBus = new EventBus();
 const linkService = new PDFLinkService({ eventBus });
@@ -39,8 +42,64 @@ eventBus.on("pagesinit", () => {
   viewer.currentScaleValue = "page-width";
 });
 eventBus.on("pagechanging", showPageNumber);
-window.addEventListener("resize", () => {
-  if (viewer.pagesCount) viewer.currentScaleValue = "page-width";
+// The window's size, and the editor opening or closing. The page clicked
+// to open the editor stays in view.
+let clicked = null;
+new ResizeObserver(() => {
+  if (!viewer.pagesCount) return;
+  viewer.currentScaleValue = "page-width";
+  if (clicked) viewer.scrollPageIntoView({ pageNumber: clicked });
+  clicked = null;
+}).observe(container);
+
+// Each page's frame in the PDF shown: {page, title, file, line}.
+let frames = new Map();
+let framesError = null;
+
+async function loadFrames() {
+  try {
+    const response = await fetch(deck.dataset.frames);
+    const { frames: found, error } = await response.json();
+    frames = new Map(found.map((frame) => [frame.page, frame]));
+    framesError = error ?? null;
+  } catch (error) {
+    console.error("studioz: could not load the frames", error);
+  }
+}
+
+let noticeTimer = null;
+
+function showNotice(text) {
+  notice.textContent = text;
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => (notice.textContent = ""), 6000);
+}
+
+const editor = new SourceEditor(
+  document.getElementById("editor-pane"),
+  deck.dataset.files,
+  showNotice,
+);
+
+container.addEventListener("click", (event) => {
+  // Following a link, or selecting text, isn't asking for the source.
+  if (event.target.closest("a") || !window.getSelection().isCollapsed) return;
+  const page = event.target.closest(".page");
+  if (!page) return;
+  const frame = frames.get(Number(page.dataset.pageNumber));
+  if (frame?.file) {
+    notice.textContent = "";
+    // The editor opening narrows the PDF.
+    clicked = editor.pane.hidden ? frame.page : null;
+    editor.open(frame.file, frame.line);
+  } else if (frame) {
+    showNotice(`La source du cadre « ${frame.title} » est introuvable.`);
+  } else {
+    showNotice(
+      framesError ??
+        "Cette page n'a pas de source à elle : page de titre, sommaire ou intercalaire.",
+    );
+  }
 });
 
 let shown = null; // the loading task of the PDF shown, which destroys it
@@ -75,6 +134,8 @@ async function show(url) {
       shown = task;
       waiting.hidden = true;
       showPageNumber();
+      await loadFrames();
+      editor.refresh();
     } catch (error) {
       console.error("studioz: could not show", url, error);
     }

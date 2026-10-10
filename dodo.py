@@ -41,6 +41,11 @@ def task_vendor():
         pdfjs / "web/pdf_viewer.css": vendor / "pdfjs/web/pdf_viewer.css",
     }
 
+    # CodeMirror is dozens of small modules: one bundle of what
+    # studioz/codemirror.mjs exports. They're all MIT, by the same author.
+    files[modules / "@codemirror/view/LICENSE"] = vendor / "codemirror/LICENSE"
+    codemirror = vendor / "codemirror/codemirror.min.mjs"
+
     def copy() -> None:
         from shutil import copyfile, copytree, rmtree
 
@@ -52,9 +57,18 @@ def task_vendor():
         copytree(pdfjs / "web/images", vendor / "pdfjs/web/images")
 
     return {
-        "actions": ["npm ci --prefix studioz --no-audit --no-fund", copy],
-        "file_dep": ["studioz/package.json", "studioz/package-lock.json"],
-        "targets": [str(target) for target in files.values()],
+        "actions": [
+            "npm ci --prefix studioz --no-audit --no-fund",
+            copy,
+            "studioz/node_modules/.bin/esbuild studioz/codemirror.mjs --bundle"
+            f" --format=esm --minify --log-level=warning --outfile={codemirror}",
+        ],
+        "file_dep": [
+            "studioz/package.json",
+            "studioz/package-lock.json",
+            "studioz/codemirror.mjs",
+        ],
+        "targets": [str(target) for target in [*files.values(), codemirror]],
     }
 
 

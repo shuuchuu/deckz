@@ -579,6 +579,22 @@ shown 3.5 s after the save, a failure 3 s. The page exposed a deckz gap: a
 Jinja error named no file; it's now a `RenderError` with the content file and
 line (deckz d75292b).
 
+**Increment 3: done** (2026-10-10): a click on a page of the preview opens its
+frame's source at its `# Title` in an editor beside the PDF (CodeMirror 6,
+Markdown with the Jinja tags marked, or YAML), fr or en. The lookup is instant
+because each Typst compilation now records its frame markers next to its PDF
+(about 50 ms per rebuild), so `deckz show frames` no longer compiles the
+document again; studioz never queries a build itself. Ctrl-S saves into the
+workspace, where the watch rebuilds; a save never overwrites a version of the
+file the editor didn't read (the person chooses: reload, or keep theirs), and
+the editor follows changes made elsewhere while it has none of its own.
+Measured on orsys/INTRA/2026-10-fortinet: the editor opens 0.2 s after the
+click, a save shows in the PDF 3.5 s later. The record exposed a typst 0.15
+quirk: a compilation after a query misses the edits made since, so a worker
+queries before compiling. Left for later increments: the post-edit checks of
+a saved file (Problems), the reverse way (from the editor to the page), and
+the other files' editors (figures, `deck.yml` from the navigator).
+
 ### Phase 3: the agent in a workspace
 
 The conversation panel, question forms, comments on frames as instructions,

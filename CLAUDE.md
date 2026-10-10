@@ -39,7 +39,10 @@ Dependency management and running: this project uses `uv`; run tools via
   the version strings it manages in `pyproject.toml` / `src/deckz/__init__.py`, and
   studioz's (`studioz/pyproject.toml`, its pin on deckz, `studioz/src/studioz/__init__.py`).
 - studioz's JavaScript: `uv run doit vendor` (`npm ci` in `studioz/`, then copies the
-  pinned files into `studioz/src/studioz/static/vendor/`, which is committed).
+  pinned files into `studioz/src/studioz/static/vendor/`, which is committed, and
+  bundles the CodeMirror modules `studioz/codemirror.mjs` lists with esbuild).
+  Pin a new package with `npm install --save-exact --before=<two weeks ago>`, so
+  that its dependencies are no newer either.
 
 ### This working tree is live
 
@@ -400,6 +403,11 @@ own deckz, every option spelled out) for the deck page in front of the person,
 and reads its state from the log (`deckz.pipelines.watch`'s messages: keep them
 in step); the page follows it through server-sent events and shows the
 handout in pdf.js, and the watch stops once no page has followed it for 30 s.
+A click on a page opens its frame's source (`deckz.analyzing.frames`, from
+what the build recorded, never compiling in studioz's process) in the editor
+beside it (`static/editor.js`, CodeMirror), which saves through
+`studioz.sources`: only content and deck files, and never over a version of
+the file the editor didn't read.
 Its tests are in `studioz/tests/`, driving the app with FastAPI's test client
 on a temporary repository, and the watches with a fake `deckz` printing the
 same log lines.

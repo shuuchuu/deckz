@@ -56,3 +56,18 @@ def repository(tmp_path: Path) -> Path:
 @fixture
 def client(repository: Path) -> TestClient:
     return TestClient(create_app(repository), base_url="http://localhost:8421")
+
+
+@fixture
+def workspace(repository: Path, monkeypatch: Any) -> Path:
+    """The workspace `demo`, created without `deckz setup`.
+
+    Returns:
+        Its path.
+    """
+    monkeypatch.setattr("studioz.workspaces.setup", lambda *_, **__: [])
+    client = TestClient(create_app(repository), base_url="http://localhost:8421")
+    client.post(
+        "/espaces", data={"name": "demo"}, headers={"Origin": "http://localhost:8421"}
+    )
+    return repository.parent / "repo--demo"

@@ -9,7 +9,9 @@
 <div class="workspace">
   {% include "_navigator.html" %}
   <main class="deck" id="deck"
-        data-events="/espaces/{{ workspace.name }}/formations/{{ deck }}/evenements?lang={{ lang }}">
+        data-events="/espaces/{{ workspace.name }}/formations/{{ deck }}/evenements?lang={{ lang }}"
+        data-frames="/espaces/{{ workspace.name }}/formations/{{ deck }}/cadres?lang={{ lang }}"
+        data-files="/espaces/{{ workspace.name }}/fichiers">
     <div class="toolbar">
       <span class="deck-path">{{ deck }}</span>
       <span class="langs">
@@ -18,6 +20,7 @@
         {% endfor %}
       </span>
       <span class="build" id="build" data-state="building">Connexion…</span>
+      <span class="notice" id="notice" role="status"></span>
       <span class="page-number" id="page-number"></span>
     </div>
     <div class="errors" id="errors" hidden>
@@ -25,11 +28,23 @@
       <p><code id="error-message"></code></p>
       <details id="error-details" hidden><summary>Détails</summary><pre id="error-lines"></pre></details>
     </div>
-    <div class="viewer-area">
-      <div class="viewer-container" id="viewer-container">
-        <div id="viewer" class="pdfViewer"></div>
+    <div class="deck-body">
+      <div class="viewer-area">
+        <div class="viewer-container" id="viewer-container" title="Cliquer sur une diapositive pour ouvrir sa source">
+          <div id="viewer" class="pdfViewer"></div>
+        </div>
+        <p class="empty waiting" id="waiting">Première construction de la formation… (de quelques secondes à quelques minutes selon sa taille)</p>
       </div>
-      <p class="empty waiting" id="waiting">Première construction de la formation… (de quelques secondes à quelques minutes selon sa taille)</p>
+      <section class="editor-pane" id="editor-pane" hidden>
+        <div class="editor-bar">
+          <span class="editor-file" id="editor-file"></span>
+          <span class="editor-status" id="editor-status"></span>
+          <button type="button" id="editor-save" disabled title="Ctrl+S">Enregistrer</button>
+          <button type="button" id="editor-close" class="secondary">Fermer</button>
+        </div>
+        <p class="editor-message" id="editor-message" hidden></p>
+        <div class="editor" id="editor"></div>
+      </section>
     </div>
   </main>
 </div>

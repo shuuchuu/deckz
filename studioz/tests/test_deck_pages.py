@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
-from pytest import fixture
 from studioz.app import create_app, watch_events
 from studioz.watches import Watches
 
@@ -26,14 +25,6 @@ try:
 except KeyboardInterrupt:
     pass
 """
-
-
-@fixture
-def workspace(repository: Path, monkeypatch: Any) -> Path:
-    monkeypatch.setattr("studioz.workspaces.setup", lambda *_, **__: [])
-    client = TestClient(create_app(repository), base_url="http://localhost:8421")
-    client.post("/espaces", data={"name": "demo"}, headers=ORIGIN)
-    return repository.parent / "repo--demo"
 
 
 def test_deck_page(client: TestClient, workspace: Path) -> None:
