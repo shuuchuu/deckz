@@ -207,5 +207,7 @@ if (panel) {
     try { localStorage.setItem("studioz-agent-folded", value ? "1" : ""); } catch {}
   }
   try { setFolded(localStorage.getItem("studioz-agent-folded") === "1"); } catch {}
+  // A workflow started from the home page opens its workspace with `?agent`.
+  if (new URLSearchParams(location.search).has("agent")) setFolded(false);
   fold.addEventListener("click", () => setFolded(!folded()));
 }

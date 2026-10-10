@@ -2,10 +2,10 @@
     `deck`: the deck on screen, whose workflows come first. -#}
 {% if declared.error %}
 <div class="refused" role="alert">
-  <p>Les workflows de l'espace sont illisibles : corrigez la section <code>studioz</code> de son <code>deckz.yml</code>.</p>
+  <p>Les workflows {{ "de l'espace" if workspace else "du dépôt" }} sont illisibles : corrigez la section <code>studioz</code> de son <code>deckz.yml</code>.</p>
   <pre>{{ declared.error }}</pre>
 </div>
-{% elif not declared.workflows %}
+{% elif not declared.workflows and workspace %}
 <p class="hint">Ce dépôt ne déclare aucun workflow (section <code>studioz.workflows</code> de <code>deckz.yml</code>) :
   écrivez directement à l'agent.</p>
 {% else %}
@@ -14,7 +14,7 @@
   {% for workflow in ordered %}
   <li>
     <button type="button" data-dialog="#action-dialog"
-            data-url="/espaces/{{ workspace.name }}/workflows/{{ workflow.key }}/formulaire"
+            data-url="{% if workspace %}/espaces/{{ workspace.name }}{% endif %}/workflows/{{ workflow.key }}/formulaire"
             data-values='{{ {"formation": deck if workflow.scope == "deck" else ""} | tojson }}'
             {% if workflow.key in declared.missing %}class="secondary" title="La skill « {{ declared.missing[workflow.key] }} » n'existe pas dans cet espace"{% endif %}>
       {{ workflow.title }}{% if workflow.scope == "deck" and not deck %}…{% endif %}</button>

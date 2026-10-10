@@ -6,6 +6,7 @@ when it was last used, its size, and its decks. Its own state about a
 workspace lives in the workspace, under `.run/studioz/`.
 """
 
+import re
 import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -14,7 +15,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from deckz.setting_up import incomplete, setup
-from deckz.worktrees import BRANCH_PREFIX, Worktree, add, main_checkout, worktrees
+from deckz.worktrees import (
+    BRANCH_PREFIX,
+    Worktree,
+    add,
+    main_checkout,
+    worktree_path,
+    worktrees,
+)
 
 if TYPE_CHECKING:
     from deckz.configuring.settings import GlobalSettings
@@ -128,6 +136,34 @@ def create(settings: "GlobalSettings", name: str) -> Created:
     items = setup(GlobalSettings.from_yaml(added.path))
     mark_used(added.path)
     return Created(added.branch.removeprefix(BRANCH_PREFIX), added.path, items)
+
+
+def base_name(main: Path) -> str:
+    """What a new workspace starts from: the main checkout's commit.
+
+    Returns:
+        Its branch and short hash, e.g. `main (ae4ef519)`.
+    """
+    branch = _git(main, "rev-parse", "--abbrev-ref", "HEAD") or "HEAD"
+    return f"{branch} ({_git(main, 'rev-parse', '--short', 'HEAD') or '?'})"
+
+
+def free_name(main: Path, wanted: str) -> str:
+    """A name for a new workspace, from `wanted`, that no workspace has.
+
+    Returns:
+        `wanted` made a valid name (letters, digits, `-`, `_`), with a \
+        number when taken.
+    """
+    base = re.sub(r"[^A-Za-z0-9_-]+", "-", wanted).strip("-_")[:40] or "travail"
+    for number in range(1, 100):
+        name = base if number == 1 else f"{base}-{number}"
+        taken = worktree_path(main, name).exists() or _git(
+            main, "branch", "--list", BRANCH_PREFIX + name
+        )
+        if not taken:
+            return name
+    return f"{base}-{datetime.now(UTC):%Y%m%d%H%M%S}"
 
 
 def size(path: Path) -> int:

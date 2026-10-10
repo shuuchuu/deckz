@@ -18,6 +18,15 @@
       <span id="create-progress" class="indicator">Création et installation… (quelques secondes)</span>
     </form>
     <div id="create-result"></div>
+    {% if declared.workflows or declared.error %}
+    <section class="workflows-section">
+      <h2>Commencer avec l'agent</h2>
+      <p class="hint">Chaque workflow ouvre un nouvel espace de travail, où l'agent commence la demande.</p>
+      {% set deck = "" %}{% set workspace = none %}
+      {% include "_workflow_list.html" %}
+    </section>
+    <dialog id="action-dialog" class="commit-dialog" aria-label="Workflow"></dialog>
+    {% endif %}
     {% if workspaces %}
     <table class="workspaces">
       <thead>

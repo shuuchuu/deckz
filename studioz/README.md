@@ -53,7 +53,10 @@ instruction to follow `skill`. An input is `text` (one line, the default),
 getting its path); each is required unless `required: false`. The prompt says what to
 work on, never how: that belongs in the skill, which also asks its own questions. A
 workspace reads its own `deckz.yml`, so a branch can add a workflow with its skill;
-an invalid section, or a skill the workspace lacks, is shown on its page.
+an invalid section, or a skill the workspace lacks, is shown on its page. The home
+page offers the workflows of the main checkout's last commit, each opening a new
+workspace from that commit (named as the person says, else after the deck or the
+workflow) where the agent starts it.
 
 The JavaScript it serves is pinned in `package.json` and copied into
 `src/studioz/static/vendor/` (CodeMirror as one bundle of what `codemirror.mjs`

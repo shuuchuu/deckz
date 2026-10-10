@@ -6,4 +6,6 @@
     <li><strong>{{ item.name }}</strong> : {{ item.detail }}</li>
     {% endfor %}
   </ul>
+  {% if workflow %}<p>« {{ workflow.title }} » n'a donc pas commencé : une fois l'installation réparée, ouvrez l'espace
+    et commencez-le de là (« Avec l'agent »).</p>{% endif %}
 </div>

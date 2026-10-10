@@ -192,6 +192,7 @@ def home(request: Request, studio: StudioDep) -> Response:
         "home.html",
         workspaces=workspaces.workspaces(studio.settings),
         upstream=workspaces.upstream(studio.main),
+        declared=workflows.declared_at(studio.main),
     )
 
 
@@ -1282,25 +1283,137 @@ def workflows_list(
     )
 
 
+@dataclass(frozen=True)
+class _Answers:
+    """A workflow's form, as posted."""
+
+    values: dict[str, str]
+    """The text fields'."""
+    deck: str
+    files: dict[str, tuple[str, bytes]]
+    """The file fields given: their name and content."""
+    fresh: bool
+    """Whether to start a new conversation."""
+    formation: str
+    """The deck on screen, which the form is about."""
+    name: str
+    """The new workspace's name, from the home page; empty to derive one."""
+    too_large: str | None = None
+    """A file over `workflows.MAX_FILE_SIZE`, not read."""
+
+    @classmethod
+    def empty(cls, formation: str = "") -> "_Answers":
+        return cls({}, formation, {}, False, formation, "")
+
+
+async def _answers(request: Request, workflow: workflows.Workflow) -> _Answers:
+    form = await request.form()
+    files: dict[str, tuple[str, bytes]] = {}
+    too_large = None
+    for one in workflow.inputs:
+        upload = form.get(one.name)
+        if one.kind == "file" and isinstance(upload, UploadFile) and upload.filename:
+            data = await upload.read(workflows.MAX_FILE_SIZE + 1)
+            if len(data) > workflows.MAX_FILE_SIZE:
+                too_large = upload.filename
+            else:
+                files[one.name] = (upload.filename, data)
+    return _Answers(
+        {
+            one.name: str(form.get(one.name, "")).replace("\r\n", "\n").strip()
+            for one in workflow.inputs
+            if one.kind != "file"
+        },
+        str(form.get("deck", "")),
+        files,
+        form.get("nouvelle") == "1",
+        str(form.get("formation", "")),
+        str(form.get("espace", "")).strip(),
+        too_large,
+    )
+
+
 def _workflow_form(
     request: Request,
     studio: Studio,
-    found: workspaces.Workspace,
     workflow: workflows.Workflow,
     declared: workflows.Declared,
+    found: workspaces.Workspace | None,
+    answers: _Answers,
     **context: Any,
 ) -> Response:
-    path = found.worktree.path
+    """A workflow's form, in a workspace, or creating one if `found` is None.
+
+    Returns:
+        The dialog's content.
+    """
+    scoped = workflow.scope == "deck"
+    if found is None:
+        action = f"/workflows/{workflow.key}"
+        decks = workflows.decks_at(studio.main) if scoped else []
+    else:
+        action = f"/espaces/{quote(found.name)}/workflows/{workflow.key}"
+        decks = workspaces.decks(found.worktree.path) if scoped else []
     return _render(
         request,
         "_workflow.html",
+        action=action,
         workspace=found,
         workflow=workflow,
         missing=declared.missing.get(workflow.key),
-        decks=workspaces.decks(path) if workflow.scope == "deck" else [],
-        conversation=bool(studio.agents.conversation(path).entries),
-        **{"values": {}, "deck": "", "formation": "", **context},
+        decks=decks,
+        conversation=found is not None
+        and bool(studio.agents.conversation(found.worktree.path).entries),
+        answers=answers,
+        base=workspaces.base_name(studio.main),
+        **context,
     )
+
+
+async def _refusal(
+    studio: Studio,
+    workflow: workflows.Workflow,
+    declared: workflows.Declared,
+    answers: _Answers,
+    decks: list[str],
+) -> str | None:
+    """Why the workflow can't start with `answers`.
+
+    Returns:
+        What to fix, None if nothing.
+    """
+    if skill := declared.missing.get(workflow.key):
+        return f"La skill « {skill} » n'existe pas dans cet espace."
+    if answers.too_large:
+        return f"« {answers.too_large} » dépasse 100 Mo."
+    given = set(answers.files)
+    if lacking := workflow.refusal(answers.values, given, answers.deck, decks):
+        return lacking
+    ok, why = await studio.login.status()
+    return None if ok else why
+
+
+async def _begin(
+    studio: Studio, path: Path, workflow: workflows.Workflow, answers: _Answers
+) -> str | None:
+    """Start the workflow in the workspace `path`: its files kept, its turn sent.
+
+    Returns:
+        Why it didn't start, None if it did.
+    """
+    conversation = studio.agents.conversation(path)
+    busy = "L'agent travaille encore : attendez la fin de son tour."
+    if conversation.running:
+        return busy
+    values = dict(answers.values)
+    for input_name, (filename, data) in answers.files.items():
+        values[input_name] = await asyncio.to_thread(
+            workflows.keep_file, path, filename, data
+        )
+    if answers.fresh:
+        await conversation.reset()
+    prompt, shown = workflow.message({**values, workflows.DECK: answers.deck})
+    return None if await conversation.send(prompt, shown) else busy
 
 
 def _declared_workflow(
@@ -1325,7 +1438,7 @@ def workflow_form(
     """
     found, workflow, declared = _declared_workflow(studio, name, key)
     return _workflow_form(
-        request, studio, found, workflow, declared, deck=formation, formation=formation
+        request, studio, workflow, declared, found, _Answers.empty(formation)
     )
 
 
@@ -1342,61 +1455,93 @@ async def workflow_start(
     """
     found, workflow, declared = _declared_workflow(studio, name, key)
     path = found.worktree.path
-    form = await request.form()
-    values = {
-        one.name: str(form.get(one.name, "")).replace("\r\n", "\n").strip()
-        for one in workflow.inputs
-        if one.kind != "file"
-    }
-    deck = str(form.get("deck", ""))
-    files = {
-        one.name: upload
-        for one in workflow.inputs
-        if one.kind == "file"
-        and isinstance(upload := form.get(one.name), UploadFile)
-        and upload.filename
-    }
-    fresh = form.get("nouvelle") == "1"
-
-    def refuse(error: str) -> Response:
+    answers = await _answers(request, workflow)
+    decks = workspaces.decks(path) if workflow.scope == "deck" else []
+    error = await _refusal(studio, workflow, declared, answers, decks)
+    if error is None:
+        error = await _begin(studio, path, workflow, answers)
+    if error is not None:
         return _workflow_form(
             request,
             studio,
-            found,
             workflow,
             declared,
-            values=values,
-            deck=deck,
-            formation=str(form.get("formation", "")),
-            fresh=fresh,
-            dropped=bool(files),
+            found,
+            answers,
+            dropped=bool(answers.files),
             error=error,
         )
-
-    if skill := declared.missing.get(key):
-        return refuse(f"La skill « {skill} » n'existe pas dans cet espace.")
-    decks = workspaces.decks(path) if workflow.scope == "deck" else []
-    if lacking := workflow.refusal(values, set(files), deck, decks):
-        return refuse(lacking)
-    ok, why = await studio.login.status()
-    if not ok:
-        return refuse(why)
-    conversation = studio.agents.conversation(path)
-    if conversation.running:
-        return refuse("L'agent travaille encore : attendez la fin de son tour.")
-    for input_name, upload in files.items():
-        data = await upload.read(workflows.MAX_FILE_SIZE + 1)
-        if len(data) > workflows.MAX_FILE_SIZE:
-            return refuse(f"« {upload.filename} » dépasse 100 Mo.")
-        values[input_name] = await asyncio.to_thread(
-            workflows.keep_file, path, str(upload.filename), data
-        )
-    if fresh:
-        await conversation.reset()
-    prompt, shown = workflow.message({**values, workflows.DECK: deck})
-    if not await conversation.send(prompt, shown):
-        return refuse("L'agent travaille encore : attendez la fin de son tour.")
     return Response(headers={"HX-Trigger": "agent-started", "HX-Reswap": "none"})
+
+
+def _home_workflow(
+    studio: Studio, key: str
+) -> tuple[workflows.Workflow, workflows.Declared]:
+    declared = workflows.declared_at(studio.main)
+    workflow = declared.get(key)
+    if workflow is None:
+        raise HTTPException(404, f"Pas de workflow « {key} »")
+    return workflow, declared
+
+
+@router.post("/workflows/{key}/formulaire", response_class=HTMLResponse)
+def home_workflow_form(request: Request, studio: StudioDep, key: str) -> Response:
+    """A workflow's form on the home page: it opens a new workspace.
+
+    Returns:
+        The dialog's content.
+    """
+    workflow, declared = _home_workflow(studio, key)
+    return _workflow_form(request, studio, workflow, declared, None, _Answers.empty())
+
+
+@router.post("/workflows/{key}", response_class=HTMLResponse)
+async def home_workflow_start(
+    request: Request, studio: StudioDep, key: str
+) -> Response:
+    """Open a new workspace, and start the workflow there.
+
+    Its name is the one given, else one made from the deck or the workflow.
+
+    Returns:
+        A redirection to the workspace (to the deck's page for a deck's \
+        workflow), its agent's panel open; or the form again with what's \
+        wrong; or what its installation left missing, the workflow not \
+        started.
+    """
+    workflow, declared = _home_workflow(studio, key)
+    answers = await _answers(request, workflow)
+    decks = workflows.decks_at(studio.main) if workflow.scope == "deck" else []
+    error = await _refusal(studio, workflow, declared, answers, decks)
+    created = None
+    if error is None:
+        name = answers.name or workspaces.free_name(
+            studio.main, Path(answers.deck).name or workflow.key
+        )
+        try:
+            created = await asyncio.to_thread(workspaces.create, studio.settings, name)
+        except DeckzError as failure:
+            error = str(failure)
+    if created is None:
+        return _workflow_form(
+            request,
+            studio,
+            workflow,
+            declared,
+            None,
+            answers,
+            dropped=bool(answers.files),
+            error=error,
+        )
+    if not created.ready:
+        return _render(request, "_setup.html", created=created, workflow=workflow)
+    # The workspace starts from the commit the form was read from, and its
+    # agent is idle: nothing keeps the workflow from starting.
+    await _begin(studio, created.path, workflow, answers)
+    target = f"/espaces/{quote(created.name)}"
+    if workflow.scope == "deck":
+        target += f"/formations/{quote(answers.deck)}"
+    return Response(headers={"HX-Redirect": f"{target}?agent=1"})
 
 
 @router.post("/espaces/{name}/agent/annuler")

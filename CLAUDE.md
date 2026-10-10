@@ -463,7 +463,9 @@ through server-sent events, which end when studioz stops (`Studio.closing`).
 (`studioz.workflows`, its schema in studioz, refusing unknown keys; deckz ignores
 the section, which a deckz test keeps): each a form on the workspace page or a deck
 page whose answers fill a prompt naming one of the repository's skills, sent to the
-conversation like a message; a file given goes into `.run/studioz/fichiers/`.
+conversation like a message; a file given goes into `.run/studioz/fichiers/`. The
+home page offers those of the main checkout's `HEAD` (read through git,
+`declared_at`), each opening a new workspace from it where the agent starts.
 
 Its tests are in `studioz/tests/`, driving the app with FastAPI's test client
 on a temporary repository, the watches with a fake `deckz` printing the

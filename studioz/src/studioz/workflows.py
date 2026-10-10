@@ -10,21 +10,23 @@ what to work on, never how (the plan's "Drift"). Inputs are `text` (a line),
 `.run/studioz/fichiers/` and names by its path there.
 
 The workspace's own `deckz.yml` declares them, read at each page: a branch
-may add one with its skill. deckz ignores the section (its settings ignore
-keys they don't know, which a deckz test keeps); its schema lives here, and
-refuses unknown keys so that a typo shows instead of being dropped.
+may add one with its skill. The home page offers those of the main
+checkout's `HEAD` (`declared_at`), which a new workspace starts from. deckz
+ignores the section (its settings ignore keys they don't know, which a deckz
+test keeps); its schema lives here, and refuses unknown keys so that a typo
+shows instead of being dropped.
 """
 
 import re
+import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from string import Formatter
 from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
-
-from deckz.exceptions import DeckzError
-from deckz.utils import load_yaml
+from yaml import YAMLError, safe_load
 
 from .workspaces import STATE_DIR
 
@@ -199,32 +201,31 @@ class Declared:
         return [workflow for workflow in self.workflows if workflow.scope == scope]
 
 
-def skill_exists(workspace: Path, skill: str) -> bool:
-    """Whether the workspace's project settings hold `skill`.
+def _skill_paths(skill: str) -> tuple[str, str]:
+    """Where a skill may be, in the project settings.
 
     Returns:
-        Whether it's a skill (`.claude/skills/<skill>/SKILL.md`) or a \
-        command (`.claude/commands/<skill>.md`) there.
+        As a skill (`.claude/skills/<skill>/SKILL.md`), then as a command.
     """
-    claude = workspace / ".claude"
-    return (claude / "skills" / skill / "SKILL.md").is_file() or (
-        claude / "commands" / f"{skill}.md"
-    ).is_file()
+    return f".claude/skills/{skill}/SKILL.md", f".claude/commands/{skill}.md"
 
 
-def declared(workspace: Path) -> Declared:
-    """The workflows the workspace's `deckz.yml` declares.
+def _git(repository: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(repository), *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
-    Returns:
-        Them, or why the section is invalid.
-    """
-    path = workspace / "deckz.yml"
-    if not path.is_file():
+
+def _parse(text: str | None, skill_exists: Callable[[str], bool]) -> Declared:
+    if text is None:
         return Declared()
     try:
-        content = load_yaml(path)
-    except DeckzError as error:
-        return Declared(error=str(error))
+        content = safe_load(text)
+    except YAMLError as error:
+        return Declared(error=f"deckz.yml n'est pas du YAML valide :\n{error}")
     section = content.get("studioz") if isinstance(content, dict) else None
     if section is None:
         return Declared()
@@ -242,8 +243,60 @@ def declared(workspace: Path) -> Declared:
         missing={
             workflow.key: workflow.skill
             for workflow in parsed.workflows
-            if not skill_exists(workspace, workflow.skill)
+            if not skill_exists(workflow.skill)
         },
+    )
+
+
+def declared(workspace: Path) -> Declared:
+    """The workflows the workspace's `deckz.yml` declares.
+
+    Returns:
+        Them, or why the section is invalid.
+    """
+    path = workspace / "deckz.yml"
+    try:
+        text = path.read_text(encoding="utf8") if path.is_file() else None
+    except (OSError, UnicodeDecodeError) as error:
+        return Declared(error=str(error))
+    return _parse(
+        text,
+        lambda skill: any((workspace / p).is_file() for p in _skill_paths(skill)),
+    )
+
+
+def declared_at(repository: Path, revision: str = "HEAD") -> Declared:
+    """The workflows `deckz.yml` declares in a commit of `repository`.
+
+    What a new workspace starting from it will offer, whatever the files of
+    the checkout are.
+
+    Returns:
+        Them, or why the section is invalid.
+    """
+    shown = _git(repository, "show", f"{revision}:deckz.yml")
+    return _parse(
+        shown.stdout if shown.returncode == 0 else None,
+        lambda skill: any(
+            _git(repository, "cat-file", "-e", f"{revision}:{p}").returncode == 0
+            for p in _skill_paths(skill)
+        ),
+    )
+
+
+def decks_at(repository: Path, revision: str = "HEAD") -> list[str]:
+    """The decks of a commit of `repository`.
+
+    Returns:
+        Each deck directory (one holding a `deck.yml`), sorted, as \
+        `workspaces.decks` finds them in a checkout.
+    """
+    listed = _git(repository, "ls-tree", "-r", "--name-only", revision).stdout
+    return sorted(
+        path.removesuffix("/deck.yml")
+        for path in listed.splitlines()
+        if path.endswith("/deck.yml")
+        and not any(part.startswith(".") for part in path.split("/"))
     )
 
 

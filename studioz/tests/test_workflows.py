@@ -1,3 +1,4 @@
+import subprocess
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from time import monotonic, sleep
@@ -9,7 +10,7 @@ from pytest import fixture
 from studioz.agent import Agents, Conversation
 from studioz.app import Login, create_app
 
-from studioz import workflows
+from studioz import workflows, workspaces
 
 ORIGIN = {"Origin": "http://localhost:8421"}
 
@@ -291,5 +292,138 @@ def test_a_workflow_needs_the_login(repository: Path, workspace: Path) -> None:
 def test_an_invalid_section_shows(studio: TestClient, workspace: Path) -> None:
     (workspace / "deckz.yml").write_text("studioz: {workflow: []}\n", "utf8")
     page = studio.get("/espaces/demo").text
-    assert "Les workflows de l'espace sont illisibles" in page
+    assert "Les workflows de l&#39;espace sont illisibles" in page
     assert "studioz.workflow" in page
+
+
+def _commit_declaration(repository: Path) -> None:
+    _declare(repository, skills=("nouvelle-formation", "qa-formation"))
+    for args in (("add", "-A"), ("commit", "-qm", "Workflows")):
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repository),
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@e",
+                *args,
+            ],
+            check=True,
+        )
+
+
+def test_the_workflows_of_a_commit(repository: Path) -> None:
+    assert workflows.declared_at(repository) == workflows.Declared()
+    _commit_declaration(repository)
+    # The checkout's own edits don't count: a workspace starts from the commit.
+    (repository / "deckz.yml").write_text("studioz: {workflow: []}\n", "utf8")
+    (repository / ".claude/skills/qa-formation/SKILL.md").unlink()
+    found = workflows.declared_at(repository)
+    assert found.error is None
+    assert found.missing == {}
+    assert [w.key for w in found.workflows] == [
+        "nouvelle-formation",
+        "relire-la-formation-qa",
+    ]
+    assert workflows.decks_at(repository) == ["client/abc"]
+    assert workflows.declared_at(repository, "HEAD~1") == workflows.Declared()
+
+
+def test_free_names(repository: Path, workspace: Path) -> None:
+    assert workspace.name == "repo--demo"
+    assert workspaces.free_name(repository, "demo") == "demo-2"
+    assert workspaces.free_name(repository, "QA de x/y !") == "QA-de-x-y"
+    assert workspaces.free_name(repository, "///") == "travail"
+
+
+@fixture
+def home(
+    repository: Path, recorder: _Recorder, monkeypatch: Any
+) -> Iterator[TestClient]:
+    _commit_declaration(repository)
+    monkeypatch.setattr("studioz.workspaces.setup", lambda *_, **__: [])
+    app = create_app(
+        repository,
+        agents=Agents(recorder),
+        login=Login(check=lambda: (True, "a@b.fr")),
+    )
+    with TestClient(app, base_url="http://localhost:8421") as client:
+        yield client
+
+
+def test_the_home_page_offers_the_workflows(home: TestClient) -> None:
+    page = home.get("/").text
+    assert "Commencer avec l'agent" in page
+    assert 'data-url="/workflows/nouvelle-formation/formulaire"' in page
+    assert 'id="action-dialog"' in page
+    form = home.post(
+        "/workflows/relire-la-formation-qa/formulaire", headers=ORIGIN
+    ).text
+    assert 'hx-post="/workflows/relire-la-formation-qa"' in form
+    assert 'name="espace"' in form
+    assert '<option value="client/abc">client/abc</option>' in form
+    assert "créé à partir de main (" in form
+
+
+def test_a_workflow_opens_a_workspace(
+    home: TestClient, repository: Path, recorder: _Recorder
+) -> None:
+    response = home.post(
+        "/workflows/relire-la-formation-qa",
+        data={"deck": "client/abc"},
+        headers=ORIGIN,
+    )
+    assert (
+        response.headers["HX-Redirect"] == "/espaces/abc/formations/client/abc?agent=1"
+    )
+    created = repository.parent / "repo--abc"
+    conversation = _conversation(home, created)
+    _wait_idle(conversation)
+    assert recorder.prompts[-1].endswith("Fais le QA de client/abc.")
+
+    # Named by the person, with a file kept in the new workspace.
+    named = home.post(
+        "/workflows/nouvelle-formation",
+        data={"espace": "pandas"},
+        files={"program": ("p.md", b"# P", "text/markdown")},
+        headers=ORIGIN,
+    )
+    assert named.headers["HX-Redirect"] == "/espaces/pandas?agent=1"
+    assert (repository.parent / "repo--pandas/.run/studioz/fichiers/p.md").is_file()
+    _wait_idle(_conversation(home, repository.parent / "repo--pandas"))
+    assert "programme .run/studioz/fichiers/p.md" in recorder.prompts[-1]
+
+
+def test_a_workflow_needs_its_answers_before_the_workspace(
+    home: TestClient, repository: Path, recorder: _Recorder
+) -> None:
+    refused = home.post(
+        "/workflows/nouvelle-formation", data={"espace": "x"}, headers=ORIGIN
+    ).text
+    assert "Remplissez « Programme »." in refused
+    assert 'name="espace" value="x"' in refused
+    assert not (repository.parent / "repo--x").exists()
+    taken = home.post(
+        "/workflows/relire-la-formation-qa",
+        data={"deck": "client/abc", "espace": "../x"},
+        headers=ORIGIN,
+    ).text
+    assert "invalid worktree name" in taken
+    assert recorder.prompts == []
+
+
+def test_a_workflow_waits_for_the_installation(
+    home: TestClient, monkeypatch: Any, recorder: _Recorder
+) -> None:
+    from deckz.setting_up import SetupItem, Status
+
+    missing = [SetupItem("pandoc", Status.MISSING, "install pandoc")]
+    monkeypatch.setattr("studioz.workspaces.setup", lambda *_, **__: missing)
+    shown = home.post(
+        "/workflows/relire-la-formation-qa", data={"deck": "client/abc"}, headers=ORIGIN
+    ).text
+    assert "install pandoc" in shown
+    assert "n'a donc pas commencé" in shown
+    assert recorder.prompts == []

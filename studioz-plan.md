@@ -5,8 +5,8 @@
 **Done:** phases 0, 1 and 2 (workspaces without agents: increments 1 to 8 under
 "Phase 2"), and phase 3 (the agent in a workspace: increments 1 to 5 under
 "Phase 3"), which the user then tried on real work, satisfied; phase 4's
-increment 1 (workflows declared, under "Phase 4"). **Next:** phase 4's
-increment 2 (see "Starting phase 4" below). `git log origin/main..main` in
+increments 1 and 2 (workflows declared, a workspace opened from one: under
+"Phase 4"). **Next:** phase 4's increment 3 (see "Starting phase 4" below). `git log origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed;
 nothing is released since 31.3.3. Push and release are the user's call.
 
@@ -116,8 +116,7 @@ build on. slides' skills are `nouvelle-formation`, `nouvelle-section`,
 (`../slides/.claude/skills/`). A suggested order, each a usable increment:
 
 1. **Workflows declared**: done (see "Phase 4").
-2. **Opening a workspace from a workflow**: the home page's "new workspace"
-   with a workflow, its inputs (a file put in the workspace) filled in.
+2. **Opening a workspace from a workflow**: done (see "Phase 4").
 3. **Questions answered later** (`defer`): a pending question that survives the
    person leaving and studioz restarting, answered on resume (see "Agent
    configuration").
@@ -993,6 +992,26 @@ workspace page. The user approved those four for slides: committed as
 `7bd8a6f9` in the workspace `studioz-workflows` (`../slides--studioz-workflows`),
 for the user to sync from studioz. Left: the home page's workflows
 (increment 2), and `qa-fix` after a QA (increment 4).
+
+**Increment 2: done** (2026-10-10): opening a workspace from a workflow. The
+home page lists, under "Commencer avec l'agent", the workflows of the main
+checkout's `HEAD` (read through git, `workflows.declared_at`, so another
+session's uncommitted edits there don't count: a new workspace starts from
+that commit), each opening its form with the workspace's name (optional:
+otherwise after the deck, or the workflow, numbered when taken), and the
+decks of that commit for a deck's workflow. "Commencer" checks the answers
+and the login first, then creates the workspace as "Nouvel espace de
+travail" does, keeps its files there and starts the workflow, and opens the
+workspace (a deck's page for a deck's workflow) with the agent's panel
+unfolded (`?agent`). If `deckz setup` left something missing, the workflow
+doesn't start and the page says so with the setup's findings. Tried on a
+throwaway local clone of slides at `7bd8a6f9` (slides' main checkout doesn't
+declare workflows until the user syncs that commit; the clone was seeded from
+slides' builds, set up, then deleted with its workspace): "Synchroniser
+fr/en…" on the Fortinet deck created `2026-10-fortinet` and showed its deck
+page with the agent at work 9 s after "Commencer"; the turn loaded
+`sync-langs` and found nothing to translate (59 s, 0,36 $ estimated). Left:
+nothing for this increment.
 
 ### Phase 5: long jobs and the remaining previews
 

@@ -1,20 +1,28 @@
-<form class="commit-form workflow-form" hx-post="/espaces/{{ workspace.name }}/workflows/{{ workflow.key }}"
-      hx-target="#action-dialog" hx-swap="innerHTML" hx-encoding="multipart/form-data" hx-disabled-elt="find button[type=submit]">
+<form class="commit-form workflow-form" hx-post="{{ action }}"
+      hx-target="#action-dialog" hx-swap="innerHTML" hx-encoding="multipart/form-data"
+      hx-disabled-elt="find button[type=submit]" hx-indicator="find .indicator">
   <header>
     <h2>{{ workflow.title }}</h2>
     <button type="button" class="secondary" onclick="this.closest('dialog').close()">Fermer</button>
   </header>
   {% if workflow.description %}<p>{{ workflow.description | workflow_text }}</p>{% endif %}
-  <input type="hidden" name="formation" value="{{ formation }}">
+  <input type="hidden" name="formation" value="{{ answers.formation }}">
+  {% if workspace is none %}
+  <label class="field">Nom du nouvel espace de travail <span class="hint">(facultatif)</span>
+    <input type="text" name="espace" value="{{ answers.name }}" pattern="[A-Za-z0-9][A-Za-z0-9_\-]*"
+           placeholder="d'après {{ 'la formation' if workflow.scope == 'deck' else 'le workflow' }}" title="Lettres, chiffres, - et _">
+  </label>
+  <p class="hint">Un nouvel espace de travail est créé à partir de {{ base }}, puis l'agent y commence.</p>
+  {% endif %}
   {% if workflow.scope == "deck" %}
-    {% if formation %}
-    <input type="hidden" name="deck" value="{{ formation }}">
-    <p>Formation : <code>{{ formation }}</code></p>
+    {% if answers.formation %}
+    <input type="hidden" name="deck" value="{{ answers.formation }}">
+    <p>Formation : <code>{{ answers.formation }}</code></p>
     {% else %}
     <label class="field">Formation
       <select name="deck" required>
         <option value="">Choisissez…</option>
-        {% for path in decks %}<option value="{{ path }}"{% if path == deck %} selected{% endif %}>{{ path }}</option>{% endfor %}
+        {% for path in decks %}<option value="{{ path }}"{% if path == answers.deck %} selected{% endif %}>{{ path }}</option>{% endfor %}
       </select>
     </label>
     {% endif %}
@@ -24,23 +32,26 @@
     {% if one.kind == "file" %}
     <input type="file" name="{{ one.name }}"{% if one.accept %} accept="{{ one.accept }}"{% endif %}{% if one.required %} required{% endif %}>
     {% elif one.kind == "long-text" %}
-    <textarea name="{{ one.name }}" rows="4"{% if one.required %} required{% endif %}>{{ values.get(one.name, "") }}</textarea>
+    <textarea name="{{ one.name }}" rows="4"{% if one.required %} required{% endif %}>{{ answers.values.get(one.name, "") }}</textarea>
     {% else %}
-    <input type="text" name="{{ one.name }}" value="{{ values.get(one.name, '') }}"{% if one.required %} required{% endif %}>
+    <input type="text" name="{{ one.name }}" value="{{ answers.values.get(one.name, '') }}"{% if one.required %} required{% endif %}>
     {% endif %}
   </label>
   {% endfor %}
   <details class="workflow-prompt">
     <summary>Ce que l'agent recevra</summary>
-    <blockquote>{{ workflow.preview(formation) }}</blockquote>
+    <blockquote>{{ workflow.preview(answers.formation) }}</blockquote>
     <p>en suivant la skill <code>{{ workflow.skill }}</code> du dépôt, qui décide de la suite et vous pose ses
       questions dans le panneau de l'agent.</p>
   </details>
   {% if conversation %}
-  <label><input type="checkbox" name="nouvelle" value="1"{% if fresh %} checked{% endif %}>
+  <label><input type="checkbox" name="nouvelle" value="1"{% if answers.fresh %} checked{% endif %}>
     Commencer une nouvelle conversation (l'agent oublie la précédente ; utile quand elle portait sur autre chose)</label>
   {% endif %}
   {% if missing %}<p class="error" role="alert">La skill « {{ missing }} » n'existe pas dans cet espace : ce workflow ne peut pas démarrer.</p>{% endif %}
   {% if error %}<p class="error" role="alert">{{ error }}{% if dropped %} Choisissez à nouveau les fichiers.{% endif %}</p>{% endif %}
-  <footer><button type="submit"{% if missing %} disabled{% endif %}>Commencer</button></footer>
+  <footer>
+    <button type="submit"{% if missing %} disabled{% endif %}>Commencer</button>
+    {% if workspace is none %}<span class="indicator">Création et installation de l'espace… (quelques secondes)</span>{% endif %}
+  </footer>
 </form>
