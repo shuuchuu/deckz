@@ -218,7 +218,8 @@ class SetupSettings(BaseModel):
     requires: tuple[SetupRequirement, ...] = ()
     """Executables the repository needs besides deckz's own (pandoc, git)."""
     steps: tuple[SetupStep, ...] = ()
-    """Commands a fresh clone needs once, e.g. vendoring JavaScript."""
+    """Commands that set up a clone or a worktree, e.g. `uv sync` (no \
+    `creates`: runs every time) or vendoring JavaScript."""
 
 
 class WorktreeSettings(BaseModel):
@@ -227,11 +228,6 @@ class WorktreeSettings(BaseModel):
     """Paths, relative to the git root, whose ignored files (the builds a \
     fresh checkout lacks, e.g. rendered figures and videos) `deckz worktree \
     add` copies from the main checkout into a new worktree."""
-    link: tuple[str, ...] = (".env",)
-    """Paths, relative to the git root, `deckz worktree add` symlinks to \
-    the main checkout's: what every checkout shares, e.g. `.env` or a \
-    `.venv` (linked only while `pyproject.toml` and `uv.lock` are the same \
-    in both)."""
 
 
 class CiSettings(BaseModel):

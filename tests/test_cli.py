@@ -531,6 +531,34 @@ def test_run_defaults_come_from_a_dotenv_file(
     }
 
 
+def test_run_defaults_come_from_the_user_dotenv_after_the_checkouts(
+    bilingual_dir: Path, monkeypatch: Any, caplog: Any
+) -> None:
+    from dotenv import main as dotenv_main
+
+    monkeypatch.setattr("dotenv.find_dotenv", dotenv_main.find_dotenv)
+    for name in ("DECKZ_LANG", "DECKZ_RUN_HANDOUT", "DECKZ_RUN_PRINT"):
+        monkeypatch.setenv(name, "")
+        monkeypatch.delenv(name)
+    from deckz.configuring.settings import default_user_config_dir
+
+    user_dir = default_user_config_dir()
+    user_dir.mkdir(parents=True, exist_ok=True)
+    (user_dir / ".env").write_text(
+        'DECKZ_LANG="fr"\nDECKZ_RUN_HANDOUT=false\nDECKZ_RUN_PRINT=false\n',
+        encoding="utf8",
+    )
+    # The checkout's own .env wins over the user's.
+    (bilingual_dir.parent.parent / ".env").write_text(
+        'DECKZ_LANG="en"\n', encoding="utf8"
+    )
+
+    main(("run", "--dry-run"))
+
+    assert "DECKZ_LANG=en (.env)" in caplog.text
+    assert f"DECKZ_RUN_PRINT=false ({user_dir / '.env'})" in caplog.text
+
+
 def test_run_announces_the_defaults_a_dotenv_file_set(
     bilingual_dir: Path, monkeypatch: Any, caplog: Any
 ) -> None:

@@ -294,24 +294,21 @@ typst_ignore_system_fonts: true
   - `steps`: commands run from the git root, without a shell, in order.
     A step whose `creates` path exists is done and skipped (`deckz setup
     --force` runs it anyway); one without `creates` runs every time.
-- `worktree`: what `deckz worktree add` brings into a new worktree, on
+- `worktree`: what `deckz worktree add` copies into a new worktree, on
   top of the checkout:
 
   ```yaml
   worktree:
     seed: [assets/typ, assets/svg, assets/web/vendor, assets/videos]
-    link: [.env, .venv]
   ```
 
-  - `seed`: paths whose ignored files (the builds a fresh checkout
-    lacks) are copied from the main checkout, file times kept, so that
-    content stamps decide what to rebuild (see [Assets
-    builders](#assets-builders)).
-  - `link`: paths symlinked to the main checkout's (default `[.env]`). A
-    `.venv` is linked only while `pyproject.toml` and `uv.lock` are the
-    same in both checkouts. A link `.gitignore` doesn't ignore (`.venv/`
-    only matches a directory) is added to the repository's
-    `info/exclude`.
+  `seed`: paths whose ignored files (the builds a fresh checkout lacks)
+  are copied from the main checkout, file times kept, so that content
+  stamps decide what to rebuild (see [Assets builders](#assets-builders)).
+  Nothing is shared by a link: each worktree gets its own environment
+  from `setup.steps` (e.g. `uv sync`, a second from uv's cache), and
+  what every checkout shares goes in the user's `.env` (see
+  [Usage](#usage)).
 
 `deckz.yml` files are merged, in order, from the git root, from the user's
 config directory (XDG-compliant, e.g.
@@ -738,10 +735,13 @@ also shows the traceback of a deckz error (as does `DECKZ_DEBUG=1`).
 Logs and progress bars go to stderr, so stdout only carries a command's
 results.
 
-Option defaults can come from the environment, or from the closest `.env`
-file above the current directory (a variable already set in the
-environment wins over the file, and an option given on the command line
-wins over both):
+Option defaults can come from the environment, from the closest `.env`
+file above the current directory, or from the `.env` in the user's config
+directory (e.g. `~/.config/deckz/.env`, next to the user's `deckz.yml`),
+which every checkout of every repository reads: the place for one's own
+defaults and credentials. The environment wins over the checkout's
+`.env`, which wins over the user's, and an option given on the command
+line wins over all of them:
 
 - `DECKZ_LANG`: the languages `deckz run`, `deckz check variables`, `deckz
   check overflow` and `deckz search-sections` process when `--lang` isn't
@@ -817,8 +817,8 @@ The main commands:
   repository, `../<repo>--NAME`, on a new branch `ws/NAME` (from the main
   checkout's `HEAD` unless `--base`), to work on something without
   disturbing the main checkout's builds and uncommitted edits. It copies
-  the builds `worktree.seed` lists and links `worktree.link` (see above),
-  then reports `deckz setup --check` there. `deckz worktree list [--json]`
+  the builds `worktree.seed` lists (see above), then runs `deckz setup`
+  there. `deckz worktree list [--json]`
   lists the worktrees with their uncommitted changes and their commits no
   other branch has; `deckz worktree remove NAME` removes one, and its
   branch, refusing while it holds either (`--force` loses the uncommitted

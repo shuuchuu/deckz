@@ -26,8 +26,10 @@ an agent from skipping the checks or discarding other people's work.
 
 ## The `.env` file
 
-A git-ignored `.env` at the repository's root can set your own defaults for `deckz
-run` and the commands processing several languages, e.g.:
+A `.env` file sets your own defaults for `deckz run` and the commands processing
+several languages, and the credentials some commands read (e.g. a lab's token). Put it
+in deckz's config directory, `~/.config/deckz/.env`, where every checkout reads it; a
+git-ignored `.env` at a checkout's root overrides it for that checkout only. E.g.:
 
 ```sh
 DECKZ_LANG="fr en"
@@ -53,6 +55,7 @@ deckz worktree remove pnd-2026  # once its work is committed and pushed (or merg
 
 It starts from the main checkout's current commit (`--base` picks another), with
 the main checkout's builds copied in (rendered figures and videos, so nothing is
-rebuilt for hours), and its `.env` (and the Python environment, while the
-dependencies are the same) shared. `remove` refuses while the worktree holds work
-nothing else has, and lists it.
+rebuilt for hours), then `deckz setup` runs there (its own Python environment, for
+instance, which takes a second). The worktree shares nothing else with the main
+checkout but git's history: your `~/.config/deckz/.env` applies to both. `remove`
+refuses while the worktree holds work nothing else has, and lists it.

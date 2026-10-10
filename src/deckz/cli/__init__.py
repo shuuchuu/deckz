@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 from logging import DEBUG, INFO, WARNING, basicConfig, getLogger
 from os import environ
+from pathlib import Path
 from typing import Annotated
 
 from cyclopts import App, Group, Parameter
@@ -34,7 +35,10 @@ def main(args: Iterable[str] | None = None) -> None:
 
     Environment variables (e.g. `DECKZ_LANG`, `DECKZ_RUN_PRINT`) are also
     read from the closest `.env` file, looked up from the current directory
-    upwards. Variables already set in the environment take precedence.
+    upwards, then from the `.env` of the user's deckz config directory (e.g.
+    `~/.config/deckz/.env`), for what every checkout shares (credentials,
+    one's own defaults). Variables already set in the environment take
+    precedence, then the checkout's `.env`.
 
     Args:
         args: Command-line arguments, defaults to `sys.argv[1:]`.
@@ -48,16 +52,26 @@ def main(args: Iterable[str] | None = None) -> None:
     from cyclopts import CycloptsError
     from dotenv import dotenv_values, find_dotenv, load_dotenv
 
+    from ..configuring.settings import default_user_config_dir
     from ..utils import import_module_and_submodules
 
+    from_dotenv: dict[str, str] = {}
     # `usecwd`: without it, the lookup starts from deckz's own installed code.
-    dotenv = find_dotenv(usecwd=True)
-    from_dotenv = frozenset(
-        name
-        for name in (dotenv_values(dotenv) if dotenv else {})
-        if name not in environ
-    )
-    load_dotenv(dotenv)
+    user_dotenv = default_user_config_dir() / ".env"
+    for dotenv, label in (
+        (find_dotenv(usecwd=True), ".env"),
+        (
+            str(user_dotenv) if user_dotenv.is_file() else "",
+            _home_relative(user_dotenv),
+        ),
+    ):
+        if not dotenv:
+            continue
+        for name in dotenv_values(dotenv):
+            if name not in environ:
+                from_dotenv[name] = label
+        # Doesn't override: the environment, then the first file, win.
+        load_dotenv(dotenv)
     # Reloads every `deckz.cli` module: `invocation` is only set after.
     import_module_and_submodules(__name__)
     from ._options import invocation
@@ -71,6 +85,11 @@ def main(args: Iterable[str] | None = None) -> None:
     except CycloptsError:
         # Already printed by cyclopts.
         raise SystemExit(2) from None
+
+
+def _home_relative(path: Path) -> str:
+    home = Path.home()
+    return f"~/{path.relative_to(home)}" if path.is_relative_to(home) else str(path)
 
 
 def _stop_child_processes() -> None:

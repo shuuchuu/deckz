@@ -46,7 +46,7 @@ def _make_repo(tmp_path: Path) -> Path:
     _write(main / "figures" / "fig.typ", "Figure\n")
     _git(main, "add", "-A")
     _git(main, "commit", "-m", "Initial")
-    # What git doesn't track: a build, the settings, the environment.
+    # What git doesn't track: a build, and what's never copied.
     _write(main / "assets" / "built" / "fig.svg", "<svg/>")
     _write(main / "assets" / "built" / "fig.svg.stamp", "abc\n")
     _write(main / ".env", "DECKZ_LANG=fr\n")
@@ -57,7 +57,7 @@ def _make_repo(tmp_path: Path) -> Path:
 def _settings(git_dir: Path) -> GlobalSettings:
     return GlobalSettings(
         paths=GlobalPaths(current_dir=git_dir, git_dir=git_dir),
-        worktree=WorktreeSettings(seed=("assets/built",), link=(".env", ".venv")),
+        worktree=WorktreeSettings(seed=("assets/built",)),
     )
 
 
@@ -87,31 +87,10 @@ def test_add_copies_the_ignored_builds_with_their_times(tmp_path: Path) -> None:
     assert copy.stat().st_mtime_ns == 1_000_000_000
     assert (added.path / "assets" / "built" / "fig.svg.stamp").is_file()
     assert added.copied == 2
+    assert not (added.path / ".env").exists()
+    assert not (added.path / ".venv").exists()
     tracked = added.path / "assets" / "built" / "credits.yml"
     assert tracked.read_text(encoding="utf8") == "author: Jane\n"
-
-
-def test_add_links_the_shared_files_and_keeps_them_ignored(tmp_path: Path) -> None:
-    main = _make_repo(tmp_path)
-
-    added = add(_settings(main), "demo")
-
-    assert added.linked == (".env", ".venv")
-    assert (added.path / ".env").is_symlink()
-    assert (added.path / ".venv").resolve() == (main / ".venv").resolve()
-    # `.venv/` only matches a directory: the symlink must be excluded too.
-    assert _git(added.path, "status", "--porcelain") == ""
-
-
-def test_add_does_not_share_the_venv_when_dependencies_differ(tmp_path: Path) -> None:
-    main = _make_repo(tmp_path)
-    _write(main / "uv.lock", "another lock\n")
-
-    added = add(_settings(main), "demo")
-
-    assert added.linked == (".env",)
-    assert not (added.path / ".venv").exists()
-    assert any(reason.startswith(".venv: ") for reason in added.not_linked)
 
 
 def test_add_starts_from_base(tmp_path: Path) -> None:
@@ -162,8 +141,6 @@ def test_remove_deletes_a_clean_worktree_and_its_branch(tmp_path: Path) -> None:
     assert not kept
     assert not path.exists()
     assert _git(main, "branch", "--list", "ws/demo") == ""
-    assert (main / ".env").is_file()
-    assert (main / ".venv" / "bin" / "python").is_file()
 
 
 def test_remove_refuses_uncommitted_changes(tmp_path: Path) -> None:

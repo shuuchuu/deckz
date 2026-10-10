@@ -93,7 +93,8 @@ Logs and progress bars go to stderr, stdout carries only results
 Tests driving `main(...)` therefore assert `raises(SystemExit)` with code
 1, not the `DeckzError` itself.
 
-`main()` also loads the closest `.env` (python-dotenv) before parsing, so
+`main()` also loads the closest `.env` (python-dotenv), then the user's
+(`<user config dir>/.env`, for what every checkout shares), before parsing, so
 option defaults can come from environment variables: the shared `Langs`
 option (`cli/_options.py`, `--lang fr en`) reads `DECKZ_LANG` on the
 commands that process several languages in one pass, and the `run`
@@ -101,7 +102,8 @@ sub-app's `Env("DECKZ_RUN_", command=False)` config gives every `run`
 subcommand's options a `DECKZ_RUN_<OPTION>` default (one name for all of
 them, so `deckz run` and `deckz run deck` agree). Commands showing a
 single resolved view take a plain `lang: Lang` instead. Tests clear
-`DECKZ_*` and stub out the `.env` lookup (`tests/conftest.py`).
+`DECKZ_*`, stub out the `.env` lookup and point `XDG_CONFIG_HOME` at an
+empty directory (`tests/conftest.py`).
 
 ### Settings resolution
 

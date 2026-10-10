@@ -15,12 +15,14 @@ def _isolated_user_config_dir(tmp_path: Path, monkeypatch: Any) -> None:
 
 
 @fixture(autouse=True)
-def _isolated_environment(monkeypatch: Any) -> None:
+def _isolated_environment(monkeypatch: Any, tmp_path_factory: Any) -> None:
     # Neither the developer's own DECKZ_* defaults (e.g. DECKZ_LANG) nor a
-    # .env file above the test's directory may change what a command does.
+    # .env file above the test's directory or in their deckz config
+    # directory may change what a command does.
     for name in [name for name in environ if name.startswith("DECKZ_")]:
         monkeypatch.delenv(name)
     monkeypatch.setattr("dotenv.find_dotenv", lambda *_, **__: "")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path_factory.mktemp("config")))
 
 
 @fixture(autouse=True)

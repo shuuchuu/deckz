@@ -6,21 +6,21 @@ PDFs or uncommitted edits in the main checkout, or in another worktree.
 deckz resolves every path from the checkout it runs in, so each worktree
 builds on its own.
 
-`add` creates `../<repo>--<name>` on a new `ws/<name>` branch and brings into
-it what git doesn't (`deckz.yml`'s `worktree` settings): it copies the
-builds a fresh checkout lacks (the main checkout's ignored files under
-`worktree.seed`, e.g. rendered figures and videos), and symlinks what every
-checkout shares (`worktree.link`, e.g. `.env` and the `.venv`). Copies keep
+`add` creates `../<repo>--<name>` on a new `ws/<name>` branch and copies into
+it the builds a fresh checkout lacks (the main checkout's ignored files under
+`deckz.yml`'s `worktree.seed`, e.g. rendered figures and videos). Copies keep
 their file times, so that a build's content stamps (`deckz.stamps`) decide
 what to rebuild: a copied output whose source differs in the worktree is
 rebuilt, and one with no stamp looks older than the fresh checkout's
-sources, so it's rebuilt rather than adopted.
+sources, so it's rebuilt rather than adopted. Nothing is linked: each
+checkout has its own environment (`deckz setup` there, e.g. `uv sync`, takes
+a second from uv's cache), and what every checkout shares (credentials, one's
+own defaults) goes in the user's `.env` (see `deckz.cli.main`).
 
 `remove` refuses while the worktree holds work nothing else has:
 uncommitted changes, or commits on no other branch, local or remote.
 """
 
-import os
 import re
 import subprocess
 from dataclasses import dataclass
@@ -59,10 +59,6 @@ class AddedWorktree:
     """The commit it starts from."""
     copied: int
     """How many files were copied from the main checkout."""
-    linked: tuple[str, ...]
-    """The `worktree.link` paths symlinked to the main checkout's."""
-    not_linked: tuple[str, ...]
-    """The others, each with why (`<path>: <reason>`)."""
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -174,8 +170,7 @@ def add(
     sha = _git(main, "rev-parse", "--verify", f"{base or 'HEAD'}^{{commit}}").strip()
     _git(main, "worktree", "add", "--quiet", "-b", branch, str(path), sha)
     copied = _seed(main, path, settings.worktree.seed)
-    linked, not_linked = _link(main, path, settings.worktree.link)
-    return AddedWorktree(path, branch, sha, copied, linked, not_linked)
+    return AddedWorktree(path, branch, sha, copied)
 
 
 def _seed(main: Path, path: Path, entries: tuple[str, ...]) -> int:
@@ -198,64 +193,6 @@ def _seed(main: Path, path: Path, entries: tuple[str, ...]) -> int:
         # Times kept: see the module docstring.
         copy2(main / file, destination, follow_symlinks=False)
     return len(files)
-
-
-def _link(
-    main: Path, path: Path, entries: tuple[str, ...]
-) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    linked, not_linked = [], []
-    for entry in entries:
-        source, destination = main / entry, path / entry
-        if not os.path.lexists(source):
-            not_linked.append(f"{entry}: not in {main}")
-            continue
-        if os.path.lexists(destination):
-            not_linked.append(f"{entry}: already in the worktree")
-            continue
-        if Path(entry).name == ".venv" and not _same_dependencies(main, path):
-            not_linked.append(
-                f"{entry}: the dependencies differ from {main}'s, "
-                "run `uv sync` in the worktree"
-            )
-            continue
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.symlink_to(os.path.relpath(source, destination.parent))
-        _ignore(path, entry)
-        linked.append(entry)
-    return tuple(linked), tuple(not_linked)
-
-
-def _same_dependencies(main: Path, path: Path) -> bool:
-    def read(root: Path, name: str) -> bytes | None:
-        file = root / name
-        return file.read_bytes() if file.is_file() else None
-
-    return all(
-        read(main, name) == read(path, name) for name in ("pyproject.toml", "uv.lock")
-    )
-
-
-def _ignore(path: Path, entry: str) -> None:
-    """Make sure git ignores the symlink `entry`.
-
-    A `.gitignore` pattern with a trailing slash (`.venv/`) only matches \
-    directories, not a symlink to one: add it to the repository's own \
-    `info/exclude`, which every checkout reads.
-    """
-    ignored = subprocess.run(
-        ["git", "-C", str(path), "check-ignore", "-q", "--", entry], check=False
-    )
-    if ignored.returncode == 0:
-        return
-    common = Path(
-        _git(path, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
-    )
-    exclude = common / "info" / "exclude"
-    exclude.parent.mkdir(parents=True, exist_ok=True)
-    text = exclude.read_text(encoding="utf8") if exclude.is_file() else ""
-    if text and not text.endswith("\n"):
-        text += "\n"
-    exclude.write_text(f"{text}/{entry}\n", encoding="utf8")
 
 
 def remove(settings: "GlobalSettings", name: str, *, force: bool = False) -> bool:

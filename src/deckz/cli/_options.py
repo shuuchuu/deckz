@@ -1,7 +1,8 @@
 """Options shared by several commands."""
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from os import environ
+from types import MappingProxyType
 from typing import Annotated
 
 from cyclopts import Parameter
@@ -40,8 +41,9 @@ class _Invocation:
 
     tokens: tuple[str, ...] = ()
     """The command-line arguments."""
-    from_dotenv: frozenset[str] = frozenset()
-    """Environment variables set by the `.env` file, not by the environment."""
+    from_dotenv: Mapping[str, str] = MappingProxyType({})
+    """Environment variables set by a `.env` file, not by the environment: \
+    the file each came from, as shown to the user."""
 
 
 invocation = _Invocation()
@@ -70,6 +72,6 @@ def environment_defaults(variables: Iterable[str]) -> list[str]:
         )
         if {f"--{option}", f"--no-{option}"} & given:
             continue
-        source = ".env" if name in invocation.from_dotenv else "environment"
+        source = invocation.from_dotenv.get(name, "environment")
         defaults.append(f"{name}={environ[name]} ({source})")
     return defaults

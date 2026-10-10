@@ -134,8 +134,8 @@ track:
 | `assets/svg/` (SVG copies of PDF figures, HTML decks) | 86 MB | assets build (`SvgAssetsBuilder`, `pdftocairo`) | minutes |
 | `assets/web/vendor/` (reveal.js, MathJax) | 11 MB | `setup.steps` (`doit web`, npm) | network, ~1 min |
 | `assets/videos/**/*.{mp4,png,quality}` | 100 MB | `deckz videos render` (Manim, 1080p60) | hours |
-| `.venv/` | 3.1 GB | `uv sync` | slow; needs a C toolchain for pycairo |
-| `.env` (`DECKZ_*` defaults, lab secrets) | — | by hand | — |
+| `.venv/` | 3.1 GB apparent, 27 MB on disk | `uv sync` (hard links from uv's cache) | 0.8 s with a warm cache |
+| `.env` (`DECKZ_*` defaults, lab secrets) | — | user-level `~/.config/deckz/.env` | — |
 
 `assets/plt` and `assets/pltly` are committed, so they come with the checkout.
 
@@ -177,20 +177,30 @@ reproducible PDFs (matplotlib's `metadata={"CreationDate": None}`, or
 ### Finding 2: the venv and `../deckz`
 
 slides depends on deckz through `[tool.uv.sources] deckz = {path = "../deckz",
-editable = true}`. A worktree outside `shuuchuu/` breaks that path, and a per-worktree
-`uv sync` costs a 3.1 GB environment (hard-linked from uv's cache, but still slow, and
-pycairo needs compiling). Instead, every task uses the main checkout's environment:
-`PATH` starts with `<main>/.venv/bin`, so the hooks (`if command -v deckz ...; else uv
-run ...`) find `deckz` directly. For the agent's own `uv run deckz ...` calls,
-`UV_PROJECT_ENVIRONMENT=<main>/.venv` with `UV_NO_SYNC=1` (verified in the spike: no
-`.venv` is created, deckz resolves every path in the worktree). Under the sandbox,
-`~/.cache` is read-only, which breaks `uv run` (it takes a lock in its cache) and makes
-matplotlib warn, so the workspace's caches live in its gitignored `.run/cache`
-(`UV_CACHE_DIR`, `XDG_CACHE_HOME`, `MPLCONFIGDIR`).
-Worktrees go next to the repository (`../slides.tasks/<task>` breaks `../deckz`;
-`../slides--<task>` doesn't), so that a stray `uv sync` still resolves. A task that
-changes `pyproject.toml` or `uv.lock` can't share the environment; studioz refuses
-those (expert work).
+editable = true}`. A worktree outside `shuuchuu/` breaks that path, so worktrees go
+next to the repository (`../slides.tasks/<task>` breaks `../deckz`; `../slides--<task>`
+doesn't).
+
+**Each workspace has its own environment** (decided 2026-10-10, after the first
+version of `deckz worktree` linked the main checkout's `.venv`). A shared environment
+breaks the invariant that workspaces are independent: once either checkout's
+`uv.lock` changes, `uv run` in one re-syncs the environment to its lock and the other
+silently runs with the wrong versions; a `uv sync` in a workspace changes the main
+checkout's; and under the sandbox, the environment is outside the writable
+worktree. Measured, a workspace's own `uv sync` costs 0.8 s and 27 MB on disk: uv
+hard-links from its cache (same disk), and pycairo's wheel is built once and cached.
+slides declares it as a `setup.steps` entry, and `deckz worktree add` runs `deckz
+setup` in the new worktree. The spike's alternative (`PATH`, `UV_PROJECT_ENVIRONMENT`
+and `UV_NO_SYNC` pointing at the main checkout's environment) is dropped.
+
+Under the sandbox, `~/.cache` is read-only, which breaks `uv run` (it takes a lock in
+its cache) and makes matplotlib warn, so the workspace's caches live in its gitignored
+`.run/cache` (`UV_CACHE_DIR`, `XDG_CACHE_HOME`, `MPLCONFIGDIR`); with them, `uv run`
+in the workspace syncs nothing (the environment was synced when it was created).
+
+What every checkout shares (one's credentials and defaults) goes in the user-level
+`~/.config/deckz/.env`, which deckz reads after the checkout's own `.env`: nothing is
+linked between checkouts.
 
 ### Finding 3: no copy-on-write here
 
@@ -228,10 +238,10 @@ A deckz command, usable without studioz: `deckz worktree add <name> [--base <rev
 1. `git worktree add ../<repo>--<name> -b ws/<name> <base>` (`<base>`: the upstream
    branch, `origin/main` on slides).
 2. Copy into it the main checkout's ignored files under `deckz.yml`'s `worktree.seed`
-   (for slides: `assets/typ`, `assets/svg`, `assets/web/vendor`, `assets/videos`),
-   and symlink `worktree.link` (`.env`, and `.venv` while `pyproject.toml` and
-   `uv.lock` match; a symlink `.venv/` doesn't ignore goes in `info/exclude`).
-3. Run `deckz setup --check` there: everything present, hooks resolved (slides'
+   (for slides: `assets/typ`, `assets/svg`, `assets/web/vendor`, `assets/videos`).
+   Nothing is linked (see Finding 2).
+3. Run `deckz setup` there (its own environment: `uv sync`), then everything is
+   present, hooks resolved (slides'
    `core.hooksPath` is the committed, relative `.githooks`, so the worktree's own
    copy runs).
 
@@ -480,7 +490,7 @@ routine commands unprompted.
 | Worktree ready | `git worktree add`: 2.6 s (692 MB); seeding (`cp -a` of `assets/typ`, `assets/svg`, `assets/web/vendor`, video renders, `.env` symlinked): 0.5 s |
 | Seeded outputs fresh? | No: with copied times, 7/7 videos and 266/266 figures stale (Finding 1). After `touch`, 0 stale (sources clean in the main checkout) |
 | Committed plots | All 101 rebuilt and modified on first build (Finding 1): a bug for every fresh clone |
-| Shared venv | Works: no `.venv` created, paths in the worktree; under the sandbox, needs the cache variables (Finding 2) |
+| Shared venv | Works: no `.venv` created, paths in the worktree; under the sandbox, needs the cache variables. Superseded: each workspace has its own environment (Finding 2) |
 | Build times | `orsys/pnd` handout: 175 s first (almost all the spurious plot rebuild), 2.7 s after; Fortinet first build 5.4 s; `--watch` rebuild seen 0.5 s after an edit; small decks peak 0.3-1 GB |
 | Git hooks in the worktree | Fire: `commit-msg` refused a one-sided commit (`Lang-sync`), `pre-commit` refused a `{=latex}` block, both with their fix messages |
 | Claude hooks | `PreToolUse` fired on every Bash call; `PostToolUse` post-edit skipped by a `cat >>` write (see "Agent configuration") |
