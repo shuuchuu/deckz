@@ -132,6 +132,25 @@ def test_worktrees_lists_changes_and_unsynced_commits(tmp_path: Path) -> None:
     assert worktree.unsynced == 1
 
 
+def test_worktrees_lists_one_stopped_in_a_rebase(tmp_path: Path) -> None:
+    main = _make_repo(tmp_path)
+    path = add(_settings(main), "demo").path
+    _write(path / "figures" / "fig.typ", "Mine\n")
+    _git(path, "commit", "-am", "Mine")
+    _write(main / "figures" / "fig.typ", "Theirs\n")
+    _git(main, "commit", "-am", "Theirs")
+    rebase = subprocess.run(
+        ["git", "-C", str(path), "rebase", "main"], capture_output=True, check=False
+    )
+    assert rebase.returncode  # Stopped on the conflict, HEAD detached.
+
+    (worktree,) = worktrees(_settings(main))
+
+    assert worktree.name == "demo"
+    assert worktree.branch == "ws/demo"
+    assert "UU figures/fig.typ" in worktree.changes
+
+
 def test_remove_deletes_a_clean_worktree_and_its_branch(tmp_path: Path) -> None:
     main = _make_repo(tmp_path)
     path = add(_settings(main), "demo").path

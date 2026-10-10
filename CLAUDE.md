@@ -428,6 +428,13 @@ disk (the index is reset, then exactly those are staged), git's hooks run
 by the workspace's own deckz (its `.venv/bin` first on the `PATH`), and the
 `Lang-sync` rule asked beforehand from deckz's `i18n_stale.one_sided` with
 the pairs `changes.LangPairs` keeps per workspace (about a second to find).
+`studioz.sync` backs the Synchronisation dialog: fetch and rebase onto the
+main checkout's upstream branch (a conflict fixed in the editor, then
+continued, or aborted), the commits checked as they'd be pushed (`deckz
+check --staged` with a temporary `GIT_INDEX_FILE` holding the commit, and
+`deckz hooks check-commits`), then a push of exactly the commit checked,
+never forced. The dialogs open through `static/dialogs.js`, so that a panel
+reloading under its button doesn't drop the answer.
 
 Its tests are in `studioz/tests/`, driving the app with FastAPI's test client
 on a temporary repository, and the watches with a fake `deckz` printing the

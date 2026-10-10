@@ -1,0 +1,17 @@
+{% set base = "/espaces/" ~ workspace.name ~ "/synchronisation" %}
+<section class="sync" id="sync" hx-get="{{ base }}{% if deck %}?formation={{ deck | urlencode }}{% endif %}" hx-swap="outerHTML"
+         hx-trigger="workspace-changed from:body, every 30s">
+  <h2>Synchronisation</h2>
+  {% if state is none %}
+  <p class="empty">La copie principale du dépôt n'a pas de branche amont : rien avec quoi synchroniser.</p>
+  {% else %}
+  {% set count = state.ahead | length %}
+  <p>{% if count %}{{ count }} commit{{ "s" if count > 1 }} à publier{% else %}Aucun commit à publier{% endif %},
+    {% if state.behind %}en retard de {{ state.behind }} sur {{ state.upstream.name }}{% else %}à jour avec {{ state.upstream.name }}{% endif %}
+    <span class="hint">({% if state.fetched %}récupéré {{ state.fetched | ago }}{% else %}jamais récupéré{% endif %})</span></p>
+  {% if state.conflicts is not none %}<p class="error">Mise à jour arrêtée sur un conflit.</p>{% endif %}
+  <button type="button" class="commit-open" data-dialog="#sync-dialog" data-url="{{ base }}/formulaire"
+          data-values='{{ {"formation": deck or ""} | tojson }}'
+          title="Récupérer la branche amont, y replacer vos commits, les vérifier et les publier">Synchroniser…</button>
+  {% endif %}
+</section>

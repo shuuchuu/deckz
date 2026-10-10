@@ -30,7 +30,16 @@ from deckz.exceptions import DeckzError, WorktreeError
 from deckz.models import Lang
 from deckz.worktrees import main_checkout, remove
 
-from . import __version__, background, changes, commits, problems, sources, workspaces
+from . import (
+    __version__,
+    background,
+    changes,
+    commits,
+    problems,
+    sources,
+    sync,
+    workspaces,
+)
 from .baselines import Baselines
 from .comparison import compare, signatures
 from .local_only import local_only
@@ -628,6 +637,154 @@ def _keep_baseline(studio: Studio, workspace: Path, draft: Draft) -> None:
         and watch.snapshot().state is State.BUILT
     ):
         studio.baselines.capture(workspace, directory, draft.lang)
+
+
+@router.get("/espaces/{name}/synchronisation", response_class=HTMLResponse)
+def sync_panel(
+    request: Request, studio: StudioDep, name: str, formation: str = ""
+) -> Response:
+    """Where the workspace stands against the upstream branch, without fetching.
+
+    Returns:
+        The navigator's Synchronisation panel.
+    """
+    found = studio.workspace(name)
+    up = sync.upstream(studio.main)
+    state = sync.state(found.worktree.path, up) if up else None
+    return _render(
+        request, "_sync_panel.html", workspace=found, state=state, deck=formation
+    )
+
+
+Formation = Annotated[str, Form()]
+"""The deck on screen, whose page opens a file in its editor; empty elsewhere."""
+
+
+def _sync_dialog(
+    request: Request,
+    studio: Studio,
+    name: str,
+    action: Callable[[Path, sync.Upstream], sync.Outcome | None],
+    deck: str,
+    *,
+    moved: bool = False,
+) -> Response:
+    """The Synchronisation dialog, after `action`.
+
+    Args:
+        request: The request.
+        studio: studioz.
+        name: The workspace.
+        action: What to do in it, given the upstream branch: its outcome, \
+            or None to only show where it stands.
+        deck: The deck on screen, if any: its page opens a conflict's file.
+        moved: Whether `action` may have moved the workspace's HEAD, which \
+            the other panels and the before/after view follow.
+
+    Returns:
+        The dialog's content.
+
+    Raises:
+        HTTPException: 409 without an upstream branch.
+    """
+    found = studio.workspace(name)
+    path = found.worktree.path
+    up = sync.upstream(studio.main)
+    if up is None:
+        raise HTTPException(409, "Pas de branche amont avec laquelle synchroniser")
+    outcome = action(path, up)
+    state = sync.state(path, up)
+    response = _render(
+        request,
+        "_sync.html",
+        workspace=found,
+        state=state,
+        outcome=outcome,
+        deck=deck,
+        editable={
+            file
+            for file in state.conflicts or ()
+            if deck and sources.source(path, file) is not None
+        },
+    )
+    if outcome is not None:
+        events = ["workspace-changed"] + (["comparison-refresh"] if moved else [])
+        response.headers["HX-Trigger"] = ", ".join(events)
+    return response
+
+
+@router.post("/espaces/{name}/synchronisation/formulaire", response_class=HTMLResponse)
+def sync_form(
+    request: Request, studio: StudioDep, name: str, formation: Formation = ""
+) -> Response:
+    return _sync_dialog(request, studio, name, lambda *_: None, formation)
+
+
+@router.post(
+    "/espaces/{name}/synchronisation/mettre-a-jour", response_class=HTMLResponse
+)
+def sync_update(
+    request: Request, studio: StudioDep, name: str, formation: Formation = ""
+) -> Response:
+    """Fetch, and rebase the workspace's commits onto the upstream branch.
+
+    Returns:
+        The dialog, with how it went (a conflict to fix, typically).
+    """
+    return _sync_dialog(request, studio, name, sync.update, formation, moved=True)
+
+
+@router.post("/espaces/{name}/synchronisation/verifier", response_class=HTMLResponse)
+def sync_check(
+    request: Request, studio: StudioDep, name: str, formation: Formation = ""
+) -> Response:
+    """Update the workspace, then check its commits as they would be pushed.
+
+    Returns:
+        The dialog, offering to publish the commit checked if it passes.
+    """
+    return _sync_dialog(request, studio, name, sync.prepare, formation, moved=True)
+
+
+@router.post("/espaces/{name}/synchronisation/publier", response_class=HTMLResponse)
+def sync_publish(
+    request: Request,
+    studio: StudioDep,
+    name: str,
+    sha: Annotated[str, Form()],
+    formation: Formation = "",
+) -> Response:
+    """Push the commit checked, unless the workspace moved since.
+
+    Returns:
+        The dialog, with how it went.
+    """
+    return _sync_dialog(
+        request, studio, name, lambda path, up: sync.publish(path, up, sha), formation
+    )
+
+
+@router.post("/espaces/{name}/synchronisation/continuer", response_class=HTMLResponse)
+def sync_continue(
+    request: Request, studio: StudioDep, name: str, formation: Formation = ""
+) -> Response:
+    return _sync_dialog(
+        request,
+        studio,
+        name,
+        lambda path, _: sync.continue_rebase(path),
+        formation,
+        moved=True,
+    )
+
+
+@router.post("/espaces/{name}/synchronisation/abandonner", response_class=HTMLResponse)
+def sync_abort(
+    request: Request, studio: StudioDep, name: str, formation: Formation = ""
+) -> Response:
+    return _sync_dialog(
+        request, studio, name, lambda path, _: sync.abort(path), formation, moved=True
+    )
 
 
 @router.get("/espaces/{name}/taille", response_class=HTMLResponse)

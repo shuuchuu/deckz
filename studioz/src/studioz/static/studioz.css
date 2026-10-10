@@ -184,7 +184,7 @@ tr.closed td { color: var(--muted); }
 .editor-pane { display: flex; flex-direction: column; flex: 1; min-width: 0; border-left: 1px solid var(--line); background: var(--panel); }
 .editor-pane[hidden] { display: none; }
 .editor-bar { display: flex; gap: 0.6rem; align-items: center; padding: 0.3rem 0.6rem; border-bottom: 1px solid var(--line); }
-.editor-file { font-family: var(--mono); font-size: 0.85em; overflow-wrap: anywhere; margin-right: auto; }
+.editor-file { font-family: var(--mono); font-size: 0.85em; overflow-wrap: anywhere; margin-right: auto; flex: 1; min-width: 0; }
 .editor-status { font-size: 0.85em; color: var(--muted); white-space: nowrap; }
 .editor-status[data-status="modified"] { color: var(--accent); }
 .editor-status[data-status="conflict"], .editor-status[data-status="failed"] { color: var(--danger); }
@@ -245,3 +245,16 @@ tr.closed td { color: var(--muted); }
 @media (prefers-color-scheme: dark) {
   .lang-sync { border-left-color: #e0a96d; }
 }
+
+/* The Synchronisation panel and dialog. */
+.sync p { font-size: 0.9em; margin: 0.2rem 0; }
+.sync .hint, .sync .error { font-size: 0.85em; }
+.sync-form h3 { font-size: 0.9em; margin: 0.4rem 0 0; }
+.sync-form .commits { list-style: none; padding: 0; margin: 0; max-height: 30vh; overflow-y: auto; }
+.sync-form .commits li { display: flex; gap: 0.5rem; align-items: baseline; padding: 0.15rem 0; border-bottom: 1px solid var(--line); }
+.sync-form .commits .subject { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.sync-form .commits .author { color: var(--muted); font-size: 0.85em; }
+.sync-form .output pre { max-height: 30vh; overflow: auto; font-size: 0.8em; margin: 0.3rem 0 0; }
+/* The dialogs live in the navigator, whose links are plain. */
+.navigator dialog a.change { color: var(--accent); font-family: var(--mono); font-size: 0.9em; overflow-wrap: anywhere; }
+.navigator dialog a.change:hover { text-decoration: underline; }

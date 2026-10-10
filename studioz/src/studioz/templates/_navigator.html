@@ -19,4 +19,9 @@
     <h2>Modifications <span class="count">{{ worktree.changes | length }}</span></h2>
   </section>
   <dialog id="commit-dialog" class="commit-dialog" aria-label="Committer"></dialog>
+  <section class="sync" id="sync" hx-swap="outerHTML" hx-trigger="load"
+           hx-get="/espaces/{{ workspace.name }}/synchronisation{% if deck %}?formation={{ deck | urlencode }}{% endif %}">
+    <h2>Synchronisation</h2>
+  </section>
+  <dialog id="sync-dialog" class="commit-dialog" aria-label="Synchroniser"></dialog>
 </nav>

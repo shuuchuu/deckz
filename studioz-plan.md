@@ -658,6 +658,33 @@ at build. Left: the agent drafting the message, "translate now" and "ask
 the agent to fix it" (phase 3); the draft is lost when the page changes;
 the commit runs while the dialog waits (20 s), not in the job queue.
 
+**Increment 7: done** (2026-10-10): Sync, a Synchronisation panel in the
+navigator (commits to publish, how far behind the upstream branch as last
+fetched, a rebase stopped on a conflict) and its dialog. "Mettre à jour"
+fetches and rebases the workspace's commits onto the upstream branch (the
+main checkout's: `origin/main` on slides), uncommitted work carried along
+(`--autostash`). A conflict stops there: the dialog lists the files, which
+open in the editor beside the PDF; "Continuer" is refused while a conflict
+marker is left, "Abandonner" puts everything back. "Mettre à jour et
+vérifier" then checks the commits as they would be pushed, whatever the
+workspace's files are: `deckz check --staged` with a temporary index holding
+the commit (`GIT_INDEX_FILE`, no deckz change needed), and the `Lang-sync`
+rule on each commit (`deckz hooks check-commits`, as CI). Only then
+"Publier N commits sur origin/main": exactly the commit checked, refused if
+the workspace's HEAD moved since, never forced (a push rejected because the
+upstream moved asks for an update first). The main checkout's files and
+branch never move. It exposed a deckz gap: a worktree stopped in a rebase
+has a detached HEAD, so `deckz.worktrees` didn't list it (studioz lost the
+workspace while its conflict was being fixed); it now reads the rebase's
+branch. Also: the dialogs' opening request now belongs to the dialog
+(`static/dialogs.js`), since htmx drops the answer to a button that a
+panel's reload removed meanwhile. Measured on slides: fetch and checks of
+one commit, 25 s; nothing was pushed to slides' origin (the push is tested
+against a local bare remote). Left: "ask the agent to resolve the conflict"
+(phase 3); a conflict in the uncommitted work brought back after the
+rebase (`--autostash`) is only reported, its files left with markers and a
+copy in `git stash list`.
+
 ### Phase 3: the agent in a workspace
 
 The conversation panel, question forms, comments on frames as instructions,

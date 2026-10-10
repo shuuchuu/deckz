@@ -1,0 +1,61 @@
+{% set base = "/espaces/" ~ workspace.name ~ "/synchronisation" %}
+{% set count = state.ahead | length %}
+<div class="commit-form sync-form" hx-target="#sync-dialog" hx-swap="innerHTML"
+     hx-indicator="#sync-progress" hx-disabled-elt="#sync-dialog button"
+     hx-vals='{{ {"formation": deck or ""} | tojson }}'>
+  <header>
+    <h2>Synchroniser avec {{ state.upstream.name }}</h2>
+    <button type="button" class="secondary" onclick="this.closest('dialog').close()">Fermer</button>
+  </header>
+  {% if outcome %}
+  {% if outcome.message %}<p class="{{ 'committed' if outcome.ok else 'error' }}" role="status">{{ outcome.message }}</p>{% endif %}
+  {% if outcome.output %}
+  <details class="output"{% if not outcome.ok %} open{% endif %}><summary>Détails</summary><pre>{{ outcome.output }}</pre></details>
+  {% endif %}
+  {% endif %}
+  {% if state.conflicts is not none %}
+  <div class="lang-sync">
+    <p>La mise à jour est arrêtée sur un conflit. Dans chacun de ces fichiers, git a mis les deux versions
+      entre des marqueurs <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>, <code>=======</code> et
+      <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> : gardez le bon texte, retirez les marqueurs, enregistrez, puis continuez.</p>
+    <ul>
+      {% for path in state.conflicts %}
+      <li>{% if path in editable %}<a href="#" class="change" data-file="{{ path }}"
+             onclick="this.closest('dialog').close()" title="L'ouvrir dans l'éditeur">{{ path }}</a>{% else %}<code>{{ path }}</code>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    <p class="hint">« Abandonner » remet l'espace comme avant la mise à jour, vos modifications comprises.</p>
+  </div>
+  <footer>
+    <button type="button" hx-post="{{ base }}/continuer">Continuer</button>
+    <button type="button" class="secondary" hx-post="{{ base }}/abandonner">Abandonner la mise à jour</button>
+    <span class="indicator" id="sync-progress">En cours…</span>
+  </footer>
+  {% else %}
+  <p>{% if state.behind %}{{ state.upstream.name }} a {{ state.behind }} commit{{ "s" if state.behind > 1 }} que l'espace n'a pas{% else %}L'espace est à jour avec {{ state.upstream.name }}{% endif %}
+    <span class="hint">({% if state.fetched %}récupéré {{ state.fetched | ago }}{% else %}jamais récupéré{% endif %})</span>.</p>
+  <h3>Commits à publier</h3>
+  {% if count %}
+  <ul class="commits">
+    {% for commit in state.ahead %}
+    <li><code>{{ commit.sha[:7] }}</code> <span class="subject">{{ commit.subject }}</span> <span class="author">{{ commit.author }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">Aucun : committez d'abord ce que vous voulez publier.</p>
+  {% endif %}
+  <p class="hint">Les modifications non committées restent dans l'espace, et le suivent quand il se met à jour.</p>
+  <footer>
+    {% if outcome and outcome.checked and outcome.checked == (state.ahead[0].sha if count else None) %}
+    <button type="button" hx-post="{{ base }}/publier" hx-vals='{{ {"sha": outcome.checked} | tojson }}'>Publier {{ count }} commit{{ "s" if count > 1 }} sur {{ state.upstream.name }}</button>
+    <span class="hint">Ils seront visibles de tous.</span>
+    {% else %}
+    <button type="button" hx-post="{{ base }}/verifier"{% if not count %} disabled{% endif %}
+            title="Récupérer {{ state.upstream.name }}, y replacer vos commits, puis les vérifier">Mettre à jour et vérifier</button>
+    {% endif %}
+    <button type="button" class="secondary" hx-post="{{ base }}/mettre-a-jour"
+            title="Récupérer {{ state.upstream.name }} et y replacer vos commits, sans rien publier">Mettre à jour seulement</button>
+    <span class="indicator" id="sync-progress">En cours : récupération, puis vérifications (jusqu'à une demi-minute)…</span>
+  </footer>
+  {% endif %}
+</div>

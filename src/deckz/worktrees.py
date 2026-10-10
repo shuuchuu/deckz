@@ -94,7 +94,7 @@ def worktree_path(main: Path, name: str) -> Path:
 
 
 def worktrees(settings: "GlobalSettings") -> list[Worktree]:
-    """Every worktree on a `ws/` branch.
+    """Every worktree on a `ws/` branch, or rebasing one.
 
     Returns:
         Them, in `git worktree list`'s order.
@@ -103,10 +103,13 @@ def worktrees(settings: "GlobalSettings") -> list[Worktree]:
     found = []
     for block in _git(main, "worktree", "list", "--porcelain").split("\n\n"):
         fields = dict(line.split(" ", 1) for line in block.splitlines() if " " in line)
-        branch = fields.get("branch", "").removeprefix("refs/heads/")
-        if not branch.startswith(BRANCH_PREFIX):
+        if "worktree" not in fields:
             continue
         path = Path(fields["worktree"])
+        branch = fields.get("branch") or _rebased_branch(path) or ""
+        branch = branch.removeprefix("refs/heads/")
+        if not branch.startswith(BRANCH_PREFIX):
+            continue
         changes = (
             tuple(_git(path, "status", "--porcelain").splitlines())
             if path.is_dir()
@@ -122,6 +125,23 @@ def worktrees(settings: "GlobalSettings") -> list[Worktree]:
             )
         )
     return found
+
+
+def _rebased_branch(path: Path) -> str | None:
+    """The branch a rebase in `path` is on: its HEAD is detached until it ends.
+
+    Returns:
+        Its ref, None outside a rebase.
+    """
+    for state in ("rebase-merge", "rebase-apply"):
+        try:
+            located = _git(path, "rev-parse", "--git-path", f"{state}/head-name")
+        except WorktreeError:
+            return None
+        head_name = path / located.strip()
+        if head_name.is_file():
+            return head_name.read_text(encoding="utf8").strip()
+    return None
 
 
 def _unsynced(main: Path, branch: str) -> int:
