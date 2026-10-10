@@ -299,8 +299,9 @@ tr.closed td { color: var(--muted); }
 .agent-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-entry[data-kind="person"] { align-self: flex-end; max-width: 90%; background: color-mix(in srgb, var(--accent) 12%, transparent); padding: 0.3rem 0.6rem; border-radius: 8px; }
 .agent-entry .who { margin: 0; font-size: 0.75em; color: var(--muted); }
-.agent-entry[data-kind="tool"], .agent-entry[data-kind="end"] { color: var(--muted); font-size: 0.82em; }
+.agent-entry[data-kind="tool"], .agent-entry[data-kind="end"], .agent-entry[data-kind="changes"], .agent-entry[data-kind="notice"] { color: var(--muted); font-size: 0.82em; }
 .agent-entry[data-kind="tool"] .agent-text::before { content: "→ "; }
+.agent-entry[data-kind="notice"] { border-left: 3px solid var(--muted); padding-left: 0.5rem; }
 .agent-entry[data-kind="end"] { border-bottom: 1px dashed var(--line); padding-bottom: 0.3rem; }
 .agent-entry[data-kind="error"] { background: var(--error-bg); padding: 0.3rem 0.6rem; border-radius: 4px; }
 .agent-detail { margin: 0.15rem 0 0; font-size: 0.85em; max-height: 8rem; overflow: auto; color: var(--muted); }

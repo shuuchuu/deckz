@@ -259,6 +259,13 @@ class FakeClient:
         self.prompts.append(prompt)
 
     async def receive_response(self) -> AsyncIterator[Any]:
+        if self.prompts[-1].endswith("écris"):
+            cwd = Path(str(self.options.cwd))
+            (cwd / "client" / "abc" / "deck.yml").write_text("name: x\n", "utf8")
+            (cwd / "nouveau.md").write_text("nouveau\n", "utf8")
+            yield _assistant(TextBlock("Écrit."))
+            yield _result()
+            return
         if self.prompts[-1] == "demande":
             # As Claude Code asks: the tool use, then the permission request.
             yield _assistant(ToolUseBlock("q", agent.ASK, _QUESTIONS))
@@ -594,3 +601,54 @@ def test_static_files_are_checked_again(agent_client: TestClient) -> None:
         "/static/agent.js", headers={"If-None-Match": response.headers["ETag"]}
     )
     assert again.status_code == 304
+
+
+def test_undo_the_last_turn(
+    agent_client: TestClient, workspace: Path, factory: FakeFactory
+) -> None:
+    agent_client.post(f"{BASE}/message", data={"message": "écris"}, headers=ORIGIN)
+    conversation = _conversation(agent_client, workspace)
+    _wait_idle(conversation)
+    assert [(e.kind, e.text, e.detail) for e in conversation.entries][-3:] == [
+        ("text", "Écrit.", ""),
+        (
+            "changes",
+            "2 fichiers modifiés par ce tour",
+            "client/abc/deck.yml\nnouveau.md",
+        ),
+        ("end", "Terminé en 2 s", ""),
+    ]
+
+    response = agent_client.post(f"{BASE}/annuler", headers=ORIGIN)
+
+    assert response.status_code == 204
+    deck = workspace / "client" / "abc" / "deck.yml"
+    assert deck.read_text(encoding="utf8") == "name: abc\n"
+    assert not (workspace / "nouveau.md").exists()
+    assert conversation.entries[-1].text == "Tour annulé : 2 fichier(s) remis"
+    assert conversation.undoable is None
+    again = agent_client.post(f"{BASE}/annuler", headers=ORIGIN)
+    assert again.status_code == 409
+    assert again.json() == {"error": "Aucun tour à annuler"}
+
+    # The agent hears of it with the next message; the transcript shows
+    # the person's own words.
+    agent_client.post(f"{BASE}/message", data={"message": "Et ?"}, headers=ORIGIN)
+    _wait_idle(conversation)
+    told = factory.clients[0].prompts[-1]
+    assert told.startswith("(La personne a annulé ton dernier tour")
+    assert "client/abc/deck.yml, nouveau.md" in told
+    assert told.endswith("\n\nEt ?")
+    said = [e.text for e in conversation.entries if e.kind == "person"]
+    assert said[-1] == "Et ?"
+
+
+def test_the_last_turn_survives_a_restart(
+    agent_client: TestClient, workspace: Path, factory: FakeFactory
+) -> None:
+    agent_client.post(f"{BASE}/message", data={"message": "écris"}, headers=ORIGIN)
+    _wait_idle(_conversation(agent_client, workspace))
+    again = Conversation(workspace, factory)
+    assert again.undoable is not None
+    assert asyncio.run(again.undo()) is None
+    assert not (workspace / "nouveau.md").exists()

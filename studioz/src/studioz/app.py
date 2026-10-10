@@ -1114,6 +1114,9 @@ async def agent_events(
             state: dict[str, object] = {
                 "running": conversation.running,
                 "asking": question is not None,
+                "undoable": len(conversation.undoable.files)
+                if conversation.undoable
+                else 0,
                 "loggedIn": ok,
                 "account": account,
             }
@@ -1185,6 +1188,20 @@ async def agent_answer(request: Request, studio: StudioDep, name: str) -> Respon
         return JSONResponse(
             {"error": "Cette question n'attend plus de réponse"}, status_code=409
         )
+    return Response(status_code=204)
+
+
+@router.post("/espaces/{name}/agent/annuler")
+async def agent_undo(studio: StudioDep, name: str) -> Response:
+    """Put back the files the agent's last turn changed.
+
+    Returns:
+        204, or 409 with why not (a turn running, a commit since).
+    """
+    found = studio.workspace(name)
+    refused = await studio.agents.conversation(found.worktree.path).undo()
+    if refused is not None:
+        return JSONResponse({"error": refused}, status_code=409)
     return Response(status_code=204)
 
 

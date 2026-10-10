@@ -3,9 +3,9 @@
 ## Where things stand, and how to resume (2026-10-10)
 
 **Done:** phases 0, 1 and 2 (workspaces without agents: increments 1 to 8 under
-"Phase 2"), and phase 3's increments 1 and 2 (the conversation panel, question
-forms, under "Phase 3"). **Next:** phase 3's increment 3, checkpoints and "Annuler
-ce tour" (see "Phase 3's increments" below). `git log origin/main..main` in
+"Phase 2"), and phase 3's increments 1 to 3 (the conversation panel, question
+forms, checkpoints and "Annuler ce tour", under "Phase 3"). **Next:** phase 3's
+increment 4, usage and rate-limit pauses (see "Phase 3's increments" below). `git log origin/main..main` in
 `../deckz` (and in `../slides`, for its `uv.lock`) lists what isn't pushed;
 nothing is released since 31.3.3. Push and release are the user's call.
 
@@ -25,7 +25,8 @@ architecture):
 | `baselines.py`, `comparison.py` | handouts as of the last commit, frame-by-frame before/after |
 | `commits.py`, `sync.py` | the Commit and Synchronisation dialogs |
 | `jobs.py`, `actions.py` | the job queue; build, upload, publish |
-| `agent.py` | each workspace's agent conversation (Agent SDK): options, the git refusal hook, the transcript |
+| `agent.py` | each workspace's agent conversation (Agent SDK): options, the git refusal hook, questions, the transcript |
+| `checkpoints.py` | the workspace's files before and after each agent turn, and undoing the last one |
 | `static/` | `deck.js` (pdf.js viewer, comparison), `editor.js` (CodeMirror), `dialogs.js` (dialogs opened from reloading panels), `agent.js` (the agent panel), vendored JS (`uv run doit vendor`) |
 
 Tests: `studioz/tests/`, against temporary repositories, a fake `deckz` (a script
@@ -101,8 +102,7 @@ are gone). studioz pins `claude-agent-sdk==0.2.160` (bundling Claude Code
 1. **The conversation panel**: done (see "Phase 3"), with the commit and branch
    refusals and `auto` permissions in the sandbox, planned for 3.
 2. **Questions**: done (see "Phase 3").
-3. **Guardrails**: a checkpoint after each turn (private index,
-   `refs/studioz/<workspace>/`) and "Annuler ce tour".
+3. **Guardrails**: done (see "Phase 3").
 4. **Usage**: each run's usage, rate-limit pauses with the reset time.
 5. **The agent in the existing dialogs**: drafting the commit message, "translate
    now" for a one-sided pair, "ask the agent to fix it" after a refusal, resolving a
@@ -870,6 +870,25 @@ slides: a two-question form (one single, one multiple choice with a free
 answer) answered from the page, the agent repeating the answers; a question
 stopped. Left: a question pending when studioz stops is lost (the turn with
 it): `defer` and answering on resume, with phase 4's workflows.
+
+**Increment 3: done** (2026-10-10): checkpoints and "Annuler ce tour".
+`studioz.checkpoints` snapshots the workspace's files before and after each
+turn (`git add -A` into a private index, `.run/studioz/agent/index`, copied
+from the workspace's the first time; the workspace's index, HEAD and branch
+never move), and keeps a turn that changed files as two trees under
+`refs/studioz/<workspace>/{avant,apres}` plus `turn.json`. The transcript
+lists the files each turn changed. "Annuler ce tour" (a second click
+confirms) puts back the files still as the turn left them, deletes those it
+created, and leaves one the person changed since (said in the transcript); it
+is refused once the workspace's HEAD moved (a commit, a sync). The agent is
+told with the next message which files went back. Only the last turn can be
+undone, also after a studioz restart. Measured on slides: a snapshot takes
+70 ms. Tried on `studioz-dev` (through the routes the panel uses: the browser
+extension wasn't connected): the agent added a line to `eni/ml1/deck.yml`,
+the turn listed it, the undo put it back (`git status` clean, refs removed),
+and the agent, asked next, knew the file was back. Left: undoing more than the
+last turn; the `refs/studioz/` of a closed workspace stay (harmless, a few
+objects); the button itself not yet tried in a browser.
 
 ### Phase 4: workflows
 

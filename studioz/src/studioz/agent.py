@@ -55,6 +55,7 @@ from claude_agent_sdk import (
     UserMessage,
 )
 
+from . import checkpoints
 from .watches import workspace_environment
 from .workspaces import STATE_DIR
 
@@ -522,6 +523,10 @@ class Conversation:
         """Grows at each change, which the pages follow."""
         self.question: Question | None = None
         """The question the agent waits on, if any."""
+        self.undoable: checkpoints.Turn | None = checkpoints.last(self._directory)
+        """The last turn, if it changed files: "Annuler ce tour" puts them back."""
+        self._note: str | None = None
+        """What the agent is told with the next message (an undone turn)."""
         self._questions = count(1)
         self._client: Client | None = None
         self._task: asyncio.Task[None] | None = None
@@ -582,10 +587,15 @@ class Conversation:
         self.running = True
         self._stopped = False
         await self._add(Entry("person", prompt.strip()))
-        self._task = asyncio.create_task(self._turn(prompt.strip()))
+        note, self._note = self._note, None
+        told = f"{note}\n\n{prompt.strip()}" if note else prompt.strip()
+        self._task = asyncio.create_task(self._turn(told))
         return True
 
     async def _turn(self, prompt: str) -> None:
+        index = self._directory / "index"
+        before = await asyncio.to_thread(checkpoints.snapshot, self.workspace, index)
+        checked = False
         try:
             if self._client is None:
                 client = self._factory(
@@ -600,6 +610,10 @@ class Conversation:
                     (self._directory / _SESSION).write_text(
                         message.session_id, encoding="utf8"
                     )
+                if isinstance(message, ResultMessage) and not checked:
+                    # Before "Terminé": the files changed belong to the turn.
+                    checked = True
+                    await self._checkpoint(index, before)
                 await self._add(*entries(self.workspace, message, self._stopped))
         except asyncio.CancelledError:
             raise
@@ -608,8 +622,74 @@ class Conversation:
             await self._add(Entry("error", "L'agent s'est arrêté", _short(str(error))))
             await self._disconnect()
         finally:
+            # Even a failed turn may have changed files.
+            if not checked:
+                await self._checkpoint(index, before)
             self.running = False
             await self._notify()
+
+    async def _checkpoint(self, index: Path, before: str | None) -> None:
+        after = await asyncio.to_thread(checkpoints.snapshot, self.workspace, index)
+        if before is None or after is None:
+            return
+        turn = await asyncio.to_thread(
+            checkpoints.record, self.workspace, self._directory, before, after
+        )
+        if turn is None:
+            return
+        self.undoable = turn
+        count = len(turn.files)
+        await self._add(
+            Entry(
+                "changes",
+                f"{count} fichier{'s' if count > 1 else ''} modifié"
+                f"{'s' if count > 1 else ''} par ce tour",
+                "\n".join(turn.files),
+            )
+        )
+
+    async def undo(self) -> str | None:
+        """Put back the files the last turn changed (see `checkpoints.undo`).
+
+        Returns:
+            None once done, else why it wasn't, in French.
+        """
+        turn = self.undoable
+        if self.running or turn is None:
+            return "Aucun tour à annuler"
+        index = self._directory / "index"
+        try:
+            undone = await asyncio.to_thread(
+                checkpoints.undo, self.workspace, index, turn
+            )
+        except checkpoints.UndoRefusedError as error:
+            return str(error)
+        self.undoable = None
+        await asyncio.to_thread(checkpoints.forget, self.workspace, self._directory)
+        detail = "\n".join(undone.restored)
+        if undone.kept:
+            detail += "\nLaissés tels quels (modifiés depuis) :\n" + "\n".join(
+                undone.kept
+            )
+        await self._add(
+            Entry(
+                "notice",
+                f"Tour annulé : {len(undone.restored)} fichier(s) remis",
+                detail,
+            )
+        )
+        self._note = (
+            "(La personne a annulé ton dernier tour depuis studioz : ces fichiers "
+            f"sont revenus à leur état d'avant : {', '.join(undone.restored) or '—'}"
+            + (
+                f" ; ceux-ci, modifiés depuis par la personne, n'ont pas été touchés : "
+                f"{', '.join(undone.kept)}"
+                if undone.kept
+                else ""
+            )
+            + ".)"
+        )
+        return None
 
     async def _can_use_tool(
         self, tool: str, data: dict[str, Any], context: ToolPermissionContext
@@ -673,6 +753,7 @@ class Conversation:
         for name in (_SESSION, _TRANSCRIPT):
             (self._directory / name).unlink(missing_ok=True)
         self.entries = []
+        self._note = None
         await self._notify()
 
     async def _disconnect(self) -> None:

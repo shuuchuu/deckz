@@ -13,9 +13,11 @@ if (panel) {
   const fresh = document.getElementById("agent-new");
   const fold = document.getElementById("agent-fold");
   const slot = document.getElementById("agent-question");
+  const undo = document.getElementById("agent-undo");
   const base = panel.dataset.base;
   let running = false;
   let asking = false;
+  let undoable = 0;
   let loggedIn = false;
 
   const atBottom = () => log.scrollHeight - log.scrollTop - log.clientHeight < 40;
@@ -24,6 +26,7 @@ if (panel) {
     panel.dataset.running = String(running);
     status.textContent = !loggedIn ? "" : asking ? "attend votre réponse" : running ? "travaille…" : "prêt";
     stop.hidden = !running;
+    undo.hidden = running || !undoable;
     send.disabled = running || !loggedIn;
     message.disabled = !loggedIn;
   }
@@ -40,6 +43,7 @@ if (panel) {
     const finished = running && !state.running;
     running = state.running;
     asking = state.asking;
+    undoable = state.undoable;
     loggedIn = state.loggedIn;
     login.hidden = loggedIn;
     status.title = loggedIn && state.account ? `Compte Claude : ${state.account}` : "";
@@ -119,6 +123,24 @@ if (panel) {
     confirming = null;
     fresh.textContent = "Nouvelle conversation";
     await post("nouvelle");
+  });
+
+  // A second click confirms: the files go back as they were before the turn.
+  let undoConfirming = null;
+  const undoLabel = "Annuler ce tour";
+  undo.addEventListener("click", async () => {
+    if (!undoConfirming) {
+      undo.textContent = `Remettre ${undoable} fichier${undoable > 1 ? "s" : ""} ?`;
+      undoConfirming = setTimeout(() => { undo.textContent = undoLabel; undoConfirming = null; }, 4000);
+      return;
+    }
+    clearTimeout(undoConfirming);
+    undoConfirming = null;
+    undo.textContent = undoLabel;
+    if (await post("annuler")) {
+      document.body.dispatchEvent(new Event("workspace-changed"));
+      document.body.dispatchEvent(new Event("comparison-refresh"));
+    }
   });
 
   const folded = () => document.body.classList.contains("agent-folded");
