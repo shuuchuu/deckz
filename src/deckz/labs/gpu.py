@@ -27,8 +27,9 @@ Colab's image: the image has no SSH host keys and its sshd listens on
 127.0.0.1:2222 only, so the machine's start command runs a second sshd on
 port 22; the SSH port is read from the instance's port mapping, since
 `vastai ssh-url` can name a recycled container's old port; each run is
-pinned to its CPUs (`taskset`, `PYTHON_CPU_COUNT`) and saved after every
-cell, so a hang or an interruption keeps what ran; the queue picks up
+pinned to its CPUs (`taskset`, `PYTHON_CPU_COUNT`), the least busy ones when
+it starts, since a host's other tenants can saturate CPUs 0 and 1, and saved
+after every cell, so a hang or an interruption keeps what ran; the queue picks up
 notebooks queued while it runs.
 """
 
@@ -104,6 +105,46 @@ with open(target + ".maxrss", "w") as f:
 """
 """Runs one notebook on the machine, saving it after every cell."""
 
+IDLE_CPUS = """\
+import os
+import sys
+import time
+
+
+def ticks():
+    # Per CPU: (all ticks, idle + iowait ticks) since boot.
+    counts = {}
+    with open("/proc/stat") as f:
+        for line in f:
+            name, *fields = line.split()
+            if name.startswith("cpu") and name[3:].isdigit():
+                values = [int(v) for v in fields]
+                counts[int(name[3:])] = (sum(values), values[3] + values[4])
+    return counts
+
+
+def pick(before, after, allowed, n):
+    def busy(cpu):
+        total = after[cpu][0] - before[cpu][0]
+        idle = after[cpu][1] - before[cpu][1]
+        return 1 - idle / total if total > 0 else 1.0
+
+    usable = [cpu for cpu in sorted(allowed) if cpu in before and cpu in after]
+    return sorted(sorted(usable, key=busy)[:n])
+
+
+if __name__ == "__main__":
+    before = ticks()
+    time.sleep(2)
+    after = ticks()
+    cpus = pick(before, after, os.sched_getaffinity(0), int(sys.argv[1]))
+    print(",".join(map(str, cpus)))
+"""
+"""Prints the given number of least busy CPUs the queue may use, over 2 seconds.
+
+Rented hosts are shared: CPUs 0 and 1 can be saturated by other tenants, which
+slowed CPU-bound notebook steps (and llama.cpp's generation) about tenfold."""
+
 QUEUE = """\
 #!/bin/bash
 exec 9>/work/queue.lock
@@ -138,7 +179,14 @@ while true; do
   echo "$(date -Is) start $name"
   start=$(date +%s)
   rm -rf /content && mkdir -p /content && cp "$path" /content/
-  (cd /content && PYTHON_CPU_COUNT=@CPUS@ taskset -c @CPU_LIST@ timeout @TIMEOUT@ \\
+  # The least busy CPUs right now: other tenants may saturate any of them.
+  cpu_list=$(python3 - @CPUS@ <<'PICK'
+@IDLE_CPUS@
+PICK
+)
+  [ -n "$cpu_list" ] || cpu_list=@CPU_LIST@
+  echo "$(date -Is) cpus $cpu_list for $name"
+  (cd /content && PYTHON_CPU_COUNT=@CPUS@ taskset -c "$cpu_list" timeout @TIMEOUT@ \\
     python3 /work/execute.py "$name" "/work/out/$name") > "out/$name.log" 2>&1
   echo "$? $(( $(date +%s) - start ))" > "out/$name.done"
   echo "$(date -Is) done $name: $(cat "out/$name.done")"
@@ -917,7 +965,8 @@ class GpuRun:
             QUEUE.replace("@TIMEOUT@", str(timeout))
             .replace("@CPUS@", str(cpus))
             .replace("@CPU_LIST@", ",".join(map(str, range(cpus))))
-            .replace("@FRESH@", self._fresh_dirs()),
+            .replace("@FRESH@", self._fresh_dirs())
+            .replace("@IDLE_CPUS@", IDLE_CPUS.rstrip("\n")),
             encoding="utf-8",
         )
         self._write_json(self._dir / "queue.json", {"timeout": timeout})

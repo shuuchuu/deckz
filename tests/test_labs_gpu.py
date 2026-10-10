@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,7 @@ from deckz.configuring.settings import (
 )
 from deckz.exceptions import GpuRunError, MissingExtraError
 from deckz.labs.gpu import (
+    IDLE_CPUS,
     GpuRun,
     GpuStatus,
     InstanceInfo,
@@ -189,7 +191,10 @@ def test_start_pins_the_cpus_and_sets_the_timeout(repo: Path) -> None:
     gpu_run.start(timeout=600)
 
     queue = (gpu_run.directory / "scripts" / "queue.sh.new").read_text()
-    assert "PYTHON_CPU_COUNT=2 taskset -c 0,1 timeout 600" in queue
+    assert 'PYTHON_CPU_COUNT=2 taskset -c "$cpu_list" timeout 600' in queue
+    # The least busy CPUs, picked before each notebook, else the first ones.
+    assert "cpu_list=$(python3 - 2 <<'PICK'\n" + IDLE_CPUS.rstrip("\n") in queue
+    assert '[ -n "$cpu_list" ] || cpu_list=0,1' in queue
     assert "for dir in /usr/local; do" in queue
     assert "CONTAINER_*|VAST_*" in queue
     assert "@" not in queue
@@ -200,6 +205,35 @@ def test_start_pins_the_cpus_and_sets_the_timeout(repo: Path) -> None:
     assert runner.commands("ssh")[-1][-1].startswith(
         "cd /work && mv -f execute.py.new execute.py && mv -f queue.sh.new queue.sh"
     )
+
+
+def test_idle_cpus_picks_the_least_busy_allowed_cpus() -> None:
+    namespace: dict[str, Any] = {}
+    exec(IDLE_CPUS, namespace)
+    pick = namespace["pick"]
+    # (all ticks, idle ticks): over the interval, CPUs 0 and 1 stay busy, 2 and 3
+    # are idle, 4 is idle but not allowed, 5 lies outside /proc/stat's second read.
+    before = {0: (0, 0), 1: (0, 0), 2: (0, 0), 3: (0, 0), 4: (0, 0), 5: (0, 0)}
+    after = {0: (100, 0), 1: (100, 5), 2: (100, 90), 3: (100, 99), 4: (100, 100)}
+
+    assert pick(before, after, {0, 1, 2, 3, 5}, 2) == [2, 3]
+    assert pick(before, after, {0, 1, 2, 3, 5}, 3) == [1, 2, 3]
+    # A CPU with no ticks counts as busy.
+    assert pick({0: (5, 5), 1: (0, 0)}, {0: (5, 5), 1: (10, 10)}, {0, 1}, 1) == [1]
+
+
+def test_idle_cpus_runs_as_the_queue_runs_it() -> None:
+    result = subprocess.run(
+        ["python3", "-", "2"],
+        input=IDLE_CPUS,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    cpus = [int(cpu) for cpu in result.stdout.strip().split(",")]
+    assert len(cpus) == min(2, len(os.sched_getaffinity(0)))
+    assert set(cpus) <= os.sched_getaffinity(0)
 
 
 def test_status_parses_the_machine_queue(repo: Path) -> None:

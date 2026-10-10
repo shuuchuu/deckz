@@ -102,7 +102,8 @@ class LabsGpuSettings(BaseModel):
     cpus: int = 2
     """CPUs each notebook runs on (Colab's T4 runtime has 2): hosts expose \
     dozens, which hides what Colab would hit (e.g. a deadlock with as many \
-    worker processes as CPUs)."""
+    worker processes as CPUs). The queue picks the least busy ones before \
+    each notebook."""
     ssh_key: str = "~/.ssh/id_ed25519"
     """Private SSH key whose public key is registered with Vast.ai \
     (`vastai create ssh-key`)."""
