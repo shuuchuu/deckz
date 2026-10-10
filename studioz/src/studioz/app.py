@@ -1,22 +1,29 @@
 """The web application: pages over a deckz repository's workspaces."""
 
+import asyncio
+import json
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib.resources import files
 from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from deckz.configuring.settings import GlobalSettings
 from deckz.exceptions import DeckzError, WorktreeError
+from deckz.models import Lang
 from deckz.worktrees import main_checkout, remove
 
 from . import __version__, workspaces
 from .local_only import local_only
+from .watches import Snapshot, Watch, Watches, handout
 
 _PACKAGE = Path(str(files("studioz")))
 
@@ -29,12 +36,20 @@ class Studio:
     main: Path
     """The repository's main checkout, which studioz never writes to."""
     settings: GlobalSettings
+    watches: Watches
 
     def workspace(self, name: str) -> workspaces.Workspace:
         found = workspaces.find(self.settings, name)
         if found is None:
             raise HTTPException(404, f"Pas d'espace de travail « {name} »")
         return found
+
+    def deck(self, name: str, deck: str) -> tuple[workspaces.Workspace, Path]:
+        found = self.workspace(name)
+        directory = workspaces.deck_dir(found.worktree.path, deck)
+        if directory is None:
+            raise HTTPException(404, f"Pas de formation « {deck} » dans « {name} »")
+        return found, directory
 
 
 def _studio(request: Request) -> Studio:
@@ -106,6 +121,101 @@ def workspace(request: Request, studio: StudioDep, name: str) -> Response:
     )
 
 
+@router.get("/espaces/{name}/formations/{deck:path}/pdf")
+def pdf(studio: StudioDep, name: str, deck: str, lang: Lang = "fr") -> Response:
+    _, directory = studio.deck(name, deck)
+    path = handout(directory, lang)
+    if not path.is_file():
+        raise HTTPException(404, "Pas encore construit")
+    return FileResponse(
+        path, media_type="application/pdf", headers={"Cache-Control": "no-store"}
+    )
+
+
+_POLL = 0.25
+_HEARTBEAT = 15.0
+
+
+def _event(name: str, data: object) -> str:
+    return f"event: {name}\ndata: {json.dumps(data)}\n\n"
+
+
+def _state(snapshot: Snapshot) -> dict[str, object]:
+    return {"state": snapshot.state.value, "errors": list(snapshot.errors)}
+
+
+async def watch_events(
+    watch: Watch, pdf_url: str, disconnected: Callable[[], Awaitable[bool]]
+) -> AsyncIterator[str]:
+    """`watch`'s state and new PDFs as server-sent events, until `disconnected`.
+
+    Following them keeps the watch running.
+
+    Yields:
+        `state` events (building, built or failed, with the errors), and \
+        `pdf` events with the URL of a new PDF.
+    """
+    watch.follow()
+    try:
+        last_state: dict[str, object] | None = None
+        last_pdf = -1
+        quiet = 0.0
+        while not await disconnected():
+            snapshot = watch.snapshot()
+            if (state := _state(snapshot)) != last_state:
+                last_state = state
+                quiet = 0.0
+                yield _event("state", state)
+            if snapshot.pdf_version and snapshot.pdf_version != last_pdf:
+                last_pdf = snapshot.pdf_version
+                quiet = 0.0
+                yield _event("pdf", {"url": f"{pdf_url}&v={last_pdf}"})
+            if quiet >= _HEARTBEAT:
+                quiet = 0.0
+                yield ": heartbeat\n\n"
+            await asyncio.sleep(_POLL)
+            quiet += _POLL
+    finally:
+        watch.unfollow()
+
+
+@router.get("/espaces/{name}/formations/{deck:path}/evenements")
+async def events(
+    request: Request, studio: StudioDep, name: str, deck: str, lang: Lang = "fr"
+) -> StreamingResponse:
+    """The deck's live build.
+
+    Returns:
+        Its server-sent events (`watch_events`).
+    """
+    found, directory = studio.deck(name, deck)
+    watch = await asyncio.to_thread(
+        studio.watches.watch, found.worktree.path, directory, lang
+    )
+    pdf_url = f"/espaces/{quote(name)}/formations/{quote(deck)}/pdf?lang={lang}"
+    return StreamingResponse(
+        watch_events(watch, pdf_url, request.is_disconnected),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get("/espaces/{name}/formations/{deck:path}", response_class=HTMLResponse)
+def deck_page(
+    request: Request, studio: StudioDep, name: str, deck: str, lang: Lang = "fr"
+) -> Response:
+    found, _ = studio.deck(name, deck)
+    workspaces.mark_used(found.worktree.path)
+    return _render(
+        request,
+        "deck.html",
+        workspace=found,
+        decks=workspaces.decks(found.worktree.path),
+        deck=deck,
+        lang=lang,
+    )
+
+
 @router.get("/espaces/{name}/taille", response_class=HTMLResponse)
 def size(studio: StudioDep, name: str) -> str:
     return _size(workspaces.size(studio.workspace(name).worktree.path))
@@ -126,18 +236,44 @@ def close(
     return _render(request, "_closed.html", workspace=found, kept=kept)
 
 
-def create_app(repository: Path) -> FastAPI:
+async def _stop_idle_watches(watches: Watches) -> None:
+    while True:
+        await asyncio.sleep(5)
+        await asyncio.to_thread(watches.stop_idle)
+
+
+def create_app(repository: Path, watches: Watches | None = None) -> FastAPI:
     """The studioz application for the deckz repository `repository`.
 
     Args:
         repository: Any checkout of the repository.
+        watches: The live builds' manager (tests replace deckz's command).
 
     Returns:
         The application.
     """
     main = main_checkout(repository)
-    app = FastAPI(title="studioz", version=__version__, docs_url=None, redoc_url=None)
-    app.state.studio = Studio(main, GlobalSettings.from_yaml(main))
+    studio = Studio(main, GlobalSettings.from_yaml(main), watches or Watches())
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        reaper = asyncio.create_task(_stop_idle_watches(studio.watches))
+        try:
+            yield
+        finally:
+            reaper.cancel()
+            with suppress(asyncio.CancelledError):
+                await reaper
+            await asyncio.to_thread(studio.watches.stop_all)
+
+    app = FastAPI(
+        title="studioz",
+        version=__version__,
+        docs_url=None,
+        redoc_url=None,
+        lifespan=lifespan,
+    )
+    app.state.studio = studio
     app.middleware("http")(local_only)
     app.mount("/static", StaticFiles(directory=_PACKAGE / "static"), name="static")
     app.include_router(router)

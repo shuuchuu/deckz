@@ -567,6 +567,18 @@ cache). A local web app can be driven by any website open in the browser, so
 studioz refuses requests not naming a local host and changes not coming from its
 own pages (`studioz.local_only`).
 
+**Increment 2: done** (2026-10-10): a deck's page shows its handout live, in
+pdf.js (6.3, vendored with htmx), fr or en. Opening it starts the workspace's
+`deckz run --watch` of that handout alone (one watch per workspace, the
+workspace's own deckz, every option spelled out); the page follows it through
+server-sent events (building, up to date, failed with the error), reloads the
+PDF at the same scroll position after each build, and the watch stops 30 s
+after no page follows it, or when studioz stops. Measured on
+orsys/INTRA/2026-10-fortinet in a fresh workspace: first build 6 s, an edit
+shown 3.5 s after the save, a failure 3 s. The page exposed a deckz gap: a
+Jinja error named no file; it's now a `RenderError` with the content file and
+line (deckz d75292b).
+
 ### Phase 3: the agent in a workspace
 
 The conversation panel, question forms, comments on frames as instructions,

@@ -393,9 +393,15 @@ into deckz, never into studioz.
 worktree`'s worktrees (studioz's own state goes in each workspace's
 `.run/studioz/`), and `studioz.local_only` refuses requests not naming a local host,
 and changes not coming from studioz's own pages (DNS rebinding, cross-site
-requests): every route that changes something is a POST. Its tests are in
-`studioz/tests/`, driving the app with FastAPI's test client on a temporary
-repository.
+requests): every route that changes something is a POST.
+`studioz.watches` runs one `deckz run --watch` per workspace (the workspace's
+own deckz, every option spelled out) for the deck page in front of the person,
+and reads its state from the log (`deckz.pipelines.watch`'s messages: keep them
+in step); the page follows it through server-sent events and shows the
+handout in pdf.js, and the watch stops once no page has followed it for 30 s.
+Its tests are in `studioz/tests/`, driving the app with FastAPI's test client
+on a temporary repository, and the watches with a fake `deckz` printing the
+same log lines.
 
 ## Conventions
 

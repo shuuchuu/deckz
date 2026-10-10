@@ -1,0 +1,21 @@
+{% set worktree = workspace.worktree %}
+<nav class="navigator">
+  <h2>Formations</h2>
+  <input class="filter" type="search" placeholder="Filtrer…" aria-label="Filtrer les formations"
+         oninput="for (const li of this.nextElementSibling.children) li.hidden = !li.textContent.toLowerCase().includes(this.value.toLowerCase())">
+  <ul class="decks">
+    {% for path in decks %}
+    <li{% if path == deck %} class="current"{% endif %}><a href="/espaces/{{ workspace.name }}/formations/{{ path }}">{{ path }}</a></li>
+    {% else %}
+    <li class="empty">Aucune formation.</li>
+    {% endfor %}
+  </ul>
+  <h2>Modifications <span class="count">{{ worktree.changes | length }}</span></h2>
+  <ul class="changes">
+    {% for line in worktree.changes %}
+    <li><code>{{ line[:2] }}</code> {{ line[3:] }}</li>
+    {% else %}
+    <li class="empty">Rien depuis le dernier commit.</li>
+    {% endfor %}
+  </ul>
+</nav>

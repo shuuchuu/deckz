@@ -156,3 +156,22 @@ def decks(path: Path) -> list[str]:
         if "deck.yml" in files:
             found.append(Path(root).relative_to(path).as_posix())
     return found
+
+
+def deck_dir(path: Path, deck: str) -> Path | None:
+    """The workspace's deck directory `deck`, if that's one.
+
+    Returns:
+        Its path, None unless `deck` is a relative path within the \
+        workspace, through no hidden directory, to a directory with a \
+        `deck.yml`.
+    """
+    parts = Path(deck).parts
+    if not parts or Path(deck).is_absolute() or any(p.startswith(".") for p in parts):
+        return None
+    directory = path / deck
+    if not (directory / "deck.yml").is_file():
+        return None
+    if not directory.resolve().is_relative_to(path.resolve()):
+        return None
+    return directory

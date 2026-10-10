@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ deck }} · {{ workspace.name }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="/static/vendor/pdfjs/web/pdf_viewer.css">
+<script type="module" src="/static/deck.js"></script>
+{% endblock %}
+{% block topbar %}{% include "_workspace_topbar.html" %}{% endblock %}
+{% block body %}
+<div class="workspace">
+  {% include "_navigator.html" %}
+  <main class="deck" id="deck"
+        data-events="/espaces/{{ workspace.name }}/formations/{{ deck }}/evenements?lang={{ lang }}">
+    <div class="toolbar">
+      <span class="deck-path">{{ deck }}</span>
+      <span class="langs">
+        {% for code in ("fr", "en") %}
+        <a href="?lang={{ code }}"{% if code == lang %} class="current" aria-current="true"{% endif %}>{{ code }}</a>
+        {% endfor %}
+      </span>
+      <span class="build" id="build" data-state="building">Connexion…</span>
+      <span class="page-number" id="page-number"></span>
+    </div>
+    <div class="errors" id="errors" hidden>
+      <p>La construction a échoué (le dernier PDF construit reste affiché) :</p>
+      <p><code id="error-message"></code></p>
+      <details id="error-details" hidden><summary>Détails</summary><pre id="error-lines"></pre></details>
+    </div>
+    <div class="viewer-area">
+      <div class="viewer-container" id="viewer-container">
+        <div id="viewer" class="pdfViewer"></div>
+      </div>
+      <p class="empty waiting" id="waiting">Première construction de la formation… (de quelques secondes à quelques minutes selon sa taille)</p>
+    </div>
+  </main>
+</div>
+{% endblock %}

@@ -1,33 +1,12 @@
 {% extends "base.html" %}
-{% set worktree = workspace.worktree %}
 {% block title %}{{ workspace.name }}{% endblock %}
-{% block topbar %}
-<span class="workspace-name">{{ workspace.name }}</span>
-<span class="branch" title="{{ worktree.path }}">{{ worktree.branch }}</span>
-{% endblock %}
+{% block topbar %}{% include "_workspace_topbar.html" %}{% endblock %}
 {% block body %}
 <div class="workspace">
-  <nav class="navigator">
-    <h2>Formations</h2>
-    <ul class="decks">
-      {% for deck in decks %}
-      <li>{{ deck }}</li>
-      {% else %}
-      <li class="empty">Aucune formation.</li>
-      {% endfor %}
-    </ul>
-    <h2>Modifications <span class="count">{{ worktree.changes | length }}</span></h2>
-    <ul class="changes">
-      {% for line in worktree.changes %}
-      <li><code>{{ line[:2] }}</code> {{ line[3:] }}</li>
-      {% else %}
-      <li class="empty">Rien depuis le dernier commit.</li>
-      {% endfor %}
-    </ul>
-  </nav>
+  {% include "_navigator.html" %}
   <main class="preview">
     <p class="empty">Choisissez une formation à gauche.</p>
-    <p class="hint">Dossier de l'espace : <code>{{ worktree.path }}</code></p>
+    <p class="hint">Dossier de l'espace : <code>{{ workspace.worktree.path }}</code></p>
   </main>
 </div>
 {% endblock %}

@@ -29,18 +29,32 @@ def task_test():
 def task_vendor():
     """Copy the JavaScript studioz serves, pinned in studioz/package.json."""
 
-    def copy() -> None:
-        from shutil import copyfile
+    modules = Path("studioz/node_modules")
+    vendor = Path("studioz/src/studioz/static/vendor")
+    pdfjs = modules / "pdfjs-dist"
+    files = {
+        modules / "htmx.org/dist/htmx.min.js": vendor / "htmx.min.js",
+        pdfjs / "LICENSE": vendor / "pdfjs/LICENSE",
+        pdfjs / "build/pdf.min.mjs": vendor / "pdfjs/pdf.min.mjs",
+        pdfjs / "build/pdf.worker.min.mjs": vendor / "pdfjs/pdf.worker.min.mjs",
+        pdfjs / "web/pdf_viewer.mjs": vendor / "pdfjs/web/pdf_viewer.mjs",
+        pdfjs / "web/pdf_viewer.css": vendor / "pdfjs/web/pdf_viewer.css",
+    }
 
-        modules = Path("studioz/node_modules")
-        vendor = Path("studioz/src/studioz/static/vendor")
-        vendor.mkdir(parents=True, exist_ok=True)
-        copyfile(modules / "htmx.org/dist/htmx.min.js", vendor / "htmx.min.js")
+    def copy() -> None:
+        from shutil import copyfile, copytree, rmtree
+
+        rmtree(vendor, ignore_errors=True)
+        for source, target in files.items():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            copyfile(source, target)
+        # What pdf_viewer.css references.
+        copytree(pdfjs / "web/images", vendor / "pdfjs/web/images")
 
     return {
         "actions": ["npm ci --prefix studioz --no-audit --no-fund", copy],
         "file_dep": ["studioz/package.json", "studioz/package-lock.json"],
-        "targets": ["studioz/src/studioz/static/vendor/htmx.min.js"],
+        "targets": [str(target) for target in files.values()],
     }
 
 

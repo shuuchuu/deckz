@@ -94,3 +94,28 @@ tr.closed td { color: var(--muted); }
   .workspaces th:nth-child(n+3):nth-child(-n+6), .workspaces td:nth-child(n+3):nth-child(-n+6) { display: none; }
 }
 .files { margin: 0.2rem 0 0.6rem; padding-left: 1.2rem; }
+
+.navigator a { color: inherit; text-decoration: none; }
+.navigator a:hover { color: var(--accent); }
+.navigator li.current a { color: var(--accent); font-weight: 600; }
+.filter { width: 100%; margin-bottom: 0.4rem; }
+.topbar a.workspace-name { color: inherit; text-decoration: none; }
+
+.deck { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; padding: 0.4rem 1rem; border-bottom: 1px solid var(--line); background: var(--panel); }
+.deck-path { font-weight: 600; overflow-wrap: anywhere; }
+.langs a { margin-right: 0.3rem; text-decoration: none; padding: 0 0.3rem; border-radius: 3px; }
+.langs a.current { background: var(--accent); color: var(--bg); }
+.build { font-size: 0.85em; padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px solid var(--line); }
+.build[data-state="building"] { color: var(--muted); }
+.build[data-state="built"] { color: #2e7d32; border-color: currentcolor; }
+.build[data-state="failed"], .build[data-state="stopped"], .build[data-state="disconnected"] { color: var(--danger); border-color: currentcolor; }
+.page-number { color: var(--muted); font-size: 0.85em; margin-left: auto; }
+.errors { background: var(--error-bg); padding: 0.5rem 1rem; max-height: 30vh; overflow: auto; }
+.errors p { margin: 0 0 0.3rem; }
+.errors pre { margin: 0; }
+.viewer-area { position: relative; flex: 1; min-height: 60vh; background: #525659; }
+/* pdf.js requires an absolutely positioned container. */
+.viewer-container { position: absolute; inset: 0; overflow: auto; }
+.waiting { position: absolute; inset: 2rem 1rem auto; text-align: center; color: #e8e7e3; }
+.waiting[hidden] { display: none; }

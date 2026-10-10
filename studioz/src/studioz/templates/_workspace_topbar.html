@@ -1,0 +1,3 @@
+{% set worktree = workspace.worktree %}
+<a class="workspace-name" href="/espaces/{{ workspace.name }}">{{ workspace.name }}</a>
+<span class="branch" title="{{ worktree.path }}">{{ worktree.branch }}</span>
