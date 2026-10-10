@@ -1,3 +1,5 @@
 # Welcome to `deckz` documentation
 
-For now, there is only a very partial [code reference][deckz].
+- The [guide](guide/index.md): running a deckz-managed repository day to day, one page
+  per task.
+- The [code reference][deckz], for deckz's own code.

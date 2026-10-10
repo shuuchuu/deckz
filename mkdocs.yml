@@ -9,6 +9,15 @@ extra_css:
 
 nav:
   - Index: index.md
+  - Guide:
+      - guide/index.md
+      - Setting up: guide/setup.md
+      - Editing and building: guide/editing.md
+      - New content: guide/new-content.md
+      - Translating: guide/translating.md
+      - Labs and videos: guide/labs-and-videos.md
+      - Before committing, teaching, publishing: guide/before-you-commit.md
+      - Checks: guide/checks.md
   - Code Reference: reference/
 
 plugins:

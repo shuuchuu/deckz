@@ -260,6 +260,11 @@ hooks, refusing to overwrite a hand-written one):
 
 ## Phase 7: a manual for people
 
+**Status (2026-10-10):** the deckz guide is written (`docs/guide/`, eight pages, in the
+mkdocs site; `mkdocs build --strict` passes), on branch `operability`, not merged. The
+agent notes point agents to it. Slides' French handbook comes after the merge, since
+it documents these commands.
+
 - **deckz docs** (mkdocs; `docs/index.md` currently only links the code reference): a
   "Running a deckz repository" guide, one page per task: setup, the edit loop
   (`run --watch`), adding a slide, a figure or a video, adding or changing a lab,

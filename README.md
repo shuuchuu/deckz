@@ -1013,5 +1013,7 @@ The main commands:
 
 ## Documentation
 
-A partial code reference, generated from the docstrings, is published via
-`mkdocs` (see `mkdocs.yml` and the `docs` directory).
+Built with `mkdocs` (see `mkdocs.yml` and the `docs` directory): a guide for
+the people running a deckz-managed repository, one page per task
+(`docs/guide/`), and a partial code reference generated from the
+docstrings.
