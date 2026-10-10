@@ -268,6 +268,27 @@ typst_ignore_system_fonts: true
   The scenes and videos directories (default `{git_dir}/figures/scenes`
   and `{assets_dir}/videos`) are `paths.scenes_dir`/`paths.videos_dir`,
   set like any other path under `paths:`.
+- `setup`: what `deckz setup` checks and runs for a fresh clone, on top
+  of deckz's own needs (git, pandoc):
+
+  ```yaml
+  setup:
+    requires:
+      - command: pdftocairo
+        why: the SVG versions of the PDF figures, for HTML decks
+        install: apt install poppler-utils
+    steps:
+      - name: reveal.js for HTML decks
+        run: [npm, ci]
+        creates: node_modules
+  ```
+
+  - `requires`: executables that must be on the `PATH`, each with what
+    needs it (`why`) and how to install it (`install`), both shown when
+    it's missing.
+  - `steps`: commands run from the git root, without a shell, in order.
+    A step whose `creates` path exists is done and skipped (`deckz setup
+    --force` runs it anyway); one without `creates` runs every time.
 
 `deckz.yml` files are merged, in order, from the git root, from the user's
 config directory (XDG-compliant, e.g.
@@ -725,6 +746,14 @@ instead (see each command's `--help` for its fields).
 
 The main commands:
 
+- `deckz setup`: set up a clone, and run it again after pulling. It
+  checks the executables deckz and the repository need (`setup.requires`
+  above), saying how to install a missing one; installs the git hooks;
+  runs the repository's `setup.steps` not done yet; and reports the
+  videos never rendered (`--videos` renders them). `--check` only
+  reports, `--claude` also installs the Claude Code hooks. It exits 1
+  while something is missing or failed, and is safe to run any number of
+  times.
 - `deckz run` (alias for `deckz run deck`, optionally restricted with
   `--parts`) / `deckz run file PATH` / `deckz run section SECTION FLAVOR` /
   `deckz run assets`: compile the deck in the current directory, a single

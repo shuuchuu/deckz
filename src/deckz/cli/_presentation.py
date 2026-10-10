@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from ..labs.gpu import GpuStatus, RunReport
     from ..models import Lang
     from ..pipelines import BuildTarget, OutputKinds
+    from ..setting_up import SetupItem
 
 
 class RichProgress(ProgressReporterProtocol):
@@ -391,3 +392,21 @@ def announce_build(what: str, langs: "Sequence[Lang]", outputs: "OutputKinds") -
     if defaults := environment_defaults(_RUN_VARIABLES):
         message += f". From the environment: {', '.join(defaults)}"
     getLogger(__name__).info(message)
+
+
+def print_setup(items: "Iterable[SetupItem]") -> None:
+    """Print `deckz setup`'s report: one line per item, then what to do."""
+    from ..setting_up import Status
+
+    console = Console(highlight=False)
+    marks = {
+        Status.OK: "[green]ok[/]     ",
+        Status.DONE: "[green]done[/]   ",
+        Status.MISSING: "[yellow]missing[/]",
+        Status.FAILED: "[red]failed[/] ",
+    }
+    for item in items:
+        console.print(f"{marks[item.status]} {item.name}", markup=True)
+        if item.detail and item.status is not Status.OK:
+            for line in item.detail.splitlines():
+                console.print(f"         {line}", markup=False)

@@ -183,6 +183,36 @@ class VideosSettings(BaseModel):
     """Warn, but still publish, a render over this size, in MB."""
 
 
+class SetupRequirement(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    command: str
+    """Executable that must be on the `PATH`."""
+    why: str
+    """What needs it, shown when it's missing."""
+    install: str | None = None
+    """How to install it, e.g. `apt install poppler-utils`."""
+
+
+class SetupStep(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    name: str
+    """What the step does, shown in `deckz setup`'s report."""
+    run: tuple[str, ...]
+    """Command to run, from the git root (no shell)."""
+    creates: str | None = None
+    """Path, relative to the git root, the step creates: when it exists, \
+    the step is done and skipped (`deckz setup --force` runs it anyway). \
+    Without it, the step runs every time."""
+
+
+class SetupSettings(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    requires: tuple[SetupRequirement, ...] = ()
+    """Executables the repository needs besides deckz's own (pandoc, git)."""
+    steps: tuple[SetupStep, ...] = ()
+    """Commands a fresh clone needs once, e.g. vendoring JavaScript."""
+
+
 class GlobalSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
     schema_version: SchemaVersion = SCHEMA_VERSION
@@ -252,6 +282,8 @@ class GlobalSettings(BaseModel):
     checks: ChecksSettings = Field(default_factory=ChecksSettings)
     i18n: I18nSettings = Field(default_factory=I18nSettings)
     videos: VideosSettings = Field(default_factory=VideosSettings)
+    setup: SetupSettings = Field(default_factory=SetupSettings)
+    """What `deckz setup` checks and runs on top of deckz's own needs."""
     paths: GlobalPaths = Field(default_factory=GlobalPaths)
 
     @classmethod

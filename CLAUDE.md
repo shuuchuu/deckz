@@ -236,6 +236,14 @@ function or a `DECKZ_HOOKS_VERSION` other than `HOOKS_VERSION` into a
 Its module docstring documents the trust boundary (the hooks are arbitrary
 code from the target repo).
 
+### Setting up
+
+`setting_up.py` backs `deckz setup`: each step (executables, git hooks,
+Claude hooks, `deckz.yml`'s `setup.steps`, videos never rendered) returns a
+`SetupItem` (`ok`, `done`, `missing`, `failed`, with how to fix it) and is
+idempotent; `check=True` changes nothing. The CLI prints them
+(`_presentation.print_setup`) and exits 1 while one is missing or failed.
+
 ### Checking
 
 `analyzing/content_checks.py` holds deckz's own generic content checks

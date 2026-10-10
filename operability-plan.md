@@ -88,6 +88,12 @@ Typst worker.
 
 ## Phase 2: `deckz setup`
 
+**Status (2026-10-10):** done on branch `operability`, not merged. Built as planned,
+except that videos are only reported unless `--videos` (a render at the published
+quality takes minutes per video). For slides, at merge time: `setup.requires`
+(pdftocairo, ffmpeg, xelatex, npm) and a `setup.steps` entry running `uv run doit web`
+(`creates: assets/web/vendor`); then the doit `install_hooks` task can go.
+
 One idempotent command for a fresh clone, and to re-run after pulling. It prints a
 checklist: ok, fixed, or missing, with how to install each missing piece.
 
