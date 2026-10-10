@@ -28,8 +28,9 @@ if (panel) {
     panel.dataset.running = String(running);
     status.textContent = !loggedIn ? "" : asking ? "attend votre réponse" : running ? "travaille…"
       : pausedUntil ? `en pause jusqu'à ${pausedUntil.replace(/^le /, "")}` : "prêt";
-    stop.hidden = !running && !pausedUntil;
-    stop.textContent = running ? "Arrêter" : "Annuler la reprise";
+    // A question asked at the end of a turn waits without it: "Écarter" drops it.
+    stop.hidden = !running && !pausedUntil && !asking;
+    stop.textContent = running ? "Arrêter" : asking ? "Écarter la question" : "Annuler la reprise";
     undo.hidden = running || !undoable;
     send.disabled = running || !loggedIn;
     message.disabled = !loggedIn;

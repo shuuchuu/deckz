@@ -5,8 +5,9 @@
 **Done:** phases 0, 1 and 2 (workspaces without agents: increments 1 to 8 under
 "Phase 2"), and phase 3 (the agent in a workspace: increments 1 to 5 under
 "Phase 3"), which the user then tried on real work, satisfied; phase 4's
-increments 1 and 2 (workflows declared, a workspace opened from one: under
-"Phase 4"). **Next:** phase 4's increment 3 (see "Starting phase 4" below). `git log origin/main..main` in
+increments 1 to 3 (workflows declared, a workspace opened from one,
+questions answered later: under "Phase 4"). **Next:** phase 4's increment 4
+(see "Starting phase 4" below). `git log origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed;
 nothing is released since 31.3.3. Push and release are the user's call.
 
@@ -101,9 +102,8 @@ Found along the way, not done (each increment's "Left" has the rest):
   échec".
 - `test_interrupt_does_not_wait_for_running_compilations` (above) failed a
   second time during phase 3, in the pre-commit hook; it passes alone.
-- A pending question or a limit pause doesn't survive a studioz restart (the
-  turn is lost); no warning before a long task when a usage window is nearly
-  full.
+- A limit pause doesn't survive a studioz restart (a pending question now
+  does); no warning before a long task when a usage window is nearly full.
 
 ### Starting phase 4
 
@@ -117,9 +117,7 @@ build on. slides' skills are `nouvelle-formation`, `nouvelle-section`,
 
 1. **Workflows declared**: done (see "Phase 4").
 2. **Opening a workspace from a workflow**: done (see "Phase 4").
-3. **Questions answered later** (`defer`): a pending question that survives the
-   person leaving and studioz restarting, answered on resume (see "Agent
-   configuration").
+3. **Questions answered later** (`defer`): done (see "Phase 4").
 4. **QA → fix**: `qa-formation`'s findings as a checklist in the workspace,
    "Appliquer les corrections" running `qa-fix` on the ones ticked.
 5. **The translation backlog**: `deckz i18n stale`'s list, each item "Traduire
@@ -1012,6 +1010,27 @@ fr/en…" on the Fortinet deck created `2026-10-fortinet` and showed its deck
 page with the agent at work 9 s after "Commencer"; the turn loaded
 `sync-langs` and found nothing to translate (59 s, 0,36 $ estimated). Left:
 nothing for this increment.
+
+**Increment 3: done** (2026-10-11): questions answered later. A
+`PreToolUse` hook defers every `AskUserQuestion`: the turn ends on the
+question (no "Terminé"), which studioz keeps in
+`.run/studioz/agent/question.json` and shows as before; the Claude Code
+process stops at once (about 0.5 GB freed while the person thinks). Answering
+resumes the session in a new process with a short note
+(`agent.ANSWERED`); Claude Code first runs the pending call again, which
+reaches `can_use_tool` (not the hook), answered from the file. Checked first
+with the pinned SDK (a Haiku experiment in the scratchpad, a few cents): the
+deferral and the resume work across processes, but a client still connected
+doesn't resume the call on its next message (the model asks again), hence
+the disconnection. A message written instead of answering, or "Écarter la
+question" (the stop button's label then), declines it: the resumed call is
+refused with that reason. "Nouvelle conversation" forgets it. A question made
+alongside other tool calls can't be deferred (documented): it waits live, as
+before, and is lost if studioz stops. Tried on slides (`studioz-dev`): the
+agent asked "Thé ou café ?", the turn ended with no Claude Code process left,
+studioz was restarted, the form was back with its new hint, and "Café" made
+the agent answer « Café. » 6 s later (0,19 $ estimated for both turns, the
+resumed context). Left: a limit pause still doesn't survive a restart.
 
 ### Phase 5: long jobs and the remaining previews
 

@@ -19,6 +19,11 @@
   {% endfor %}
   <div class="agent-actions">
     <button type="submit">Répondre</button>
+    {% if question.deferred %}
+    <span class="hint">L'agent reprendra à votre réponse, même plus tard ou après un redémarrage de studioz ;
+      « Écarter la question » la retire, et un message de votre part y répond autrement.</span>
+    {% else %}
     <span class="hint">L'agent attend votre réponse pour continuer ; « Arrêter » met fin au tour.</span>
+    {% endif %}
   </div>
 </form>

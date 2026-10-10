@@ -448,8 +448,11 @@ the person (never an API key: studioz removes `ANTHROPIC_API_KEY`), in the
 workspace with the repository's project settings, `auto` permissions in the
 sandbox, and a `PreToolUse` hook refusing the `git` commands that commit, push
 or move a branch (the person commits from studioz); a question it asks
-(`AskUserQuestion`) is a form in the panel, the turn waiting in `can_use_tool`
-for the answer. `studioz.checkpoints` snapshots the workspace's files around
+(`AskUserQuestion`) is a form in the panel: a `PreToolUse` hook defers it, so
+the turn ends on it and it waits in `.run/studioz/agent/question.json`, across
+restarts, until the answers resume the session, where Claude Code runs the call
+again through `can_use_tool` (a question alongside other tool calls can't be
+deferred: the turn then waits in `can_use_tool`). `studioz.checkpoints` snapshots the workspace's files around
 each turn (a private index, trees under `refs/studioz/`), so that "Annuler ce
 tour" puts back what the last one changed. The panel shows the account's usage
 windows and each turn's usage; a turn stopped by a usage limit pauses the

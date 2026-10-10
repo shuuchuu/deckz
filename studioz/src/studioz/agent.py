@@ -44,6 +44,7 @@ from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
     ClaudeSDKClient,
+    DeferredToolUse,
     HookContext,
     HookInput,
     HookJSONOutput,
@@ -70,6 +71,8 @@ AGENT_DIR = STATE_DIR / "agent"
 
 _SESSION = "session"
 _TRANSCRIPT = "transcript.jsonl"
+_QUESTION = "question.json"
+"""The question a turn ended on (deferred), until the session resumes with it."""
 _IDLE_AFTER = 15 * 60.0
 _DETAIL = 400
 
@@ -222,7 +225,11 @@ class Question:
 
     id: int
     asked: list[Asked]
-    answers: "asyncio.Future[dict[str, str] | None]"
+    answers: "asyncio.Future[dict[str, str] | None] | None" = None
+    """Where the answers go while the turn waits for them (a live question)."""
+    deferred: str | None = None
+    """The tool call a deferred question's turn ended on: its answers wait in
+    `_QUESTION` for the session to resume."""
 
 
 def _short(text: str, limit: int = _DETAIL) -> str:
@@ -307,6 +314,9 @@ def _failed_tools(workspace: Path, message: UserMessage) -> list[Entry]:
 
 
 def _result(message: ResultMessage, stopped: bool, limited: bool) -> list[Entry]:
+    if message.stop_reason == "tool_deferred":
+        # The question it ended on says it (`Conversation._defer`).
+        return []
     seconds = round(message.duration_ms / 1000)
     if limited and message.is_error:
         return [Entry("end", f"Interrompu par la limite au bout de {seconds} s")]
@@ -404,6 +414,9 @@ def usage_summary(found: tuple[Window, ...]) -> dict[str, object]:
     return {"text": text, "title": title, "warn": any(w.used >= _WARN for w in found)}
 
 
+ANSWERED = "(La personne a répondu à ta question depuis studioz.)"
+"""Sent with the answers to a deferred question, which resume its turn."""
+
 RESUME = (
     "La limite d'utilisation de l'abonnement est passée : reprends là où tu "
     "t'étais arrêté."
@@ -486,6 +499,22 @@ async def _refuse_git(  # ruff: ignore[unused-async]
     }
 
 
+async def _defer_question(  # ruff: ignore[unused-async]
+    _input: HookInput, _tool_use_id: str | None, _context: HookContext
+) -> HookJSONOutput:
+    # The turn ends on the question, which then waits without a process,
+    # across studioz's restarts; the answers resume the session, where Claude
+    # Code runs the call again through `can_use_tool` (checked with 2.1.283:
+    # the hook doesn't run again). It only works for a call alone in its turn:
+    # otherwise Claude Code asks `can_use_tool` at once, which waits live.
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "defer",
+        }
+    }
+
+
 async def _no_op(  # ruff: ignore[unused-async]
     _input: HookInput, _tool_use_id: str | None, _context: HookContext
 ) -> HookJSONOutput:
@@ -546,6 +575,7 @@ def options(
         hooks={
             "PreToolUse": [
                 HookMatcher(matcher="Bash", hooks=[_refuse_git]),
+                HookMatcher(matcher=ASK, hooks=[_defer_question]),
                 HookMatcher(matcher=None, hooks=[_no_op]),
             ]
         },
@@ -625,6 +655,12 @@ class Conversation:
         self._note: str | None = None
         """What the agent is told with the next message (an undone turn)."""
         self._questions = count(1)
+        if (pending := self._pending()) and "answers" not in pending:
+            found = asked(pending.get("input") or {})
+            if found and not pending.get("declined"):
+                self.question = Question(
+                    next(self._questions), found, deferred=pending.get("id")
+                )
         self._client: Client | None = None
         self._task: asyncio.Task[None] | None = None
         self._changed = asyncio.Condition()
@@ -686,8 +722,9 @@ class Conversation:
         """
         if self.running or not prompt.strip():
             return False
-        # The person takes over from a pause.
+        # The person takes over from a pause, or from a question.
         self.paused_until = None
+        self._decline("La personne a écrit un message au lieu de répondre.")
         await self._add(Entry("person", (shown or prompt).strip()))
         self._start(prompt.strip())
         return True
@@ -712,6 +749,7 @@ class Conversation:
         index = self._directory / "index"
         before = await asyncio.to_thread(checkpoints.snapshot, self.workspace, index)
         checked = False
+        deferred: DeferredToolUse | None = None
         try:
             if self._client is None:
                 client = self._factory(
@@ -723,15 +761,13 @@ class Conversation:
             async for message in self._client.receive_response():
                 if isinstance(message, RateLimitEvent):
                     self._limited(message.rate_limit_info)
-                if isinstance(message, ResultMessage) and message.session_id:
-                    self._directory.mkdir(parents=True, exist_ok=True)
-                    (self._directory / _SESSION).write_text(
-                        message.session_id, encoding="utf8"
-                    )
-                if isinstance(message, ResultMessage) and not checked:
-                    # Before "Terminé": the files changed belong to the turn.
-                    checked = True
-                    await self._checkpoint(index, before)
+                if isinstance(message, ResultMessage):
+                    deferred = message.deferred_tool_use
+                    self._keep_session(message.session_id)
+                    if not checked:
+                        # Before "Terminé": the files changed belong to the turn.
+                        checked = True
+                        await self._checkpoint(index, before)
                 await self._add(
                     *entries(
                         self.workspace,
@@ -740,6 +776,8 @@ class Conversation:
                         self._limited_until is not None,
                     )
                 )
+            if deferred is not None:
+                await self._defer(deferred)
         except asyncio.CancelledError:
             raise
         except Exception as error:
@@ -751,17 +789,26 @@ class Conversation:
             if not checked:
                 await self._checkpoint(index, before)
             self.running = False
-            if self._limited_until is not None and not self._stopped:
-                self.paused_until = self._limited_until
-                await self._add(
-                    Entry(
-                        "notice",
-                        f"En pause : l'agent reprendra seul {when(self.paused_until)}",
-                        "« Arrêter » annule la reprise ; un message de votre part "
-                        "la remplace.",
-                    )
-                )
+            await self._pause_if_limited()
             await self._notify()
+
+    async def _pause_if_limited(self) -> None:
+        """Pause the conversation until the limit that stopped its turn resets."""
+        if self._limited_until is None or self._stopped:
+            return
+        self.paused_until = self._limited_until
+        await self._add(
+            Entry(
+                "notice",
+                f"En pause : l'agent reprendra seul {when(self.paused_until)}",
+                "« Arrêter » annule la reprise ; un message de votre part la remplace.",
+            )
+        )
+
+    def _keep_session(self, session: str) -> None:
+        if session:
+            self._directory.mkdir(parents=True, exist_ok=True)
+            (self._directory / _SESSION).write_text(session, encoding="utf8")
 
     def _limited(self, info: RateLimitInfo) -> None:
         self.account.windows = windows(info) or self.account.windows
@@ -832,16 +879,70 @@ class Conversation:
         )
         return None
 
+    def _pending(self) -> dict[str, Any] | None:
+        path = self._directory / _QUESTION
+        try:
+            return json.loads(path.read_text(encoding="utf8"))
+        except (OSError, ValueError):
+            return None
+
+    def _write_pending(self, pending: dict[str, Any]) -> None:
+        self._directory.mkdir(parents=True, exist_ok=True)
+        (self._directory / _QUESTION).write_text(
+            json.dumps(pending, ensure_ascii=False), encoding="utf8"
+        )
+
+    async def _defer(self, deferred: DeferredToolUse) -> None:
+        """Keep the question the turn ended on, for the person to answer later.
+
+        The process stops: answering resumes the session in a new one, where
+        the call runs again.
+        """
+        pending: dict[str, Any] = {"id": deferred.id, "input": deferred.input}
+        found = asked(deferred.input) if deferred.name == ASK else []
+        if not found:
+            pending["declined"] = "Question illisible pour studioz."
+        self._write_pending(pending)
+        await self._disconnect()
+        if found:
+            self.question = Question(next(self._questions), found, deferred=deferred.id)
+            await self._add(Entry("question", "\n".join(a.question for a in found)))
+
+    def _decline(self, reason: str) -> bool:
+        """Drop a deferred question: its call is refused when the session resumes.
+
+        Returns:
+            Whether there was one.
+        """
+        question = self.question
+        if question is None or question.deferred is None:
+            return False
+        self.question = None
+        pending = self._pending() or {"id": question.deferred}
+        self._write_pending({**pending, "declined": reason})
+        return True
+
     async def _can_use_tool(
         self, tool: str, data: dict[str, Any], context: ToolPermissionContext
     ) -> PermissionResult:
         found = asked(data) if tool == ASK else []
         if not found:
             return await _deny(tool, data, context)
+        pending = self._pending()
+        if pending and pending.get("id") == context.tool_use_id:
+            # The deferred question's call, run again as the session resumed.
+            (self._directory / _QUESTION).unlink(missing_ok=True)
+            if "answers" in pending:
+                return PermissionResultAllow(
+                    updated_input={**data, "answers": pending["answers"]}
+                )
+            return PermissionResultDeny(
+                message=pending.get("declined") or "La personne n'a pas répondu."
+            )
         answers: asyncio.Future[dict[str, str] | None] = (
             asyncio.get_running_loop().create_future()
         )
-        self.question = Question(next(self._questions), found, answers)
+        self.question = Question(next(self._questions), found, answers=answers)
         await self._add(Entry("question", "\n".join(a.question for a in found)))
         try:
             given = await answers
@@ -853,8 +954,10 @@ class Conversation:
         await self._add(Entry("person", "\n".join(f"{q} → {given[q]}" for q in given)))
         return PermissionResultAllow(updated_input={**data, "answers": given})
 
-    def answer(self, question_id: int, answers: dict[str, str]) -> bool:
+    async def answer(self, question_id: int, answers: dict[str, str]) -> bool:
         """Answer the question the agent waits on.
+
+        A deferred question's answers resume its turn.
 
         Args:
             question_id: The question answered, which must still be waiting.
@@ -867,19 +970,38 @@ class Conversation:
         if (
             question is None
             or question.id != question_id
-            or question.answers.done()
+            or (question.answers is not None and question.answers.done())
             or set(answers) != {a.question for a in question.asked}
         ):
             return False
-        question.answers.set_result(answers)
+        if question.answers is not None:
+            question.answers.set_result(answers)
+            return True
+        if self.running:
+            return False
+        self.question = None
+        pending = self._pending() or {"id": question.deferred}
+        self._write_pending({**pending, "answers": answers})
+        await self._add(
+            Entry("person", "\n".join(f"{q} → {answers[q]}" for q in answers))
+        )
+        self.paused_until = None
+        self._start(ANSWERED)
         return True
 
     def _drop_question(self) -> None:
-        if self.question is not None and not self.question.answers.done():
-            self.question.answers.set_result(None)
+        question = self.question
+        if question is not None and question.answers and not question.answers.done():
+            question.answers.set_result(None)
 
     async def interrupt(self) -> None:
-        """Stop the agent's turn, or cancel a pause; what it changed stays."""
+        """Stop the agent's turn, or cancel a pause, or drop a deferred question.
+
+        What the agent changed stays.
+        """
+        if not self.running and self._decline("La personne a écarté la question."):
+            await self._add(Entry("notice", "Question écartée"))
+            return
         if self.paused_until is not None and not self.running:
             self.paused_until = None
             await self._add(Entry("notice", "Reprise annulée"))
@@ -895,9 +1017,10 @@ class Conversation:
         if self._task is not None:
             await asyncio.wait({self._task}, timeout=10)
         await self._disconnect()
-        for name in (_SESSION, _TRANSCRIPT):
+        for name in (_SESSION, _TRANSCRIPT, _QUESTION):
             (self._directory / name).unlink(missing_ok=True)
         self.entries = []
+        self.question = None
         self._note = None
         await self._notify()
 

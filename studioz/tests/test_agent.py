@@ -8,6 +8,7 @@ from typing import Any
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
+    DeferredToolUse,
     PermissionResultAllow,
     PermissionResultDeny,
     RateLimitEvent,
@@ -743,3 +744,173 @@ def test_a_pause_is_cancelled(tmp_path: Path, factory: FakeFactory) -> None:
         assert conversation.paused_until is None
 
     asyncio.run(scenario())
+
+
+class DeferringClient:
+    """Stands for Claude Code with studioz's hook deferring questions.
+
+    `demande plus tard` ends the turn on a deferred question; a client
+    resuming the session runs that call again through `can_use_tool` (as
+    Claude Code 2.1.283 does) before answering the prompt.
+    """
+
+    pending: dict[str, Any] | None = None
+
+    def __init__(self, options: ClaudeAgentOptions) -> None:
+        self.options = options
+        self.prompts: list[str] = []
+
+    async def connect(self) -> None:
+        pass
+
+    async def query(self, prompt: str) -> None:
+        self.prompts.append(prompt)
+
+    async def receive_response(self) -> AsyncIterator[Any]:
+        pending = DeferringClient.pending
+        if pending and self.options.resume:
+            DeferringClient.pending = None
+            assert self.options.can_use_tool is not None
+            decision = await self.options.can_use_tool(
+                agent.ASK, _QUESTIONS, ToolPermissionContext(tool_use_id=pending["id"])
+            )
+            if isinstance(decision, PermissionResultAllow):
+                assert decision.updated_input is not None
+                yield _assistant(
+                    TextBlock(f"Reçu : {decision.updated_input['answers']}")
+                )
+            else:
+                yield _assistant(TextBlock(f"Refusé : {decision.message}"))
+        if self.prompts[-1] == "demande plus tard":
+            yield _assistant(ToolUseBlock("d1", agent.ASK, _QUESTIONS))
+            DeferringClient.pending = {"id": "d1"}
+            yield _result(
+                stop_reason="tool_deferred",
+                deferred_tool_use=DeferredToolUse("d1", agent.ASK, _QUESTIONS),
+            )
+            return
+        yield _assistant(TextBlock(f"Lu : {self.prompts[-1]}"))
+        yield _result()
+
+    async def interrupt(self) -> None:
+        pass
+
+    async def disconnect(self) -> None:
+        pass
+
+
+@fixture
+def deferring(
+    workspace: Path, repository: Path, logged_in: Login
+) -> Iterator[Callable[[], TestClient]]:
+    """Starts studioz with `DeferringClient`s, as often as asked (restarts).
+
+    Yields:
+        What starts it again, stopping the last one.
+    """
+    DeferringClient.pending = None
+    started: list[Any] = []
+
+    def start() -> TestClient:
+        if started:
+            started.pop().__exit__(None, None, None)
+        app = create_app(repository, agents=Agents(DeferringClient), login=logged_in)
+        client = TestClient(app, base_url="http://localhost:8421")
+        client.__enter__()
+        started.append(client)
+        return client
+
+    yield start
+    for client in started:
+        client.__exit__(None, None, None)
+
+
+def _ask_later(client: TestClient, workspace: Path) -> Conversation:
+    client.post(
+        f"{BASE}/message", data={"message": "demande plus tard"}, headers=ORIGIN
+    )
+    conversation = _conversation(client, workspace)
+    _wait_question(conversation)
+    _wait_idle(conversation)
+    return conversation
+
+
+def test_a_deferred_question_survives_a_restart(
+    deferring: Callable[[], TestClient], workspace: Path
+) -> None:
+    conversation = _ask_later(deferring(), workspace)
+    assert conversation.question is not None
+    assert conversation.question.deferred == "d1"
+    assert not conversation.running
+    assert [e.kind for e in conversation.entries] == ["person", "question"]
+
+    # studioz restarted: the question is back, and answering resumes the session.
+    client = deferring()
+    again = _conversation(client, workspace)
+    assert again.question is not None
+    from studioz.app import _agent_question
+
+    assert "même plus tard ou après un redémarrage" in _agent_question(again.question)
+    assert [a.question for a in again.question.asked] == [
+        "Quelle couleur ?",
+        "Quels fruits ?",
+    ]
+    answered = client.post(
+        f"{BASE}/reponse",
+        data={"question": str(again.question.id), "q0": "Rouge", "q1": "Kiwi"},
+        headers=ORIGIN,
+    )
+    assert answered.status_code == 204
+    _wait_idle(again)
+    answers = {"Quelle couleur ?": "Rouge", "Quels fruits ?": "Kiwi"}
+    assert [(e.kind, e.text) for e in again.entries][2:] == [
+        ("person", "Quelle couleur ? → Rouge\nQuels fruits ? → Kiwi"),
+        ("text", f"Reçu : {answers}"),
+        ("text", f"Lu : {agent.ANSWERED}"),
+        ("end", "Terminé en 2 s"),
+    ]
+    assert again.question is None
+    assert not (workspace / AGENT_DIR / "question.json").exists()
+
+
+def test_a_message_instead_of_an_answer(
+    deferring: Callable[[], TestClient], workspace: Path
+) -> None:
+    client = deferring()
+    conversation = _ask_later(client, workspace)
+    client.post(f"{BASE}/message", data={"message": "Autre chose"}, headers=ORIGIN)
+    _wait_idle(conversation)
+    assert [e.text for e in conversation.entries][-3:] == [
+        "Refusé : La personne a écrit un message au lieu de répondre.",
+        "Lu : Autre chose",
+        "Terminé en 2 s",
+    ]
+
+
+def test_a_deferred_question_set_aside(
+    deferring: Callable[[], TestClient], workspace: Path
+) -> None:
+    client = deferring()
+    conversation = _ask_later(client, workspace)
+    client.post(f"{BASE}/arreter", headers=ORIGIN)
+    assert conversation.question is None
+    assert conversation.entries[-1].text == "Question écartée"
+    # Gone after a restart too, and refused when the session resumes.
+    client = deferring()
+    again = _conversation(client, workspace)
+    assert again.question is None
+    client.post(f"{BASE}/message", data={"message": "Suite"}, headers=ORIGIN)
+    _wait_idle(again)
+    assert "Refusé : La personne a écarté la question." in [
+        e.text for e in again.entries
+    ]
+
+
+def test_a_new_conversation_forgets_the_question(
+    deferring: Callable[[], TestClient], workspace: Path
+) -> None:
+    client = deferring()
+    conversation = _ask_later(client, workspace)
+    client.post(f"{BASE}/nouvelle", headers=ORIGIN)
+    assert conversation.question is None
+    assert not (workspace / AGENT_DIR / "question.json").exists()

@@ -1232,7 +1232,12 @@ async def agent_answer(request: Request, studio: StudioDep, name: str) -> Respon
         return JSONResponse(
             {"error": f"Pas de réponse à « {missing[0]} »"}, status_code=422
         )
-    if not conversation.answer(question.id, answers):
+    if question.deferred:
+        # The answers start Claude Code again, resuming the session.
+        ok, why = await studio.login.status()
+        if not ok:
+            return JSONResponse({"error": why}, status_code=409)
+    if not await conversation.answer(question.id, answers):
         return JSONResponse(
             {"error": "Cette question n'attend plus de réponse"}, status_code=409
         )
