@@ -127,6 +127,12 @@ checklist: ok, fixed, or missing, with how to install each missing piece.
 
 ## Phase 3: `deckz status`
 
+**Status (2026-10-10):** done on branch `operability`, not merged, except two items:
+`missing-en` for the decks your changes reach (slow, about a minute for every deck; CI
+can run it), and demos whose code changed after their outputs were written. The checks
+run on the working tree (about 15 s on slides; `--no-checks` skips them). The
+translation backlog line is there for the maintainer.
+
 One command answering "where is my work, and what's left before I can commit, teach or
 publish". Each item ends with the command that resolves it. `--json` for agents.
 

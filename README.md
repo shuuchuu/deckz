@@ -751,6 +751,17 @@ instead (see each command's `--help` for its fields).
 
 The main commands:
 
+- `deckz status`: where your work stands, and what's left before
+  committing, teaching or publishing. Your changes are the working tree's
+  plus the commits not on the upstream branch yet (`--since REV` to count
+  from elsewhere). It lists the content checks' problems (`--no-checks`
+  skips them), what your changes leave to translate and the repository's
+  backlog, lab notebooks and videos not published as committed or
+  rendered (compared with their remotes as last fetched; `--fetch` fetches
+  them first), and the built PDFs of the decks your changes reach that
+  don't match them. Each item says how to resolve it; `--json` for
+  scripts. `deckz show affected PATH...` prints the decks a change to
+  PATHs reaches.
 - `deckz setup`: set up a clone, and run it again after pulling. It
   checks the executables deckz and the repository need (`setup.requires`
   above), saying how to install a missing one; installs the git hooks;

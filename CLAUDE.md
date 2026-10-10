@@ -236,6 +236,16 @@ function or a `DECKZ_HOOKS_VERSION` other than `HOOKS_VERSION` into a
 Its module docstring documents the trust boundary (the hooks are arbitrary
 code from the target repo).
 
+### Status
+
+`status.py` backs `deckz status`: one `StatusSection` per concern (checks,
+translation, labs, videos, built decks), each a summary line plus
+`StatusItem`s carrying their fix. "Your changes" come from `git status`
+and the commits since the upstream's merge base (`base_revision`). It
+never touches the network unless `fetch`. `analyzing/affected.py` maps
+changed files to the decks resolving them (French; an `en/` file counts
+as its French sibling), for `status` and `deckz show affected`.
+
 ### Setting up
 
 `setting_up.py` backs `deckz setup`: each step (executables, git hooks,

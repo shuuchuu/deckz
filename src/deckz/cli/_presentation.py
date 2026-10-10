@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from ..models import Lang
     from ..pipelines import BuildTarget, OutputKinds
     from ..setting_up import SetupItem
+    from ..status import StatusSection
 
 
 class RichProgress(ProgressReporterProtocol):
@@ -410,3 +411,17 @@ def print_setup(items: "Iterable[SetupItem]") -> None:
         if item.detail and item.status is not Status.OK:
             for line in item.detail.splitlines():
                 console.print(f"         {line}", markup=False)
+
+
+def print_status(scope: str, sections: "Iterable[StatusSection]") -> None:
+    """Print `deckz status`: each section's summary, then its items and fixes."""
+    console = Console(highlight=False)
+    console.print(f"Your changes: {scope}", markup=False)
+    for section in sections:
+        mark = "[yellow]![/]" if section.items else "[green]✓[/]"
+        console.print(f"\n{mark} [bold]{section.title}[/]: ", end="")
+        console.print(section.summary, markup=False)
+        for item in section.items:
+            console.print(f"  - {item.text}", markup=False)
+            if item.fix:
+                console.print(f"    → {item.fix}", markup=False)
