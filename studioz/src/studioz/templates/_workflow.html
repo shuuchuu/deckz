@@ -1,0 +1,46 @@
+<form class="commit-form workflow-form" hx-post="/espaces/{{ workspace.name }}/workflows/{{ workflow.key }}"
+      hx-target="#action-dialog" hx-swap="innerHTML" hx-encoding="multipart/form-data" hx-disabled-elt="find button[type=submit]">
+  <header>
+    <h2>{{ workflow.title }}</h2>
+    <button type="button" class="secondary" onclick="this.closest('dialog').close()">Fermer</button>
+  </header>
+  {% if workflow.description %}<p>{{ workflow.description | workflow_text }}</p>{% endif %}
+  <input type="hidden" name="formation" value="{{ formation }}">
+  {% if workflow.scope == "deck" %}
+    {% if formation %}
+    <input type="hidden" name="deck" value="{{ formation }}">
+    <p>Formation : <code>{{ formation }}</code></p>
+    {% else %}
+    <label class="field">Formation
+      <select name="deck" required>
+        <option value="">Choisissez…</option>
+        {% for path in decks %}<option value="{{ path }}"{% if path == deck %} selected{% endif %}>{{ path }}</option>{% endfor %}
+      </select>
+    </label>
+    {% endif %}
+  {% endif %}
+  {% for one in workflow.inputs %}
+  <label class="field">{{ one.label | workflow_text }}{% if not one.required %} <span class="hint">(facultatif)</span>{% endif %}
+    {% if one.kind == "file" %}
+    <input type="file" name="{{ one.name }}"{% if one.accept %} accept="{{ one.accept }}"{% endif %}{% if one.required %} required{% endif %}>
+    {% elif one.kind == "long-text" %}
+    <textarea name="{{ one.name }}" rows="4"{% if one.required %} required{% endif %}>{{ values.get(one.name, "") }}</textarea>
+    {% else %}
+    <input type="text" name="{{ one.name }}" value="{{ values.get(one.name, '') }}"{% if one.required %} required{% endif %}>
+    {% endif %}
+  </label>
+  {% endfor %}
+  <details class="workflow-prompt">
+    <summary>Ce que l'agent recevra</summary>
+    <blockquote>{{ workflow.preview(formation) }}</blockquote>
+    <p>en suivant la skill <code>{{ workflow.skill }}</code> du dépôt, qui décide de la suite et vous pose ses
+      questions dans le panneau de l'agent.</p>
+  </details>
+  {% if conversation %}
+  <label><input type="checkbox" name="nouvelle" value="1"{% if fresh %} checked{% endif %}>
+    Commencer une nouvelle conversation (l'agent oublie la précédente ; utile quand elle portait sur autre chose)</label>
+  {% endif %}
+  {% if missing %}<p class="error" role="alert">La skill « {{ missing }} » n'existe pas dans cet espace : ce workflow ne peut pas démarrer.</p>{% endif %}
+  {% if error %}<p class="error" role="alert">{{ error }}{% if dropped %} Choisissez à nouveau les fichiers.{% endif %}</p>{% endif %}
+  <footer><button type="submit"{% if missing %} disabled{% endif %}>Commencer</button></footer>
+</form>

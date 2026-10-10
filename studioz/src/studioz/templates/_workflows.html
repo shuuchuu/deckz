@@ -1,0 +1,9 @@
+<div class="commit-form">
+  <header>
+    <h2>Avec l'agent</h2>
+    <button type="button" class="secondary" onclick="this.closest('dialog').close()">Fermer</button>
+  </header>
+  <p class="hint">Chaque workflow remplit une demande à l'agent, qui suit la méthode écrite pour le dépôt (une skill) ;
+    vous suivez son travail dans le panneau de l'agent, et vous committez quand vous le décidez.</p>
+  {% include "_workflow_list.html" %}
+</div>

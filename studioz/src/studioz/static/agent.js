@@ -184,6 +184,13 @@ if (panel) {
     shown.textContent = ` ${error}`;
   });
 
+  // A workflow started from its dialog (`_workflow.html`).
+  document.body.addEventListener("agent-started", (event) => {
+    event.target.closest?.("dialog")?.close();
+    setFolded(false);
+    log.scrollTop = log.scrollHeight;
+  });
+
   // The editor's "Demander à l'agent": a message started about a passage.
   document.addEventListener("agent-prefill", (event) => {
     setFolded(false);

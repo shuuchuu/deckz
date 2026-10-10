@@ -673,8 +673,13 @@ class Conversation:
             with suppress(TimeoutError):
                 await asyncio.wait_for(self._changed.wait(), timeout)
 
-    async def send(self, prompt: str) -> bool:
+    async def send(self, prompt: str, shown: str | None = None) -> bool:
         """Give the agent a message, starting its turn.
+
+        Args:
+            prompt: The message.
+            shown: What the transcript shows instead, if not the message (a \
+                workflow's, whose message names its skill).
 
         Returns:
             Whether it was sent: not while the agent is still at work.
@@ -683,7 +688,7 @@ class Conversation:
             return False
         # The person takes over from a pause.
         self.paused_until = None
-        await self._add(Entry("person", prompt.strip()))
+        await self._add(Entry("person", (shown or prompt).strip()))
         self._start(prompt.strip())
         return True
 

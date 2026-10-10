@@ -54,6 +54,18 @@ def test_unsupported_deckz_yml_schema_version_is_rejected(tmp_path: Path) -> Non
         DeckSettings.from_yaml(deck_dir)
 
 
+def test_a_studioz_section_is_left_to_studioz(tmp_path: Path) -> None:
+    # studioz reads its workflows from `deckz.yml`'s `studioz` section, with
+    # its own schema: deckz's settings must keep ignoring keys they don't know.
+    deck_dir = _deck_dir(tmp_path)
+    (deck_dir / "deckz.yml").write_text(
+        "studioz:\n  workflows:\n    - {name: x, skill: y, prompt: z}\n",
+        encoding="utf8",
+    )
+    settings = DeckSettings.from_yaml(deck_dir)
+    assert "studioz" not in settings.model_dump()
+
+
 def test_tests_never_see_a_git_hook_environment() -> None:
     from os import environ
 

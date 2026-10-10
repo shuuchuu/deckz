@@ -347,3 +347,16 @@ button.small { padding: 0 0.4rem; font-size: 0.8em; }
 .commit-message { display: flex; flex-direction: column; gap: 0.3rem; }
 .commit-message .message-head { display: flex; gap: 0.5rem; align-items: center; }
 .agent-ask-error { font-size: 0.85em; }
+
+/* Workflows: the workspace page's list, and their dialogs. */
+.workflows-section { max-width: 48rem; margin-top: 1.5rem; }
+.workflows-section h2 { font-size: 1rem; }
+.workflows { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.workflows li { display: flex; flex-wrap: wrap; gap: 0.3rem 0.8rem; align-items: baseline; }
+.workflows .hint, .workflows .error { font-size: 0.9em; }
+.workflow-form .field { display: flex; flex-direction: column; gap: 0.2rem; font-weight: 600; font-size: 0.9em; }
+.workflow-form .field .hint { font-weight: normal; }
+.workflow-form input[type=text], .workflow-form select, .workflow-form textarea { font: inherit; font-weight: normal; padding: 0.3rem 0.5rem; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--text); }
+.workflow-prompt { font-size: 0.9em; color: var(--muted); }
+.workflow-prompt p { margin-top: 0.3rem; }
+.workflow-prompt blockquote { margin: 0.3rem 0; padding: 0.2rem 0.6rem; border-left: 3px solid var(--line); color: var(--text); }

@@ -4,11 +4,11 @@
 
 **Done:** phases 0, 1 and 2 (workspaces without agents: increments 1 to 8 under
 "Phase 2"), and phase 3 (the agent in a workspace: increments 1 to 5 under
-"Phase 3"), which the user then tried on real work, satisfied. **Next:** phase
-4, workflows (see "Starting phase 4" below). Everything is pushed (`git log
-origin/main..main` in `../deckz`, and in `../slides` for its `uv.lock`, lists
-what isn't); nothing is released since 31.3.3. Push and release are the user's
-call.
+"Phase 3"), which the user then tried on real work, satisfied; phase 4's
+increment 1 (workflows declared, under "Phase 4"). **Next:** phase 4's
+increment 2 (see "Starting phase 4" below). `git log origin/main..main` in
+`../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed;
+nothing is released since 31.3.3. Push and release are the user's call.
 
 ### Code map
 
@@ -29,6 +29,7 @@ architecture):
 | `agent.py` | each workspace's agent conversation (Agent SDK): options, the git refusal hook, questions, the transcript |
 | `checkpoints.py` | the workspace's files before and after each agent turn, and undoing the last one |
 | `asks.py` | what the dialogs ask the agent (prompts), and the proposed commit message |
+| `workflows.py` | the workflows a workspace's `deckz.yml` declares (`studioz.workflows`), their forms' prompts and files |
 | `static/` | `deck.js` (pdf.js viewer, comparison), `editor.js` (CodeMirror), `dialogs.js` (dialogs opened from reloading panels), `agent.js` (the agent panel), vendored JS (`uv run doit vendor`) |
 
 Tests: `studioz/tests/`, against temporary repositories, a fake `deckz` (a script
@@ -45,10 +46,14 @@ yielding the SDK's own message objects; nothing in them touches the network.
 - Try it on slides: from the worktree, `uv run --quiet studioz --workdir
   ../slides --port 8431 --no-browser`, then <http://localhost:8431/>. The dev
   workspace is `studioz-dev` (`../slides--studioz-dev`, branch `ws/studioz-dev`,
-  clean at `697e9401`, one commit behind `origin/main`); the Fortinet deck
+  recreated clean at `ae4ef519` on 2026-10-10 after the user's own trial had
+  closed the first one: create it again from the home page if it's gone); the
+  Fortinet deck
   (`orsys/INTRA/2026-10-fortinet`) is the usual test deck. Leave it clean: a scratch
-  commit comes back off with `git reset --soft 697e9401 && git reset -q` (or the new
-  base after an update), and files are restored from a copy taken first.
+  commit comes back off with `git reset --soft ae4ef519 && git reset -q` (or the new
+  base after an update), and files are restored from a copy taken first. Restart
+  the server after changing Python code: the templates are read fresh, the modules
+  not, so a page may call what the running code lacks.
 - A workspace runs its own deckz, installed from `../deckz` (main). To try deckz
   changes from the worktree, point the workspace at it for the trial:
   `.venv/lib/python3.12/site-packages/deckz.pth` holds
@@ -108,14 +113,9 @@ increments below: the agent's conversation (`studioz.agent`), its questions,
 checkpoints, usage and the dialogs' asks (`studioz.asks`) are what workflows
 build on. slides' skills are `nouvelle-formation`, `nouvelle-section`,
 `qa-formation`, `qa-fix`, `sync-langs`, `markdown-edge-cases`
-(`../slides/.claude/skills/`). deckz's settings models set no pydantic `extra`,
-so a `studioz:` section in `deckz.yml` should be ignored by deckz (not tried):
-check it first, and keep its schema in studioz (a rule studioz needs from deckz
-goes into deckz). A suggested order, each a usable increment:
+(`../slides/.claude/skills/`). A suggested order, each a usable increment:
 
-1. **Workflows declared**: `studioz.workflows` read from `deckz.yml` (name,
-   skill, inputs, prompt, scope), listed where they apply (the workspace, a
-   deck's page), each a form whose prompt starts a turn in the conversation.
+1. **Workflows declared**: done (see "Phase 4").
 2. **Opening a workspace from a workflow**: the home page's "new workspace"
    with a workflow, its inputs (a file put in the workspace) filled in.
 3. **Questions answered later** (`defer`): a pending question that survives the
@@ -963,6 +963,35 @@ tested with fakes, not tried on a real conflict.
 `studioz.workflows` in `deckz.yml`, opening a workspace from a workflow, `defer` for
 questions answered later, the QA → fix chain (findings as a checklist in the
 workspace), the translation backlog as a list to work through.
+
+**Increment 1: done** (2026-10-10): workflows declared. A workspace's own
+`deckz.yml` declares them under `studioz.workflows` (studioz's README,
+"Workflows", is the reference): a name, an optional description, the skill, a
+`scope` (`workspace`, or `deck` for one deck, `{deck}` in the prompt), inputs
+(`text`, `long-text`, `file`, required unless said) and the prompt. The
+workspace page lists them all ("Avec l'agent"), a deck page behind "Avec
+l'agent…" (its deck's first, about the deck on screen); each opens a form
+(the deck chosen when it isn't on screen, "Ce que l'agent recevra" showing
+the prompt with the fields' labels), whose "Commencer" sends the
+conversation the prompt filled in, preceded by "Suis la skill `<skill>` du
+dépôt", while the transcript shows the workflow's name and the prompt; the
+dialog closes and the agent's panel opens. A file is kept under
+`.run/studioz/fichiers/` (the same file given again is kept once). With a
+conversation going on, a box offers to start a new one. The section's schema
+refuses unknown keys, a prompt field no input fills and duplicate names,
+shown in place of the list with each problem's path; a workflow whose skill
+the workspace lacks is shown so, and refused. deckz ignoring the section is
+now a deckz test (pydantic's default, `extra="ignore"`). Tried on slides
+(`studioz-dev`, recreated from the home page), with four workflows declared in
+its `deckz.yml` for the trial (uncommitted, put back): "Synchroniser fr/en"
+from the Fortinet deck's page loaded the `sync-langs` skill as the turn's
+first tool and found nothing to translate (42 s, 0,34 $ estimated);
+"Nouvelle formation" with a Markdown program and a new conversation kept the
+file, loaded `nouvelle-formation`, which read it and asked its two questions
+as a form (stopped there); a misspelled key showed its two errors on the
+workspace page. Left: the declaration itself in slides' `deckz.yml` (the
+user's call; the trial's is in the increment's report), the home page's
+workflows (increment 2), and `qa-fix` after a QA (increment 4).
 
 ### Phase 5: long jobs and the remaining previews
 

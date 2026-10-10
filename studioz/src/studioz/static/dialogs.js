@@ -19,5 +19,6 @@ document.addEventListener("click", async (event) => {
   } finally {
     button.disabled = false;
   }
-  if (dialog.childElementCount) dialog.showModal();
+  // A dialog's own buttons may load another of its contents.
+  if (dialog.childElementCount && !dialog.open) dialog.showModal();
 });

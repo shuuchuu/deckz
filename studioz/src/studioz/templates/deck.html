@@ -32,6 +32,11 @@
         <button type="button" class="secondary" data-dialog="#action-dialog"
                 data-url="/espaces/{{ workspace.name }}/formations/{{ deck }}/envoyer/formulaire"
                 title="Envoyer les PDF de la formation sur Google Drive">Envoyer…</button>
+        {% if declared.workflows or declared.error %}
+        <button type="button" class="secondary" data-dialog="#action-dialog"
+                data-url="/espaces/{{ workspace.name }}/workflows" data-values='{{ {"formation": deck} | tojson }}'
+                title="Les workflows du dépôt : une demande à l'agent, préparée">Avec l'agent…</button>
+        {% endif %}
       </span>
       <span class="build" id="build" data-state="building">Connexion…</span>
       <span class="notice" id="notice" role="status"></span>

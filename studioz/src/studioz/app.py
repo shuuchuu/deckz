@@ -26,6 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markdown_it import MarkdownIt
 from markupsafe import Markup
+from starlette.datastructures import UploadFile
 
 from deckz.analyzing.frames import frames
 from deckz.analyzing.i18n_stale import lang_sync_kind, one_sided
@@ -45,6 +46,7 @@ from . import (
     problems,
     sources,
     sync,
+    workflows,
     workspaces,
 )
 from .baselines import Baselines
@@ -180,6 +182,7 @@ def _markdown(text: str) -> Markup:
 
 templates.env.filters["ago"] = _ago
 templates.env.filters["markdown"] = _markdown
+templates.env.filters["workflow_text"] = workflows.text
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -214,6 +217,7 @@ def workspace(request: Request, studio: StudioDep, name: str) -> Response:
         "workspace.html",
         workspace=found,
         decks=workspaces.decks(found.worktree.path),
+        declared=workflows.declared(found.worktree.path),
     )
 
 
@@ -439,6 +443,7 @@ def deck_page(
         deck=deck,
         lang=lang,
         view="changes" if vue == "modifications" else "slides",
+        declared=workflows.declared(found.worktree.path),
     )
 
 
@@ -1256,6 +1261,142 @@ async def agent_ask(request: Request, studio: StudioDep, name: str) -> Response:
     if not await conversation.send(text):
         return JSONResponse({"error": "L'agent travaille encore"}, status_code=409)
     return Response(status_code=204)
+
+
+@router.post("/espaces/{name}/workflows", response_class=HTMLResponse)
+def workflows_list(
+    request: Request, studio: StudioDep, name: str, formation: Formation = ""
+) -> Response:
+    """The workflows offered on a deck's page: the deck's, then the others.
+
+    Returns:
+        The "Avec l'agent" dialog's content.
+    """
+    found = studio.workspace(name)
+    return _render(
+        request,
+        "_workflows.html",
+        workspace=found,
+        declared=workflows.declared(found.worktree.path),
+        deck=formation,
+    )
+
+
+def _workflow_form(
+    request: Request,
+    studio: Studio,
+    found: workspaces.Workspace,
+    workflow: workflows.Workflow,
+    declared: workflows.Declared,
+    **context: Any,
+) -> Response:
+    path = found.worktree.path
+    return _render(
+        request,
+        "_workflow.html",
+        workspace=found,
+        workflow=workflow,
+        missing=declared.missing.get(workflow.key),
+        decks=workspaces.decks(path) if workflow.scope == "deck" else [],
+        conversation=bool(studio.agents.conversation(path).entries),
+        **{"values": {}, "deck": "", "formation": "", **context},
+    )
+
+
+def _declared_workflow(
+    studio: Studio, name: str, key: str
+) -> tuple[workspaces.Workspace, workflows.Workflow, workflows.Declared]:
+    found = studio.workspace(name)
+    declared = workflows.declared(found.worktree.path)
+    workflow = declared.get(key)
+    if workflow is None:
+        raise HTTPException(404, f"Pas de workflow « {key} » dans « {name} »")
+    return found, workflow, declared
+
+
+@router.post("/espaces/{name}/workflows/{key}/formulaire", response_class=HTMLResponse)
+def workflow_form(
+    request: Request, studio: StudioDep, name: str, key: str, formation: Formation = ""
+) -> Response:
+    """A workflow's form, about the deck on screen if it's a deck's workflow.
+
+    Returns:
+        The dialog's content.
+    """
+    found, workflow, declared = _declared_workflow(studio, name, key)
+    return _workflow_form(
+        request, studio, found, workflow, declared, deck=formation, formation=formation
+    )
+
+
+@router.post("/espaces/{name}/workflows/{key}", response_class=HTMLResponse)
+async def workflow_start(
+    request: Request, studio: StudioDep, name: str, key: str
+) -> Response:
+    """Start a workflow: its prompt, filled in, begins a turn of the agent.
+
+    Returns:
+        Nothing to show, telling the page (`agent-started`) to close the \
+        dialog and open the agent's panel; or the form again with what's \
+        wrong, the answers kept but the files.
+    """
+    found, workflow, declared = _declared_workflow(studio, name, key)
+    path = found.worktree.path
+    form = await request.form()
+    values = {
+        one.name: str(form.get(one.name, "")).replace("\r\n", "\n").strip()
+        for one in workflow.inputs
+        if one.kind != "file"
+    }
+    deck = str(form.get("deck", ""))
+    files = {
+        one.name: upload
+        for one in workflow.inputs
+        if one.kind == "file"
+        and isinstance(upload := form.get(one.name), UploadFile)
+        and upload.filename
+    }
+    fresh = form.get("nouvelle") == "1"
+
+    def refuse(error: str) -> Response:
+        return _workflow_form(
+            request,
+            studio,
+            found,
+            workflow,
+            declared,
+            values=values,
+            deck=deck,
+            formation=str(form.get("formation", "")),
+            fresh=fresh,
+            dropped=bool(files),
+            error=error,
+        )
+
+    if skill := declared.missing.get(key):
+        return refuse(f"La skill « {skill} » n'existe pas dans cet espace.")
+    decks = workspaces.decks(path) if workflow.scope == "deck" else []
+    if lacking := workflow.refusal(values, set(files), deck, decks):
+        return refuse(lacking)
+    ok, why = await studio.login.status()
+    if not ok:
+        return refuse(why)
+    conversation = studio.agents.conversation(path)
+    if conversation.running:
+        return refuse("L'agent travaille encore : attendez la fin de son tour.")
+    for input_name, upload in files.items():
+        data = await upload.read(workflows.MAX_FILE_SIZE + 1)
+        if len(data) > workflows.MAX_FILE_SIZE:
+            return refuse(f"« {upload.filename} » dépasse 100 Mo.")
+        values[input_name] = await asyncio.to_thread(
+            workflows.keep_file, path, str(upload.filename), data
+        )
+    if fresh:
+        await conversation.reset()
+    prompt, shown = workflow.message({**values, workflows.DECK: deck})
+    if not await conversation.send(prompt, shown):
+        return refuse("L'agent travaille encore : attendez la fin de son tour.")
+    return Response(headers={"HX-Trigger": "agent-started", "HX-Reswap": "none"})
 
 
 @router.post("/espaces/{name}/agent/annuler")

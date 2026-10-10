@@ -459,6 +459,11 @@ corriger", of resolving a conflict: prompts studioz writes from the dialog) and
 the Commit dialog's proposed message (one exchange, no tool). Its session and transcript
 are kept in `.run/studioz/agent/`, resumed after a restart; the page follows it
 through server-sent events, which end when studioz stops (`Studio.closing`).
+`studioz.workflows` reads the workflows a workspace's own `deckz.yml` declares
+(`studioz.workflows`, its schema in studioz, refusing unknown keys; deckz ignores
+the section, which a deckz test keeps): each a form on the workspace page or a deck
+page whose answers fill a prompt naming one of the repository's skills, sent to the
+conversation like a message; a file given goes into `.run/studioz/fichiers/`.
 
 Its tests are in `studioz/tests/`, driving the app with FastAPI's test client
 on a temporary repository, the watches with a fake `deckz` printing the

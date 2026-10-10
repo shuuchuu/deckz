@@ -6,7 +6,12 @@
 <div class="workspace">
   {% include "_navigator.html" %}
   <main class="preview">
-    <p class="empty">Choisissez une formation à gauche.</p>
+    <p class="empty">Choisissez une formation à gauche, écrivez à l'agent, ou commencez un workflow.</p>
+    <section class="workflows-section">
+      <h2>Avec l'agent</h2>
+      {% set deck = "" %}
+      {% include "_workflow_list.html" %}
+    </section>
     <p class="hint">Dossier de l'espace : <code>{{ workspace.worktree.path }}</code></p>
   </main>
   {% include "_agent.html" %}

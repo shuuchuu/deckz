@@ -1,0 +1,295 @@
+from collections.abc import AsyncIterator, Iterator
+from pathlib import Path
+from time import monotonic, sleep
+from typing import Any
+
+from claude_agent_sdk import ClaudeAgentOptions, ResultMessage
+from fastapi.testclient import TestClient
+from pytest import fixture
+from studioz.agent import Agents, Conversation
+from studioz.app import Login, create_app
+
+from studioz import workflows
+
+ORIGIN = {"Origin": "http://localhost:8421"}
+
+_DECLARED = """\
+schema_version: 1
+studioz:
+  workflows:
+    - name: { fr: Nouvelle formation, en: New training }
+      description: { fr: À partir d'un programme. }
+      skill: nouvelle-formation
+      inputs:
+        - { name: program, kind: file, label: { fr: Programme }, accept: ".pdf,.md" }
+        - { name: notes, kind: long-text, label: Remarques, required: false }
+      prompt: "Crée la formation à partir du programme {program}. {notes}"
+    - name: Relire la formation (QA)
+      skill: qa-formation
+      scope: deck
+      prompt: "Fais le QA de {deck}."
+"""
+
+
+def _declare(
+    workspace: Path, yaml: str = _DECLARED, skills: tuple[str, ...] = ()
+) -> None:
+    (workspace / "deckz.yml").write_text(yaml, encoding="utf8")
+    for skill in skills:
+        directory = workspace / ".claude" / "skills" / skill
+        directory.mkdir(parents=True)
+        (directory / "SKILL.md").write_text(f"---\nname: {skill}\n---\n", "utf8")
+
+
+def test_declared_workflows(tmp_path: Path) -> None:
+    assert workflows.declared(tmp_path) == workflows.Declared()
+    _declare(tmp_path, skills=("nouvelle-formation",))
+    found = workflows.declared(tmp_path)
+    assert found.error is None
+    assert [w.key for w in found.workflows] == [
+        "nouvelle-formation",
+        "relire-la-formation-qa",
+    ]
+    assert found.missing == {"relire-la-formation-qa": "qa-formation"}
+    assert [w.key for w in found.scoped("deck")] == ["relire-la-formation-qa"]
+    new = found.workflows[0]
+    assert new.title == "Nouvelle formation"
+    assert new.preview() == (
+        "Crée la formation à partir du programme [Programme]. [Remarques]"
+    )
+    prompt, shown = new.message({"program": ".run/studioz/fichiers/p.pdf"})
+    assert prompt == (
+        "Suis la skill `nouvelle-formation` du dépôt pour cette demande.\n\n"
+        "Crée la formation à partir du programme .run/studioz/fichiers/p.pdf."
+    )
+    assert shown.startswith("Nouvelle formation : Crée la formation")
+
+
+def test_a_repository_without_workflows(tmp_path: Path) -> None:
+    (tmp_path / "deckz.yml").write_text("{}\n", encoding="utf8")
+    assert workflows.declared(tmp_path) == workflows.Declared()
+
+
+def _error(tmp_path: Path, section: str) -> str:
+    (tmp_path / "deckz.yml").write_text(f"studioz:\n{section}", encoding="utf8")
+    error = workflows.declared(tmp_path).error
+    assert error is not None
+    return error
+
+
+def test_invalid_declarations_say_what_is_wrong(tmp_path: Path) -> None:
+    def one(fields: str) -> str:
+        return _error(tmp_path, f"  workflows:\n    - {{{fields}}}\n")
+
+    assert "workflows.0.then" in one("name: a, skill: s, prompt: p, then: x")
+    assert "le {x} du prompt n'est aucun champ" in one(
+        "name: a, skill: s, prompt: '{x}'"
+    )
+    assert "`{deck}` demande `scope: deck`" in one(
+        "name: a, skill: s, prompt: '{deck}'"
+    )
+    assert "une accolade s'écrit deux fois" in one("name: a, skill: s, prompt: '{'")
+    assert "skill" in one("name: a, skill: '../x', prompt: p")
+    assert "deux workflows s'appellent « a »" in _error(
+        tmp_path,
+        "  workflows:\n"
+        "    - {name: A, skill: s, prompt: p}\n"
+        "    - {name: a, skill: t, prompt: q}\n",
+    )
+    assert "studioz.workflow" in _error(tmp_path, "  workflow: []\n")
+
+
+def test_files_are_kept_once(tmp_path: Path) -> None:
+    first = workflows.keep_file(tmp_path, "../Programme 2026?.pdf", b"a")
+    assert first == ".run/studioz/fichiers/Programme 2026_.pdf"
+    assert workflows.keep_file(tmp_path, "Programme 2026?.pdf", b"a") == first
+    other = workflows.keep_file(tmp_path, "Programme 2026?.pdf", b"b")
+    assert other == ".run/studioz/fichiers/Programme 2026_-2.pdf"
+    assert (tmp_path / other).read_bytes() == b"b"
+    assert workflows.keep_file(tmp_path, "...", b"c").endswith("/fichier")
+
+
+class _Recorder:
+    """Stands for `ClaudeSDKClient`: records the prompts, ends each turn."""
+
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+
+    def __call__(self, _options: ClaudeAgentOptions) -> "_Recorder":
+        return self
+
+    async def connect(self) -> None:
+        pass
+
+    async def query(self, prompt: str) -> None:
+        self.prompts.append(prompt)
+
+    async def receive_response(self) -> AsyncIterator[Any]:
+        yield ResultMessage("success", 1, 1, False, 1, "s")
+
+    async def interrupt(self) -> None:
+        pass
+
+    async def disconnect(self) -> None:
+        pass
+
+
+@fixture
+def recorder() -> _Recorder:
+    return _Recorder()
+
+
+@fixture
+def studio(
+    repository: Path, workspace: Path, recorder: _Recorder
+) -> Iterator[TestClient]:
+    _declare(workspace, skills=("nouvelle-formation", "qa-formation"))
+    app = create_app(
+        repository,
+        agents=Agents(recorder),
+        login=Login(check=lambda: (True, "a@b.fr")),
+    )
+    # As a context manager: the agent's turn runs in the app's event loop.
+    with TestClient(app, base_url="http://localhost:8421") as client:
+        yield client
+
+
+def _conversation(client: TestClient, workspace: Path) -> Conversation:
+    return client.app.state.studio.agents.conversation(workspace)  # ty: ignore[unresolved-attribute]
+
+
+def _wait_idle(conversation: Conversation) -> None:
+    deadline = monotonic() + 10
+    while conversation.running:
+        assert monotonic() < deadline, "the agent's turn never ended"
+        sleep(0.02)
+
+
+def test_the_pages_offer_the_workflows(studio: TestClient) -> None:
+    page = studio.get("/espaces/demo").text
+    assert "Nouvelle formation</button>" in page
+    assert "Relire la formation (QA)…</button>" in page
+    assert "/espaces/demo/workflows/nouvelle-formation/formulaire" in page
+    deck = studio.get("/espaces/demo/formations/client/abc").text
+    assert "Avec l'agent…" in deck
+    listed = studio.post(
+        "/espaces/demo/workflows", data={"formation": "client/abc"}, headers=ORIGIN
+    ).text
+    # The deck's own first, about the deck on screen.
+    assert listed.index("Relire la formation") < listed.index("Nouvelle formation")
+    assert '"formation": "client/abc"' in listed
+
+
+def test_a_deck_without_workflows_has_no_button(
+    repository: Path, workspace: Path
+) -> None:
+    client = TestClient(create_app(repository), base_url="http://localhost:8421")
+    assert "Avec l'agent…" not in client.get("/espaces/demo/formations/client/abc").text
+    assert "aucun workflow" in client.get("/espaces/demo").text
+
+
+def test_the_forms(studio: TestClient) -> None:
+    form = studio.post(
+        "/espaces/demo/workflows/nouvelle-formation/formulaire", headers=ORIGIN
+    ).text
+    assert 'type="file" name="program" accept=".pdf,.md" required' in form
+    assert '<textarea name="notes" rows="4">' in form
+    assert "la skill <code>nouvelle-formation</code>" in form
+    chosen = studio.post(
+        "/espaces/demo/workflows/relire-la-formation-qa/formulaire", headers=ORIGIN
+    ).text
+    assert '<option value="client/abc">client/abc</option>' in chosen
+    fixed = studio.post(
+        "/espaces/demo/workflows/relire-la-formation-qa/formulaire",
+        data={"formation": "client/abc"},
+        headers=ORIGIN,
+    ).text
+    assert '<input type="hidden" name="deck" value="client/abc">' in fixed
+    assert "<blockquote>Fais le QA de client/abc.</blockquote>" in fixed
+    assert "<select" not in fixed
+    assert (
+        studio.post("/espaces/demo/workflows/x/formulaire", headers=ORIGIN).status_code
+        == 404
+    )
+
+
+def test_a_workflow_starts_a_turn(
+    studio: TestClient, workspace: Path, recorder: _Recorder
+) -> None:
+    response = studio.post(
+        "/espaces/demo/workflows/nouvelle-formation",
+        data={"notes": "Deux jours.\r\nINTRA."},
+        files={"program": ("programme.pdf", b"%PDF", "application/pdf")},
+        headers=ORIGIN,
+    )
+    assert response.status_code == 200
+    assert response.headers["HX-Trigger"] == "agent-started"
+    conversation = _conversation(studio, workspace)
+    _wait_idle(conversation)
+    assert recorder.prompts == [
+        "Suis la skill `nouvelle-formation` du dépôt pour cette demande.\n\n"
+        "Crée la formation à partir du programme "
+        ".run/studioz/fichiers/programme.pdf. Deux jours.\nINTRA."
+    ]
+    assert (workspace / ".run/studioz/fichiers/programme.pdf").read_bytes() == b"%PDF"
+    assert conversation.entries[0].kind == "person"
+    assert conversation.entries[0].text.startswith("Nouvelle formation : Crée")
+
+    # With the conversation going on, the form offers a fresh one.
+    form = studio.post(
+        "/espaces/demo/workflows/relire-la-formation-qa/formulaire", headers=ORIGIN
+    ).text
+    assert 'name="nouvelle"' in form
+    studio.post(
+        "/espaces/demo/workflows/relire-la-formation-qa",
+        data={"deck": "client/abc", "nouvelle": "1"},
+        headers=ORIGIN,
+    )
+    _wait_idle(conversation)
+    assert recorder.prompts[-1].endswith("Fais le QA de client/abc.")
+    assert conversation.entries[0].text == (
+        "Relire la formation (QA) : Fais le QA de client/abc."
+    )
+
+
+def test_a_workflow_refuses_what_is_missing(
+    studio: TestClient, workspace: Path, recorder: _Recorder
+) -> None:
+    def start(key: str, **kwargs: Any) -> str:
+        return studio.post(
+            f"/espaces/demo/workflows/{key}", headers=ORIGIN, **kwargs
+        ).text
+
+    no_file = start("nouvelle-formation", data={"notes": "Gardées"})
+    assert "Remplissez « Programme »." in no_file
+    assert ">Gardées</textarea>" in no_file
+    assert "Choisissez la formation." in start(
+        "relire-la-formation-qa", data={"deck": "../x"}
+    )
+    (workspace / ".claude/skills/qa-formation/SKILL.md").unlink()
+    missing = start("relire-la-formation-qa", data={"deck": "client/abc"})
+    assert "La skill « qa-formation » n&#39;existe pas dans cet espace." in missing
+    assert recorder.prompts == []
+
+
+def test_a_workflow_needs_the_login(repository: Path, workspace: Path) -> None:
+    _declare(workspace, skills=("nouvelle-formation", "qa-formation"))
+    app = create_app(
+        repository,
+        agents=Agents(_Recorder()),
+        login=Login(check=lambda: (False, "Claude Code n'est connecté à aucun compte")),
+    )
+    client = TestClient(app, base_url="http://localhost:8421")
+    refused = client.post(
+        "/espaces/demo/workflows/relire-la-formation-qa",
+        data={"deck": "client/abc"},
+        headers=ORIGIN,
+    ).text
+    assert "connecté à aucun compte" in refused
+
+
+def test_an_invalid_section_shows(studio: TestClient, workspace: Path) -> None:
+    (workspace / "deckz.yml").write_text("studioz: {workflow: []}\n", "utf8")
+    page = studio.get("/espaces/demo").text
+    assert "Les workflows de l'espace sont illisibles" in page
+    assert "studioz.workflow" in page
