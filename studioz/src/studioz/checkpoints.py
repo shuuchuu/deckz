@@ -156,6 +156,28 @@ def _blobs(workspace: Path, tree: str, files: tuple[str, ...]) -> dict[str, str]
     return found
 
 
+def _write_blob(workspace: Path, name: str, meta: str) -> None:
+    # Written from the object, not with `git restore`, which takes the
+    # workspace's own index lock (busy while studioz runs `git status`).
+    mode, _, blob = meta.split()
+    content = subprocess.run(
+        ["git", "cat-file", "blob", blob],
+        cwd=workspace,
+        capture_output=True,
+        check=True,
+        timeout=_TIMEOUT,
+    ).stdout
+    target = workspace / name
+    if target.is_symlink() or target.exists():
+        target.unlink()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if mode == "120000":
+        target.symlink_to(content.decode())
+        return
+    target.write_bytes(content)
+    target.chmod(0o755 if mode == "100755" else 0o644)
+
+
 def undo(workspace: Path, index: Path, turn: Turn) -> Undone:
     """Put back the files `turn` changed, those still as it left them.
 
@@ -182,17 +204,10 @@ def undo(workspace: Path, index: Path, turn: Turn) -> Undone:
         before = _blobs(workspace, turn.before, turn.files)
         restored = tuple(f for f in turn.files if after.get(f) == current.get(f))
         kept = tuple(f for f in turn.files if f not in restored)
-        if back := [f for f in restored if f in before]:
-            _git(
-                workspace,
-                "restore",
-                f"--source={turn.before}",
-                "--worktree",
-                "--",
-                *back,
-            )
         for name in restored:
-            if name not in before:
+            if name in before:
+                _write_blob(workspace, name, before[name])
+            else:
                 (workspace / name).unlink(missing_ok=True)
     except (OSError, subprocess.SubprocessError) as error:
         raise UndoRefusedError(str(error)) from error

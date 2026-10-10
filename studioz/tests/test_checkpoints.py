@@ -90,3 +90,30 @@ def test_a_turn_without_changes_is_not_kept(workspace: Path, tmp_path: Path) -> 
     assert tree is not None
     assert record(workspace, tmp_path, tree, tree) is None
     assert snapshot(tmp_path / "not-git", tmp_path / "other-index") is None
+
+
+def test_undo_while_git_holds_the_workspace_index(
+    workspace: Path, tmp_path: Path
+) -> None:
+    # As when studioz's background `git status` runs right after a turn.
+    index = tmp_path / "index"
+    deck = workspace / "client" / "abc" / "deck.yml"
+    before = snapshot(workspace, index)
+    _write(deck, "name: by the agent\n")
+    turn = record(workspace, tmp_path, before or "", snapshot(workspace, index) or "")
+    assert turn is not None
+    lock = Path(
+        subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-path", "index.lock"],
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    )
+    lock.touch()
+    try:
+        assert undo(workspace, index, turn).restored == ("client/abc/deck.yml",)
+    finally:
+        lock.unlink()
+    assert deck.read_text(encoding="utf8") == "name: abc\n"

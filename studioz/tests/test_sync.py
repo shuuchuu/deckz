@@ -265,6 +265,8 @@ def test_sync_dialog_conflict(
         f"{SYNC}/formulaire", data={"formation": "client/abc"}, headers=ORIGIN
     ).text
     assert 'class="change" data-file="shared.md"' in page
+    assert 'data-agent-task="conflit"' in page
+    assert '"path": ["shared.md"]' in page
     assert "Continuer" in page
     assert "Publier" not in page
     assert "conflit" in client.get(SYNC).text

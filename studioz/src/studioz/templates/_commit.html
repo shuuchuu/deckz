@@ -43,7 +43,10 @@
     <p>Ces fichiers changent sans leur version dans l'autre langue :</p>
     <ul>
       {% for change in one_sided %}
-      <li><code>{{ change.changed_path }}</code> (pas <code>{{ change.other_path }}</code>)</li>
+      <li><code>{{ change.changed_path }}</code> (pas <code>{{ change.other_path }}</code>)
+        <button type="button" class="secondary small" data-agent-task="traduire"
+                data-agent-values='{{ {"changed": change.changed_path | string, "other": change.other_path | string} | tojson }}'
+                title="L'agent porte la modification dans l'autre langue ; vous cochez ensuite les deux fichiers">Traduire avec l'agent</button></li>
       {% endfor %}
     </ul>
     <p>Portez la modification et cochez-la aussi, ou dites pourquoi
@@ -66,14 +69,14 @@
     {% else %}Les vérifications ne signalent aucun problème.{% endif %}
     Le dépôt vérifie à nouveau les fichiers au commit (quelques secondes).
   </p>
-  <label class="message-label" for="commit-message">Message</label>
-  <textarea id="commit-message" name="message" rows="5" required
-            placeholder="Première ligne : ce que fait ce commit, en une phrase courte.">{{ draft.message }}</textarea>
+  {% with message=draft.message %}{% include "_commit_message.html" %}{% endwith %}
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   {% if refused %}
   <div class="refused" role="alert">
     <p>Le dépôt a refusé ce commit, rien n'a été enregistré. Corrigez ce qu'il indique, puis recommencez : le message est gardé.</p>
     <pre>{{ refused }}</pre>
+    <p><button type="button" class="secondary" data-agent-task="corriger"
+               data-agent-values='{{ {"refused": refused, "path": selected | list} | tojson }}'>Demander à l'agent de corriger</button></p>
   </div>
   {% endif %}
   <footer>

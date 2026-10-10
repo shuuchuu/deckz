@@ -68,6 +68,7 @@ export class SourceEditor {
     this.view = new EditorView({ parent: this.element("editor") });
     this.element("editor-save").addEventListener("click", () => this.save());
     this.element("editor-close").addEventListener("click", () => this.close());
+    this.element("editor-ask")?.addEventListener("click", () => this.ask());
     window.addEventListener("beforeunload", (event) => {
       if (this.dirty) event.preventDefault();
     });
@@ -208,6 +209,19 @@ export class SourceEditor {
     document.body.dispatchEvent(new Event("workspace-changed"));
     this.say(null);
     this.setStatus(this.dirty ? "modified" : "saved");
+  }
+
+  // Starts a message to the agent about the passage under the cursor (the
+  // agent panel, `agent.js`, takes it).
+  ask() {
+    if (!this.file) return;
+    const { state } = this.view;
+    const range = state.selection.main;
+    const line = state.doc.lineAt(range.head).number;
+    let excerpt = state.sliceDoc(range.from, range.to).trim().replace(/\s+/g, " ");
+    if (excerpt.length > 120) excerpt = `${excerpt.slice(0, 117)}…`;
+    const text = `À propos de \`${this.file}\`, ligne ${line}${excerpt ? ` (« ${excerpt} »)` : ""} : `;
+    document.dispatchEvent(new CustomEvent("agent-prefill", { detail: { text } }));
   }
 
   // Shows the file as it is on disk now, at the same place.

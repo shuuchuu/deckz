@@ -3,10 +3,9 @@
 ## Where things stand, and how to resume (2026-10-10)
 
 **Done:** phases 0, 1 and 2 (workspaces without agents: increments 1 to 8 under
-"Phase 2"), and phase 3's increments 1 to 4 (the conversation panel, question
-forms, checkpoints and "Annuler ce tour", usage and limit pauses, under "Phase
-3"). **Next:** phase 3's increment 5, the agent in the existing dialogs (see
-"Phase 3's increments" below). `git log origin/main..main` in
+"Phase 2"), and phase 3 (the agent in a workspace: increments 1 to 5 under
+"Phase 3"). **Next:** phase 4, workflows (see "Phase 4"); first, a trial of
+phase 3 by the user on real work. `git log origin/main..main` in
 `../deckz` (and in `../slides`, for its `uv.lock`) lists what isn't pushed;
 nothing is released since 31.3.3. Push and release are the user's call.
 
@@ -28,6 +27,7 @@ architecture):
 | `jobs.py`, `actions.py` | the job queue; build, upload, publish |
 | `agent.py` | each workspace's agent conversation (Agent SDK): options, the git refusal hook, questions, the transcript |
 | `checkpoints.py` | the workspace's files before and after each agent turn, and undoing the last one |
+| `asks.py` | what the dialogs ask the agent (prompts), and the proposed commit message |
 | `static/` | `deck.js` (pdf.js viewer, comparison), `editor.js` (CodeMirror), `dialogs.js` (dialogs opened from reloading panels), `agent.js` (the agent panel), vendored JS (`uv run doit vendor`) |
 
 Tests: `studioz/tests/`, against temporary repositories, a fake `deckz` (a script
@@ -105,10 +105,7 @@ are gone). studioz pins `claude-agent-sdk==0.2.160` (bundling Claude Code
 2. **Questions**: done (see "Phase 3").
 3. **Guardrails**: done (see "Phase 3").
 4. **Usage**: done (see "Phase 3").
-5. **The agent in the existing dialogs**: drafting the commit message, "translate
-   now" for a one-sided pair, "ask the agent to fix it" after a refusal, resolving a
-   Sync conflict (the person sees the result before continuing), comments on frames
-   as instructions.
+5. **The agent in the existing dialogs**: done (see "Phase 3").
 
 ## Why
 
@@ -905,6 +902,28 @@ a one-word turn on the long trial conversation showed 0,32 $ (the resumed
 context), the header 14 % and 77 %. A real limit wasn't hit (tested with
 fakes). Left: a pause doesn't survive a studioz restart; no warning before a
 long task when a window is nearly full.
+
+**Increment 5: done** (2026-10-10): the agent in the dialogs. The Commit
+dialog has "Proposer un message" (`studioz.asks.draft_message`: one exchange
+with no tool, on the diff of the files ticked and the last commits' subjects,
+with Haiku to spare the plan; the person edits it), "Traduire avec l'agent"
+beside each file changed without its other language, and "Demander à l'agent
+de corriger" under a refusal; the Synchronisation dialog has "Demander à
+l'agent de résoudre" on a conflict. Each sends the conversation a prompt
+studioz writes from what the dialog shows (`asks.prompt`), closes the dialog
+and opens the panel; the person checks the turn, then commits or continues
+from the dialog as before. The editor's "Demander à l'agent" starts a message
+about the passage under the cursor (file, line, selection): comments on
+frames as instructions. It exposed a fault in increment 3: undoing used `git
+restore`, which takes the workspace's own index lock, busy when studioz's
+`git status` runs right after a turn; files are now written from the
+snapshot's objects. Errors in the panel get their own line (the state's
+updates rewrote the status). Tried on slides (`studioz-dev`): a French list
+item added, the proposed message « Add Visualisation to big-data tools »;
+"Traduire avec l'agent" closed the dialog, the agent followed the
+repository's `sync-langs` skill and added « Visualizing » (39 s), and "Annuler
+ce tour" put the English file back. The conflict and refusal buttons are
+tested with fakes, not tried on a real conflict.
 
 ### Phase 4: workflows
 

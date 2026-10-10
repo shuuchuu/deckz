@@ -24,6 +24,9 @@
              onclick="this.closest('dialog').close()" title="L'ouvrir dans l'éditeur">{{ path }}</a>{% else %}<code>{{ path }}</code>{% endif %}</li>
       {% endfor %}
     </ul>
+    <p><button type="button" class="secondary" data-agent-task="conflit"
+               data-agent-values='{{ {"path": state.conflicts | list, "upstream": state.upstream.name} | tojson }}'
+               title="L'agent résout les conflits dans les fichiers ; vous vérifiez, puis continuez ici">Demander à l'agent de résoudre</button></p>
     <p class="hint">« Abandonner » remet l'espace comme avant la mise à jour, vos modifications comprises.</p>
   </div>
   <footer>

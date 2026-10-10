@@ -329,6 +329,8 @@ tr.closed td { color: var(--muted); }
 .agent-question .other input[type=text] { flex: 1; font: inherit; padding: 0.2rem 0.4rem; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--text); }
 .agent-login { margin: 0.5rem 0.7rem; background: var(--error-bg); padding: 0.4rem 0.6rem; border-radius: 4px; font-size: 0.9em; }
 .agent-login[hidden] { display: none; }
+.agent-error { margin: 0.3rem 0.7rem; color: var(--danger); font-size: 0.85em; }
+.agent-error[hidden] { display: none; }
 .agent-form { border-top: 1px solid var(--line); padding: 0.5rem 0.6rem; display: flex; flex-direction: column; gap: 0.4rem; }
 .agent-form textarea { font: inherit; font-size: 0.9em; padding: 0.4rem 0.5rem; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--text); resize: vertical; }
 .agent-actions { display: flex; gap: 0.5rem; align-items: center; }
@@ -339,3 +341,9 @@ tr.closed td { color: var(--muted); }
   .workspace, .agent-folded .workspace { grid-template-columns: 1fr; }
   .agent { min-height: 50vh; border-left: 0; border-top: 1px solid var(--line); }
 }
+
+/* The agent, asked from a dialog or the editor. */
+button.small { padding: 0 0.4rem; font-size: 0.8em; }
+.commit-message { display: flex; flex-direction: column; gap: 0.3rem; }
+.commit-message .message-head { display: flex; gap: 0.5rem; align-items: center; }
+.agent-ask-error { font-size: 0.85em; }

@@ -453,7 +453,10 @@ for the answer. `studioz.checkpoints` snapshots the workspace's files around
 each turn (a private index, trees under `refs/studioz/`), so that "Annuler ce
 tour" puts back what the last one changed. The panel shows the account's usage
 windows and each turn's usage; a turn stopped by a usage limit pauses the
-conversation, which resumes by itself at the reset time. Its session and transcript
+conversation, which resumes by itself at the reset time. `studioz.asks` holds
+what the dialogs ask it ("Traduire avec l'agent", "Demander à l'agent de
+corriger", of resolving a conflict: prompts studioz writes from the dialog) and
+the Commit dialog's proposed message (one exchange, no tool). Its session and transcript
 are kept in `.run/studioz/agent/`, resumed after a restart; the page follows it
 through server-sent events, which end when studioz stops (`Studio.closing`).
 

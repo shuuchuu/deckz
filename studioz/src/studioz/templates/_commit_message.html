@@ -1,0 +1,13 @@
+{% set base = "/espaces/" ~ workspace.name %}
+<div class="commit-message" id="commit-message-box">
+  <div class="message-head">
+    <label class="message-label" for="commit-message">Message</label>
+    <button type="button" class="secondary small" hx-post="{{ base }}/commit/proposer"
+            hx-target="#commit-message-box" hx-swap="outerHTML" hx-indicator="#commit-drafting"
+            title="Un message rédigé par Claude d'après les fichiers cochés, à relire">Proposer un message</button>
+    <span class="indicator" id="commit-drafting">Rédaction…</span>
+  </div>
+  <textarea id="commit-message" name="message" rows="5" required
+            placeholder="Première ligne : ce que fait ce commit, en une phrase courte.">{{ message }}</textarea>
+  {% if draft_error %}<p class="error" role="alert">{{ draft_error }}</p>{% endif %}
+</div>

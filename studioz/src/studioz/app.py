@@ -38,6 +38,7 @@ from . import (
     __version__,
     actions,
     agent,
+    asks,
     background,
     changes,
     commits,
@@ -71,6 +72,8 @@ class Studio:
     jobs: Jobs
     agents: agent.Agents
     login: "Login"
+    drafter: Callable[[Path, list[str]], Awaitable[str]] = asks.draft_message
+    """Writes a commit message (tests replace it)."""
     closing: Event = field(default_factory=Event)
     """Set when studioz stops: the pages' server-sent events end."""
 
@@ -646,6 +649,41 @@ def commit_form(
     return _commit_dialog(request, studio, studio.workspace(name), draft)
 
 
+@router.post("/espaces/{name}/commit/proposer", response_class=HTMLResponse)
+async def commit_draft(
+    request: Request, studio: StudioDep, name: str, draft: DraftDep
+) -> Response:
+    """A commit message for the files ticked, by Claude (`asks.draft_message`).
+
+    Returns:
+        The dialog's message box, with the message proposed, or the one \
+        written and why there's none.
+    """
+    found = studio.workspace(name)
+    path = found.worktree.path
+    changed = await asyncio.to_thread(background.changes, path)
+    paths = commits.to_stage(changed, draft.selected(changed, shown=False))
+    message, error = draft.message, None
+    ok, why = await studio.login.status()
+    if not ok:
+        error = why
+    elif not paths:
+        error = "Cochez d'abord les fichiers du commit."
+    else:
+        try:
+            message = await studio.drafter(path, paths) or message
+        except Exception as failure:
+            # Whatever Claude Code says (a limit, no network): the person writes it.
+            error = f"Pas de proposition : {str(failure)[:200]}"
+    return _render(
+        request,
+        "_commit_message.html",
+        workspace=found,
+        message=message,
+        draft_error=error,
+    )
+
+
 @router.post("/espaces/{name}/commit", response_class=HTMLResponse)
 def commit(request: Request, studio: StudioDep, name: str, draft: DraftDep) -> Response:
     """Commit the files chosen, unless something's missing or a hook refuses.
@@ -1195,6 +1233,31 @@ async def agent_answer(request: Request, studio: StudioDep, name: str) -> Respon
     return Response(status_code=204)
 
 
+@router.post("/espaces/{name}/agent/demander")
+async def agent_ask(request: Request, studio: StudioDep, name: str) -> Response:
+    """Send the agent what a dialog's "Demander à l'agent" asks (`asks.prompt`).
+
+    Returns:
+        204, 422 for an unknown request, or 409 while the agent is at work \
+        or Claude Code isn't logged in.
+    """
+    found = studio.workspace(name)
+    form = await request.form()
+    values = {key: [str(v) for v in form.getlist(key)] for key in form}
+    task = str(form.get("task", ""))
+    try:
+        text = asks.prompt(task, values)
+    except ValueError as error:
+        return JSONResponse({"error": str(error)}, status_code=422)
+    ok, why = await studio.login.status()
+    if not ok:
+        return JSONResponse({"error": why}, status_code=409)
+    conversation = studio.agents.conversation(found.worktree.path)
+    if not await conversation.send(text):
+        return JSONResponse({"error": "L'agent travaille encore"}, status_code=409)
+    return Response(status_code=204)
+
+
 @router.post("/espaces/{name}/agent/annuler")
 async def agent_undo(studio: StudioDep, name: str) -> Response:
     """Put back the files the agent's last turn changed.
@@ -1258,6 +1321,7 @@ def create_app(
     baselines: Baselines | None = None,
     agents: agent.Agents | None = None,
     login: Login | None = None,
+    drafter: Callable[[Path, list[str]], Awaitable[str]] | None = None,
 ) -> FastAPI:
     """The studioz application for the deckz repository `repository`.
 
@@ -1269,6 +1333,7 @@ def create_app(
         baselines: The baselines' builds (same).
         agents: The workspaces' agents (tests replace the Agent SDK's client).
         login: Claude Code's login check (same).
+        drafter: What writes a commit message (same).
 
     Returns:
         The application.
@@ -1285,6 +1350,7 @@ def create_app(
         Jobs(),
         agents or agent.Agents(),
         login or Login(),
+        drafter or asks.draft_message,
     )
 
     @asynccontextmanager

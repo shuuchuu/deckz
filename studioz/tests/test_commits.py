@@ -146,6 +146,8 @@ def test_one_language_changed_asks_why(committer: TestClient, workspace: Path) -
 
     page = committer.post(FORM, data={}, headers=ORIGIN).text
     assert "<code>content/a/x.md</code> (pas <code>content/a/en/x.md</code>)" in page
+    assert 'data-agent-task="traduire"' in page
+    assert '{"changed": "content/a/x.md", "other": "content/a/en/x.md"}' in page
     assert 'value="only"' in page
 
     page = committer.post(
@@ -232,6 +234,7 @@ def test_a_hook_refusal_is_shown(
 
     assert "Le dépôt a refusé ce commit" in page
     assert "client/abc/notes.txt: bad" in page
+    assert 'data-agent-task="corriger"' in page
     assert str(workspace) not in page
     assert ">Notes</textarea>" in page
     assert _git(workspace, "rev-parse", "HEAD") == head

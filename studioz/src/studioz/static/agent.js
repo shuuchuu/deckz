@@ -87,10 +87,15 @@ if (panel) {
   events.addEventListener("error", () => { status.textContent = "reconnexion…"; });
   events.addEventListener("open", () => { status.textContent = ""; update(); });
 
+  // Its own line: the state's next update rewrites the status.
+  const failure = document.getElementById("agent-error");
   async function post(path, body) {
     const response = await fetch(`${base}/${path}`, { method: "POST", body });
-    if (!response.ok && response.headers.get("content-type")?.includes("json")) {
-      status.textContent = (await response.json()).error;
+    failure.hidden = response.ok;
+    if (!response.ok) {
+      let error = "La demande n'a pas abouti";
+      try { error = (await response.json()).error; } catch {}
+      failure.textContent = error;
     }
     return response.ok;
   }
@@ -149,6 +154,42 @@ if (panel) {
       document.body.dispatchEvent(new Event("workspace-changed"));
       document.body.dispatchEvent(new Event("comparison-refresh"));
     }
+  });
+
+  // A dialog's "Demander à l'agent" (`asks.prompt` writes the message).
+  document.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-agent-task]");
+    if (!button) return;
+    const body = new FormData();
+    body.set("task", button.dataset.agentTask);
+    for (const [key, value] of Object.entries(JSON.parse(button.dataset.agentValues || "{}"))) {
+      for (const item of [].concat(value)) body.append(key, item);
+    }
+    button.disabled = true;
+    const response = await fetch(`${base}/demander`, { method: "POST", body });
+    if (response.ok) {
+      button.closest("dialog")?.close();
+      setFolded(false);
+      return;
+    }
+    button.disabled = false;
+    let error = "La demande n'est pas partie";
+    try { error = (await response.json()).error; } catch {}
+    let shown = button.nextElementSibling;
+    if (!shown?.classList.contains("agent-ask-error")) {
+      shown = document.createElement("span");
+      shown.className = "error agent-ask-error";
+      button.after(shown);
+    }
+    shown.textContent = ` ${error}`;
+  });
+
+  // The editor's "Demander à l'agent": a message started about a passage.
+  document.addEventListener("agent-prefill", (event) => {
+    setFolded(false);
+    message.value = event.detail.text + message.value;
+    message.focus();
+    message.setSelectionRange(event.detail.text.length, event.detail.text.length);
   });
 
   const folded = () => document.body.classList.contains("agent-folded");
