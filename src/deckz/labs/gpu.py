@@ -28,9 +28,12 @@ Colab's image: the image has no SSH host keys and its sshd listens on
 port 22; the SSH port is read from the instance's port mapping, since
 `vastai ssh-url` can name a recycled container's old port; each run is
 pinned to its CPUs (`taskset`, `PYTHON_CPU_COUNT`), the least busy ones when
-it starts, since a host's other tenants can saturate CPUs 0 and 1, and saved
-after every cell, so a hang or an interruption keeps what ran; the queue picks up
-notebooks queued while it runs.
+it starts, since a host's other tenants can saturate CPUs 0 and 1, and tells
+llama.cpp how many (`LLAMA_ARG_THREADS`), which would otherwise start a thread
+per host CPU; each run is saved after every cell, so a hang or an interruption
+keeps what ran; what a run leaves running (a server it started, holding GPU
+memory) is killed after it, as the next notebook would get a fresh VM on
+Colab; the queue picks up notebooks queued while it runs.
 """
 
 import json
@@ -186,9 +189,21 @@ PICK
 )
   [ -n "$cpu_list" ] || cpu_list=@CPU_LIST@
   echo "$(date -Is) cpus $cpu_list for $name"
-  (cd /content && PYTHON_CPU_COUNT=@CPUS@ taskset -c "$cpu_list" timeout @TIMEOUT@ \\
+  # Every process the run starts inherits the tag, a server it leaves behind too.
+  run_tag="$name.$start"
+  # llama.cpp starts a thread per host CPU, not per CPU it may use: dozens on 2.
+  (cd /content && DECKZ_GPU_RUN="$run_tag" LLAMA_ARG_THREADS=@CPUS@ \\
+    PYTHON_CPU_COUNT=@CPUS@ taskset -c "$cpu_list" timeout @TIMEOUT@ \\
     python3 /work/execute.py "$name" "/work/out/$name") > "out/$name.log" 2>&1
-  echo "$? $(( $(date +%s) - start ))" > "out/$name.done"
+  code=$?
+  # What the run left running (e.g. `ollama serve`, holding GPU memory) would
+  # outlive it into the next notebook's, unlike on Colab's fresh VM: kill it.
+  for environ in $(grep -lsxzF "DECKZ_GPU_RUN=$run_tag" /proc/[0-9]*/environ); do
+    pid=${environ#/proc/}
+    pid=${pid%/environ}
+    kill -9 "$pid" 2>/dev/null && echo "$(date -Is) killed $pid left by $name"
+  done
+  echo "$code $(( $(date +%s) - start ))" > "out/$name.done"
   echo "$(date -Is) done $name: $(cat "out/$name.done")"
 done
 echo "$(date -Is) queue finished"

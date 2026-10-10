@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from deckz.configuring.settings import (
 from deckz.exceptions import GpuRunError, MissingExtraError
 from deckz.labs.gpu import (
     IDLE_CPUS,
+    QUEUE,
     GpuRun,
     GpuStatus,
     InstanceInfo,
@@ -192,6 +194,7 @@ def test_start_pins_the_cpus_and_sets_the_timeout(repo: Path) -> None:
 
     queue = (gpu_run.directory / "scripts" / "queue.sh.new").read_text()
     assert 'PYTHON_CPU_COUNT=2 taskset -c "$cpu_list" timeout 600' in queue
+    assert 'DECKZ_GPU_RUN="$run_tag" LLAMA_ARG_THREADS=2' in queue
     # The least busy CPUs, picked before each notebook, else the first ones.
     assert "cpu_list=$(python3 - 2 <<'PICK'\n" + IDLE_CPUS.rstrip("\n") in queue
     assert '[ -n "$cpu_list" ] || cpu_list=0,1' in queue
@@ -234,6 +237,50 @@ def test_idle_cpus_runs_as_the_queue_runs_it() -> None:
     cpus = [int(cpu) for cpu in result.stdout.strip().split(",")]
     assert len(cpus) == min(2, len(os.sched_getaffinity(0)))
     assert set(cpus) <= os.sched_getaffinity(0)
+
+
+def test_queue_kills_what_a_run_leaves_running(tmp_path: Path) -> None:
+    start = QUEUE.index("  for environ in")
+    cleanup = QUEUE[start : QUEUE.index("  done\n", start) + len("  done\n")]
+    pids = tmp_path / "pids"
+    # A server the run started, detached as `ollama serve &` would be, and a
+    # process of someone else's on the machine.
+    spawn = (
+        f"DECKZ_GPU_RUN=nb.ipynb.1 setsid sleep 300 & echo $! >> {pids}\n"
+        f"DECKZ_GPU_RUN=other.ipynb.1 setsid sleep 300 & echo $! >> {pids}\n"
+    )
+    subprocess.run(["bash", "-c", spawn], check=True)
+    left, other = map(int, pids.read_text().split())
+    try:
+        _wait_for_env(left, b"DECKZ_GPU_RUN=nb.ipynb.1")
+        _wait_for_env(other, b"DECKZ_GPU_RUN=other.ipynb.1")
+        result = subprocess.run(
+            ["bash", "-c", "name=nb.ipynb\nrun_tag=nb.ipynb.1\n" + cleanup],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        assert f"killed {left} left by nb.ipynb" in result.stdout
+        assert not Path(f"/proc/{left}").exists() or _zombie(left)
+        assert Path(f"/proc/{other}").exists()
+    finally:
+        for pid in (left, other):
+            subprocess.run(["kill", "-9", str(pid)], check=False, capture_output=True)
+
+
+def _wait_for_env(pid: int, entry: bytes) -> None:
+    # A forked child's environ holds its new variables only once it has exec'd.
+    for _ in range(500):
+        if entry in Path(f"/proc/{pid}/environ").read_bytes().split(b"\0"):
+            return
+        time.sleep(0.01)
+    msg = f"{pid} never got {entry!r}"
+    raise AssertionError(msg)
+
+
+def _zombie(pid: int) -> bool:
+    return Path(f"/proc/{pid}/stat").read_text().split(") ")[1].startswith("Z")
 
 
 def test_status_parses_the_machine_queue(repo: Path) -> None:
