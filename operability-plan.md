@@ -29,9 +29,10 @@ They're kept for good, beyond this plan, as "Operability guidelines" in `CLAUDE.
 
 ## Phase 1: make `deckz run` safe by default
 
-**Status (2026-10-10):** done on branch `operability` (worktree `../deckz-operability`),
-not merged. Tried on slides through `uv run --with-editable ../deckz-operability`, which
-takes precedence over slides' editable `../deckz`. `deckz upload` refuses outdated PDFs
+**Status (2026-10-10):** done and merged (f07f90b, 8a91bb0); slides follows it in
+672e3a48 (`typst_memory_max: 5GiB`, CLAUDE.md and qa-fix without the `--sync` and
+`systemd-run` warnings). Later phases are tried on slides the same way first: `uv run --with-editable
+../deckz-operability` takes precedence over slides' editable `../deckz`. `deckz upload` refuses outdated PDFs
 (see the end).
 
 ### 1.1 `--sync` removes orphans, not what this run didn't build
