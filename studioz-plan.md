@@ -4,9 +4,9 @@
 
 **Done:** phases 0, 1 and 2 (workspaces without agents: increments 1 to 8 under
 "Phase 2"). **Next:** phase 3, the agent in a workspace (see "Starting phase 3"
-below). Nothing since `c58160d` is pushed (`git log origin/main..main` in
-`../deckz` lists it), and nothing released since 31.3.3: push and release are the
-user's call.
+below). Everything is pushed to `origin/main` (`git log origin/main..main` in
+`../deckz` lists what isn't), and nothing is released since 31.3.3: push and
+release are the user's call.
 
 ### Code map
 
