@@ -12,7 +12,7 @@ def all(  # ruff: ignore[builtin-variable-shadowing]
     print: bool = False,  # ruff: ignore[builtin-argument-shadowing]
     html: bool = False,
     part_handouts: bool = True,
-    sync: bool = False,
+    sync: bool = True,
     langs: Langs = ("fr",),
     dry_run: bool = False,
     workdir: Path = Path(),
@@ -31,10 +31,11 @@ def all(  # ruff: ignore[builtin-variable-shadowing]
         html: Produce an HTML deck (whole deck, with a table of contents)
         part_handouts: With --handout, also produce one handout per part,
             besides the whole deck's
-        sync: Once everything compiled, remove the PDFs of the output
-            directories that this run didn't produce, in every language:
-            e.g. part handouts after --no-part-handouts, English PDFs
-            after a French-only run, or other parts' PDFs with --parts
+        sync: Once everything compiled, remove the PDFs that no build of
+            the deck produces anymore (a removed or renamed part, a renamed
+            deck, a stray file), in the languages this run built. What
+            this run merely skips (another language, presentations after
+            --no-presentation, other parts with --parts) is kept
         langs: Languages to compile, each to its own output paths
             (English under an `en/` subdirectory). English is strict: every
             resolved file, title and variable must have a complete English
@@ -45,7 +46,7 @@ def all(  # ruff: ignore[builtin-variable-shadowing]
 
     """
     from ...pipelines import OutputKinds, all_targets, build
-    from .._presentation import RichProgress, print_plan_of
+    from .._presentation import RichProgress, announce_build, print_plan_of
 
     langs = unique(langs)
     outputs = OutputKinds(
@@ -56,6 +57,7 @@ def all(  # ruff: ignore[builtin-variable-shadowing]
         part_handouts=part_handouts,
         sync=sync,
     )
+    announce_build("every shared section and deck-local override", langs, outputs)
     targets = all_targets(workdir, langs)
     if dry_run:
         print_plan_of(targets, outputs)

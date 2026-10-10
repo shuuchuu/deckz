@@ -25,7 +25,7 @@ from .components.protocols import DeckBuilderProtocol, ProgressReporterProtocol
 from .configuring.settings import DeckSettings, GlobalSettings
 from .configuring.variables import get_variables, resolve_variables
 from .exceptions import CompilationError, DeckzError
-from .models import LANGS, Deck, FlavorName, Lang, PartName, lang_dir
+from .models import Deck, FlavorName, Lang, PartName, lang_dir
 from .utils import all_deck_settings
 
 _logger = getLogger(__name__)
@@ -46,6 +46,9 @@ class BuildTarget:
     """Where the deck's files live, when not just the usual content and deck \
     directories (see [`DeckSettingsFactory.deck_builder`]\
     [deckz.components.factory.DeckSettingsFactory.deck_builder])."""
+    parts: tuple[PartName, ...] | None = None
+    """The parts to compile, when not all of them (`--parts`). `deck` stays \
+    whole: `stale_pdfs` needs every output of the deck, not only this build's."""
 
 
 @dataclass(frozen=True)
@@ -59,20 +62,35 @@ class OutputKinds:
     part_handouts: bool = True
     """One handout per part, besides the whole deck's (with `handout` only)."""
     sync: bool = False
-    """Remove the PDFs of the decks' output directories, in every language, \
-    that the build doesn't produce (see `stale_pdfs`)."""
+    """Remove the PDFs that no build of the decks produces anymore, in the \
+    languages built (see `stale_pdfs`)."""
+
+    @property
+    def pdfs(self) -> bool:
+        """Whether any PDF is built."""
+        return self.handout or self.presentation or self.print
+
+
+_EVERY_PDF = OutputKinds(handout=True, presentation=True, print=True)
 
 
 def _deck_builder(
     target: BuildTarget,
     outputs: OutputKinds,
     progress: ProgressReporterProtocol,
+    *,
+    whole_deck: bool = False,
 ) -> DeckBuilderProtocol:
     lang = target.lang
     variables = {**get_variables(target.settings, lang=lang), "lang": lang}
+    deck = (
+        target.deck
+        if whole_deck or target.parts is None
+        else target.deck.filter(target.parts)
+    )
     return DeckSettingsFactory(target.settings, lang=lang).deck_builder(
         variables=variables,
-        deck=resolve_variables(target.deck, variables),
+        deck=resolve_variables(deck, variables),
         build_handout=outputs.handout,
         build_presentation=outputs.presentation,
         build_print=outputs.print,
@@ -101,7 +119,6 @@ def build(
     _logger.debug("Built assets in %.2fs", perf_counter() - start)
 
     several_langs = len({target.lang for target in targets}) > 1
-    produced: list[Path] = []
 
     def compile_target(target: BuildTarget) -> None:
         target_progress = (
@@ -110,7 +127,6 @@ def build(
             else progress
         )
         builder = _deck_builder(target, outputs, target_progress)
-        produced.extend(builder.output_paths())
         if not builder.build_deck():
             msg = (
                 f"{target.label} failed to compile in {target.lang}, see the "
@@ -130,39 +146,41 @@ def build(
                 advance()
 
     if outputs.sync:
-        for pdf in stale_pdfs(targets, produced):
-            _logger.info("Removing %s, not produced by this build", pdf)
+        for pdf in stale_pdfs(targets, outputs):
+            _logger.info("Removing %s, which no build of its deck produces", pdf)
             pdf.unlink()
 
 
-def stale_pdfs(targets: Iterable[BuildTarget], produced: Iterable[Path]) -> list[Path]:
-    """The PDFs of `targets`' output directories missing from `produced`.
+def stale_pdfs(targets: Iterable[BuildTarget], outputs: OutputKinds) -> list[Path]:
+    """The PDFs of `targets`' output directories that no build produces anymore.
 
-    Covers every language's directory, the languages `targets` don't build \
-    included: a synced build leaves exactly its own PDFs. Leaves alone a \
-    deck's directories when `produced` has no PDF in them at all (e.g. an \
-    HTML-only build), rather than emptying them.
+    A PDF is stale when no build of its deck, whatever its kinds or parts, \
+    would write it: a removed or renamed part's, a renamed deck's, a stray \
+    file. What this build merely skips (presentations after a handout-only \
+    build, other parts under `--parts`) is kept. Only the languages built \
+    are looked at: another language's deck may not even parse. A build \
+    producing no PDF at all (e.g. HTML only) leaves the PDFs alone.
 
     Args:
         targets: The build's targets.
-        produced: Every output path the build writes.
+        outputs: The build's outputs.
 
     Returns:
         The stale PDFs, sorted.
     """
-    produced = set(produced)
-    stale = []
-    for pdf_dir in {target.settings.paths.pdf_dir for target in targets}:
-        dirs = {lang_dir(pdf_dir, lang) for lang in LANGS}
-        if not any(path.suffix == ".pdf" and path.parent in dirs for path in produced):
-            continue
-        stale.extend(
-            pdf
-            for directory in dirs
-            for pdf in directory.glob("*.pdf")
-            if pdf not in produced
-        )
-    return sorted(stale)
+    if not outputs.pdfs:
+        return []
+    expected: dict[Path, set[Path]] = {}
+    for target in targets:
+        directory = lang_dir(target.settings.paths.pdf_dir, target.lang)
+        builder = _deck_builder(target, _EVERY_PDF, _NULL_PROGRESS, whole_deck=True)
+        expected.setdefault(directory, set()).update(builder.output_paths())
+    return sorted(
+        pdf
+        for directory, paths in expected.items()
+        for pdf in directory.glob("*.pdf")
+        if pdf not in paths
+    )
 
 
 def plan(targets: Iterable[BuildTarget], outputs: OutputKinds) -> list[PlannedCompile]:
@@ -197,8 +215,9 @@ def deck_targets(
         parser = DeckSettingsFactory(settings, lang=lang).parser()
         deck = parser.from_deck_definition(settings.paths.deck_definition)
         if parts is not None:
-            deck = deck.filter(parts)
-        targets.append(BuildTarget(deck, settings, lang, deck.name))
+            # Fails now on an unknown part, before anything compiles.
+            deck.filter(parts)
+        targets.append(BuildTarget(deck, settings, lang, deck.name, parts=parts))
     return targets
 
 

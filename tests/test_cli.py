@@ -531,6 +531,42 @@ def test_run_defaults_come_from_a_dotenv_file(
     }
 
 
+def test_run_announces_the_defaults_a_dotenv_file_set(
+    bilingual_dir: Path, monkeypatch: Any, caplog: Any
+) -> None:
+    from dotenv import main as dotenv_main
+
+    monkeypatch.setattr("dotenv.find_dotenv", dotenv_main.find_dotenv)
+    for name in ("DECKZ_LANG", "DECKZ_RUN_HANDOUT", "DECKZ_RUN_PRINT"):
+        monkeypatch.setenv(name, "")
+        monkeypatch.delenv(name)
+    (bilingual_dir.parent.parent / ".env").write_text(
+        'DECKZ_LANG="en"\nDECKZ_RUN_HANDOUT=false\nDECKZ_RUN_PRINT=false\n',
+        encoding="utf8",
+    )
+
+    main(("run", "--print", "--dry-run"))
+
+    assert "Building company/bilingual in en: presentations, print handout" in (
+        caplog.text
+    )
+    assert "DECKZ_LANG=en (.env)" in caplog.text
+    assert "DECKZ_RUN_HANDOUT=false (.env)" in caplog.text
+    # Given on the command line: the variable didn't count.
+    assert "DECKZ_RUN_PRINT" not in caplog.text
+
+
+def test_run_announces_the_defaults_the_environment_set(
+    bilingual_dir: Path, monkeypatch: Any, caplog: Any
+) -> None:
+    monkeypatch.setenv("DECKZ_RUN_PRESENTATION", "false")
+
+    main(("run", "--no-print", "--dry-run"))
+
+    assert "in fr: handout, part handouts, then removing" in caplog.text
+    assert "DECKZ_RUN_PRESENTATION=false (environment)" in caplog.text
+
+
 def test_single_view_commands_ignore_deckz_lang(
     bilingual_dir: Path, monkeypatch: Any, capsys: Any
 ) -> None:
@@ -549,49 +585,83 @@ def test_run_without_part_handouts_plans_the_whole_handout_only(
     assert _planned_pdfs(capsys) == {"company/bilingual/pdf/bilingual-handout.pdf"}
 
 
-def _stale_pdfs(bilingual_dir: Path) -> list[Path]:
-    # A part handout, both languages' leftovers, and an unrelated PDF.
+def _leftover_pdfs(bilingual_dir: Path) -> tuple[list[Path], list[Path]]:
+    """PDFs no build of the deck produces, and PDFs a narrower build skips.
+
+    Returns:
+        `(orphans, skipped)`: a removed part's handout and a stray file in
+        French; a part handout, a presentation, and an English stray file.
+    """
     pdf_dir = bilingual_dir / "pdf"
-    stale = [
+    orphans = [pdf_dir / "bilingual-p2-handout.pdf", pdf_dir / "old.pdf"]
+    skipped = [
         pdf_dir / "bilingual-p1-handout.pdf",
-        pdf_dir / "en" / "bilingual-handout.pdf",
+        pdf_dir / "bilingual-p1-presentation.pdf",
         pdf_dir / "en" / "old.pdf",
     ]
-    for pdf in stale:
+    for pdf in orphans + skipped:
         pdf.parent.mkdir(parents=True, exist_ok=True)
-        pdf.write_bytes(b"%PDF-1.4 stale")
-    return stale
+        pdf.write_bytes(b"%PDF-1.4 leftover")
+    return orphans, skipped
 
 
 def test_run_sync_dry_run_lists_the_pdfs_it_would_remove(
     bilingual_dir: Path, capsys: Any
 ) -> None:
-    stale = _stale_pdfs(bilingual_dir)
+    orphans, skipped = _leftover_pdfs(bilingual_dir)
 
-    main(("run", *_HANDOUT_ONLY, "--no-part-handouts", "--sync", "--dry-run"))
+    main(("run", *_HANDOUT_ONLY, "--no-part-handouts", "--dry-run"))
 
     removals = {
         line.split(":")[0]
         for line in capsys.readouterr().out.splitlines()
-        if line.endswith(": remove (not produced by this build)")
+        if line.endswith(": remove (no build of its deck produces it)")
     }
     assert removals == {
-        "company/bilingual/pdf/bilingual-p1-handout.pdf",
-        "company/bilingual/pdf/en/bilingual-handout.pdf",
-        "company/bilingual/pdf/en/old.pdf",
+        "company/bilingual/pdf/bilingual-p2-handout.pdf",
+        "company/bilingual/pdf/old.pdf",
     }
-    assert all(pdf.exists() for pdf in stale)
+    assert all(pdf.exists() for pdf in orphans + skipped)
 
 
-def test_run_sync_removes_the_pdfs_it_did_not_produce(bilingual_dir: Path) -> None:
-    stale = _stale_pdfs(bilingual_dir)
+def test_run_sync_removes_only_the_pdfs_no_build_produces(
+    bilingual_dir: Path,
+) -> None:
+    orphans, skipped = _leftover_pdfs(bilingual_dir)
 
-    main(("run", *_HANDOUT_ONLY, "--no-part-handouts", "--sync"))
+    main(("run", *_HANDOUT_ONLY, "--no-part-handouts"))
 
-    assert not any(pdf.exists() for pdf in stale)
-    assert [pdf.name for pdf in (bilingual_dir / "pdf").glob("**/*.pdf")] == [
-        "bilingual-handout.pdf"
-    ]
+    assert not any(pdf.exists() for pdf in orphans)
+    assert all(pdf.exists() for pdf in skipped)
+    assert (bilingual_dir / "pdf" / "bilingual-handout.pdf").exists()
+
+
+def test_run_sync_only_looks_at_the_languages_built(bilingual_dir: Path) -> None:
+    orphans, _ = _leftover_pdfs(bilingual_dir)
+
+    main(("run", *_HANDOUT_ONLY, "--lang", "en"))
+
+    assert all(pdf.exists() for pdf in orphans)
+    assert not (bilingual_dir / "pdf" / "en" / "old.pdf").exists()
+
+
+def test_run_sync_keeps_the_other_parts_pdfs(working_dir: Path) -> None:
+    other_part = working_dir / "pdf" / "abc-p2-handout.pdf"
+    other_part.parent.mkdir(parents=True, exist_ok=True)
+    other_part.write_bytes(b"%PDF-1.4 leftover")
+
+    main(("run", *_HANDOUT_ONLY, "--parts", "p1"))
+
+    assert other_part.exists()
+    assert (working_dir / "pdf" / "abc-p1-handout.pdf").exists()
+
+
+def test_run_no_sync_keeps_every_pdf(bilingual_dir: Path) -> None:
+    orphans, skipped = _leftover_pdfs(bilingual_dir)
+
+    main(("run", *_HANDOUT_ONLY, "--no-sync"))
+
+    assert all(pdf.exists() for pdf in orphans + skipped)
 
 
 def test_run_sync_keeps_every_pdf_of_the_languages_built(
@@ -600,18 +670,18 @@ def test_run_sync_keeps_every_pdf_of_the_languages_built(
     main(("run", *_HANDOUT_ONLY, "--lang", "fr", "en"))
     built = sorted((bilingual_dir / "pdf").glob("**/*.pdf"))
 
-    main(("run", *_HANDOUT_ONLY, "--lang", "fr", "en", "--sync"))
+    main(("run", *_HANDOUT_ONLY, "--lang", "fr", "en"))
 
     assert sorted((bilingual_dir / "pdf").glob("**/*.pdf")) == built
     assert len(built) == 4
 
 
 def test_run_sync_without_any_pdf_leaves_the_pdfs_alone(bilingual_dir: Path) -> None:
-    _stale_pdfs(bilingual_dir)
+    orphans, skipped = _leftover_pdfs(bilingual_dir)
 
-    main(("run", "--no-handout", "--no-presentation", "--no-print", "--sync"))
+    main(("run", "--no-handout", "--no-presentation", "--no-print"))
 
-    assert len(list((bilingual_dir / "pdf").glob("**/*.pdf"))) == 3
+    assert all(pdf.exists() for pdf in orphans + skipped)
 
 
 def test_run_en_missing_file_fails_loudly(

@@ -133,6 +133,7 @@ pandoc_command:
   - typst
   - --lua-filter={templates_dir}/pandoc/filters/boxes.lua
 typst_parallel_compilations: 1
+typst_memory_max: 5GiB
 typst_font_paths:
   - assets/fonts
 typst_ignore_system_fonts: true
@@ -146,6 +147,11 @@ typst_ignore_system_fonts: true
   run --watch`, each PDF's process stays alive instead, so rebuilds are
   incremental: on a 145-page deck, an edit re-renders every PDF in about a
   second.
+- `typst_memory_max`: stop a compilation whose process uses more memory
+  than this (e.g. `5GiB`; unset by default: no limit). Its PDF then fails
+  with a message naming the limit, instead of the machine running out of
+  memory, which is what a `deckz run decks` over a repository with large
+  decks needs. Checked every half second, on Linux only.
 - `typst_font_paths`: directories where Typst looks for fonts, on top of
   its embedded ones (Libertinus Serif, New Computer Modern, DejaVu Sans
   Mono). Relative to the git root; `{git_dir}`, `{assets_dir}` and
@@ -693,7 +699,7 @@ wins over both):
 
 `deckz <command> --help` lists the variables each option reads. For
 instance, a `.env` (typically git-ignored) building only each deck's whole
-handout, in both languages, and removing any other PDF, by default:
+handout, in both languages, by default:
 
 ```sh
 DECKZ_LANG="fr en"
@@ -701,7 +707,6 @@ DECKZ_RUN_HANDOUT=true
 DECKZ_RUN_PART_HANDOUTS=false
 DECKZ_RUN_PRESENTATION=false
 DECKZ_RUN_PRINT=false
-DECKZ_RUN_SYNC=true
 ```
 
 Exit codes: 0 on success, 1 on a deckz error (e.g. a missing flavor or a
@@ -735,12 +740,13 @@ The main commands:
   A deck's handout comes whole and, unless `--no-part-handouts`, one per
   part; its presentations come one per part only. `--parts` restricts
   every output to the parts listed, the whole deck's handout included.
-  `--sync` makes the PDF directories hold exactly what the run produced:
-  once everything compiled, it removes every other PDF in them, in every
-  language (part handouts after `--no-part-handouts`, English PDFs after a
-  French-only run, other parts' PDFs under `--parts`), which keeps a
-  `deckz upload` from publishing stale ones. A failed build removes
-  nothing, nor does a run producing no PDF at all; `--dry-run --sync`
+  `--sync` (the default; `--no-sync` turns it off) removes the PDFs no
+  build of the deck produces anymore, once everything compiled: a removed
+  or renamed part's, a renamed deck's, a stray file. It only looks at the
+  languages the run built, and keeps what the run merely skipped (part
+  handouts after `--no-part-handouts`, presentations after
+  `--no-presentation`, other parts' PDFs under `--parts`). A failed build
+  removes nothing, nor does a run producing no PDF at all; `--dry-run`
   lists what would go.
   `run file`/`run section` write their output
   under `<git_dir>/.run/`, not the current deck's own `pdf`/`.build`, and

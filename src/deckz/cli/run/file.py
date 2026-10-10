@@ -14,7 +14,7 @@ def run_file(
     print: bool = True,  # ruff: ignore[builtin-argument-shadowing]
     html: bool = False,
     part_handouts: bool = True,
-    sync: bool = False,
+    sync: bool = True,
     langs: Langs = ("fr",),
     watch: bool = False,
     open: bool = True,  # ruff: ignore[builtin-argument-shadowing]
@@ -36,10 +36,11 @@ def run_file(
         html: Produce an HTML deck (whole deck, with a table of contents)
         part_handouts: With --handout, also produce one handout per part,
             besides the whole deck's
-        sync: Once everything compiled, remove the PDFs of the output
-            directories that this run didn't produce, in every language:
-            e.g. part handouts after --no-part-handouts, English PDFs
-            after a French-only run, or other parts' PDFs with --parts
+        sync: Once everything compiled, remove the PDFs that no build of
+            the deck produces anymore (a removed or renamed part, a renamed
+            deck, a stray file), in the languages this run built. What
+            this run merely skips (another language, presentations after
+            --no-presentation, other parts with --parts) is kept
         langs: Languages to compile, each to its own output paths
             (English under an `en/` subdirectory). English is strict: every
             resolved file, title and variable must have a complete English
@@ -58,7 +59,12 @@ def run_file(
     from ...configuring.settings import DeckSettings
     from ...pipelines import OutputKinds, build, file_targets
     from ...pipelines import run_file as _run_file
-    from .._presentation import RichProgress, print_plan_of, show_output_dirs
+    from .._presentation import (
+        RichProgress,
+        announce_build,
+        print_plan_of,
+        show_output_dirs,
+    )
 
     logger = getLogger(__name__)
     settings = preview_settings(DeckSettings.from_yaml(workdir), "file", path)
@@ -71,6 +77,7 @@ def run_file(
         part_handouts=part_handouts,
         sync=sync,
     )
+    announce_build(path, langs, outputs)
 
     if dry_run:
         print_plan_of(file_targets(path, settings, langs), outputs)

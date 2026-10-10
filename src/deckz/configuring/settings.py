@@ -6,6 +6,7 @@ from pydantic import (
     AfterValidator,
     BaseModel,
     BeforeValidator,
+    ByteSize,
     ConfigDict,
     Field,
     ValidationError,
@@ -192,6 +193,13 @@ class GlobalSettings(BaseModel):
     Each one can take a few GB on a large deck, and Typst already uses every \
     core within a single compilation, so more than 1 mostly trades memory for \
     a small speedup.
+    """
+    typst_memory_max: ByteSize | None = None
+    """Stop a Typst compilation whose process uses more memory than this.
+
+    E.g. `5GiB`. The PDF then fails to build, with a message naming the \
+    limit, instead of the machine running out of memory on a large deck. \
+    Checked every half second, on Linux only. Unset: no limit.
     """
     typst_font_paths: tuple[str, ...] = ()
     """Directories Typst searches for fonts, on top of its embedded ones.

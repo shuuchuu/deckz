@@ -52,6 +52,7 @@ class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
                 for path in self._settings.typst_font_paths
             ),
             ignore_system_fonts=self._settings.typst_ignore_system_fonts,
+            memory_max=self._settings.typst_memory_max,
         )
 
     def markdown_converter(self) -> MarkdownConverterProtocol:

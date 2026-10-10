@@ -21,3 +21,14 @@ def _isolated_environment(monkeypatch: Any) -> None:
     for name in [name for name in environ if name.startswith("DECKZ_")]:
         monkeypatch.delenv(name)
     monkeypatch.setattr("dotenv.find_dotenv", lambda *_, **__: "")
+
+
+@fixture(autouse=True)
+def _isolated_git(monkeypatch: Any) -> None:
+    # A git hook (deckz's pre-commit runs the tests) exports GIT_DIR,
+    # GIT_INDEX_FILE and the like. A test's own `git` calls would follow them
+    # into the real repository instead of the test's temporary one: once, from
+    # a linked worktree, they committed fixtures onto the branch and set
+    # core.bare and test remotes in the shared config.
+    for name in [name for name in environ if name.startswith("GIT_")]:
+        monkeypatch.delenv(name)

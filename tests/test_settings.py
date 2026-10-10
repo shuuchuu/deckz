@@ -52,3 +52,10 @@ def test_unsupported_deckz_yml_schema_version_is_rejected(tmp_path: Path) -> Non
     (deck_dir / "deckz.yml").write_text("schema_version: 2\n", encoding="utf8")
     with raises(InvalidConfigurationError, match="schema_version 2"):
         DeckSettings.from_yaml(deck_dir)
+
+
+def test_tests_never_see_a_git_hook_environment() -> None:
+    from os import environ
+
+    # See conftest's `_isolated_git`.
+    assert not [name for name in environ if name.startswith("GIT_")]

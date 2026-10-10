@@ -15,7 +15,7 @@ def run(
     print: bool = True,  # ruff: ignore[builtin-argument-shadowing]
     html: bool = False,
     part_handouts: bool = True,
-    sync: bool = False,
+    sync: bool = True,
     langs: Langs = ("fr",),
     watch: bool = False,
     dry_run: bool = False,
@@ -31,10 +31,11 @@ def run(
         html: Produce an HTML deck (whole deck, with a table of contents)
         part_handouts: With --handout, also produce one handout per part,
             besides the whole deck's
-        sync: Once everything compiled, remove the PDFs of the output
-            directories that this run didn't produce, in every language:
-            e.g. part handouts after --no-part-handouts, English PDFs
-            after a French-only run, or other parts' PDFs with --parts
+        sync: Once everything compiled, remove the PDFs that no build of
+            the deck produces anymore (a removed or renamed part, a renamed
+            deck, a stray file), in the languages this run built. What
+            this run merely skips (another language, presentations after
+            --no-presentation, other parts with --parts) is kept
         langs: Languages to compile, each to its own output paths
             (English under an `en/` subdirectory). English is strict: every
             resolved file, title and variable must have a complete English
@@ -49,7 +50,7 @@ def run(
     from ...configuring.settings import DeckSettings
     from ...pipelines import OutputKinds, build, deck_targets
     from ...pipelines import run as _run
-    from .._presentation import RichProgress, print_plan_of
+    from .._presentation import RichProgress, announce_build, print_plan_of
 
     settings = DeckSettings.from_yaml(workdir)
     langs = unique(langs)
@@ -60,6 +61,11 @@ def run(
         html=html,
         part_handouts=part_handouts,
         sync=sync,
+    )
+    announce_build(
+        str(settings.paths.current_dir.relative_to(settings.paths.git_dir)),
+        langs,
+        outputs,
     )
 
     if dry_run:

@@ -136,7 +136,9 @@ all`) from `GlobalSettingsFactory.shared_parser()`.
 `GlobalSettingsFactory.compiler()` returns `TypstCompiler`
 (`components/compiler.py`: the `typst` bindings in a child process per PDF,
 kept warm across `--watch` rebuilds so Typst's incremental cache survives;
-see the module's header comment for why never in deckz's own process).
+see the module's header comment for why never in deckz's own process;
+`typst_memory_max` makes it stop a worker whose resident memory, read from
+`/proc` every half second, goes over the limit).
 
 ### Build pipeline
 
@@ -161,10 +163,12 @@ the deck builder; a target's `basedirs` override is set only by
 files living under any deck's directory, not just one
 `current_dir`/`content_dir` pair. `build` raises `CompilationError`, naming
 the target's label, when any PDF fails to compile, so every `run` command
-fails. Only after every target compiled, `OutputKinds.sync` (`--sync`)
-removes the `stale_pdfs`: the PDFs of the targets' output directories, in
-every language (`models.lang_dir`), that no target's
-`DeckBuilder.output_paths()` lists.
+fails. Only after every target compiled, `OutputKinds.sync` (`--sync`, on by
+default) removes the `stale_pdfs`: the PDFs of the targets' output
+directories, in the languages built (`models.lang_dir`), that no build of
+the whole deck with every PDF kind would write (a `BuildTarget` keeps its
+deck whole and applies `--parts` in `_deck_builder`, for this). What a
+narrower build skips is never removed.
 
 Each compilation has an output `Format` (`components/deck_builder.py`):
 `CompileType`s `Handout`/`Presentation`/`PrintHandout` are `Typst`, and

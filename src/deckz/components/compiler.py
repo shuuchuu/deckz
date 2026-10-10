@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
+from logging import getLogger
 from multiprocessing import get_context
 from multiprocessing.connection import Connection
 from pathlib import Path
@@ -32,6 +33,27 @@ _warm_lock = Lock()
 _live_workers: set["_Worker"] = set()
 _live_lock = Lock()
 _stopped = False
+
+# How often a worker's memory is checked against `memory_max` while it compiles.
+_MEMORY_POLL_SECONDS = 0.5
+_STATUS = Path("/proc/self/status")
+
+
+def _resident_memory(pid: int) -> int | None:
+    """Resident memory of process `pid`, in bytes.
+
+    Returns:
+        Its `VmRSS` from Linux's `/proc`, or None elsewhere, or once the \
+        process is gone.
+    """
+    try:
+        status = Path(f"/proc/{pid}/status").read_text(encoding="ascii")
+    except OSError:
+        return None
+    for line in status.splitlines():
+        if line.startswith("VmRSS:"):
+            return int(line.split()[1]) * 1024
+    return None
 
 
 def _serve(
@@ -94,8 +116,13 @@ def _sigint_blocked() -> Iterator[None]:
 
 class _Worker:
     def __init__(
-        self, main: Path, font_paths: tuple[Path, ...], ignore_system_fonts: bool
+        self,
+        main: Path,
+        font_paths: tuple[Path, ...],
+        ignore_system_fonts: bool,
+        memory_max: int | None = None,
     ) -> None:
+        self._memory_max = memory_max
         self._connection, child_connection = get_context("spawn").Pipe()
         self._process: BaseProcess = get_context("spawn").Process(
             target=_serve,
@@ -123,6 +150,14 @@ class _Worker:
     def compile(self) -> CompileResult:
         try:
             self._connection.send(True)
+            if self._memory_max is not None and self._over_memory_max():
+                self.kill()
+                return CompileResult(
+                    False,
+                    "the Typst worker process went over typst_memory_max "
+                    f"({self._memory_max / 2**30:.1f} GiB) and was stopped: raise "
+                    "the limit in deckz.yml, or build fewer outputs at once",
+                )
             ok, diagnostics = self._connection.recv()
         except (EOFError, OSError):
             self.close()
@@ -132,6 +167,22 @@ class _Worker:
                 ", possibly killed for using too much memory",
             )
         return CompileResult(ok, diagnostics)
+
+    def _over_memory_max(self) -> bool:
+        """Wait for the compilation's answer, checking the worker's memory meanwhile.
+
+        Returns:
+            Whether the worker went over `memory_max` before answering.
+        """
+        pid, memory_max = self._process.pid, self._memory_max
+        if pid is None or memory_max is None:
+            return False
+        while True:
+            memory = _resident_memory(pid)
+            if memory is not None and memory > memory_max:
+                return True
+            if self._connection.poll(_MEMORY_POLL_SECONDS):
+                return False
 
     @property
     def alive(self) -> bool:
@@ -222,6 +273,10 @@ class TypstCompiler(CompilerProtocol):
     already parallelizes a single compilation across cores, and each \
     concurrent one adds a whole document's memory (up to a few GB).
 
+    With `memory_max` (bytes), a compilation whose process goes over it \
+    is stopped and fails, instead of the machine running out of memory. \
+    It's checked every half second, on Linux only (`/proc`).
+
     Typst finds fonts in `font_paths`, in its own embedded fonts, and, \
     unless `ignore_system_fonts`, in the system's. Scanning the system's \
     fonts costs every child process a fixed ~0.2s with a thousand fonts \
@@ -234,13 +289,21 @@ class TypstCompiler(CompilerProtocol):
         max_parallel: int = 1,
         font_paths: tuple[Path, ...] = (),
         ignore_system_fonts: bool = False,
+        memory_max: int | None = None,
     ) -> None:
         self._slots = BoundedSemaphore(max_parallel)
         self._font_paths = font_paths
         self._ignore_system_fonts = ignore_system_fonts
+        self._memory_max = memory_max
+        if memory_max is not None and not _STATUS.exists():
+            getLogger(__name__).warning(
+                "typst_memory_max is ignored: it needs Linux's /proc"
+            )
 
     def _worker(self, main: Path) -> _Worker:
-        return _Worker(main, self._font_paths, self._ignore_system_fonts)
+        return _Worker(
+            main, self._font_paths, self._ignore_system_fonts, self._memory_max
+        )
 
     def compile(self, file: Path) -> CompileResult:
         main = file.resolve()

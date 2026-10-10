@@ -36,14 +36,30 @@ def main(args: Iterable[str] | None = None) -> None:
     Raises:
         SystemExit: With code 2 on a command-line usage error.
     """
+    from shlex import split
+    from sys import argv
+
     from cyclopts import CycloptsError
-    from dotenv import find_dotenv, load_dotenv
+    from dotenv import dotenv_values, find_dotenv, load_dotenv
 
     from ..utils import import_module_and_submodules
 
     # `usecwd`: without it, the lookup starts from deckz's own installed code.
-    load_dotenv(find_dotenv(usecwd=True))
+    dotenv = find_dotenv(usecwd=True)
+    from_dotenv = frozenset(
+        name
+        for name in (dotenv_values(dotenv) if dotenv else {})
+        if name not in environ
+    )
+    load_dotenv(dotenv)
+    # Reloads every `deckz.cli` module: `invocation` is only set after.
     import_module_and_submodules(__name__)
+    from ._options import invocation
+
+    invocation.from_dotenv = from_dotenv
+    invocation.tokens = tuple(
+        argv[1:] if args is None else split(args) if isinstance(args, str) else args
+    )
     try:
         app.meta(args, result_action="return_none", exit_on_error=False)
     except CycloptsError:

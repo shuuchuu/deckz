@@ -9,6 +9,7 @@ This module is where the CLI turns those into rich widgets.
 import sys
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
+from logging import getLogger
 from pathlib import Path, PurePath
 from subprocess import DEVNULL, Popen
 from typing import TYPE_CHECKING
@@ -184,8 +185,6 @@ def show_output_dirs(
         open_dir: Open the first output directory: an HTML one when only \
             HTML is built.
     """
-    from logging import getLogger
-
     logger = getLogger(__name__)
     pdfs = outputs.handout or outputs.presentation or outputs.print
     bases = [settings.paths.pdf_dir] if pdfs or not outputs.html else []
@@ -263,11 +262,7 @@ def print_plan_of(targets: "Sequence[BuildTarget]", outputs: "OutputKinds") -> N
     if not targets:
         return
     planned = plan(targets, outputs)
-    removed = (
-        stale_pdfs(targets, (item.output_path for item in planned))
-        if outputs.sync
-        else []
-    )
+    removed = stale_pdfs(targets, outputs) if outputs.sync else []
     print_plan(planned, targets[0].settings.paths.git_dir, removed)
 
 
@@ -303,7 +298,7 @@ def print_plan(
         for fragment in item.changed_fragments:
             print(f"  {display(fragment)}")
     for path in removed:
-        print(f"{display(path)}: remove (not produced by this build)")
+        print(f"{display(path)}: remove (no build of its deck produces it)")
 
 
 def print_gpu_status(status: "GpuStatus") -> None:
@@ -353,3 +348,46 @@ def print_gpu_reports(reports: Iterable["RunReport"]) -> None:
             or "[green]none[/green]",
         )
     Console(highlight=False).print(table)
+
+
+_RUN_VARIABLES = (
+    "DECKZ_LANG",
+    *(
+        f"DECKZ_RUN_{option}"
+        for option in (
+            "HANDOUT",
+            "PART_HANDOUTS",
+            "PRESENTATION",
+            "PRINT",
+            "HTML",
+            "SYNC",
+        )
+    ),
+)
+
+
+def announce_build(what: str, langs: "Sequence[Lang]", outputs: "OutputKinds") -> None:
+    """Log what a `run` command builds, and which settings came from the environment.
+
+    A `.env` file can change what `deckz run` does without a word on the \
+    command line: this line says so before anything is built.
+    """
+    from ._options import environment_defaults
+
+    kinds = [
+        kind
+        for kind, wanted in (
+            ("handout", outputs.handout),
+            ("part handouts", outputs.handout and outputs.part_handouts),
+            ("presentations", outputs.presentation),
+            ("print handout", outputs.print),
+            ("HTML", outputs.html),
+        )
+        if wanted
+    ]
+    message = f"Building {what} in {' + '.join(langs)}: {', '.join(kinds) or 'nothing'}"
+    if outputs.sync and outputs.pdfs:
+        message += ", then removing the PDFs no build produces anymore"
+    if defaults := environment_defaults(_RUN_VARIABLES):
+        message += f". From the environment: {', '.join(defaults)}"
+    getLogger(__name__).info(message)
