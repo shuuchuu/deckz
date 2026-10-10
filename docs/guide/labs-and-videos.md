@@ -14,6 +14,16 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
 - A hands-on notebook stores no outputs (trainees would see the answers); a demo
   stores those of a full run in its own language: run it, then `deckz labs outputs
   <executed copy> <notebook>`.
+- A demo that needs a GPU (or Colab's exact libraries) runs on a rented machine:
+  `deckz labs gpu up`, `queue <notebooks>`, `run`, `status --watch`, `fetch`, then
+  `down`, which stops the billing (see the README for each step's options). The
+  machine runs Colab's own image, so what runs there runs on Colab.
+- Writing a notebook for Colab: its runtime is Python 3.13 (pin a project the
+  notebook installs accordingly), and the image sets `UV_CONSTRAINT` and
+  `UV_SYSTEM_PYTHON`, so `!uv pip install --system <packages>` (or `!pip install`)
+  adds packages without replacing Colab's own. Never `uv sync` an exact environment
+  into the system Python: it removes what Colab ships. `deckz labs gpu` restores the
+  image's packages before each notebook, as a fresh Colab session would.
 - `deckz labs compare <lab dir>` shows how the French and English versions differ
   beyond the translation.
 - Never put a token or password in a notebook: the `lab-secrets` check refuses it,
