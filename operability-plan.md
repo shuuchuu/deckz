@@ -88,9 +88,9 @@ Typst worker.
 
 ## Phase 2: `deckz setup`
 
-**Status (2026-10-10):** done on branch `operability`, not merged. Built as planned,
+**Status (2026-10-10):** done and merged. Built as planned,
 except that videos are only reported unless `--videos` (a render at the published
-quality takes minutes per video). For slides, at merge time: `setup.requires`
+quality takes minutes per video). For slides, still to do: `setup.requires`
 (pdftocairo, ffmpeg, xelatex, npm) and a `setup.steps` entry running `uv run doit web`
 (`creates: assets/web/vendor`); then the doit `install_hooks` task can go.
 
@@ -127,7 +127,7 @@ checklist: ok, fixed, or missing, with how to install each missing piece.
 
 ## Phase 3: `deckz status`
 
-**Status (2026-10-10):** done on branch `operability`, not merged, except two items:
+**Status (2026-10-10):** done and merged, except two items:
 `missing-en` for the decks your changes reach (slow, about a minute for every deck; CI
 can run it), and demos whose code changed after their outputs were written. The checks
 run on the working tree (about 15 s on slides; `--no-checks` skips them). The
@@ -162,11 +162,11 @@ Building blocks:
 
 ## Phase 4: scaffolding for the mechanical half of new work
 
-**Status (2026-10-10):** done on branch `operability`, not merged. Differences: the
+**Status (2026-10-10):** done and merged. Differences: the
 lab name rule is deckz's generic one (kebab-case path parts), not slides' framework and
 forbidden-word rules, which belong in a slides check; `labs.link_snippet` prints the
 repository's own link syntax; `new deck` doesn't check the catalog layout (a slides
-convention). For slides, at merge time: `templates/scaffold/deck/` (`deck.yml` with
+convention). For slides, still to do: `templates/scaffold/deck/` (`deck.yml` with
 `$about@...` first and `$contact@full` last, `variables.yml` with `deck_title`,
 `content/about/description.md` and its `en/`), and `labs.link_snippet`.
 
@@ -191,8 +191,8 @@ people and skills. The file layout shouldn't need either.
 ### 5.1 Task-oriented help
 
 **Status (2026-10-10):** 5.1, 5.2 (the check messages and the commit-msg hint, without a
-structured `Finding` type yet: `deckz status` will need one) and 5.3 done on branch
-`operability`, not merged. Groups as planned, except that `upload` is under Everyday
+structured `Finding` type yet: `deckz status` will need one) and 5.3 done and merged.
+Groups as planned, except that `upload` is under Everyday
 and `generate-completion` under Setting up; there is no `new` group until phase 4.
 `lab-secrets` and `lab-format` find nothing on slides and take about 2 s each, so they
 needn't be opt-in there.
@@ -238,7 +238,7 @@ These rules are enforced today only by what an agent remembers (reviewed in slid
 
 ## Phase 6: CI for the managed repo
 
-**Status (2026-10-10):** done on branch `operability`, not merged, never run on GitHub
+**Status (2026-10-10):** done and merged, never run on GitHub
 (that needs a push). Adds `ci.apt_packages`: slides' `uv sync` builds pycairo (manim),
 which needs `libcairo2-dev` and `pkg-config` (and likely `libpango1.0-dev`), and
 downloads tensorflow, so its first runs will need adjusting. Builds of changed decks
@@ -261,7 +261,7 @@ hooks, refusing to overwrite a hand-written one):
 ## Phase 7: a manual for people
 
 **Status (2026-10-10):** the deckz guide is written (`docs/guide/`, eight pages, in the
-mkdocs site; `mkdocs build --strict` passes), on branch `operability`, not merged. The
+mkdocs site; `mkdocs build --strict` passes), merged. The
 agent notes point agents to it. Slides' French handbook comes after the merge, since
 it documents these commands.
 
