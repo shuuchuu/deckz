@@ -66,12 +66,19 @@ def lab_pairs(settings: "GlobalSettings") -> list[str]:
     notebooks_dir = settings.paths.labs_notebooks_dir
     git_dir = settings.paths.git_dir
     problems = [
-        f"{_rel(notebooks_dir / path, git_dir)}: missing"
+        f"{_rel(notebooks_dir / path, git_dir)}: missing: translate the other "
+        "language's notebook into it (a copy without its ID metadata, then "
+        "`deckz labs ids`)"
         for path in missing_notebooks(notebooks_dir)
     ]
     for stem, pair_problems in compare_pairs(notebooks_dir):
         where = _rel(notebooks_dir / stem, git_dir)
-        problems += [f"{where}: {problem}" for problem in pair_problems]
+        lab_dir = _rel((notebooks_dir / stem).parent, git_dir)
+        problems += [
+            f"{where}: {problem} (fr and en differ beyond a translation: "
+            f"`deckz labs compare {lab_dir}`)"
+            for problem in pair_problems
+        ]
     return problems
 
 
@@ -93,14 +100,22 @@ def lab_outputs(settings: "GlobalSettings") -> list[str]:
         has_outputs = any(cell.get("outputs") for cell in code_cells)
         where = _rel(path, git_dir)
         if kind == "hands-on" and has_outputs:
-            problems.append(f"{where}: hands-on notebook has stored outputs")
+            problems.append(
+                f"{where}: hands-on notebook has stored outputs: clear them "
+                f"(`jupyter nbconvert --clear-output --inplace {where}`, then "
+                f"`deckz labs fmt {where}`)"
+            )
         elif kind == "demo" and code_cells and not has_outputs:
-            problems.append(f"{where}: demo notebook has no stored outputs")
+            problems.append(
+                f"{where}: demo notebook has no stored outputs: run it, then "
+                f"`deckz labs outputs <executed copy> {where}`"
+            )
         colab = notebook.get("metadata", {}).get("colab", {})
         if kind == "demo" and colab.get("private_outputs"):
             problems.append(
                 f"{where}: demo notebook sets Colab's private_outputs, which "
-                "hides its stored outputs"
+                "hides its stored outputs: remove metadata.colab.private_outputs "
+                "(Colab: Edit > Notebook settings)"
             )
     return problems
 
@@ -151,7 +166,10 @@ def asset_credits(settings: "GlobalSettings") -> list[str]:
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if _CREDIT_LINE.match(line):
                 where = f"{_rel(path, git_dir)}:{lineno}"
-                problems.append(f"{where}: LaTeX in a credit line: {line.strip()}")
+                problems.append(
+                    f"{where}: LaTeX in a credit line: {line.strip()}: write it "
+                    "in Markdown (`code`, *italic*, **bold**, plain characters)"
+                )
     return problems
 
 
@@ -166,7 +184,8 @@ def raw_latex(settings: "GlobalSettings") -> list[str]:
         for path in sorted(a_content_dir.rglob("*.tex")):
             problems.append(
                 f"{_rel(path, git_dir)}: .tex content (only "
-                f"{', '.join(settings.file_extensions)} is compiled)"
+                f"{', '.join(settings.file_extensions)} is compiled): convert "
+                "it to Markdown"
             )
         for extension in settings.file_extensions:
             for path in sorted(a_content_dir.rglob(f"*{extension}")):
@@ -175,7 +194,8 @@ def raw_latex(settings: "GlobalSettings") -> list[str]:
                     lineno = text.count("\n", 0, match.start()) + 1
                     where = f"{_rel(path, git_dir)}:{lineno}"
                     problems.append(
-                        f"{where}: {{=latex}} block (dropped by the Markdown pipeline)"
+                        f"{where}: {{=latex}} block (dropped by the Markdown "
+                        "pipeline): rewrite it in Markdown, or as a {=typst} block"
                     )
     return problems
 
@@ -218,7 +238,8 @@ def lab_urls(settings: "GlobalSettings") -> list[str]:
                         where = f"{_rel(path, git_dir)}:{lineno}"
                         problems.append(
                             f"{where}: hand-written link to the "
-                            "published notebooks repo"
+                            "published notebooks repo: link the lab through the "
+                            "repository's own templating, which follows its ID"
                         )
     return problems
 

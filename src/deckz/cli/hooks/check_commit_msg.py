@@ -33,11 +33,23 @@ def check_commit_msg(message_file: Path, /, *, workdir: Path = Path()) -> None:
     if lang_sync_kind(message) is not None:
         return
 
-    pairs = "\n".join(f"  {fr} / {en}" for fr, en in one_sided)
+    changes = "\n".join(
+        f"  {change.changed_path} (not {change.other_path})" for change in one_sided
+    )
+    sides = sorted({change.changed for change in one_sided})
+    only = "\n".join(
+        f"  Lang-sync: {side}-only (<why>)    nothing to port: a typo, "
+        "the language's own typography..."
+        for side in sides
+    )
     msg = (
-        "one side of a fr/en pair changed with no Lang-sync trailer:\n"
-        f"{pairs}\n"
-        "add a trailer to the commit message: Lang-sync: fr-only (<reason>) | "
-        "en-only (<reason>) | pending"
+        "these files changed without their other-language version:\n"
+        f"{changes}\n"
+        "Say why in the commit message: after a blank line, end it with one of\n"
+        "  Lang-sync: pending              the other language comes in a later "
+        "commit (`deckz i18n stale` lists it until then)\n"
+        f"{only}\n"
+        "or stage the other language's version too. Your message is kept in "
+        ".git/COMMIT_EDITMSG."
     )
     raise CommitRefusedError(msg)

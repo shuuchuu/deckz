@@ -73,7 +73,10 @@ def test_check_commit_msg_refuses_a_one_sided_change_with_no_trailer(
         main(("hooks", "check-commit-msg", str(message)))
 
     assert exc_info.value.code == 1
-    assert "Lang-sync" in caplog.text
+    assert "content/topic/topic.md (not content/topic/en/topic.md)" in caplog.text
+    assert "Lang-sync: pending" in caplog.text
+    assert "Lang-sync: fr-only (<why>)" in caplog.text
+    assert "en-only" not in caplog.text
 
 
 def test_check_commit_msg_accepts_a_trailer(repo: Path) -> None:

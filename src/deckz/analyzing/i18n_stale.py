@@ -257,9 +257,25 @@ def stale_files(
     return sorted(stale, key=lambda finding: finding.path)
 
 
-def staged_one_sided_pairs(
-    settings: "GlobalSettings",
-) -> list[tuple[PurePosixPath, PurePosixPath]]:
+@dataclass(frozen=True)
+class OneSidedChange:
+    """A fr/en pair whose staged changes touch one side only."""
+
+    fr: PurePosixPath
+    en: PurePosixPath
+    changed: str
+    """The side changed: `fr` or `en`."""
+
+    @property
+    def changed_path(self) -> PurePosixPath:
+        return self.fr if self.changed == "fr" else self.en
+
+    @property
+    def other_path(self) -> PurePosixPath:
+        return self.en if self.changed == "fr" else self.fr
+
+
+def staged_one_sided_pairs(settings: "GlobalSettings") -> list[OneSidedChange]:
     """Every fr/en pair with exactly one side in the git index's staged changes.
 
     Used by the `commit-msg` hook (`deckz hooks check-commit-msg`): unlike
@@ -271,8 +287,7 @@ def staged_one_sided_pairs(
         settings: The repository's settings.
 
     Returns:
-        `(fr_path, en_path)` for every pair where the staged changes touch \
-        one side but not the other.
+        Every pair where the staged changes touch one side but not the other.
     """
     from subprocess import run
 
@@ -286,7 +301,7 @@ def staged_one_sided_pairs(
     staged_paths = {path for path in staged.split("\0") if path}
     pairs = [*content_pairs(settings), *notebook_pairs(settings)]
     return [
-        (fr, en)
+        OneSidedChange(fr, en, "fr" if str(fr) in staged_paths else "en")
         for fr, en in pairs
         if (str(fr) in staged_paths) != (str(en) in staged_paths)
     ]
