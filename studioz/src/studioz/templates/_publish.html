@@ -1,0 +1,31 @@
+<div class="commit-form"{% if not report.checked %} hx-post="/espaces/{{ workspace.name }}/publier/formulaire"
+     hx-trigger="every 2s" hx-target="#action-dialog" hx-swap="innerHTML"{% endif %}>
+  <header>
+    <h2>Publier pour les stagiaires</h2>
+    <button type="button" class="secondary" onclick="this.closest('dialog').close()">Fermer</button>
+  </header>
+  <p>Les liens des TP et les QR codes des vidéos sont imprimés dans les PDF remis aux stagiaires.
+    Une publication remplace tout ce qui est publié ; deckz refuse de faire disparaître un lien déjà publié,
+    et de publier des carnets non committés.</p>
+  {% if ahead %}
+  <p class="error">{{ ahead }} commit{{ "s" if ahead > 1 }} de cet espace ne {{ "sont" if ahead > 1 else "est" }} pas encore sur {{ upstream.name }} :
+    vous publieriez un contenu que le dépôt n'a pas encore. Synchronisez d'abord, sauf raison particulière.</p>
+  {% endif %}
+  {% for what, (name, does) in publishable.items() %}
+  {% set group = pending[what] %}
+  <section class="publishable">
+    <h3>{{ name[0] | upper }}{{ name[1:] }}</h3>
+    <p class="hint">{{ does }}</p>
+    {% if group %}
+    <ul>{% for problem in group.problems %}<li>{{ problem.text }}{% if problem.fix %} <span class="hint">({{ problem.fix }})</span>{% endif %}</li>{% endfor %}</ul>
+    {% elif report.checked %}
+    <p class="empty">Rien d'autre à publier d'après la dernière vérification.</p>
+    {% else %}
+    <p class="hint">Vérification de l'espace en cours…</p>
+    {% endif %}
+    <button type="button"{% if not group %} class="secondary"{% endif %}
+            hx-post="/espaces/{{ workspace.name }}/publier" hx-vals='{{ {"what": what} | tojson }}'
+            hx-target="#action-dialog" hx-swap="innerHTML">Publier {{ name }}</button>
+  </section>
+  {% endfor %}
+</div>

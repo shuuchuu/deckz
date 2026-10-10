@@ -180,7 +180,10 @@ target repo's own `templates/assets_builders.py`, e.g. generated plots) → buil
 the deck builder; a target's `basedirs` override is set only by
 `shared_targets`/`all_targets` since their synthetic decks can include
 files living under any deck's directory, not just one
-`current_dir`/`content_dir` pair. `build` raises `CompilationError`, naming
+`current_dir`/`content_dir` pair. Each target compiles holding
+`deck_lock` (an `flock` on `<build_dir>/.lock`), so two builds of one deck
+(a `--watch` and a full build, two terminals) wait for each other instead of
+writing the same files at once. `build` raises `CompilationError`, naming
 the target's label, when any PDF fails to compile, so every `run` command
 fails. A Jinja error in a content file is a `RenderError` naming the file
 and line (`render_dependencies`), whose build copy is removed so that the
@@ -435,6 +438,10 @@ check --staged` with a temporary `GIT_INDEX_FILE` holding the commit, and
 `deckz hooks check-commits`), then a push of exactly the commit checked,
 never forced. The dialogs open through `static/dialogs.js`, so that a panel
 reloading under its button doesn't drop the answer.
+`studioz.jobs` runs the long commands a person starts (`studioz.actions`: a
+deck's full build, `deckz upload` after showing `deckz upload --dry-run`,
+`deckz labs|videos publish`), each workspace's one after the other, their
+logs shown from the top bar; deckz's own refusals still decide.
 
 Its tests are in `studioz/tests/`, driving the app with FastAPI's test client
 on a temporary repository, and the watches with a fake `deckz` printing the

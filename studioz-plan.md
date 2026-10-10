@@ -685,6 +685,28 @@ against a local bare remote). Left: "ask the agent to resolve the conflict"
 rebase (`--autostash`) is only reported, its files left with markers and a
 copy in `git stash list`.
 
+**Increment 8: done** (2026-10-10): build, upload, publish, and the job
+queue. A deck's page has "Construire…" (each output and language a
+checkbox, spelled out as `deckz run --handout --no-presentation … --sync
+--lang …`) and "Envoyer…" (the PDFs `deckz upload --dry-run --json` lists,
+new in deckz, the outdated ones marked and the upload disabled while there
+are, since deckz would refuse them; a remote file with no local PDF is
+deleted, said before). The top bar has "Publier…" (labs and videos not
+published, from the workspace's `deckz status`, with what publishing
+replaces, and a warning when the workspace's commits aren't on the
+upstream branch yet) and the jobs' summary, which opens their logs. Jobs
+(`studioz.jobs`) run the workspace's own deckz, one at a time per
+workspace, in order, stoppable (SIGINT, then SIGKILL), their logs without
+deckz's code locations; they last as long as studioz. It exposed a deckz
+gap: two builds of one deck (the page's `--watch` and a full build, or two
+terminals) wrote the same fragments and PDFs at once; each compilation now
+holds a per-deck `flock` (`.build/.lock`), the second one logging that it
+waits. Measured on slides: the upload preview takes 0.8 s, an incremental
+full build of the Fortinet deck in French a few seconds; nothing was
+uploaded or published (both tested against a fake deckz). Left: desktop
+notifications when a job ends (the summary changes colour), jobs surviving
+a studioz restart, the videos' renders and labs on GPU (phase 5).
+
 ### Phase 3: the agent in a workspace
 
 The conversation panel, question forms, comments on frames as instructions,

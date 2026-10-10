@@ -1,0 +1,26 @@
+<form class="commit-form" hx-post="/espaces/{{ workspace.name }}/formations/{{ deck }}/envoyer"
+      hx-target="#action-dialog" hx-swap="innerHTML">
+  <header>
+    <h2>Envoyer {{ deck }} sur Google Drive</h2>
+    <button type="button" class="secondary" onclick="this.closest('dialog').close()">Fermer</button>
+  </header>
+  {% if plan.error %}
+  <p class="error">deckz n'a pas pu lister les PDF : {{ plan.error }}</p>
+  {% elif not plan.pdfs %}
+  <p class="empty">Aucun PDF à envoyer : construisez d'abord la formation.</p>
+  {% else %}
+  <p>Ces PDF remplacent ceux du dossier en ligne de la formation ; un fichier en ligne sans PDF du même nom ici est supprimé.</p>
+  <ul class="pdfs">
+    {% for pdf in plan.pdfs %}
+    <li><code>{{ pdf }}</code>{% if pdf in plan.outdated %} <span class="outdated">ne correspond plus au contenu</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% if plan.outdated %}
+  <p class="error">deckz refusera l'envoi : reconstruisez d'abord ces PDF (« Construire… », avec les mêmes documents et langues).</p>
+  {% endif %}
+  <footer>
+    <button type="submit"{% if plan.outdated %} disabled{% endif %}>Envoyer {{ plan.pdfs | length }} PDF</button>
+    <span class="hint">La première fois, Google demande l'autorisation dans le navigateur.</span>
+  </footer>
+  {% endif %}
+</form>

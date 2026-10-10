@@ -33,7 +33,8 @@ Never skip them (`--no-verify`): CI runs the same checks on every push anyway.
 Build the deck you'll hand out (`deckz run --workdir <deck> --lang fr` or `en`), look
 at `deckz check overflow <deck>`, and skim the PDF. `deckz upload` sends a deck's PDFs
 to Google Drive; it refuses PDFs that don't match the deck's content anymore (rebuild
-them, or delete them).
+them, or delete them). `deckz upload --dry-run` lists the PDFs it would send and the
+outdated ones, without connecting.
 
 ## Publishing labs and videos
 

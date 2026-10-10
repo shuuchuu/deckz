@@ -258,3 +258,29 @@ tr.closed td { color: var(--muted); }
 /* The dialogs live in the navigator, whose links are plain. */
 .navigator dialog a.change { color: var(--accent); font-family: var(--mono); font-size: 0.9em; overflow-wrap: anywhere; }
 .navigator dialog a.change:hover { text-decoration: underline; }
+
+/* Jobs, and the dialogs starting them. */
+.topbar-actions { margin-left: auto; display: flex; gap: 0.6rem; align-items: center; }
+.topbar-actions button { padding: 0.15rem 0.7rem; font-size: 0.9em; }
+.jobs-badge { background: transparent; color: var(--muted); border-color: var(--line); }
+.jobs-badge[data-state="running"] { color: var(--accent); border-color: currentcolor; }
+.jobs-badge[data-state="done"] { color: #2e7d32; border-color: currentcolor; }
+.jobs-badge[data-state="failed"] { color: var(--danger); border-color: currentcolor; }
+.deck-actions { display: flex; gap: 0.4rem; }
+.deck-actions button { padding: 0.1rem 0.6rem; font-size: 0.9em; }
+.job { border: 1px solid var(--line); border-radius: 4px; padding: 0.4rem 0.6rem; }
+.job header { display: flex; gap: 0.6rem; align-items: baseline; }
+.job .job-title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.job .job-state { font-size: 0.8em; padding: 0 0.5rem; border-radius: 999px; border: 1px solid currentcolor; color: var(--muted); white-space: nowrap; }
+.job[data-state="running"] .job-state { color: var(--accent); }
+.job[data-state="done"] .job-state { color: #2e7d32; }
+.job[data-state="failed"] .job-state, .job[data-state="stopped"] .job-state { color: var(--danger); }
+.job-log { max-height: 45vh; overflow: auto; font-size: 0.78em; margin: 0.4rem 0 0; background: var(--bg); padding: 0.4rem; border-radius: 4px; }
+.choices { border: 1px solid var(--line); border-radius: 4px; display: flex; flex-wrap: wrap; gap: 0.3rem 1.2rem; }
+.choices legend { font-weight: 600; font-size: 0.9em; }
+.pdfs { margin: 0; padding-left: 1.2rem; font-size: 0.9em; }
+.pdfs code { overflow-wrap: anywhere; }
+.outdated { color: var(--danger); font-size: 0.85em; }
+.publishable { border-top: 1px solid var(--line); padding-top: 0.4rem; }
+.publishable h3 { margin: 0; font-size: 0.95em; }
+.publishable ul { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; font-size: 0.9em; }

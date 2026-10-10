@@ -27,11 +27,12 @@ from deckz.analyzing.frames import frames
 from deckz.analyzing.i18n_stale import lang_sync_kind, one_sided
 from deckz.configuring.settings import DeckSettings, GlobalSettings
 from deckz.exceptions import DeckzError, WorktreeError
-from deckz.models import Lang
+from deckz.models import LANGS, Lang
 from deckz.worktrees import main_checkout, remove
 
 from . import (
     __version__,
+    actions,
     background,
     changes,
     commits,
@@ -42,6 +43,7 @@ from . import (
 )
 from .baselines import Baselines
 from .comparison import compare, signatures
+from .jobs import Job, Jobs
 from .local_only import local_only
 from .watches import Snapshot, State, Watch, Watches, handout
 
@@ -61,6 +63,7 @@ class Studio:
     affected: changes.Affected
     baselines: Baselines
     pairs: changes.LangPairs
+    jobs: Jobs
 
     def workspace(self, name: str) -> workspaces.Workspace:
         found = workspaces.find(self.settings, name)
@@ -787,6 +790,222 @@ def sync_abort(
     )
 
 
+@router.get("/espaces/{name}/taches/resume", response_class=HTMLResponse)
+def jobs_badge(request: Request, studio: StudioDep, name: str) -> Response:
+    """The top bar's summary of the workspace's jobs.
+
+    Returns:
+        How many run or wait, else how the last one ended.
+    """
+    found = studio.workspace(name)
+    jobs = studio.jobs.jobs(found.worktree.path)
+    return _render(
+        request,
+        "_jobs_badge.html",
+        workspace=found,
+        active=[job for job in jobs if not job.finished],
+        last=next((job for job in jobs if job.finished), None),
+    )
+
+
+@router.post("/espaces/{name}/taches", response_class=HTMLResponse)
+def jobs_list(request: Request, studio: StudioDep, name: str) -> Response:
+    """The workspace's jobs, the latest one's log shown.
+
+    Returns:
+        The jobs dialog's content.
+    """
+    found = studio.workspace(name)
+    return _render(
+        request,
+        "_jobs.html",
+        workspace=found,
+        jobs=studio.jobs.jobs(found.worktree.path),
+    )
+
+
+def _job_or_404(
+    studio: Studio, name: str, job_id: int
+) -> tuple[workspaces.Workspace, Job]:
+    found = studio.workspace(name)
+    job = studio.jobs.get(found.worktree.path, job_id)
+    if job is None:
+        raise HTTPException(404, f"Pas de tâche {job_id} dans « {name} »")
+    return found, job
+
+
+@router.get("/espaces/{name}/taches/{job_id}", response_class=HTMLResponse)
+def job_view(request: Request, studio: StudioDep, name: str, job_id: int) -> Response:
+    """A job and its log, which reloads itself until the job ends.
+
+    Returns:
+        The job's section.
+    """
+    found, job = _job_or_404(studio, name, job_id)
+    return _render(request, "_job.html", workspace=found, job=job, open=True)
+
+
+@router.post("/espaces/{name}/taches/{job_id}/arreter", response_class=HTMLResponse)
+def job_stop(request: Request, studio: StudioDep, name: str, job_id: int) -> Response:
+    found, job = _job_or_404(studio, name, job_id)
+    studio.jobs.stop(found.worktree.path, job_id)
+    return _render(request, "_job.html", workspace=found, job=job, open=True)
+
+
+def _started(request: Request, found: workspaces.Workspace) -> Response:
+    """The jobs dialog, the job just started first, its log shown.
+
+    Returns:
+        The response, telling the top bar's summary.
+    """
+    response = jobs_list(request, _studio(request), found.name)
+    response.headers["HX-Trigger"] = "jobs-changed"
+    return response
+
+
+@router.post(
+    "/espaces/{name}/formations/{deck:path}/construire/formulaire",
+    response_class=HTMLResponse,
+)
+def build_form(request: Request, studio: StudioDep, name: str, deck: str) -> Response:
+    """What a full build of the deck produces, each output to choose.
+
+    Returns:
+        The build dialog's content.
+    """
+    found, _ = studio.deck(name, deck)
+    return _render(
+        request,
+        "_build.html",
+        workspace=found,
+        deck=deck,
+        kinds=actions.KINDS,
+        chosen=actions.DEFAULT_KINDS,
+        langs=("fr", "en"),
+    )
+
+
+@router.post(
+    "/espaces/{name}/formations/{deck:path}/construire", response_class=HTMLResponse
+)
+def build_deck(
+    request: Request,
+    studio: StudioDep,
+    name: str,
+    deck: str,
+    kind: Annotated[list[str] | None, Form()] = None,
+    lang: Annotated[list[Lang] | None, Form()] = None,
+) -> Response:
+    """Start a job building the deck's outputs chosen, in the languages chosen.
+
+    Returns:
+        The job, or the form again with what's missing.
+    """
+    found, directory = studio.deck(name, deck)
+    kinds = frozenset(k for k in kind or () if k in actions.KINDS)
+    langs = [code for code in LANGS if code in (lang or ())]
+    if not langs or not kinds & {"handout", "presentation", "print", "html"}:
+        return _render(
+            request,
+            "_build.html",
+            workspace=found,
+            deck=deck,
+            kinds=actions.KINDS,
+            chosen=kinds,
+            langs=langs,
+            error="Choisissez au moins une langue et un document à produire.",
+        )
+    path = found.worktree.path
+    studio.jobs.submit(
+        path,
+        actions.build_title(deck, kinds, langs),
+        actions.build_steps(path, kinds, langs),
+        directory,
+    )
+    return _started(request, found)
+
+
+@router.post(
+    "/espaces/{name}/formations/{deck:path}/envoyer/formulaire",
+    response_class=HTMLResponse,
+)
+def upload_form(request: Request, studio: StudioDep, name: str, deck: str) -> Response:
+    """The deck's PDFs an upload would send, the outdated ones marked.
+
+    Returns:
+        The upload dialog's content.
+    """
+    found, directory = studio.deck(name, deck)
+    plan = actions.upload_plan(found.worktree.path, directory)
+    return _render(request, "_upload.html", workspace=found, deck=deck, plan=plan)
+
+
+@router.post(
+    "/espaces/{name}/formations/{deck:path}/envoyer", response_class=HTMLResponse
+)
+def upload_deck(request: Request, studio: StudioDep, name: str, deck: str) -> Response:
+    """Start a job uploading the deck's PDFs (deckz refuses outdated ones).
+
+    Returns:
+        The job.
+    """
+    found, directory = studio.deck(name, deck)
+    path = found.worktree.path
+    studio.jobs.submit(
+        path,
+        f"Envoyer les PDF de {deck} sur Google Drive",
+        actions.upload_steps(path),
+        directory,
+    )
+    return _started(request, found)
+
+
+@router.post("/espaces/{name}/publier/formulaire", response_class=HTMLResponse)
+def publish_form(request: Request, studio: StudioDep, name: str) -> Response:
+    """What's not published, and what publishing does.
+
+    Returns:
+        The publish dialog's content.
+    """
+    found = studio.workspace(name)
+    path = found.worktree.path
+    report = studio.statuses.report(path)
+    groups = {group.key: group for group in report.result or ()}
+    up = sync.upstream(studio.main)
+    return _render(
+        request,
+        "_publish.html",
+        workspace=found,
+        report=report,
+        pending={what: groups.get(what) for what in actions.PUBLISHABLE},
+        publishable=actions.PUBLISHABLE,
+        ahead=len(sync.state(path, up).ahead) if up else 0,
+        upstream=up,
+    )
+
+
+@router.post("/espaces/{name}/publier", response_class=HTMLResponse)
+def publish(
+    request: Request, studio: StudioDep, name: str, what: Annotated[str, Form()]
+) -> Response:
+    """Start a job publishing the workspace's labs or videos.
+
+    Returns:
+        The job.
+
+    Raises:
+        HTTPException: 422 for something not publishable.
+    """
+    found = studio.workspace(name)
+    path = found.worktree.path
+    try:
+        steps = actions.publish_steps(path, what)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from None
+    studio.jobs.submit(path, f"Publier {actions.PUBLISHABLE[what][0]}", steps)
+    return _started(request, found)
+
+
 @router.get("/espaces/{name}/taille", response_class=HTMLResponse)
 def size(studio: StudioDep, name: str) -> str:
     return _size(workspaces.size(studio.workspace(name).worktree.path))
@@ -841,6 +1060,7 @@ def create_app(
         affected or changes.Affected(),
         baselines or Baselines(),
         changes.LangPairs(),
+        Jobs(),
     )
 
     @asynccontextmanager
@@ -855,6 +1075,7 @@ def create_app(
             await asyncio.to_thread(studio.watches.stop_all)
             studio.statuses.stop_all()
             studio.affected.stop_all()
+            await asyncio.to_thread(studio.jobs.stop_all)
             await asyncio.to_thread(studio.baselines.stop_all)
 
     app = FastAPI(

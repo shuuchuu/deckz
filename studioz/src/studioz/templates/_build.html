@@ -1,0 +1,24 @@
+<form class="commit-form" hx-post="/espaces/{{ workspace.name }}/formations/{{ deck }}/construire"
+      hx-target="#action-dialog" hx-swap="innerHTML">
+  <header>
+    <h2>Construire {{ deck }}</h2>
+    <button type="button" class="secondary" onclick="this.closest('dialog').close()">Fermer</button>
+  </header>
+  <fieldset class="choices">
+    <legend>Documents</legend>
+    {% for kind, label in kinds.items() %}
+    <label><input type="checkbox" name="kind" value="{{ kind }}"{% if kind in chosen %} checked{% endif %}> {{ label }}</label>
+    {% endfor %}
+  </fieldset>
+  <fieldset class="choices">
+    <legend>Langues</legend>
+    {% for code in ("fr", "en") %}
+    <label><input type="checkbox" name="lang" value="{{ code }}"{% if code in langs %} checked{% endif %}> {{ code }}</label>
+    {% endfor %}
+  </fieldset>
+  <p class="hint">Les PDF arrivent dans le dossier <code>pdf/</code> de la formation (<code>pdf/en/</code> en anglais) ;
+    ceux qu'aucune construction de la formation ne produit plus sont supprimés. La construction tourne en tâche de fond :
+    vous pouvez continuer à travailler.</p>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <footer><button type="submit">Construire</button></footer>
+</form>

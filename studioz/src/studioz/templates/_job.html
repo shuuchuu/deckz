@@ -1,0 +1,16 @@
+<section class="job" id="job-{{ job.id }}" data-state="{{ job.state.name | lower }}"
+         {% if not job.finished %}hx-get="/espaces/{{ workspace.name }}/taches/{{ job.id }}" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
+  <header>
+    <span class="job-state">{{ job.state.value }}</span>
+    <span class="job-title">{{ job.title }}</span>
+    <span class="hint">{{ (job.ended or job.started or job.created) | ago }}</span>
+    {% if not job.finished %}
+    <button type="button" class="secondary" hx-post="/espaces/{{ workspace.name }}/taches/{{ job.id }}/arreter"
+            hx-target="#job-{{ job.id }}" hx-swap="outerHTML">Arrêter</button>
+    {% endif %}
+  </header>
+  {% if open %}
+  <pre class="job-log">{% for line in job.log %}{{ line }}
+{% else %}{% if job.state.name == "QUEUED" %}En attente de la tâche en cours de cet espace…{% endif %}{% endfor %}</pre>
+  {% endif %}
+</section>

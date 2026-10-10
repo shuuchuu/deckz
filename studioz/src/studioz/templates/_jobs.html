@@ -1,0 +1,11 @@
+<div class="commit-form jobs">
+  <header>
+    <h2>Tâches de l'espace</h2>
+    <button type="button" class="secondary" onclick="this.closest('dialog').close()">Fermer</button>
+  </header>
+  {% for job in jobs %}
+  {% with open = loop.first %}{% include "_job.html" %}{% endwith %}
+  {% else %}
+  <p class="empty">Aucune tâche depuis le démarrage de studioz. Construire ou envoyer une formation, publier les TP ou les vidéos en lance une.</p>
+  {% endfor %}
+</div>

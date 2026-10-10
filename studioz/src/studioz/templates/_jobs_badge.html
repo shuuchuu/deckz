@@ -1,0 +1,5 @@
+<button type="button" class="jobs-badge" data-dialog="#action-dialog" data-url="/espaces/{{ workspace.name }}/taches"
+        {% if active %}data-state="running"{% elif last %}data-state="{{ last.state.name | lower }}"{% endif %}
+        title="Les tâches de l'espace : constructions, envois, publications">
+  {% if active %}Tâches : {{ active | length }} en cours{% elif last %}Dernière tâche {{ last.state.value }}{% else %}Tâches{% endif %}
+</button>

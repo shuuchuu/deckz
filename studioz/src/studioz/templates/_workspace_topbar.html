@@ -1,3 +1,9 @@
 {% set worktree = workspace.worktree %}
 <a class="workspace-name" href="/espaces/{{ workspace.name }}">{{ workspace.name }}</a>
 <span class="branch" title="{{ worktree.path }}">{{ worktree.branch }}</span>
+<span class="topbar-actions">
+  <span id="jobs-badge" hx-get="/espaces/{{ workspace.name }}/taches/resume" hx-trigger="load, every 3s, jobs-changed from:body" hx-swap="innerHTML"></span>
+  <button type="button" class="secondary" data-dialog="#action-dialog" data-url="/espaces/{{ workspace.name }}/publier/formulaire"
+          title="Publier les TP ou les vidéos pour les stagiaires">Publier…</button>
+</span>
+<dialog id="action-dialog" class="commit-dialog" aria-label="Action"></dialog>

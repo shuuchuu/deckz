@@ -11,7 +11,6 @@ The `Lang-sync` rule is deckz's (`deckz.analyzing.i18n_stale.one_sided`):
 studioz asks before the hook does, and writes the trailer the person chose.
 """
 
-import os
 import subprocess
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass
@@ -20,7 +19,7 @@ from pathlib import Path
 from deckz.analyzing.i18n_stale import OneSidedChange
 
 from .background import Change, git
-from .watches import environment
+from .watches import workspace_environment
 
 _TIMEOUT = 900
 LANG_SYNC_CHOICES = ("pending", "only")
@@ -111,23 +110,13 @@ def lang_sync_trailer(
     return f"{sides.pop()}-only ({reason})"
 
 
-def _environment(workspace: Path) -> dict[str, str]:
-    variables = environment()
-    # The hooks run `deckz` from the PATH: the workspace's own.
-    venv = workspace / ".venv" / "bin"
-    if venv.is_dir():
-        variables["PATH"] = f"{venv}{os.pathsep}{variables.get('PATH', '')}"
-    variables["GIT_LITERAL_PATHSPECS"] = "1"
-    return variables
-
-
 def _run(
     workspace: Path, args: Sequence[str], text: str = ""
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", "-C", str(workspace), *args],
         input=text,
-        env=_environment(workspace),
+        env=workspace_environment(workspace, GIT_LITERAL_PATHSPECS="1"),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,

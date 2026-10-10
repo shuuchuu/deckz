@@ -19,7 +19,6 @@ checkout is never touched (other sessions may be working in it).
 Every command runs in the workspace, the checks with its own deckz.
 """
 
-import os
 import re
 import shutil
 import subprocess
@@ -30,7 +29,7 @@ from pathlib import Path
 from tempfile import mkdtemp
 
 from .background import git
-from .watches import environment
+from .watches import workspace_environment
 from .workspaces import STATE_DIR
 
 _NETWORK_TIMEOUT = 180
@@ -145,15 +144,14 @@ def state(workspace: Path, up: Upstream) -> State:
 
 
 def _environment(workspace: Path, **extra: str) -> dict[str, str]:
-    variables = environment()
-    venv = workspace / ".venv" / "bin"
-    if venv.is_dir():
-        variables["PATH"] = f"{venv}{os.pathsep}{variables.get('PATH', '')}"
-    # Nothing may wait for a password typed in a terminal nobody sees.
-    variables["GIT_TERMINAL_PROMPT"] = "0"
-    variables["GIT_EDITOR"] = "true"
-    variables["GIT_LITERAL_PATHSPECS"] = "1"
-    return variables | extra
+    return workspace_environment(
+        workspace,
+        # Nothing may wait for a password typed in a terminal nobody sees.
+        GIT_TERMINAL_PROMPT="0",
+        GIT_EDITOR="true",
+        GIT_LITERAL_PATHSPECS="1",
+        **extra,
+    )
 
 
 def _run(

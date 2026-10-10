@@ -24,6 +24,14 @@
         <button type="button" data-view="changes" aria-pressed="{{ 'true' if view == 'changes' else 'false' }}"
                 title="Les cadres modifiés depuis le dernier commit, avant et après">Avant/après</button>
       </span>
+      <span class="deck-actions">
+        <button type="button" class="secondary" data-dialog="#action-dialog"
+                data-url="/espaces/{{ workspace.name }}/formations/{{ deck }}/construire/formulaire"
+                title="Construire tous les PDF de la formation, en tâche de fond">Construire…</button>
+        <button type="button" class="secondary" data-dialog="#action-dialog"
+                data-url="/espaces/{{ workspace.name }}/formations/{{ deck }}/envoyer/formulaire"
+                title="Envoyer les PDF de la formation sur Google Drive">Envoyer…</button>
+      </span>
       <span class="build" id="build" data-state="building">Connexion…</span>
       <span class="notice" id="notice" role="status"></span>
       <span class="page-number" id="page-number"></span>

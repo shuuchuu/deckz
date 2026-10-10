@@ -122,6 +122,22 @@ def environment() -> dict[str, str]:
     return variables
 
 
+def workspace_environment(workspace: Path, **extra: str) -> dict[str, str]:
+    """`environment()`, with the workspace's own `.venv/bin` first on the `PATH`.
+
+    What git's hooks run `deckz` from (they take it from the `PATH`), and
+    any other command run there.
+
+    Returns:
+        The variables, `extra` added.
+    """
+    variables = environment()
+    venv = workspace / ".venv" / "bin"
+    if venv.is_dir():
+        variables["PATH"] = f"{venv}{os.pathsep}{variables.get('PATH', '')}"
+    return variables | extra
+
+
 class Watch:
     def __init__(
         self, workspace: Path, deck: Path, lang: Lang, command: Sequence[str]

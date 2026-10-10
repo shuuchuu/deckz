@@ -7,7 +7,8 @@ do without doing any of it. The `run*` functions are `build` applied to \
 their command's targets.
 """
 
-from collections.abc import Callable, Iterable, Sequence, Set
+from collections.abc import Callable, Iterable, Iterator, Sequence, Set
+from contextlib import contextmanager
 from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
@@ -127,7 +128,9 @@ def build(
             else progress
         )
         builder = _deck_builder(target, outputs, target_progress)
-        if not builder.build_deck():
+        with deck_lock(target.settings.paths.build_dir, target.label):
+            built = builder.build_deck()
+        if not built:
             msg = (
                 f"{target.label} failed to compile in {target.lang}, see the "
                 "errors above"
@@ -149,6 +152,34 @@ def build(
         for pdf in stale_pdfs(targets, outputs):
             _logger.info("Removing %s, which no build of its deck produces", pdf)
             pdf.unlink()
+
+
+@contextmanager
+def deck_lock(build_dir: Path, label: str) -> Iterator[None]:
+    """One compilation of a deck's outputs at a time, across deckz processes.
+
+    Two builds of one deck (a `--watch` and a full build, two terminals, an
+    agent's build next to a person's) would write the same fragments and PDFs
+    at once. The second one waits, saying so. The kernel releases the lock
+    (`flock` on `<build_dir>/.lock`) when its process exits, however it exits.
+
+    Args:
+        build_dir: The deck's build directory.
+        label: The deck, as the message waiting for it names it.
+
+    Yields:
+        Once the lock is held, until exiting.
+    """
+    import fcntl
+
+    build_dir.mkdir(parents=True, exist_ok=True)
+    with (build_dir / ".lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            _logger.info("Waiting for another build of %s to finish", label)
+            fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
 
 
 def stale_pdfs(targets: Iterable[BuildTarget], outputs: OutputKinds) -> list[Path]:

@@ -742,6 +742,26 @@ def test_upload_refuses_outdated_pdfs(bilingual_dir: Path, caplog: Any) -> None:
     assert "--include-stale" in caplog.text
 
 
+def test_upload_dry_run_lists_the_pdfs_and_the_outdated_ones(
+    bilingual_dir: Path, capsys: Any
+) -> None:
+    import json
+
+    main(("run", *_HANDOUT_ONLY, "--no-part-handouts", "--lang", "fr", "en"))
+    content = bilingual_dir / "content" / "hello.md"
+    content.write_text(content.read_text() + "\nMore.\n", encoding="utf8")
+    capsys.readouterr()
+
+    main(("upload", "--dry-run", "--json"))
+
+    found = json.loads(capsys.readouterr().out)
+    assert found["pdfs"] == [
+        "company/bilingual/pdf/bilingual-handout.pdf",
+        "company/bilingual/pdf/en/bilingual-handout.pdf",
+    ]
+    assert found["outdated"] == ["company/bilingual/pdf/bilingual-handout.pdf"]
+
+
 def test_run_en_missing_file_fails_loudly(
     bilingual_dir: Path, caplog: Any, capsys: Any
 ) -> None:
