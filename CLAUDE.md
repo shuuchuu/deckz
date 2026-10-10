@@ -175,7 +175,9 @@ the deck builder; a target's `basedirs` override is set only by
 files living under any deck's directory, not just one
 `current_dir`/`content_dir` pair. `build` raises `CompilationError`, naming
 the target's label, when any PDF fails to compile, so every `run` command
-fails. Only after every target compiled, `OutputKinds.sync` (`--sync`, on by
+fails. A Jinja error in a content file is a `RenderError` naming the file
+and line (`render_dependencies`), whose build copy is removed so that the
+next build renders it again rather than keep its previous output. Only after every target compiled, `OutputKinds.sync` (`--sync`, on by
 default) removes the `stale_pdfs`: the PDFs of the targets' output
 directories, in the languages built (`models.lang_dir`), that no build of
 the whole deck with every PDF kind would write (a `BuildTarget` keeps its

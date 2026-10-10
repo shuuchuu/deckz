@@ -53,6 +53,10 @@ class CompilationError(DeckzError):
     pass
 
 
+class RenderError(DeckzError):
+    """A content file's Jinja template failed to render."""
+
+
 class ScaffoldRefusedError(DeckzError):
     """`deckz new`/`deckz labs new` would overwrite something, or got a bad name."""
 

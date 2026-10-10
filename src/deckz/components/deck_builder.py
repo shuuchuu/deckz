@@ -16,9 +16,12 @@ from multiprocessing import cpu_count
 from pathlib import Path, PurePosixPath
 from shutil import copyfile
 from time import perf_counter
+from traceback import extract_tb
 from typing import Any
 
-from ..exceptions import DeckzError
+from jinja2 import TemplateError, TemplateSyntaxError
+
+from ..exceptions import DeckzError, RenderError
 from ..models import (
     CompileResult,
     Deck,
@@ -491,35 +494,75 @@ def build_copy_path(
     )
 
 
+@dataclass(frozen=True)
+class CopiedDependency:
+    build_path: Path
+    """The build copy, a template rendered next to itself."""
+    variables: Mapping[str, Any]
+    source: Path
+    """The content file it's a copy of."""
+
+
 def copy_dependencies(
     dependencies: Iterable[DependencyRef],
     target_build_dir: Path,
     basedirs: Iterable[Path],
     *,
     force: bool = False,
-) -> list[tuple[Path, Mapping[str, Any]]]:
+) -> list[CopiedDependency]:
     copied = []
     for dependency in dependencies:
         build_path = build_copy_path(dependency, target_build_dir, basedirs)
+        copy = CopiedDependency(
+            build_path, dependency.variables, dependency.resolved_path
+        )
         if force:
             build_path.parent.mkdir(parents=True, exist_ok=True)
             copyfile(dependency.resolved_path, build_path)
-            copied.append((build_path, dependency.variables))
+            copied.append(copy)
         elif copy_file_if_changed(dependency.resolved_path, build_path):
             _logger.debug("Re-rendering %s: new or changed", dependency.resolved_path)
-            copied.append((build_path, dependency.variables))
+            copied.append(copy)
     return copied
+
+
+def _template_line(error: TemplateError, template: Path) -> int | None:
+    # A syntax error carries its line; a runtime one (an undefined name, a
+    # failing filter) is in the traceback, which Jinja points at the template.
+    if isinstance(error, TemplateSyntaxError):
+        return error.lineno
+    frames = extract_tb(error.__traceback__)
+    return next(
+        (f.lineno for f in reversed(frames) if f.filename == str(template)), None
+    )
 
 
 def render_dependencies(
     renderer: RendererProtocol,
     markdown_converter: MarkdownConverterProtocol,
-    to_render: Iterable[tuple[Path, Mapping[str, Any]]],
+    to_render: Iterable[CopiedDependency],
     fragment_suffix: str,
 ) -> None:
-    for item_path, variables in to_render:
+    """Render each copied content file, and convert the Markdown ones.
+
+    Raises:
+        RenderError: Naming the content file and line, when Jinja fails.
+    """
+    for copied in to_render:
+        item_path = copied.build_path
         rendered_path = item_path.with_suffix("")
-        renderer.render_to_path(item_path, rendered_path, variables=variables)
+        try:
+            renderer.render_to_path(
+                item_path, rendered_path, variables=copied.variables
+            )
+        except TemplateError as error:
+            # Its copy now matches its source: without it, the next build
+            # would take the file as rendered and keep its previous output.
+            item_path.unlink(missing_ok=True)
+            line = _template_line(error, item_path)
+            where = f"{copied.source}:{line}" if line else str(copied.source)
+            msg = f"{where}: {error.message or type(error).__name__}"
+            raise RenderError(msg) from error
         if rendered_path.suffix == ".md":
             markdown_converter.convert(
                 rendered_path, rendered_path.with_suffix(fragment_suffix)
