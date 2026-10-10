@@ -279,7 +279,11 @@ def test_baseline_built_in_a_scratch_checkout(
     assert state.baseline.pdf.parent == (
         workspace / BASELINES_DIR / commit / "client" / "abc" / "fr"
     )
-    assert not scratch_path(workspace).exists()
+    # The baseline is there just before its scratch checkout is removed.
+    deadline = monotonic() + 10
+    while scratch_path(workspace).exists():
+        assert monotonic() < deadline, "scratch checkout never removed"
+        sleep(0.05)
     worktrees = _git(workspace, "worktree", "list")
     assert ".baseline" not in worktrees
 

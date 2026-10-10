@@ -51,6 +51,17 @@ def test_a_save_names_the_version_it_replaces(workspace: Path) -> None:
     assert [p.name for p in hello.parent.iterdir()] == ["hello.md"]
 
 
+def test_a_save_keeps_the_files_line_endings(workspace: Path) -> None:
+    hello = _content(workspace)
+    # As a browser posts the editor's text: with CRLF line endings.
+    save(hello, "# Hello\r\n\r\nText\r\n", read(hello)[1])
+    assert hello.read_bytes() == b"# Hello\n\nText\n"
+
+    hello.write_bytes(b"# Hello\r\nText\r\n")
+    save(hello, "# Hello\nMore\n", read(hello)[1])
+    assert hello.read_bytes() == b"# Hello\r\nMore\r\n"
+
+
 def test_open_then_save(client: TestClient, workspace: Path) -> None:
     hello = _content(workspace)
 

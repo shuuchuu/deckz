@@ -69,9 +69,15 @@ def save(path: Path, text: str, version: str) -> str:
     Raises:
         ChangedOnDiskError: If the file isn't `version` anymore.
     """
-    current = _version(path.read_bytes())
+    on_disk = path.read_bytes()
+    current = _version(on_disk)
     if current != version:
         raise ChangedOnDiskError(current)
+    # The file keeps its line endings: a browser posts a form's text with
+    # CRLF ones, whatever the file had (and the editor only knows LF).
+    text = text.replace("\r\n", "\n")
+    if b"\r\n" in on_disk:
+        text = text.replace("\n", "\r\n")
     data = text.encode("utf8")
     with NamedTemporaryFile(
         dir=path.parent, prefix=f".{path.name}.", delete=False
