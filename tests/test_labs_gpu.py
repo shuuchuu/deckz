@@ -262,7 +262,7 @@ def test_queue_kills_what_a_run_leaves_running(tmp_path: Path) -> None:
         )
 
         assert f"killed {left} left by nb.ipynb" in result.stdout
-        assert not Path(f"/proc/{left}").exists() or _zombie(left)
+        _wait_gone(left)
         assert Path(f"/proc/{other}").exists()
     finally:
         for pid in (left, other):
@@ -276,6 +276,17 @@ def _wait_for_env(pid: int, entry: bytes) -> None:
             return
         time.sleep(0.01)
     msg = f"{pid} never got {entry!r}"
+    raise AssertionError(msg)
+
+
+def _wait_gone(pid: int) -> None:
+    # `kill -9` returns before the process exits: on a loaded machine it can
+    # still be running a moment later.
+    for _ in range(500):
+        if not Path(f"/proc/{pid}").exists() or _zombie(pid):
+            return
+        time.sleep(0.01)
+    msg = f"{pid} still running after kill -9"
     raise AssertionError(msg)
 
 
