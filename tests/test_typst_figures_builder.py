@@ -6,6 +6,8 @@ from pytest import raises
 from deckz.components.typst_figures_builder import TypstFiguresAssetsBuilder
 from deckz.exceptions import DeckzError
 
+_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>\n'
+
 
 def _make_layout(tmp_path: Path) -> tuple[Path, Path, Path]:
     assets_dir = tmp_path / "assets"
@@ -14,7 +16,9 @@ def _make_layout(tmp_path: Path) -> tuple[Path, Path, Path]:
     input_dir.mkdir(parents=True)
     (input_dir / "_svg.typ").write_text("#include sys.inputs.figure\n", encoding="utf8")
     (input_dir / "_lib.typ").write_text("#let unused = 1\n", encoding="utf8")
-    (input_dir / "fig.typ").write_text("Figure\n", encoding="utf8")
+    (input_dir / "fig.typ").write_text(
+        '#import "_lib.typ": unused\nFigure\n', encoding="utf8"
+    )
     (input_dir / "fig.yml").write_text("author: Jane\n", encoding="utf8")
     assets_dir.mkdir(parents=True, exist_ok=True)
     return assets_dir, input_dir, output_dir
@@ -116,6 +120,45 @@ def test_build_assets_rebuilds_on_library_change(tmp_path: Path) -> None:
     builder.build_assets()
 
     assert (output_dir / "fig.fr.svg").stat().st_mtime_ns != before
+
+
+def test_build_assets_skips_a_change_of_a_library_it_does_not_use(
+    tmp_path: Path,
+) -> None:
+    assets_dir, input_dir, output_dir = _make_layout(tmp_path)
+    (input_dir / "_other.typ").write_text("#let other = 1\n", encoding="utf8")
+    builder = TypstFiguresAssetsBuilder(input_dir, output_dir, assets_dir)
+    builder.build_assets()
+    before = (output_dir / "fig.fr.svg").stat().st_mtime_ns
+    (input_dir / "_other.typ").write_text("#let other = 2\n", encoding="utf8")
+
+    builder.build_assets()
+
+    assert (output_dir / "fig.fr.svg").stat().st_mtime_ns == before
+
+
+def test_build_assets_follows_absolute_references(tmp_path: Path) -> None:
+    # `/typ/...` is the library's mirror under the Typst root: its source is
+    # what counts; `/img/...` is any other asset.
+    assets_dir, input_dir, output_dir = _make_layout(tmp_path)
+    (assets_dir / "img").mkdir()
+    picture = assets_dir / "img" / "pic.svg"
+    picture.write_text(_SVG, encoding="utf8")
+    (input_dir / "fig.typ").write_text(
+        '#import "/typ/_lib.typ": unused\n#image("/img/pic.svg")\n', encoding="utf8"
+    )
+    builder = TypstFiguresAssetsBuilder(input_dir, output_dir, assets_dir)
+    builder.build_assets()
+
+    for changed, text in (
+        (input_dir / "_lib.typ", "#let unused = 2\n"),
+        (picture, _SVG.replace("1", "2")),
+    ):
+        before = (output_dir / "fig.fr.svg").stat().st_mtime_ns
+        changed.write_text(text, encoding="utf8")
+        _touch_past(changed, output_dir / "fig.fr.svg")
+        builder.build_assets()
+        assert (output_dir / "fig.fr.svg").stat().st_mtime_ns != before, changed
 
 
 def test_build_assets_rebuilds_on_extra_watched_file_change(tmp_path: Path) -> None:

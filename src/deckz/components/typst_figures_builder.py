@@ -7,6 +7,7 @@ text translation comes from or how a deck picks it up (this repo's own
 `.typ` figures to SVG, once per language, with the right include path.
 """
 
+import re
 from collections.abc import Iterable
 from logging import getLogger
 from pathlib import Path
@@ -15,6 +16,9 @@ from ..exceptions import DeckzError
 from ..stamps import digest, is_fresh, stamp_path, write_stamp
 from ..utils import copy_file_if_changed
 from .protocols import AssetsBuilderProtocol
+
+# A string literal on one line, not a package (`"@preview/cetz:0.5.2"`).
+_STRING = re.compile(r'"([^"@\n][^"\n]*)"')
 
 
 class TypstFiguresAssetsBuilder(AssetsBuilderProtocol):
@@ -27,8 +31,9 @@ class TypstFiguresAssetsBuilder(AssetsBuilderProtocol):
     `_`-prefixed library and any non-`.typ` file alongside them (e.g. `.yml`
     credits) are mirrored into `output_dir` first. Typst draws SVG text as
     paths: no font to ship, but no selectable text either. Each SVG's
-    stamp (`deckz.stamps`) covers its figure, every library and
-    `extra_watched_files`: a change of any of them rebuilds it.
+    stamp (`deckz.stamps`) covers its figure, the files it references
+    (libraries, images, ...) and those `_svg.typ` does (the theme), and
+    `extra_watched_files`: a change of any of them rebuilds it, and only it.
     """
 
     def __init__(
@@ -52,8 +57,8 @@ class TypstFiguresAssetsBuilder(AssetsBuilderProtocol):
                 address other assets the way deck content does.
             font_paths: Extra font directories passed to the Typst compiler.
             languages: Languages each figure is compiled once per.
-            extra_watched_files: Extra files (e.g. a shared theme) whose \
-                change, like a library's, rebuilds every figure.
+            extra_watched_files: Extra files whose change rebuilds every \
+                figure, on top of those the figures reference.
         """
         self._input_dir = input_dir
         self._output_dir = output_dir
@@ -90,17 +95,18 @@ class TypstFiguresAssetsBuilder(AssetsBuilderProtocol):
             ):
                 path.unlink()
 
-        # A shared library or theme changes every figure.
-        shared_inputs = (
-            *sorted(self._input_dir / r for r in sources if r.name.startswith("_")),
-            *self._extra_watched_files,
-        )
-        shared = digest(shared_inputs)
         to_build = []
+        wrapper = self._typst_sources(self._input_dir / "_svg.typ")
         for svg, (figure, lang) in svgs.items():
-            source = self._input_dir / figure
-            stamp = digest([source], shared, lang)
-            if not is_fresh(svg, stamp, [source, *shared_inputs]):
+            inputs = sorted(
+                {
+                    *self._typst_sources(self._input_dir / figure),
+                    *wrapper,
+                    *self._extra_watched_files,
+                }
+            )
+            stamp = digest(inputs, lang)
+            if not is_fresh(svg, stamp, inputs):
                 to_build.append((svg, figure, lang, stamp))
         if not to_build:
             return
@@ -120,6 +126,45 @@ class TypstFiguresAssetsBuilder(AssetsBuilderProtocol):
 
     def watched_dirs(self) -> Iterable[Path]:
         return (self._input_dir,)
+
+    def _typst_sources(self, file: Path) -> frozenset[Path]:
+        """`file` and every file it references, transitively.
+
+        A reference is any string literal naming an existing file, \
+        relative to the referencing file or, starting with `/`, to \
+        `assets_dir` (the Typst root, where `input_dir` is mirrored at \
+        `output_dir`): imports, includes, images, data files, whatever \
+        helper takes the path. A path built at run time (`"/img/" + name`) \
+        isn't seen.
+
+        Returns:
+            The files, `.typ` sources under `input_dir` rather than their \
+            mirrors.
+        """
+        found = {file}
+        pending = [file]
+        while pending:
+            current = pending.pop()
+            text = current.read_text(encoding="utf8", errors="replace")
+            for reference in _STRING.findall(text):
+                path = self._resolve(reference, current)
+                if path is not None and path not in found:
+                    found.add(path)
+                    if path.suffix == ".typ":
+                        pending.append(path)
+        return frozenset(found)
+
+    def _resolve(self, reference: str, current: Path) -> Path | None:
+        if reference.startswith("/"):
+            path = self._assets_dir / reference[1:]
+            if path.is_relative_to(self._output_dir):
+                path = self._input_dir / path.relative_to(self._output_dir)
+        else:
+            path = current.parent / reference
+        try:
+            return path if path.is_file() else None
+        except OSError:  # E.g. a string too long to be a path.
+            return None
 
     def _svg_path(self, figure: Path, lang: str) -> Path:
         return self._output_dir / figure.with_suffix(f".{lang}.svg")
