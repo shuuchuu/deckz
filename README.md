@@ -771,7 +771,9 @@ The main commands:
   are listed first) or lab notebook pair (same cells in both languages,
   in deckz's format, with their IDs), refusing to overwrite anything. A
   repository's own starting files go under `templates/scaffold/`:
-  `deck/` (every file, rendered with Jinja's `{{ name }}`/`{{ title }}`)
+  `deck/` (every file, rendered with Jinja's `{{ name }}`/`{{ title }}`,
+  minus a `.jinja` suffix: name the template's `deck.yml.jinja`, or deckz
+  takes it for a deck)
   and `lab/hands-on.ipynb`/`lab/demo.ipynb`. `labs.link_snippet` (e.g.
   `'{{ "{lab}" | lab("{kind}") }}'`) is printed after `labs new`, filled
   in, for the content file linking the lab.

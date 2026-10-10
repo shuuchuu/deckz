@@ -10,7 +10,7 @@ deckz new deck company/CODE --name CODE --title "Course title"
 ```
 
 creates the deck's directory from the repository's template (`templates/scaffold/
-deck/`). Then list its sections in `deck.yml` (`$section@flavor`; `deckz
+deck/`, whose `deck.yml.jinja` becomes `deck.yml`). Then list its sections in `deck.yml` (`$section@flavor`; `deckz
 section-flavors <section>` lists a section's flavors) and build it.
 
 ## A shared section

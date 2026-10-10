@@ -90,7 +90,7 @@ def test_new_deck_parses(repo: Path, capsys: Any) -> None:
 def test_new_deck_renders_the_repository_template(repo: Path) -> None:
     template = repo / "templates" / "scaffold" / "deck"
     (template / "content" / "about").mkdir(parents=True)
-    (template / "deck.yml").write_text(
+    (template / "deck.yml.jinja").write_text(
         "name: {{ name }}\nparts:\n  - name: main\n    title: {{ title }}\n"
         "    sections: []\n",
         encoding="utf8",

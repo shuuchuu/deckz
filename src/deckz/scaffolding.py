@@ -183,8 +183,10 @@ def new_deck(
     """Create a deck in `directory`: from `templates/scaffold/deck/`, or a bare one.
 
     The repository's template directory is copied file by file, each file
-    rendered with Jinja (`{{ name }}`, `{{ title }}`) on the way; without
-    one, only a `deck.yml` with a single empty part is written.
+    rendered with Jinja (`{{ name }}`, `{{ title }}`) on the way, and a
+    `.jinja` suffix dropped from its name: the template's `deck.yml.jinja`
+    keeps deckz (and YAML tools) from taking the template for a deck.
+    Without one, only a `deck.yml` with a single empty part is written.
 
     Returns:
         The files written.
@@ -215,7 +217,8 @@ def new_deck(
         return [deck_yml]
     env = Environment(undefined=StrictUndefined, keep_trailing_newline=True)
     targets = {
-        source: directory / source.relative_to(template_dir)
+        source: directory
+        / source.relative_to(template_dir).with_name(source.name.removesuffix(".jinja"))
         for source in sorted(template_dir.rglob("*"))
         if source.is_file()
     }
