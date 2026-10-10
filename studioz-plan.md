@@ -4,9 +4,10 @@
 
 **Done:** phases 0, 1 and 2 (workspaces without agents: increments 1 to 8 under
 "Phase 2"), and phase 3's increment 1 (the conversation panel, under "Phase 3").
-**Next:** phase 3's increment 2, question forms (see "Phase 3's increments" below). Everything is pushed to `origin/main` (`git log origin/main..main` in
-`../deckz` lists what isn't), and nothing is released since 31.3.3: push and
-release are the user's call.
+**Next:** phase 3's increment 2, question forms (see "Phase 3's increments"
+below). Not pushed yet: the agent panel in deckz (`git log origin/main..main` in
+`../deckz` lists it) and slides' matching `uv.lock` (`1cf2de1d`, on slides' main);
+nothing is released since 31.3.3. Push and release are the user's call.
 
 ### Code map
 
@@ -82,9 +83,10 @@ Found along the way, not done (each increment's "Left" has the rest):
   studioz restart, and their end isn't notified beyond the top bar's colour.
 - The untracked `.claude/` in `../deckz` is the frontend plugin's install: the
   user's, kept, never committed.
-- slides depends on studioz (editable), which now depends on `claude-agent-sdk`:
-  slides' `uv.lock` needs `uv lock` there once deckz main has it (a slides change,
-  the user's call).
+- slides depends on studioz (editable): a new studioz dependency makes slides'
+  `uv.lock` stale, and the next `uv run` there rewrites it. Merge such a change
+  with a `uv lock` committed in slides at once (as `1cf2de1d` did for
+  `claude-agent-sdk`); each workspace's own `uv.lock` follows when it syncs.
 - The agent writes its commands' descriptions in English, although the appended
   prompt asks for French; and a command failing for an ordinary reason (`grep`
   finding nothing, exit 1) shows as "Refusé ou en échec".
