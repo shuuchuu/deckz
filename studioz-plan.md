@@ -227,17 +227,24 @@ A deckz command, usable without studioz: `deckz worktree add <name> [--base <rev
 
 1. `git worktree add ../<repo>--<name> -b ws/<name> <base>` (`<base>`: the upstream
    branch, `origin/main` on slides).
-2. Copy into it the outputs listed by a new `setup.seed` setting in `deckz.yml` (for
-   slides: `assets/typ`, `assets/svg`, `assets/web/vendor`, the video renders), and
-   symlink `.env`.
+2. Copy into it the main checkout's ignored files under `deckz.yml`'s `worktree.seed`
+   (for slides: `assets/typ`, `assets/svg`, `assets/web/vendor`, `assets/videos`),
+   and symlink `worktree.link` (`.env`, and `.venv` while `pyproject.toml` and
+   `uv.lock` match; a symlink `.venv/` doesn't ignore goes in `info/exclude`).
 3. Run `deckz setup --check` there: everything present, hooks resolved (slides'
    `core.hooksPath` is the committed, relative `.githooks`, so the worktree's own
    copy runs).
 
 With hash stamps (done), a seeded output whose source changed in the main checkout's
 working tree is simply rebuilt in the workspace. Step 2 copies each output with its
-`.stamp`, and skips an output that has none: a fresh copy is newer than the
-workspace's sources, so `deckz.stamps` would adopt it unchecked.
+`.stamp` and keeps file times, so an output with no stamp looks older than the
+workspace's freshly checked-out sources and is rebuilt, not adopted.
+
+**Done** (2026-10-10): `deckz worktree add/list/remove` (`deckz.worktrees`). On
+slides: 3.5 s, 1,425 files copied, `deckz setup --check` all ok in the worktree. The
+trial found the Typst figures' stamps too coarse (every `_`-library counted for every
+figure, so another session's untracked `_impromptu.typ` in the main checkout made all
+258 SVGs rebuild): each figure's stamp now covers only the files it references.
 
 ## Workspaces
 
@@ -505,7 +512,8 @@ earlier work: about 2 GB each, `typst_memory_max` at 5 GiB).
    `--force` gap) and slides' plots and SVG mirrors use it; the plots' stamps are
    committed, so a fresh clone rebuilds none and cross-machine bytes no longer
    matter. Seeding a workspace copies the stamps with the outputs.
-2. `deckz worktree add/remove` and `setup.seed`.
+2. `deckz worktree add/remove` and `worktree.seed`. **Done** (see "Seeding,
+   concretely").
 3. A machine-wide compilation limit (`typst_machine_compilations`, flock slots in the
    user cache dir).
 4. `deckz show frames` (each page of a built PDF → its frame, file and line), for the

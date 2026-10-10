@@ -221,6 +221,19 @@ class SetupSettings(BaseModel):
     """Commands a fresh clone needs once, e.g. vendoring JavaScript."""
 
 
+class WorktreeSettings(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    seed: tuple[str, ...] = ()
+    """Paths, relative to the git root, whose ignored files (the builds a \
+    fresh checkout lacks, e.g. rendered figures and videos) `deckz worktree \
+    add` copies from the main checkout into a new worktree."""
+    link: tuple[str, ...] = (".env",)
+    """Paths, relative to the git root, `deckz worktree add` symlinks to \
+    the main checkout's: what every checkout shares, e.g. `.env` or a \
+    `.venv` (linked only while `pyproject.toml` and `uv.lock` are the same \
+    in both)."""
+
+
 class CiSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
     deckz_repository: str | None = None
@@ -307,9 +320,11 @@ class GlobalSettings(BaseModel):
     i18n: I18nSettings = Field(default_factory=I18nSettings)
     videos: VideosSettings = Field(default_factory=VideosSettings)
     setup: SetupSettings = Field(default_factory=SetupSettings)
+    """What `deckz setup` checks and runs on top of deckz's own needs."""
+    worktree: WorktreeSettings = Field(default_factory=WorktreeSettings)
+    """What `deckz worktree add` brings into a new worktree."""
     ci: CiSettings = Field(default_factory=CiSettings)
     """What `deckz hooks install --ci`'s workflow runs and needs."""
-    """What `deckz setup` checks and runs on top of deckz's own needs."""
     paths: GlobalPaths = Field(default_factory=GlobalPaths)
 
     @classmethod

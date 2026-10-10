@@ -294,6 +294,24 @@ typst_ignore_system_fonts: true
   - `steps`: commands run from the git root, without a shell, in order.
     A step whose `creates` path exists is done and skipped (`deckz setup
     --force` runs it anyway); one without `creates` runs every time.
+- `worktree`: what `deckz worktree add` brings into a new worktree, on
+  top of the checkout:
+
+  ```yaml
+  worktree:
+    seed: [assets/typ, assets/svg, assets/web/vendor, assets/videos]
+    link: [.env, .venv]
+  ```
+
+  - `seed`: paths whose ignored files (the builds a fresh checkout
+    lacks) are copied from the main checkout, file times kept, so that
+    content stamps decide what to rebuild (see [Assets
+    builders](#assets-builders)).
+  - `link`: paths symlinked to the main checkout's (default `[.env]`). A
+    `.venv` is linked only while `pyproject.toml` and `uv.lock` are the
+    same in both checkouts. A link `.gitignore` doesn't ignore (`.venv/`
+    only matches a directory) is added to the repository's
+    `info/exclude`.
 
 `deckz.yml` files are merged, in order, from the git root, from the user's
 config directory (XDG-compliant, e.g.
@@ -795,6 +813,16 @@ The main commands:
   reports, `--claude` also installs the Claude Code hooks. It exits 1
   while something is missing or failed, and is safe to run any number of
   times.
+- `deckz worktree add NAME [--base REV]`: create a second checkout of the
+  repository, `../<repo>--NAME`, on a new branch `ws/NAME` (from the main
+  checkout's `HEAD` unless `--base`), to work on something without
+  disturbing the main checkout's builds and uncommitted edits. It copies
+  the builds `worktree.seed` lists and links `worktree.link` (see above),
+  then reports `deckz setup --check` there. `deckz worktree list [--json]`
+  lists the worktrees with their uncommitted changes and their commits no
+  other branch has; `deckz worktree remove NAME` removes one, and its
+  branch, refusing while it holds either (`--force` loses the uncommitted
+  changes and keeps the branch).
 - `deckz run` (alias for `deckz run deck`, optionally restricted with
   `--parts`) / `deckz run file PATH` / `deckz run section SECTION FLAVOR` /
   `deckz run assets`: compile the deck in the current directory, a single

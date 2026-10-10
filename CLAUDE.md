@@ -60,8 +60,8 @@ into this checkout only a finished change. Before merging one that changes behav
 `@app.command()` as an import side effect (e.g. `src/deckz/cli/upload.py`).
 Related commands are grouped under sub-apps: most are their own package
 under `src/deckz/cli/` with one module per subcommand (`run`, `check`,
-`clean`, `show`, `flavor`, `asset`, `i18n`, `labs`, `hooks`, `extras` — see
-`run/__init__.py` for the pattern: an `App(name=...)` registered onto the
+`clean`, `show`, `flavor`, `asset`, `i18n`, `labs`, `hooks`, `worktree`,
+`extras` — see `run/__init__.py` for the pattern: an `App(name=...)` registered onto the
 parent app). A sub-app may declare a default subcommand via `@app.default`
 (`run`/`show`/`clean` do; `check`'s default is `content`, running
 every check — deckz's own content checks plus a `templates/checks.py`

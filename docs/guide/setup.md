@@ -37,3 +37,22 @@ DECKZ_RUN_PRINT=false
 
 Every `deckz run` starts by saying what it builds and which of these values it used,
 so a default you forgot about never goes unnoticed.
+
+## A second checkout for a separate piece of work
+
+To work on something apart (a new deck while another is half-edited, or to let
+someone else's uncommitted work be), open a worktree: a second checkout of the
+repository, on its own branch, next to the first.
+
+```sh
+deckz worktree add pnd-2026     # creates ../<repo>--pnd-2026 on branch ws/pnd-2026
+cd ../<repo>--pnd-2026          # build, edit and commit there as usual
+deckz worktree list             # each worktree's uncommitted changes and unpushed commits
+deckz worktree remove pnd-2026  # once its work is committed and pushed (or merged)
+```
+
+It starts from the main checkout's current commit (`--base` picks another), with
+the main checkout's builds copied in (rendered figures and videos, so nothing is
+rebuilt for hours), and its `.env` (and the Python environment, while the
+dependencies are the same) shared. `remove` refuses while the worktree holds work
+nothing else has, and lists it.

@@ -90,6 +90,14 @@ class VideoPublishRefusedError(DeckzError):
     """
 
 
+class WorktreeError(DeckzError):
+    """`deckz worktree` refuses.
+
+    An invalid or taken name, or removing a worktree holding work nothing \
+    else has (uncommitted changes, commits on no other branch).
+    """
+
+
 class DeckParsingError(DeckzError):
     """Some nodes of `deck` failed to parse, each described in `errors`."""
 
