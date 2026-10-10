@@ -212,7 +212,6 @@ def ci_workflow(ci: "CiSettings") -> str:
       - name: Install the system packages the dependencies need
         run: apt-get update && apt-get install -y --no-install-recommends \\
           {" ".join(ci.apt_packages)}
-
 """
         if ci.apt_packages
         else ""
@@ -251,8 +250,8 @@ jobs:
         with:
           path: {repo}
           fetch-depth: 0
-{deckz_checkout}
-{apt}      # The container runs as root, the checkouts belong to the runner's user:
+{deckz_checkout}{apt}
+      # The container runs as root, the checkouts belong to the runner's user:
       # git refuses to read them until told they're safe.
       - name: Trust the checkouts
         run: git config --global --add safe.directory "*"
