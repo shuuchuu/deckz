@@ -802,8 +802,8 @@ The main commands:
   backlog, lab notebooks and videos not published as committed or
   rendered (compared with their remotes as last fetched; `--fetch` fetches
   them first), and the built PDFs of the decks your changes reach that
-  don't match them. Each item says how to resolve it; `--json` for
-  scripts. `deckz show affected PATH...` prints the decks a change to
+  don't match them (`--no-decks` skips them). Each item says how to
+  resolve it; `--json` for scripts, each section with a stable `key`. `deckz show affected PATH...` prints the decks a change to
   PATHs reaches.
 - `deckz new deck DIR --name NAME --title TITLE`, `deckz new section
   PATH [--title TITLE]`, `deckz labs new LAB hands-on|demo`: create the

@@ -267,7 +267,8 @@ refusing (`ScaffoldRefusedError`) to overwrite anything.
 ### Status
 
 `status.py` backs `deckz status`: one `StatusSection` per concern (checks,
-translation, labs, videos, built decks), each a summary line plus
+translation, labs, videos, built decks, told apart by its `key`), each a
+summary line plus
 `StatusItem`s carrying their fix. "Your changes" come from `git status`
 and the commits since the upstream's merge base (`base_revision`). It
 never touches the network unless `fetch`. `analyzing/affected.py` maps

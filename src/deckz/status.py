@@ -9,7 +9,7 @@ the labs and videos are compared with their remotes as last fetched.
 
 import subprocess
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -31,6 +31,9 @@ class StatusSection:
     summary: str
     """One line: what was looked at, or that nothing needs doing."""
     items: tuple[StatusItem, ...] = field(default=())
+    key: str = ""
+    """What the section is about, for a program, whatever its title: `checks`, \
+    `translation`, `labs`, `videos` or `decks`."""
 
 
 def _git(git_dir: Path, *args: str, strip: bool = True) -> str | None:
@@ -352,6 +355,7 @@ def status(
     since: str | None = None,
     fetch: bool = False,
     checks: bool = True,
+    decks: bool = True,
 ) -> tuple[str, list[StatusSection]]:
     """Every section of `deckz status`.
 
@@ -361,6 +365,8 @@ def status(
             upstream's merge base.
         fetch: Fetch the labs and videos remotes first.
         checks: Run the content checks (the slowest part).
+        decks: Compare the built PDFs of the decks your changes reach with \
+            their content (the next slowest).
 
     Returns:
         `(what "your changes" means, the sections)`.
@@ -368,11 +374,14 @@ def status(
     git_dir = settings.paths.git_dir
     base, scope = base_revision(git_dir, since)
     uncommitted, changed = changed_paths(git_dir, base)
-    sections = [checks_section(settings)] if checks else []
-    sections += [
-        translation_section(settings, uncommitted, changed),
-        labs_section(settings, uncommitted, fetch=fetch),
-        videos_section(settings, fetch=fetch),
-        decks_section(settings, changed),
+    sections = {"checks": checks_section(settings)} if checks else {}
+    sections |= {
+        "translation": translation_section(settings, uncommitted, changed),
+        "labs": labs_section(settings, uncommitted, fetch=fetch),
+        "videos": videos_section(settings, fetch=fetch),
+    }
+    if decks:
+        sections["decks"] = decks_section(settings, changed)
+    return f"{_count(len(changed), 'changed file')}, {scope}", [
+        replace(section, key=key) for key, section in sections.items()
     ]
-    return f"{_count(len(changed), 'changed file')}, {scope}", sections

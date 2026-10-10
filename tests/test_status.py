@@ -91,6 +91,15 @@ def test_status_without_labs_nor_videos(repo: Path) -> None:
     assert summaries["Labs"] == "no lab notebooks"
     assert summaries["Videos"] == "no videos"
     assert summaries["Built decks"] == "your changes reach no deck"
+    # Programs tell the sections apart by key, whatever their titles.
+    assert [section.key for section in sections] == [
+        "translation",
+        "labs",
+        "videos",
+        "decks",
+    ]
+    _, sections = status(_settings(repo), checks=False, decks=False)
+    assert [section.key for section in sections] == ["translation", "labs", "videos"]
 
 
 def test_status_command_prints_every_section(repo: Path, capsys: Any) -> None:

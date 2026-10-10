@@ -10,6 +10,7 @@ def status(
     since: str | None = None,
     fetch: bool = False,
     checks: bool = True,
+    decks: bool = True,
     json: bool = False,
     workdir: Path = Path(),
 ) -> None:
@@ -28,6 +29,8 @@ def status(
         fetch: Fetch the labs and videos remotes first, instead of
             comparing with them as last fetched
         checks: Run the content checks (about 15 s on a large repository)
+        decks: Compare the built PDFs of the decks your changes reach with
+            their content (several seconds when a change reaches many)
         json: Print one JSON object instead
         workdir: Path to move into before running the command
     """
@@ -35,7 +38,11 @@ def status(
     from ..status import status as _status
 
     scope, sections = _status(
-        GlobalSettings.from_yaml(workdir), since=since, fetch=fetch, checks=checks
+        GlobalSettings.from_yaml(workdir),
+        since=since,
+        fetch=fetch,
+        checks=checks,
+        decks=decks,
     )
     if json:
         from dataclasses import asdict
