@@ -574,7 +574,9 @@ they enforce need no repo-specific knowledge:
   `git commit -a`, `git clean` without `--dry-run`, and anything that
   would discard uncommitted changes (`git checkout`/`restore` on a
   changed file, `git reset --hard`, a bare `git stash`) -- several Claude
-  Code sessions may share one checkout.
+  Code sessions may share one checkout. Also deny skipping the git hooks
+  (`--no-verify`, `git commit -n`, `git -c core.hooksPath=...`): they run
+  the repository's checks.
 - **PostToolUse/Edit,Write,MultiEdit**: convert an edited content file
   with this repo's own `pandoc_command` and run deckz's content checks
   (built-ins plus `templates/checks.py`'s) against it, reporting any

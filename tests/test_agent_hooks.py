@@ -108,6 +108,30 @@ def test_bash_denial_denies_commit_dash_a(tmp_path: Path) -> None:
     assert "commit -a" in reason
 
 
+def test_bash_denial_denies_skipping_the_hooks(tmp_path: Path) -> None:
+    repo = _init(tmp_path)
+    settings = _settings(repo)
+
+    for command in (
+        "git commit --no-verify -m x",
+        "git commit -nm x",
+        "git commit -n",
+        "git push --no-verify",
+        "git -c core.hooksPath=/dev/null commit -m x",
+    ):
+        reason = bash_denial(settings, _bash_payload(command, repo))
+        assert reason is not None, command
+        assert "Never skip the git hooks" in reason
+
+
+def test_bash_denial_allows_an_n_inside_an_option_value(tmp_path: Path) -> None:
+    repo = _init(tmp_path)
+    settings = _settings(repo)
+
+    for command in ("git commit -mnew", "git push -n origin main"):
+        assert bash_denial(settings, _bash_payload(command, repo)) is None, command
+
+
 def test_bash_denial_denies_clean_without_dry_run(tmp_path: Path) -> None:
     repo = _init(tmp_path)
     settings = _settings(repo)

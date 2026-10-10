@@ -9,14 +9,15 @@ sessions, not a sandbox -- so `cli/hooks/*.py` catches broadly around
 every call here instead of letting an exception propagate.
 
 Two events need no repository-specific knowledge: PreToolUse/Bash (deny
-staging everything or discarding uncommitted changes -- several Claude
-Code sessions may share one checkout) and Stop (flag a content file or
-lab notebook pair changed on one language side only during the session,
-reusing `analyzing.i18n_stale`'s pairing). PostToolUse/Edit converts an
-edited content file with the repo's own `pandoc_command` and runs deckz's
-content checks against it. A target repo's own `templates/hooks.py`
-(`GlobalPaths.hooks_module`) can add further Bash denials -- the repo
-rules analogue of `templates/checks.py` -- by exposing:
+skipping the git hooks, and staging everything or discarding uncommitted
+changes -- several Claude Code sessions may share one checkout) and Stop
+(flag a content file or lab notebook pair changed on one language side
+only during the session, reusing `analyzing.i18n_stale`'s pairing).
+PostToolUse/Edit converts an edited content file with the repo's own
+`pandoc_command` and runs deckz's content checks against it. A target
+repo's own `templates/hooks.py` (`GlobalPaths.hooks_module`) can add
+further Bash denials -- the repo rules analogue of `templates/checks.py`
+-- by exposing:
 
     def deny_bash(
         words: Sequence[str], cwd: Path, settings: GlobalSettings
@@ -31,6 +32,7 @@ import hashlib
 import json
 import re
 import shlex
+from itertools import pairwise
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
@@ -42,6 +44,49 @@ _HEREDOC_RE = re.compile(
 )
 _SEPARATORS = {";", "&&", "||", "|", "&", "\n", "(", ")"}
 _GIT_OPTIONS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
+# `git commit` short options taking a value: in a cluster such as `-nm`, the
+# letters after one of these are its value, not options.
+_COMMIT_VALUE_OPTIONS = set("mFcCt")
+_NO_VERIFY = (
+    "Never skip the git hooks: they run the repository's checks. Fix what they"
+    " report, or ask the user."
+)
+
+
+def _commit_no_verify(args: list[str]) -> bool:
+    """Whether `git commit`'s arguments hold `-n`, alone or in a cluster.
+
+    Returns:
+        True if so; the letters after a value-taking option are its value.
+    """
+    for arg in args:
+        if arg == "--":
+            return False
+        if not re.fullmatch(r"-[a-zA-Z]+", arg):
+            continue
+        for letter in arg[1:]:
+            if letter == "n":
+                return True
+            if letter in _COMMIT_VALUE_OPTIONS:
+                break
+    return False
+
+
+def _skips_hooks(words: list[str], sub: str, args: list[str]) -> bool:
+    """Whether a git command skips the repository's hooks.
+
+    Returns:
+        True for `--no-verify`, `git commit -n`, or `-c core.hooksPath=...`.
+    """
+    if any(
+        word.lower().startswith("core.hookspath=")
+        for previous, word in pairwise(words)
+        if previous == "-c"
+    ):
+        return True
+    if sub not in {"commit", "push", "merge", "cherry-pick", "rebase", "am"}:
+        return False
+    return "--no-verify" in args or (sub == "commit" and _commit_no_verify(args))
 
 
 def commands(script: str) -> list[list[str]]:
@@ -147,6 +192,8 @@ def _builtin_denial(words: list[str], cwd: Path) -> str | None:
     if call is None:
         return None
     sub, args, cwd = call
+    if _skips_hooks(words, sub, args):
+        return _NO_VERIFY
     if sub == "add" and {"-A", "--all", ".", "-u", "--update", ":/"} & set(args):
         return (
             "Stage explicit paths (`git add <file>...`): other sessions' uncommitted"
