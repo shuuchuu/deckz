@@ -41,3 +41,29 @@ def test_a_compilation_under_memory_max_succeeds(tmp_path: Path) -> None:
 
     assert result.ok
     assert main.with_suffix(".pdf").exists()
+
+
+def test_a_compilation_waits_for_a_machine_slot(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    from threading import Event, Thread
+
+    from deckz.components.machine_slots import MachineSlots
+
+    monkeypatch.setattr(compiler, "_stopped", False)
+    main = tmp_path / "main.typ"
+    main.write_text("Hello\n", encoding="utf8")
+    slots = MachineSlots(1, tmp_path / "slots")
+    done = Event()
+
+    def compile_main() -> None:
+        assert TypstCompiler(machine_slots=slots).compile(main).ok
+        done.set()
+
+    # Another deckz process's compilation holds the only slot.
+    with slots.hold():
+        thread = Thread(target=compile_main)
+        thread.start()
+        assert not done.wait(1)
+    assert done.wait(30)
+    thread.join()

@@ -36,7 +36,10 @@ The error names the file. Common causes:
 - a missing English file in an English build: [Translating](translating.md);
 - a video never rendered: `deckz videos render`;
 - a compilation using more memory than `deckz.yml`'s `typst_memory_max`: build fewer
-  PDFs at once, or raise the limit.
+  PDFs at once, or raise the limit. To keep several builds at once (two checkouts, a
+  `--watch` and another build) from adding up their memory, set
+  `typst_machine_compilations` (e.g. `2`) in your own `~/.config/deckz/deckz.yml`:
+  past it, a compilation waits for another to finish.
 
 ## Checking the result
 

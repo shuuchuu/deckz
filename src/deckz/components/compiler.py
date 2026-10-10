@@ -1,5 +1,5 @@
 from collections.abc import Iterator
-from contextlib import contextmanager, suppress
+from contextlib import AbstractContextManager, contextmanager, nullcontext, suppress
 from logging import getLogger
 from multiprocessing import get_context
 from multiprocessing.connection import Connection
@@ -12,6 +12,8 @@ from .protocols import CompilerProtocol
 
 if TYPE_CHECKING:
     from multiprocessing.process import BaseProcess
+
+    from .machine_slots import MachineSlots
 
 # Every compilation runs in a child process, never in deckz's own process.
 # Typst's memoization cache is global to the process that compiles and only
@@ -273,6 +275,12 @@ class TypstCompiler(CompilerProtocol):
     already parallelizes a single compilation across cores, and each \
     concurrent one adds a whole document's memory (up to a few GB).
 
+    With `machine_slots`, a compilation also holds one of its slots, \
+    shared by every deckz process of the machine (see \
+    [`MachineSlots`][deckz.components.machine_slots.MachineSlots]): only \
+    while it compiles, so a `--watch` worker idle between rebuilds holds \
+    none, though it keeps its memory.
+
     With `memory_max` (bytes), a compilation whose process goes over it \
     is stopped and fails, instead of the machine running out of memory. \
     It's checked every half second, on Linux only (`/proc`).
@@ -290,8 +298,10 @@ class TypstCompiler(CompilerProtocol):
         font_paths: tuple[Path, ...] = (),
         ignore_system_fonts: bool = False,
         memory_max: int | None = None,
+        machine_slots: "MachineSlots | None" = None,
     ) -> None:
         self._slots = BoundedSemaphore(max_parallel)
+        self._machine_slots = machine_slots
         self._font_paths = font_paths
         self._ignore_system_fonts = ignore_system_fonts
         self._memory_max = memory_max
@@ -300,6 +310,11 @@ class TypstCompiler(CompilerProtocol):
                 "typst_memory_max is ignored: it needs Linux's /proc"
             )
 
+    def _machine_slot(self) -> AbstractContextManager[bool]:
+        if self._machine_slots is None:
+            return nullcontext(True)
+        return self._machine_slots.hold(cancelled=lambda: _stopped)
+
     def _worker(self, main: Path) -> _Worker:
         return _Worker(
             main, self._font_paths, self._ignore_system_fonts, self._memory_max
@@ -307,8 +322,8 @@ class TypstCompiler(CompilerProtocol):
 
     def compile(self, file: Path) -> CompileResult:
         main = file.resolve()
-        with self._slots:
-            if _stopped:
+        with self._slots, self._machine_slot() as held:
+            if _stopped or not held:
                 return CompileResult(False, "compilation cancelled")
             with _warm_lock:
                 workers = _warm_workers

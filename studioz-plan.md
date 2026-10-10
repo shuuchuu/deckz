@@ -217,8 +217,8 @@ The machine has 15 GB of RAM and 8 cores. A large deck's Typst compilation takes
 2 GB and `typst_memory_max` lets it reach 5 GiB. Each `--watch` keeps its processes
 alive, and each agent session costs a few hundred MB. `typst_parallel_compilations` is
 per deckz process, so two tasks building at once each believe they own the machine.
-deckz needs a machine-wide limit, a semaphore of `flock`ed slots in the user cache
-dir (`labs/gpu.py` already uses `flock`), shared by every deckz process: studioz's
+deckz needs a machine-wide limit, a semaphore of `flock`ed slots in the user's
+runtime dir (`labs/gpu.py` already uses `flock`), shared by every deckz process: studioz's
 tasks, agent sessions in the terminal, a person's builds. Roughly two large
 compilations at a time here.
 
@@ -524,8 +524,12 @@ earlier work: about 2 GB each, `typst_memory_max` at 5 GiB).
    matter. Seeding a workspace copies the stamps with the outputs.
 2. `deckz worktree add/remove` and `worktree.seed`. **Done** (see "Seeding,
    concretely").
-3. A machine-wide compilation limit (`typst_machine_compilations`, flock slots in the
-   user cache dir).
+3. A machine-wide compilation limit (`typst_machine_compilations`, flock slots).
+   **Done** (2026-10-10): `components/machine_slots.py`; the slots live in
+   `$XDG_RUNTIME_DIR/deckz/`, not the cache dir, since the sandbox redirects
+   `XDG_CACHE_HOME` into each worktree; a sandboxed process opens existing slot
+   files read-only (`flock` allows it). A slot is held only while compiling: idle
+   `--watch` workers keep their memory without one.
 4. `deckz show frames` (each page of a built PDF → its frame, file and line), for the
    before/after view and click-to-source.
 5. The `stop` hook runs the post-edit checks on every content file the worktree

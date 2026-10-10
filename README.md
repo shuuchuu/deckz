@@ -147,6 +147,15 @@ typst_ignore_system_fonts: true
   run --watch`, each PDF's process stays alive instead, so rebuilds are
   incremental: on a 145-page deck, an edit re-renders every PDF in about a
   second.
+- `typst_machine_compilations`: how many Typst compilations may run at
+  once on the machine, across every deckz process of the user (unset by
+  default: no such limit). `typst_parallel_compilations` only bounds one
+  process, so two builds (two checkouts or worktrees, a `--watch` next to
+  an agent's build) each believe they own the machine. Each compilation
+  holds one of these slots while it runs (`flock`ed files in
+  `$XDG_RUNTIME_DIR/deckz/`, freed by the kernel if a process dies), and
+  waits for one, saying so, while they're all taken. Machine-specific, so
+  the user's own `deckz.yml` is the natural place for it.
 - `typst_memory_max`: stop a compilation whose process uses more memory
   than this (e.g. `5GiB`; unset by default: no limit). Its PDF then fails
   with a message naming the limit, instead of the machine running out of

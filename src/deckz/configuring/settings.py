@@ -257,6 +257,16 @@ class GlobalSettings(BaseModel):
     core within a single compilation, so more than 1 mostly trades memory for \
     a small speedup.
     """
+    typst_machine_compilations: int | None = Field(default=None, ge=1)
+    """How many Typst compilations may run at once on this machine, across \
+    every deckz process of the user: builds in other checkouts and \
+    worktrees, a `--watch` next to an agent's build.
+
+    `typst_parallel_compilations` only bounds one process. A compilation \
+    waits for a slot (saying so once) while they're all taken. Machine-wide \
+    by nature, so the user's own `deckz.yml` is the place to set it, or a \
+    repository's as a default. Unset: no machine-wide limit.
+    """
     typst_memory_max: ByteSize | None = None
     """Stop a Typst compilation whose process uses more memory than this.
 

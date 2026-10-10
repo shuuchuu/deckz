@@ -37,6 +37,7 @@ class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
 
     def compiler(self) -> CompilerProtocol:
         from .compiler import TypstCompiler
+        from .machine_slots import MachineSlots
 
         # Relative to the git root, whatever deckz's own working directory.
         paths = self._settings.paths
@@ -53,6 +54,11 @@ class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
             ),
             ignore_system_fonts=self._settings.typst_ignore_system_fonts,
             memory_max=self._settings.typst_memory_max,
+            machine_slots=(
+                None
+                if self._settings.typst_machine_compilations is None
+                else MachineSlots(self._settings.typst_machine_compilations)
+            ),
         )
 
     def markdown_converter(self) -> MarkdownConverterProtocol:

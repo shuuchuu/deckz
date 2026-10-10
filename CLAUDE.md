@@ -140,7 +140,9 @@ all`) from `GlobalSettingsFactory.shared_parser()`.
 kept warm across `--watch` rebuilds so Typst's incremental cache survives;
 see the module's header comment for why never in deckz's own process;
 `typst_memory_max` makes it stop a worker whose resident memory, read from
-`/proc` every half second, goes over the limit).
+`/proc` every half second, goes over the limit; `typst_machine_compilations`
+makes each compilation hold one of a few `flock`ed slot files shared by every
+deckz process, `components/machine_slots.py`).
 
 ### Build pipeline
 
