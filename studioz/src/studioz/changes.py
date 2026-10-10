@@ -3,7 +3,8 @@
 Its changed files, grouped by what they are (a deck's own files, shared
 content, labs, videos, images and theme, the rest), each content file or
 notebook whose other language didn't change flagged: the commit hook asks
-such a commit for a `Lang-sync` trailer. Then the decks the changes reach
+such a commit for a `Lang-sync` trailer (deckz's rule, from its fr/en pairs:
+`LangPairs`). Then the decks the changes reach
 (`deckz show affected`, 7 s on slides: run in the background by the
 workspace's own deckz, again when the changed files, or a changed `.yml`,
 change), each one's before/after (`studioz.comparison`) a click away.
@@ -12,11 +13,13 @@ change), each one's before/after (`studioz.comparison`) a click away.
 import json
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from threading import Lock
 
+from deckz.analyzing.i18n_stale import lang_pairs, one_sided
 from deckz.configuring.settings import GlobalSettings
 
 from . import sources
-from .background import Change, Runs, changes, git
+from .background import Runs, changes, git
 
 
 @dataclass(frozen=True)
@@ -25,7 +28,7 @@ class ChangedFile:
     status: str
     """In French: modifié, nouveau, supprimé, renommé, en conflit."""
     other_lang: str | None = None
-    """The other language's file, when it exists and didn't change."""
+    """The other language's file, when the change is on this side only."""
     editable: bool = False
 
 
@@ -49,46 +52,30 @@ def _status(code: str) -> str:
     return "modifié"
 
 
-def other_lang(path: PurePosixPath) -> PurePosixPath | None:
-    """The other language's version of a content file or lab notebook.
-
-    deckz's conventions: `x/a.md` is translated in `x/en/a.md`, and
-    `a-fr.ipynb` in `a-en.ipynb`.
-
-    Returns:
-        Its path, None for other files.
-    """
-    if path.suffix == ".md":
-        if path.parent.name == "en":
-            return path.parent.parent / path.name
-        return path.parent / "en" / path.name
-    for lang, other in (("fr", "en"), ("en", "fr")):
-        suffix = f"-{lang}.ipynb"
-        if path.name.endswith(suffix):
-            return path.with_name(path.name.removesuffix(suffix) + f"-{other}.ipynb")
-    return None
-
-
 def _relative(workspace: Path, path: Path) -> PurePosixPath:
     return PurePosixPath(path.relative_to(workspace).as_posix())
 
 
-def grouped(workspace: Path, decks: list[str]) -> list[ChangeGroup]:
+Pairs = list[tuple[PurePosixPath, PurePosixPath]]
+
+
+def grouped(workspace: Path, decks: list[str], pairs: Pairs) -> list[ChangeGroup]:
     """The workspace's changes since its last commit, grouped.
 
     Args:
         workspace: The workspace.
         decks: Its decks (`studioz.workspaces.decks`).
+        pairs: Its fr/en pairs (`LangPairs.get`).
 
     Returns:
         The groups with changes: each deck's own files first, by deck.
     """
     paths = GlobalSettings.from_yaml(workspace).paths
     found = changes(workspace)
-    changed = {change.path for change in found}
-    content_dirs = [_relative(workspace, paths.content_dir)] + [
-        PurePosixPath(deck) / "content" for deck in decks
-    ]
+    alone = {
+        str(change.changed_path): str(change.other_path)
+        for change in one_sided({change.path for change in found}, pairs)
+    }
     kinds = [
         ("Contenu partagé", _relative(workspace, paths.content_dir)),
         ("Labs", _relative(workspace, paths.labs_notebooks_dir)),
@@ -99,7 +86,12 @@ def grouped(workspace: Path, decks: list[str]) -> list[ChangeGroup]:
     by_kind: dict[str, list[ChangedFile]] = {}
     for change in found:
         path = PurePosixPath(change.path)
-        file = _file(workspace, change, path, changed, content_dirs)
+        file = ChangedFile(
+            change.path,
+            _status(change.status),
+            alone.get(change.path),
+            sources.source(workspace, change.path) is not None,
+        )
         deck = max((d for d in decks if path.is_relative_to(d)), key=len, default=None)
         if deck is not None:
             by_deck.setdefault(deck, []).append(file)
@@ -119,33 +111,6 @@ def grouped(workspace: Path, decks: list[str]) -> list[ChangeGroup]:
     return groups
 
 
-def _file(
-    workspace: Path,
-    change: Change,
-    path: PurePosixPath,
-    changed: set[str],
-    content_dirs: list[PurePosixPath],
-) -> ChangedFile:
-    sibling = other_lang(path)
-    if (
-        sibling is not None
-        and path.suffix == ".md"
-        and not any(path.is_relative_to(root) for root in content_dirs)
-    ):
-        sibling = None
-    alone = (
-        sibling is not None
-        and str(sibling) not in changed
-        and (workspace / sibling).exists()
-    )
-    return ChangedFile(
-        change.path,
-        _status(change.status),
-        str(sibling) if alone else None,
-        sources.source(workspace, change.path) is not None,
-    )
-
-
 def affected_command(workspace: Path) -> list[str] | None:
     """`deckz show affected` of the workspace's changes, by its own deckz.
 
@@ -160,7 +125,7 @@ def affected_command(workspace: Path) -> list[str] | None:
 
 
 def affected_fingerprint(workspace: Path) -> tuple[str, ...]:
-    """What the decks the changes reach depend on.
+    """What the decks the changes reach depend on, and the fr/en pairs.
 
     Returns:
         HEAD, the changed files, and the changed `.yml` files' times (a \
@@ -190,3 +155,27 @@ class Affected(Runs[tuple[str, ...]]):
             command: `affected_command`, which tests replace.
         """
         super().__init__(command, _decks, affected_fingerprint)
+
+
+class LangPairs:
+    """Each workspace's fr/en pairs, found again when its files' layout changes.
+
+    deckz finds them (`deckz.analyzing.i18n_stale.lang_pairs`) in about a
+    second on a large repository, so they're kept while the changed files,
+    and their `.yml` files, stay the same (`affected_fingerprint`).
+    """
+
+    def __init__(self) -> None:
+        self._pairs: dict[Path, tuple[tuple[str, ...], Pairs]] = {}
+        self._lock = Lock()
+
+    def get(self, workspace: Path) -> Pairs:
+        current = affected_fingerprint(workspace)
+        with self._lock:
+            kept = self._pairs.get(workspace)
+        if kept is not None and kept[0] == current:
+            return kept[1]
+        found = lang_pairs(GlobalSettings.from_yaml(workspace))
+        with self._lock:
+            self._pairs[workspace] = (current, found)
+        return found

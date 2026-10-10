@@ -423,6 +423,11 @@ when its files change), `studioz.baselines` keeps each deck's handout as of
 the last commit (from the live build of a clean workspace, else built in a
 scratch checkout next to it), and `studioz.comparison` matches frames by
 title and compares their rendered pages for the "Avant/après" view.
+`studioz.commits` backs the Commit dialog: the chosen files as they are on
+disk (the index is reset, then exactly those are staged), git's hooks run
+by the workspace's own deckz (its `.venv/bin` first on the `PATH`), and the
+`Lang-sync` rule asked beforehand from deckz's `i18n_stale.one_sided` with
+the pairs `changes.LangPairs` keeps per workspace (about a second to find).
 
 Its tests are in `studioz/tests/`, driving the app with FastAPI's test client
 on a temporary repository, and the watches with a fake `deckz` printing the

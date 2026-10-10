@@ -24,12 +24,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from deckz.analyzing.frames import frames
+from deckz.analyzing.i18n_stale import lang_sync_kind, one_sided
 from deckz.configuring.settings import DeckSettings, GlobalSettings
 from deckz.exceptions import DeckzError, WorktreeError
 from deckz.models import Lang
 from deckz.worktrees import main_checkout, remove
 
-from . import __version__, background, changes, problems, sources, workspaces
+from . import __version__, background, changes, commits, problems, sources, workspaces
 from .baselines import Baselines
 from .comparison import compare, signatures
 from .local_only import local_only
@@ -50,6 +51,7 @@ class Studio:
     statuses: problems.Statuses
     affected: changes.Affected
     baselines: Baselines
+    pairs: changes.LangPairs
 
     def workspace(self, name: str) -> workspaces.Workspace:
         found = workspaces.find(self.settings, name)
@@ -459,7 +461,7 @@ def changes_panel(
     """
     found = studio.workspace(name)
     path = found.worktree.path
-    groups = changes.grouped(path, workspaces.decks(path))
+    groups = changes.grouped(path, workspaces.decks(path), studio.pairs.get(path))
     query = f"?formation={quote(formation)}&lang={lang}" if formation else ""
     return _render(
         request,
@@ -472,6 +474,159 @@ def changes_panel(
         deck=formation,
         lang=lang,
     )
+
+
+@dataclass(frozen=True)
+class Draft:
+    """The commit dialog's fields, as posted."""
+
+    listed: frozenset[str]
+    """The files the dialog showed: one changed since is chosen by default."""
+    paths: frozenset[str]
+    """The files chosen."""
+    message: str
+    lang_sync: str
+    """How to answer the `Lang-sync` rule (`commits.LANG_SYNC_CHOICES`)."""
+    reason: str
+    deck: str | None
+    """The deck on screen, whose live build may become the new baseline."""
+    lang: Lang
+
+    def selected(self, found: list[background.Change], *, shown: bool) -> set[str]:
+        """The files chosen among those changed.
+
+        Args:
+            found: The files changed now.
+            shown: Whether the selection is shown before it's used: a file \
+                the dialog didn't list yet is then chosen by default; never \
+                in a commit, which holds only what the person saw.
+
+        Returns:
+            Their paths.
+        """
+        return {
+            change.path
+            for change in found
+            if change.path in self.paths or (shown and change.path not in self.listed)
+        }
+
+
+def _draft(
+    listed: Annotated[list[str] | None, Form()] = None,
+    path: Annotated[list[str] | None, Form()] = None,
+    message: Annotated[str, Form()] = "",
+    lang_sync: Annotated[str, Form()] = "",
+    reason: Annotated[str, Form()] = "",
+    formation: Annotated[str, Form()] = "",
+    lang: Annotated[Lang, Form()] = "fr",
+) -> Draft:
+    return Draft(
+        frozenset(listed or ()),
+        frozenset(path or ()),
+        message,
+        lang_sync,
+        reason,
+        formation or None,
+        lang,
+    )
+
+
+DraftDep = Annotated[Draft, Depends(_draft)]
+
+
+def _commit_dialog(
+    request: Request,
+    studio: Studio,
+    found: workspaces.Workspace,
+    draft: Draft,
+    **context: Any,
+) -> Response:
+    path = found.worktree.path
+    changed = background.changes(path)
+    pairs = studio.pairs.get(path)
+    selected = draft.selected(changed, shown=True)
+    alone = one_sided(set(commits.to_stage(changed, selected)), pairs)
+    report = studio.statuses.report(path)
+    return _render(
+        request,
+        "_commit.html",
+        workspace=found,
+        draft=draft,
+        groups=changes.grouped(path, workspaces.decks(path), pairs),
+        selected=selected,
+        one_sided=alone,
+        sides={change.changed for change in alone},
+        report=report,
+        checks=next((g for g in report.result or () if g.key == "checks"), None),
+        blocked=commits.blocked(path, changed),
+        **context,
+    )
+
+
+@router.post("/espaces/{name}/commit/formulaire", response_class=HTMLResponse)
+def commit_form(
+    request: Request, studio: StudioDep, name: str, draft: DraftDep
+) -> Response:
+    """The commit dialog, with the fields posted kept.
+
+    Returns:
+        Its content, the files changed now listed.
+    """
+    return _commit_dialog(request, studio, studio.workspace(name), draft)
+
+
+@router.post("/espaces/{name}/commit", response_class=HTMLResponse)
+def commit(request: Request, studio: StudioDep, name: str, draft: DraftDep) -> Response:
+    """Commit the files chosen, unless something's missing or a hook refuses.
+
+    Returns:
+        The commit dialog, with the new commit and what's left, or with \
+        why it wasn't made.
+    """
+    found = studio.workspace(name)
+    path = found.worktree.path
+    changed = background.changes(path)
+    selected = draft.selected(changed, shown=False)
+    paths = commits.to_stage(changed, selected)
+    error = commits.blocked(path, changed)
+    if error is None and not selected:
+        error = "Cochez au moins un fichier."
+    if error is None and not draft.message.strip():
+        error = "Écrivez le message du commit."
+    trailer = None
+    alone = one_sided(set(paths), studio.pairs.get(path))
+    if error is None and alone and lang_sync_kind(draft.message) is None:
+        try:
+            trailer = commits.lang_sync_trailer(alone, draft.lang_sync, draft.reason)
+        except ValueError as refusal:
+            error = str(refusal)
+    if error is not None:
+        return _commit_dialog(request, studio, found, draft, error=error)
+    result = commits.commit(path, paths, draft.message, trailer)
+    if isinstance(result, commits.Refused):
+        return _commit_dialog(request, studio, found, draft, refused=result.output)
+    _keep_baseline(studio, path, draft)
+    fresh = Draft(frozenset(), frozenset(), "", "", "", draft.deck, draft.lang)
+    response = _commit_dialog(request, studio, found, fresh, committed=result)
+    response.headers["HX-Trigger"] = "workspace-changed, comparison-refresh"
+    return response
+
+
+def _keep_baseline(studio: Studio, workspace: Path, draft: Draft) -> None:
+    """Keep the deck on screen's live build as the new commit's baseline.
+
+    It is the commit's when the commit left no change behind, and the build
+    is done (`Baselines.capture` checks the former).
+    """
+    directory = workspaces.deck_dir(workspace, draft.deck) if draft.deck else None
+    watch = studio.watches.get(workspace)
+    if (
+        directory is not None
+        and watch is not None
+        and (watch.deck, watch.lang) == (directory, draft.lang)
+        and watch.snapshot().state is State.BUILT
+    ):
+        studio.baselines.capture(workspace, directory, draft.lang)
 
 
 @router.get("/espaces/{name}/taille", response_class=HTMLResponse)
@@ -527,6 +682,7 @@ def create_app(
         statuses or problems.Statuses(workspaces.base_branch(main)),
         affected or changes.Affected(),
         baselines or Baselines(),
+        changes.LangPairs(),
     )
 
     @asynccontextmanager

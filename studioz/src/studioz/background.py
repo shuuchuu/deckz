@@ -29,6 +29,8 @@ class Change:
     """Relative to the workspace; for a rename, the new path."""
     status: str
     """Its two-letter `git status --porcelain` status, e.g. ` M` or `??`."""
+    original: str | None = None
+    """For a rename or copy, the original path."""
 
 
 def git(workspace: Path, *args: str) -> str | None:
@@ -71,10 +73,11 @@ def changes(workspace: Path) -> list[Change]:
     for entry in entries:
         if not entry:
             continue
-        found.append(Change(entry[3:], entry[:2]))
+        original = None
         if "R" in entry[:2] or "C" in entry[:2]:
             # The original path follows a rename or copy.
-            next(entries, None)
+            original = next(entries, None)
+        found.append(Change(entry[3:], entry[:2], original))
     return found
 
 

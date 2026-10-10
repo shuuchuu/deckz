@@ -1,6 +1,13 @@
 <section class="changes" id="changes" hx-get="{{ url }}" hx-swap="outerHTML"
          hx-trigger="workspace-changed from:body, every {% if affected.running %}2{% else %}10{% endif %}s">
   <h2>Modifications <span class="count">{{ count }}</span></h2>
+  {% if count %}
+  <button type="button" class="commit-open" hx-post="/espaces/{{ workspace.name }}/commit/formulaire"
+          hx-include="#commit-form" hx-vals='{{ {"formation": deck or "", "lang": lang} | tojson }}'
+          hx-target="#commit-dialog" hx-swap="innerHTML"
+          hx-on::after-request="if (event.detail.successful) document.getElementById('commit-dialog').showModal()"
+          title="Choisir les fichiers à committer et écrire le message">Committer…</button>
+  {% endif %}
   {% for group in groups %}
   <h3>{% if group.deck %}<a href="/espaces/{{ workspace.name }}/formations/{{ group.deck }}?lang={{ lang }}&vue=modifications"
      title="Avant/après de cette formation">{{ group.title }}</a>{% else %}{{ group.title }}{% endif %}</h3>

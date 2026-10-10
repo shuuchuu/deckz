@@ -340,9 +340,9 @@ def post_edit_report(settings: "GlobalSettings", payload: dict[str, Any]) -> str
 
 
 def _pairs(settings: "GlobalSettings") -> list[tuple[PurePosixPath, PurePosixPath]]:
-    from .analyzing.i18n_stale import content_pairs, notebook_pairs
+    from .analyzing.i18n_stale import lang_pairs
 
-    return [*content_pairs(settings), *notebook_pairs(settings)]
+    return lang_pairs(settings)
 
 
 def _file_hash(git_dir: Path, path: PurePosixPath) -> str:

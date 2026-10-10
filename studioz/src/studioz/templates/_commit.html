@@ -1,0 +1,86 @@
+{% set base = "/espaces/" ~ workspace.name %}
+<form id="commit-form" class="commit-form" hx-post="{{ base }}/commit" hx-target="#commit-dialog"
+      hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
+  <input type="hidden" name="formation" value="{{ draft.deck or '' }}">
+  <input type="hidden" name="lang" value="{{ draft.lang }}">
+  <header>
+    <h2>Committer</h2>
+    <button type="button" class="secondary" onclick="this.closest('dialog').close()">Fermer</button>
+  </header>
+  {% if committed %}
+  <p class="committed" role="status">Commit <code>{{ committed.sha[:7] }}</code> « {{ committed.subject }} » enregistré.
+    Il reste sur cet espace jusqu'à la synchronisation.</p>
+  {% endif %}
+  {% if blocked %}<p class="error">{{ blocked }}</p>{% endif %}
+  {% if groups %}
+  <p class="hint">Les fichiers cochés partent tels qu'ils sont dans l'espace ; les autres y restent, inchangés.</p>
+  <div class="commit-files" hx-post="{{ base }}/commit/formulaire" hx-trigger="change"
+       hx-target="#commit-dialog" hx-swap="innerHTML">
+    {% for group in groups %}
+    {% set paths = group.files | map(attribute="path") | list %}
+    <fieldset>
+      <legend><label>
+        <input type="checkbox" {% if paths | select("in", selected) | list | length == paths | length %}checked{% endif %}
+               onchange="for (const box of this.closest('fieldset').querySelectorAll('input[name=path]')) box.checked = this.checked">
+        {{ group.title }}</label></legend>
+      <ul>
+        {% for file in group.files %}
+        <li>
+          <input type="hidden" name="listed" value="{{ file.path }}">
+          <label>
+            <input type="checkbox" name="path" value="{{ file.path }}"{% if file.path in selected %} checked{% endif %}>
+            <span class="status" data-status="{{ file.status }}">{{ file.status }}</span>
+            <span class="path">{{ file.path }}</span>
+          </label>
+        </li>
+        {% endfor %}
+      </ul>
+    </fieldset>
+    {% endfor %}
+  </div>
+  {% if one_sided %}
+  <div class="lang-sync">
+    <p>Ces fichiers changent sans leur version dans l'autre langue :</p>
+    <ul>
+      {% for change in one_sided %}
+      <li><code>{{ change.changed_path }}</code> (pas <code>{{ change.other_path }}</code>)</li>
+      {% endfor %}
+    </ul>
+    <p>Portez la modification et cochez-la aussi, ou dites pourquoi
+      (le dépôt l'exige : c'est le trailer <code>Lang-sync</code> du message) :</p>
+    <label><input type="radio" name="lang_sync" value="pending"{% if draft.lang_sync == "pending" %} checked{% endif %}>
+      La traduction suivra dans un prochain commit (<code>deckz i18n stale</code> la rappelle d'ici là)</label>
+    {% if sides | length == 1 %}
+    <label><input type="radio" name="lang_sync" value="only"{% if draft.lang_sync == "only" %} checked{% endif %}>
+      Rien à traduire, parce que :</label>
+    <input class="reason" name="reason" value="{{ draft.reason }}" aria-label="Pourquoi il n'y a rien à traduire"
+           placeholder="une coquille, la typographie propre à la langue…"
+           oninput="this.form.querySelector('input[name=lang_sync][value=only]').checked = true">
+    {% endif %}
+  </div>
+  {% endif %}
+  <p class="checks">
+    {% if checks %}Le panneau Problèmes signale {{ checks.problems | length }} problème{{ "s" if checks.problems | length > 1 }} de vérification :
+    le dépôt refusera le commit s'ils sont dans les fichiers cochés.
+    {% elif report.running and not report.checked %}Vérification de l'espace en cours.
+    {% else %}Les vérifications ne signalent aucun problème.{% endif %}
+    Le dépôt vérifie à nouveau les fichiers au commit (quelques secondes).
+  </p>
+  <label class="message-label" for="commit-message">Message</label>
+  <textarea id="commit-message" name="message" rows="5" required
+            placeholder="Première ligne : ce que fait ce commit, en une phrase courte.">{{ draft.message }}</textarea>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  {% if refused %}
+  <div class="refused" role="alert">
+    <p>Le dépôt a refusé ce commit, rien n'a été enregistré. Corrigez ce qu'il indique, puis recommencez : le message est gardé.</p>
+    <pre>{{ refused }}</pre>
+  </div>
+  {% endif %}
+  <footer>
+    <button type="submit"{% if blocked or not selected %} disabled{% endif %}>Committer {{ selected | length }} fichier{{ "s" if selected | length > 1 }}</button>
+    <span class="indicator">Commit en cours : le dépôt vérifie les fichiers…</span>
+  </footer>
+  {% else %}
+  <p class="empty">Rien à committer : aucune modification depuis le dernier commit.</p>
+  {% endif %}
+</form>

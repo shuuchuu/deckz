@@ -140,19 +140,17 @@ def translation_section(
     Returns:
         Its section.
     """
-    from .analyzing.i18n_stale import content_pairs, notebook_pairs, stale_files
+    from .analyzing.i18n_stale import lang_pairs, one_sided, stale_files
 
     git_dir = settings.paths.git_dir
-    items = []
-    for fr, en in [*content_pairs(settings), *notebook_pairs(settings)]:
-        if (str(fr) in uncommitted) != (str(en) in uncommitted):
-            edited, other = (fr, en) if str(fr) in uncommitted else (en, fr)
-            items.append(
-                StatusItem(
-                    f"{edited}: changed without {other} (not committed yet)",
-                    "port the change, or commit it with a Lang-sync trailer",
-                )
-            )
+    items = [
+        StatusItem(
+            f"{change.changed_path}: changed without {change.other_path} "
+            "(not committed yet)",
+            "port the change, or commit it with a Lang-sync trailer",
+        )
+        for change in one_sided(uncommitted, lang_pairs(settings))
+    ]
     every = stale_files(settings)
     yours = [stale for stale in every if str(stale.path) in changed]
     items += [

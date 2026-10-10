@@ -1,7 +1,7 @@
 import shutil
 import subprocess
 import sys
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from time import monotonic, sleep
 from typing import Any
 
@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from pytest import fixture, mark
 from studioz.app import create_app
 from studioz.baselines import BASELINES_DIR, Baselines, scratch_path
-from studioz.changes import Affected, ChangedFile, grouped, other_lang
+from studioz.changes import Affected, ChangedFile, LangPairs, grouped
 from studioz.comparison import Row, _signature, compare, signatures
 from studioz.watches import Watches
 from studioz_pdfs import write_pdf
@@ -51,19 +51,6 @@ def _commit(workspace: Path, message: str = "Content") -> None:
     _git(workspace, "commit", "-m", message)
 
 
-def test_other_lang() -> None:
-    assert other_lang(PurePosixPath("content/a/x.md")) == PurePosixPath(
-        "content/a/en/x.md"
-    )
-    assert other_lang(PurePosixPath("content/a/en/x.md")) == PurePosixPath(
-        "content/a/x.md"
-    )
-    assert other_lang(PurePosixPath("labs/notebooks/t/l/demo-fr.ipynb")) == (
-        PurePosixPath("labs/notebooks/t/l/demo-en.ipynb")
-    )
-    assert other_lang(PurePosixPath("figures/x.py")) is None
-
-
 def test_changes_grouped_with_lone_translations(workspace: Path) -> None:
     for path in (
         "content/a/x.md",
@@ -80,14 +67,19 @@ def test_changes_grouped_with_lone_translations(workspace: Path) -> None:
     _write(workspace, "content/a/y.md", "changed\n")
     _write(workspace, "content/a/en/y.md", "changed\n")
     _write(workspace, "client/abc/content/en/about.md", "changed\n")
+    _write(workspace, "content/a/z.md")
+    _write(workspace, "labs/notebooks/t/demo-en.ipynb")
+    _write(workspace, "labs/notebooks/t/demo-fr.ipynb")
     _write(workspace, "assets/img/new.png")
     (workspace / "README.md").unlink()
 
-    groups = {group.title: group for group in grouped(workspace, ["client/abc"])}
+    pairs = LangPairs().get(workspace)
+    groups = {group.title: group for group in grouped(workspace, ["client/abc"], pairs)}
 
     assert list(groups) == [
         "client/abc",
         "Contenu partagé",
+        "Labs",
         "Images et thème",
         "Autres fichiers",
     ]
@@ -105,7 +97,10 @@ def test_changes_grouped_with_lone_translations(workspace: Path) -> None:
         "content/a/x.md": "content/a/en/x.md",
         "content/a/y.md": None,
         "content/a/en/y.md": None,
+        # deckz's rule: a new French file needs its English one too.
+        "content/a/z.md": "content/a/en/z.md",
     }
+    assert {file.other_lang for file in groups["Labs"].files} == {None}
     assert groups["Images et thème"].files[0].status == "nouveau"
     assert groups["Autres fichiers"].files == (
         ChangedFile("README.md", "supprimé", None, editable=False),
@@ -304,6 +299,47 @@ def test_baseline_built_in_a_scratch_checkout(
     assert "1 inchangé" in page
     assert 'data-file="client/abc/content/slides.md" data-line="4"' in page
     assert client.get(f"{DECK}/avant.pdf?lang=fr").content.startswith(b"%PDF")
+
+
+def test_live_build_kept_as_the_baseline_at_commit(
+    workspace: Path, repository: Path, fake_build: list[str]
+) -> None:
+    _slides(workspace, {"One": "a"})
+    _commit(workspace)
+    _slides(workspace, {"One": "a", "Two": "b"})
+    _build(workspace, fake_build)
+    # A scratch build would fail: the baseline must be the live one.
+    baselines = Baselines(lambda *_: [sys.executable, "-c", "exit(1)"])
+    # The deck's page keeps its watch running.
+    sleeping = [sys.executable, "-c", "import time; time.sleep(60)"]
+    watches = Watches(command=lambda *_: sleeping)
+    client = TestClient(
+        create_app(repository, watches=watches, baselines=baselines),
+        base_url="http://localhost:8421",
+    )
+    deck = workspace / "client" / "abc"
+    before = _git(workspace, "rev-parse", "HEAD")
+    watch = watches.watch(workspace, deck, "fr")
+    try:
+        watch._parse("12:00:00 INFO     Initial build finished")
+        client.post(
+            "/espaces/demo/commit",
+            data={
+                "path": "client/abc/content/slides.md",
+                "message": "Two",
+                "lang_sync": "pending",
+                "formation": "client/abc",
+                "lang": "fr",
+            },
+            headers=ORIGIN,
+        )
+    finally:
+        watches.stop_all()
+
+    assert _git(workspace, "rev-parse", "HEAD") != before
+    state = baselines.get(workspace, deck, "fr")
+    assert state.baseline is not None
+    assert state.baseline.titles == {2: "One", 3: "Two"}
 
 
 def test_failed_baseline_build_and_retry(

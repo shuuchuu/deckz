@@ -15,7 +15,7 @@ before trailers were used doesn't count.
 """
 
 import re
-from collections.abc import Iterator, Sequence
+from collections.abc import Collection, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
@@ -234,7 +234,7 @@ def stale_files(
         One entry per stale side of a pair, sorted by path.
     """
     git_dir = settings.paths.git_dir
-    pairs = [*content_pairs(settings), *notebook_pairs(settings)]
+    pairs = lang_pairs(settings)
     if targets:
         resolved = [target.resolve() for target in targets]
         pairs = [
@@ -275,6 +275,44 @@ class OneSidedChange:
         return self.en if self.changed == "fr" else self.fr
 
 
+def lang_pairs(
+    settings: "GlobalSettings",
+) -> list[tuple[PurePosixPath, PurePosixPath]]:
+    """Every fr/en pair the `Lang-sync` rule covers: content files and notebooks.
+
+    Slow on a large repository (finding the decks' own content directories:
+    about a second for 80 decks); a caller checking several sets of paths
+    computes them once.
+
+    Returns:
+        Each pair, French side first.
+    """
+    return [*content_pairs(settings), *notebook_pairs(settings)]
+
+
+def one_sided(
+    changed: Collection[str],
+    pairs: Iterable[tuple[PurePosixPath, PurePosixPath]],
+) -> list[OneSidedChange]:
+    """The pairs with exactly one side among `changed`: the `Lang-sync` rule.
+
+    A commit changing such a pair needs a `Lang-sync` trailer (the commit-msg
+    hook, `deckz hooks check-commits`).
+
+    Args:
+        changed: Changed paths, relative to the repository's root.
+        pairs: The pairs (`lang_pairs`).
+
+    Returns:
+        Each of them, with its side changed.
+    """
+    return [
+        OneSidedChange(fr, en, "fr" if str(fr) in changed else "en")
+        for fr, en in pairs
+        if (str(fr) in changed) != (str(en) in changed)
+    ]
+
+
 def staged_one_sided_pairs(settings: "GlobalSettings") -> list[OneSidedChange]:
     """Every fr/en pair with exactly one side in the git index's staged changes.
 
@@ -298,13 +336,9 @@ def staged_one_sided_pairs(settings: "GlobalSettings") -> list[OneSidedChange]:
         capture_output=True,
         check=True,
     ).stdout.decode()
-    staged_paths = {path for path in staged.split("\0") if path}
-    pairs = [*content_pairs(settings), *notebook_pairs(settings)]
-    return [
-        OneSidedChange(fr, en, "fr" if str(fr) in staged_paths else "en")
-        for fr, en in pairs
-        if (str(fr) in staged_paths) != (str(en) in staged_paths)
-    ]
+    return one_sided(
+        {path for path in staged.split("\0") if path}, lang_pairs(settings)
+    )
 
 
 @dataclass(frozen=True)
@@ -346,7 +380,7 @@ def one_sided_commits(
             raise DeckzError(msg)
         return result.stdout
 
-    pairs = [*content_pairs(settings), *notebook_pairs(settings)]
+    pairs = lang_pairs(settings)
     found = []
     for sha in git("rev-list", "--reverse", "--no-merges", revisions).split():
         message = git("show", "-s", "--format=%B", sha)
@@ -357,11 +391,7 @@ def one_sided_commits(
                 "\0"
             )
         )
-        changes = tuple(
-            OneSidedChange(fr, en, "fr" if str(fr) in changed else "en")
-            for fr, en in pairs
-            if (str(fr) in changed) != (str(en) in changed)
-        )
+        changes = tuple(one_sided(changed, pairs))
         if changes:
             found.append(OneSidedCommit(sha, message.splitlines()[0], changes))
     return found

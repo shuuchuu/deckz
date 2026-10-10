@@ -4,7 +4,7 @@ from pathlib import PurePosixPath as P
 
 from pytest import raises
 
-from deckz.analyzing.i18n_stale import stale_files
+from deckz.analyzing.i18n_stale import OneSidedChange, one_sided, stale_files
 from deckz.configuring.settings import GlobalPaths, GlobalSettings, I18nSettings
 from deckz.exceptions import InvalidConfigurationError
 
@@ -208,3 +208,15 @@ def test_synced_at_must_name_a_commit(tmp_path: Path) -> None:
 
     with raises(InvalidConfigurationError):
         stale_files(_synced_settings(repo, "no-such-revision"))
+
+
+def test_one_sided_pairs() -> None:
+    pairs = [(P("c/a.md"), P("c/en/a.md")), (P("c/b.md"), P("c/en/b.md"))]
+
+    assert one_sided({"c/a.md", "c/en/a.md", "c/en/b.md", "x.py"}, pairs) == [
+        OneSidedChange(P("c/b.md"), P("c/en/b.md"), "en")
+    ]
+    found = one_sided({"c/a.md"}, pairs)
+    assert [(c.changed_path, c.other_path) for c in found] == [
+        (P("c/a.md"), P("c/en/a.md"))
+    ]

@@ -118,6 +118,7 @@ tr.closed td { color: var(--muted); }
 }
 .problems .problem { white-space: pre-wrap; overflow-wrap: anywhere; }
 .navigator .problems a.problem { color: var(--accent); }
+.changes .commit-open { font-size: 0.85em; padding: 0.1rem 0.6rem; margin-bottom: 0.2rem; }
 .problems .fix { display: block; color: var(--muted); font-size: 0.85em; }
 .problems .checking { font-weight: 400; text-transform: none; letter-spacing: 0; }
 .problems .hint, .problems .error { font-size: 0.85em; margin: 0.4rem 0; }
@@ -213,4 +214,34 @@ tr.closed td { color: var(--muted); }
   .editor .tok-keyword, .editor .tok-atom, .editor .tok-bool, .editor .cm-jinja { color: #c49be0; }
   .editor .tok-number { color: #8fd18f; }
   .editor .tok-propertyName, .editor .tok-variableName { color: #7db3d8; }
+}
+
+/* The commit dialog, over the page. */
+.commit-dialog { width: min(52rem, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); }
+.commit-dialog::backdrop { background: rgb(0 0 0 / 0.35); }
+.commit-form { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.8rem 1rem 1rem; }
+.commit-form header, .commit-form footer { display: flex; gap: 0.8rem; align-items: center; }
+.commit-form header h2 { margin: 0 auto 0 0; }
+.commit-form p { margin: 0; }
+.commit-form .committed { color: #2e7d32; }
+.commit-files { max-height: 40vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 4px; padding: 0.2rem 0.6rem; }
+.commit-files fieldset { border: 0; padding: 0; margin: 0.3rem 0; }
+.commit-files legend { font-weight: 600; font-size: 0.9em; overflow-wrap: anywhere; }
+.commit-files ul { list-style: none; padding: 0 0 0 1.4rem; margin: 0; }
+.commit-files li label { display: flex; gap: 0.4rem; align-items: baseline; }
+.commit-files .status { font-size: 0.75em; color: var(--muted); min-width: 4.2rem; }
+.commit-files .status[data-status="nouveau"] { color: #2e7d32; }
+.commit-files .status[data-status="supprimé"], .commit-files .status[data-status="en conflit"] { color: var(--danger); }
+.commit-files .path { font-family: var(--mono); font-size: 0.85em; overflow-wrap: anywhere; min-width: 0; }
+.lang-sync { border-left: 3px solid #8a4b08; padding: 0.3rem 0.8rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.lang-sync ul { margin: 0; padding-left: 1.2rem; font-size: 0.9em; }
+.lang-sync code { overflow-wrap: anywhere; }
+.lang-sync .reason { margin-left: 1.6rem; }
+.commit-form .checks { color: var(--muted); font-size: 0.9em; }
+.commit-form .message-label { font-weight: 600; font-size: 0.9em; }
+.commit-form textarea { font: 0.9rem/1.4 var(--mono); padding: 0.4rem 0.5rem; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--text); resize: vertical; }
+.refused { background: var(--error-bg); padding: 0.5rem 0.8rem; border-radius: 4px; }
+.refused pre { margin: 0.4rem 0 0; max-height: 30vh; overflow: auto; font-size: 0.8em; }
+@media (prefers-color-scheme: dark) {
+  .lang-sync { border-left-color: #e0a96d; }
 }

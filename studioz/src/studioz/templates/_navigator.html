@@ -18,4 +18,5 @@
            hx-get="/espaces/{{ workspace.name }}/modifications{% if deck %}?formation={{ deck }}&lang={{ lang }}{% endif %}">
     <h2>Modifications <span class="count">{{ worktree.changes | length }}</span></h2>
   </section>
+  <dialog id="commit-dialog" class="commit-dialog" aria-label="Committer"></dialog>
 </nav>

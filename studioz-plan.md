@@ -634,6 +634,30 @@ only frame pages are compared (not the outline or dividers), figures'
 and labs' before/after, and the comparison ignores a theme placing its
 frame number elsewhere.
 
+**Increment 6: done** (2026-10-10): Commit, a dialog opened from the
+Changes panel: the files changed, grouped as in the panel and all chosen
+(file-level selection; a file that changed after the dialog opened is
+listed, never committed unseen), the checks' verdict from the Problems
+panel, the message, and, when the selection changes one language of a
+fr/en pair only, the hook's two ways out but porting: "pending" or
+"nothing to port, because…", written as the `Lang-sync` trailer. The rule
+is deckz's own (`i18n_stale.one_sided`, now shared by the commit-msg hook,
+CI, `deckz status` and the agent hooks, and by the Changes panel instead of
+its own copy); finding the pairs takes 1.2 s on slides, so studioz keeps
+them while the workspace's layout stays the same. studioz commits the
+chosen files as they are on disk (whatever was staged in a terminal is
+unstaged first), with git's hooks run by the workspace's own deckz; a
+refusal is shown with deckz's message and fix, the message kept. The deck
+on screen's live build becomes the new commit's baseline when the commit
+leaves no change. Refused during a rebase, a merge or a conflict.
+Measured on slides: the dialog opens in 1.8 s the first time, 0.2 s
+after; a commit takes 20 s, nearly all of it `deckz check --staged` (16 s);
+a `{=latex}` block was refused with `raw-latex`'s message. It exposed a
+deckz gap: a broken Jinja tag (`{{ x`) passes `deckz check`, and fails only
+at build. Left: the agent drafting the message, "translate now" and "ask
+the agent to fix it" (phase 3); the draft is lost when the page changes;
+the commit runs while the dialog waits (20 s), not in the job queue.
+
 ### Phase 3: the agent in a workspace
 
 The conversation panel, question forms, comments on frames as instructions,

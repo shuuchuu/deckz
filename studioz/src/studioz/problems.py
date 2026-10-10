@@ -57,6 +57,8 @@ class Problem:
 class Group:
     title: str
     problems: tuple[Problem, ...]
+    key: str = ""
+    """`deckz status`'s section key, for its groups."""
 
 
 StatusReport = Report[tuple[Group, ...]]
@@ -96,14 +98,15 @@ def status_command(workspace: Path, since: str | None) -> list[str]:
 def _groups(workspace: Path, sections: list[dict]) -> tuple[Group, ...]:
     groups = []
     for section in sections:
-        title = _TITLES.get(section.get("key", ""))
+        key = section.get("key", "")
+        title = _TITLES.get(key)
         if title is None or not section["items"]:
             continue
         problems = []
         for item in section["items"]:
             file, line = locate(workspace, item["text"])
             problems.append(Problem(item["text"], item.get("fix", ""), file, line))
-        groups.append(Group(title, tuple(problems)))
+        groups.append(Group(title, tuple(problems), key))
     return tuple(groups)
 
 
