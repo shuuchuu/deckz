@@ -606,7 +606,8 @@ def commit(request: Request, studio: StudioDep, name: str, draft: DraftDep) -> R
     if isinstance(result, commits.Refused):
         return _commit_dialog(request, studio, found, draft, refused=result.output)
     _keep_baseline(studio, path, draft)
-    fresh = Draft(frozenset(), frozenset(), "", "", "", draft.deck, draft.lang)
+    # What the person left out stays out; the message starts over.
+    fresh = Draft(draft.listed, draft.paths, "", "", "", draft.deck, draft.lang)
     response = _commit_dialog(request, studio, found, fresh, committed=result)
     response.headers["HX-Trigger"] = "workspace-changed, comparison-refresh"
     return response

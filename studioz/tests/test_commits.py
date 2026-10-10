@@ -99,8 +99,8 @@ def test_commit_only_the_files_chosen(committer: TestClient, workspace: Path) ->
     assert _git(workspace, "log", "-1", "--format=%an").strip() == "Person"
     left = {change.path: change.status for change in changes(workspace)}
     assert left == {"README.md": "??", "other.txt": "??"}
-    # What's left is listed, chosen, with an empty message.
-    assert 'name="path" value="README.md" checked' in response.text
+    # What's left is listed, still not chosen, with an empty message.
+    assert 'name="path" value="README.md">' in response.text
     assert "</textarea>" in response.text
     assert ">Update the notes" not in response.text
 
