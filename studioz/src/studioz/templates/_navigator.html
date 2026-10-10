@@ -10,6 +10,10 @@
     <li class="empty">Aucune formation.</li>
     {% endfor %}
   </ul>
+  <section class="problems" id="problems" hx-swap="outerHTML" hx-trigger="load"
+           hx-get="/espaces/{{ workspace.name }}/problemes{% if deck %}?formation={{ deck }}&lang={{ lang }}{% endif %}">
+    <h2>Problèmes</h2>
+  </section>
   <h2>Modifications <span class="count">{{ worktree.changes | length }}</span></h2>
   <ul class="changes">
     {% for line in worktree.changes %}

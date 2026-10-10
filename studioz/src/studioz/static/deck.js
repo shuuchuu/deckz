@@ -81,6 +81,14 @@ const editor = new SourceEditor(
   showNotice,
 );
 
+// Opens a file at a line in the editor, keeping `page` in view.
+function openSource(file, line, page) {
+  notice.textContent = "";
+  // The editor opening narrows the PDF.
+  clicked = editor.pane.hidden ? page : null;
+  editor.open(file, line);
+}
+
 container.addEventListener("click", (event) => {
   // Following a link, or selecting text, isn't asking for the source.
   if (event.target.closest("a") || !window.getSelection().isCollapsed) return;
@@ -88,10 +96,7 @@ container.addEventListener("click", (event) => {
   if (!page) return;
   const frame = frames.get(Number(page.dataset.pageNumber));
   if (frame?.file) {
-    notice.textContent = "";
-    // The editor opening narrows the PDF.
-    clicked = editor.pane.hidden ? frame.page : null;
-    editor.open(frame.file, frame.line);
+    openSource(frame.file, frame.line, frame.page);
   } else if (frame) {
     showNotice(`La source du cadre « ${frame.title} » est introuvable.`);
   } else {
@@ -143,7 +148,22 @@ async function show(url) {
   loading = false;
 }
 
+// The Problems panel's links (`_problems.html`).
+document.addEventListener("click", (event) => {
+  const link = event.target.closest("a.problem");
+  if (!link) return;
+  event.preventDefault();
+  const page = Number(link.dataset.page) || null;
+  if (page) viewer.scrollPageIntoView({ pageNumber: page });
+  if (link.dataset.file) {
+    openSource(link.dataset.file, Number(link.dataset.line) || 1, page);
+  }
+});
+
 function setState(state, lines = []) {
+  if (state !== build.dataset.state && (state === "built" || state === "failed")) {
+    document.body.dispatchEvent(new Event("problems-refresh"));
+  }
   build.dataset.state = state;
   build.textContent = LABELS[state] ?? state;
   errors.hidden = state !== "failed";

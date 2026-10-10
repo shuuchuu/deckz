@@ -1,0 +1,27 @@
+<section class="problems" id="problems" hx-get="{{ url }}" hx-swap="outerHTML"
+         hx-trigger="problems-refresh from:body{% if report.running %}, every 2s{% endif %}">
+  <h2>Problèmes <span class="count">{{ count }}</span>
+    {% if report.running %}<span class="checking">vérification…</span>{% endif %}</h2>
+  {% for group in groups %}
+  <h3>{{ group.title }}</h3>
+  <ul>
+    {% for problem in group.problems %}
+    <li>
+      {% if deck and (problem.file or problem.page) %}
+      <a href="#" class="problem"
+         {% if problem.file %}data-file="{{ problem.file }}"{% endif %}
+         {% if problem.line %}data-line="{{ problem.line }}"{% endif %}
+         {% if problem.page %}data-page="{{ problem.page }}"{% endif %}>{{ problem.text }}</a>
+      {% else %}
+      <span class="problem">{{ problem.text }}</span>
+      {% endif %}
+      {% if problem.fix %}<span class="fix">{{ problem.fix }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">{% if report.checked %}Aucun problème.{% else %}Vérification de l'espace…{% endif %}</p>
+  {% endfor %}
+  {% if report.error %}<p class="error">La vérification a échoué : {{ report.error }}</p>{% endif %}
+  {% if report.checked %}<p class="hint">Espace vérifié {{ report.checked | ago }}{% if report.running %}, nouvelle vérification en cours{% endif %}.</p>{% endif %}
+</section>

@@ -204,6 +204,8 @@ export class SourceEditor {
     }
     this.version = (await response.json()).version;
     this.saved = text;
+    // The Problems panel checks the workspace again.
+    document.body.dispatchEvent(new Event("problems-refresh"));
     this.say(null);
     this.setStatus(this.dirty ? "modified" : "saved");
   }

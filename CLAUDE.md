@@ -412,6 +412,11 @@ what the build recorded, never compiling in studioz's process) in the editor
 beside it (`static/editor.js`, CodeMirror), which saves through
 `studioz.sources`: only content and deck files, and never over a version of
 the file the editor didn't read.
+`studioz.problems` fills the navigator's Problems panel: the workspace's own
+`deckz status --json --no-decks`, run again in the background whenever the
+workspace's files changed (`git status`), plus the deck on screen's build
+failure and the frames its build recorded as shrunk; each problem naming a
+file links to the editor.
 Its tests are in `studioz/tests/`, driving the app with FastAPI's test client
 on a temporary repository, and the watches with a fake `deckz` printing the
 same log lines.

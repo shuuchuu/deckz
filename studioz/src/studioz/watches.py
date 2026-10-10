@@ -96,14 +96,20 @@ def watch_command(workspace: Path, lang: Lang) -> list[str]:
     ]
 
 
-def _environment() -> dict[str, str]:
-    environment = dict(os.environ)
+def environment() -> dict[str, str]:
+    """The environment a workspace's own deckz runs in.
+
+    Returns:
+        studioz's, without its virtual environment, and with lines wide \
+        enough not to wrap.
+    """
+    variables = dict(os.environ)
     # studioz's own environment (the main checkout's) isn't the workspace's.
-    environment.pop("VIRTUAL_ENV", None)
+    variables.pop("VIRTUAL_ENV", None)
     # Wide enough that Rich doesn't wrap a log line.
-    environment["COLUMNS"] = "400"
-    environment["PYTHONUNBUFFERED"] = "1"
-    return environment
+    variables["COLUMNS"] = "400"
+    variables["PYTHONUNBUFFERED"] = "1"
+    return variables
 
 
 class Watch:
@@ -125,7 +131,7 @@ class Watch:
         self._process = subprocess.Popen(
             command,
             cwd=deck,
-            env=_environment(),
+            env=environment(),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,

@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
-from studioz.app import create_app, watch_events
-from studioz.watches import Watches
+from studioz.app import _state, create_app, watch_events
+from studioz.watches import Snapshot, State, Watches
 
 ORIGIN = {"Origin": "http://localhost:8421"}
 DECK = "/espaces/demo/formations/client/abc"
@@ -99,3 +99,12 @@ def test_closing_studioz_stops_its_watches(
         watch = manager.watch(workspace, workspace / "client" / "abc", "fr")
 
     assert not watch.alive()
+
+
+def test_errors_name_files_relative_to_the_workspace(workspace: Path) -> None:
+    failed = Snapshot(State.FAILED, (f"{workspace}/content/x.md:3: oops",), 0, 0)
+
+    assert _state(failed, workspace) == {
+        "state": "failed",
+        "errors": ["content/x.md:3: oops"],
+    }

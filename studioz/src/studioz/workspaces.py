@@ -65,6 +65,16 @@ def upstream(main: Path) -> str | None:
     return _git(main, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
 
 
+def base_branch(main: Path) -> str | None:
+    """What workspaces' changes count from: the upstream branch, else main's.
+
+    Returns:
+        A branch name, None if the main checkout has no branch checked out.
+    """
+    branch = _git(main, "rev-parse", "--abbrev-ref", "HEAD")
+    return upstream(main) or (branch if branch and branch != "HEAD" else None)
+
+
 def last_use(path: Path) -> datetime:
     """When studioz last opened the workspace, else its last commit's date.
 

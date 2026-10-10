@@ -595,6 +595,24 @@ queries before compiling. Left for later increments: the post-edit checks of
 a saved file (Problems), the reverse way (from the editor to the page), and
 the other files' editors (figures, `deck.yml` from the navigator).
 
+**Increment 4: done** (2026-10-10): the navigator's Problems panel, live.
+Workspace-wide: the workspace's own `deckz status` (its content checks, what
+its changes leave to translate, labs and videos not published), run in the
+background when the page opens and again whenever the workspace's files
+changed (`git status`, 20 ms, decides), so after each save; it takes 13 s on
+slides, the checks being most of it. For the deck on screen: its build's
+failure, and the frames its build shrank to fit. Each problem naming a file
+opens it in the editor at its line, and a shrunk frame also brings the PDF
+to its page. deckz changes: every compilation now records the theme's
+shrunk-frame and table markers with the frames (`<main>.markers.json`), so
+`deckz check overflow` gives each shrunk frame's line and no longer
+compiles (0.6 s instead of 2.6 s on the Fortinet deck, both languages);
+`deckz status` sections carry a stable `key`, and `--no-decks` skips the
+built decks (8 s when a change reaches many decks), which studioz doesn't
+show: they are for the build and upload increment. Left: deckz's messages
+are in English in a French UI, and the lab checks (6 of the 10 s) each read
+every notebook again.
+
 ### Phase 3: the agent in a workspace
 
 The conversation panel, question forms, comments on frames as instructions,

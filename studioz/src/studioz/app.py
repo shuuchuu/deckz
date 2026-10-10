@@ -28,7 +28,7 @@ from deckz.exceptions import DeckzError, WorktreeError
 from deckz.models import Lang
 from deckz.worktrees import main_checkout, remove
 
-from . import __version__, sources, workspaces
+from . import __version__, problems, sources, workspaces
 from .local_only import local_only
 from .watches import Snapshot, Watch, Watches, handout
 
@@ -44,6 +44,7 @@ class Studio:
     """The repository's main checkout, which studioz never writes to."""
     settings: GlobalSettings
     watches: Watches
+    statuses: problems.Statuses
 
     def workspace(self, name: str) -> workspaces.Workspace:
         found = workspaces.find(self.settings, name)
@@ -172,8 +173,10 @@ def _event(name: str, data: object) -> str:
     return f"event: {name}\ndata: {json.dumps(data)}\n\n"
 
 
-def _state(snapshot: Snapshot) -> dict[str, object]:
-    return {"state": snapshot.state.value, "errors": list(snapshot.errors)}
+def _state(snapshot: Snapshot, workspace: Path) -> dict[str, object]:
+    # deckz names files by their absolute path.
+    errors = [line.replace(f"{workspace}/", "") for line in snapshot.errors]
+    return {"state": snapshot.state.value, "errors": errors}
 
 
 async def watch_events(
@@ -194,7 +197,7 @@ async def watch_events(
         quiet = 0.0
         while not await disconnected():
             snapshot = watch.snapshot()
-            if (state := _state(snapshot)) != last_state:
+            if (state := _state(snapshot, watch.workspace)) != last_state:
                 last_state = state
                 quiet = 0.0
                 yield _event("state", state)
@@ -287,6 +290,44 @@ def save_source(
     return JSONResponse({"version": saved})
 
 
+@router.get("/espaces/{name}/problemes", response_class=HTMLResponse)
+def problems_panel(
+    request: Request,
+    studio: StudioDep,
+    name: str,
+    formation: str | None = None,
+    lang: Lang = "fr",
+) -> Response:
+    """The workspace's Problems panel, and those of the deck on screen.
+
+    Returns:
+        The panel, which reloads itself while `deckz status` runs, and on \
+        a `problems-refresh` event.
+    """
+    found = studio.workspace(name)
+    path = found.worktree.path
+    report = studio.statuses.report(path)
+    groups: list[problems.Group | None] = []
+    if formation is not None:
+        _, directory = studio.deck(name, formation)
+        watch = studio.watches.get(path)
+        if watch and watch.deck == directory and watch.lang == lang:
+            groups.append(problems.build_problems(path, watch.snapshot()))
+        groups.append(problems.shrunk(path, directory, lang))
+    groups += report.groups
+    shown = [group for group in groups if group is not None]
+    query = f"?formation={quote(formation)}&lang={lang}" if formation else ""
+    return _render(
+        request,
+        "_problems.html",
+        url=f"/espaces/{quote(name)}/problemes{query}",
+        groups=shown,
+        count=sum(len(group.problems) for group in shown),
+        report=report,
+        deck=formation,
+    )
+
+
 @router.get("/espaces/{name}/taille", response_class=HTMLResponse)
 def size(studio: StudioDep, name: str) -> str:
     return _size(workspaces.size(studio.workspace(name).worktree.path))
@@ -313,18 +354,28 @@ async def _stop_idle_watches(watches: Watches) -> None:
         await asyncio.to_thread(watches.stop_idle)
 
 
-def create_app(repository: Path, watches: Watches | None = None) -> FastAPI:
+def create_app(
+    repository: Path,
+    watches: Watches | None = None,
+    statuses: problems.Statuses | None = None,
+) -> FastAPI:
     """The studioz application for the deckz repository `repository`.
 
     Args:
         repository: Any checkout of the repository.
         watches: The live builds' manager (tests replace deckz's command).
+        statuses: The workspaces' `deckz status` runs (tests replace it too).
 
     Returns:
         The application.
     """
     main = main_checkout(repository)
-    studio = Studio(main, GlobalSettings.from_yaml(main), watches or Watches())
+    studio = Studio(
+        main,
+        GlobalSettings.from_yaml(main),
+        watches or Watches(),
+        statuses or problems.Statuses(workspaces.base_branch(main)),
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -336,6 +387,7 @@ def create_app(repository: Path, watches: Watches | None = None) -> FastAPI:
             with suppress(asyncio.CancelledError):
                 await reaper
             await asyncio.to_thread(studio.watches.stop_all)
+            studio.statuses.stop_all()
 
     app = FastAPI(
         title="studioz",
