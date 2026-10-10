@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, overload
 
 from ..exceptions import VideoSceneError
 from ..models import Lang
+from ..stamps import digest, is_fresh, python_sources
 
 if TYPE_CHECKING:
     from ..configuring.settings import GlobalSettings
@@ -38,6 +39,21 @@ class Scene:
     languages: tuple[Lang, ...]
     """Languages the scene has on-screen text for; empty if it has none \
     (one render for every language)."""
+    import_root: Path | None = None
+    """The directory the module's absolute imports resolve against \
+    (`scenes_dir`'s parent, see `rendering.render_one`), for `sources`."""
+
+    def sources(self) -> tuple[Path, ...]:
+        """The files its renders are made from, which their stamps cover.
+
+        Returns:
+            Its module, then the modules under `import_root` it imports, \
+            transitively (`deckz.stamps.python_sources`).
+        """
+        roots = (self.module.parent,)
+        if self.import_root is not None:
+            roots += (self.import_root,)
+        return python_sources(self.module, roots)
 
 
 @dataclass(frozen=True)
@@ -123,7 +139,15 @@ def scenes(settings: "GlobalSettings") -> list[Scene]:
                 languages = _languages(call, f"{module}:{node.lineno}")
                 name = re.sub(r"(?<!^)(?=[A-Z])", "-", node.name).lower()
                 path = module.parent.relative_to(scenes_dir) / name
-                found.append(Scene(module, node.name, path.as_posix(), languages))
+                found.append(
+                    Scene(
+                        module,
+                        node.name,
+                        path.as_posix(),
+                        languages,
+                        scenes_dir.parent,
+                    )
+                )
     return found
 
 
@@ -186,13 +210,13 @@ def out_of_date(render: Render, wanted: str) -> bool:
     """Whether `render` must be (re-)rendered at quality `wanted`.
 
     Returns:
-        True if it or its poster is missing, older than its scene's \
-        module, or at another quality.
+        True if it or its poster is missing, if its stamp (`deckz.stamps`) \
+        doesn't match its scene's sources, or if it's at another quality.
     """
     file = render.file
+    sources = render.scene.sources()
     return (
-        not file.is_file()
-        or not file.with_suffix(".png").is_file()
-        or file.stat().st_mtime_ns < render.scene.module.stat().st_mtime_ns
+        not file.with_suffix(".png").is_file()
+        or not is_fresh(file, digest(sources), sources)
         or quality(file) != wanted
     )

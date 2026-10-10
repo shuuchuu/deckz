@@ -12,6 +12,7 @@ from logging import getLogger
 from pathlib import Path
 
 from ..exceptions import DeckzError
+from ..stamps import digest, is_fresh, stamp_path, write_stamp
 from ..utils import copy_file_if_changed
 from .protocols import AssetsBuilderProtocol
 
@@ -25,7 +26,9 @@ class TypstFiguresAssetsBuilder(AssetsBuilderProtocol):
     (`/img`, `/typst`, ...) the way deck content does: their sources, every
     `_`-prefixed library and any non-`.typ` file alongside them (e.g. `.yml`
     credits) are mirrored into `output_dir` first. Typst draws SVG text as
-    paths: no font to ship, but no selectable text either.
+    paths: no font to ship, but no selectable text either. Each SVG's
+    stamp (`deckz.stamps`) covers its figure, every library and
+    `extra_watched_files`: a change of any of them rebuilds it.
     """
 
     def __init__(
@@ -50,7 +53,7 @@ class TypstFiguresAssetsBuilder(AssetsBuilderProtocol):
             font_paths: Extra font directories passed to the Typst compiler.
             languages: Languages each figure is compiled once per.
             extra_watched_files: Extra files (e.g. a shared theme) whose \
-                mtime, like a library's, forces every figure to rebuild.
+                change, like a library's, rebuilds every figure.
         """
         self._input_dir = input_dir
         self._output_dir = output_dir
@@ -78,32 +81,27 @@ class TypstFiguresAssetsBuilder(AssetsBuilderProtocol):
             for figure in figures
             for lang in self._languages
         }
+        keep = {*svgs, *map(stamp_path, svgs)}
         for path in self._output_dir.rglob("*"):
             if (
                 path.is_file()
-                and path not in svgs
+                and path not in keep
                 and path.relative_to(self._output_dir) not in sources
             ):
                 path.unlink()
 
         # A shared library or theme changes every figure.
-        shared = max(
-            (
-                path.stat().st_mtime_ns
-                for path in (
-                    *(self._input_dir / r for r in sources if r.name.startswith("_")),
-                    *self._extra_watched_files,
-                )
-            ),
-            default=0,
+        shared_inputs = (
+            *sorted(self._input_dir / r for r in sources if r.name.startswith("_")),
+            *self._extra_watched_files,
         )
-        to_build = [
-            (svg, figure, lang)
-            for svg, (figure, lang) in svgs.items()
-            if not svg.exists()
-            or svg.stat().st_mtime_ns
-            < max(shared, (self._input_dir / figure).stat().st_mtime_ns)
-        ]
+        shared = digest(shared_inputs)
+        to_build = []
+        for svg, (figure, lang) in svgs.items():
+            source = self._input_dir / figure
+            stamp = digest([source], shared, lang)
+            if not is_fresh(svg, stamp, [source, *shared_inputs]):
+                to_build.append((svg, figure, lang, stamp))
         if not to_build:
             return
         self._logger.info("Compiling %d Typst figure(s) to SVG", len(to_build))
@@ -126,7 +124,7 @@ class TypstFiguresAssetsBuilder(AssetsBuilderProtocol):
     def _svg_path(self, figure: Path, lang: str) -> Path:
         return self._output_dir / figure.with_suffix(f".{lang}.svg")
 
-    def _compile(self, svg: Path, figure: Path, lang: str) -> str | None:
+    def _compile(self, svg: Path, figure: Path, lang: str, stamp: str) -> str | None:
         import typst
 
         try:
@@ -145,4 +143,5 @@ class TypstFiguresAssetsBuilder(AssetsBuilderProtocol):
             )
         except typst.TypstError as error:
             return f"{figure} ({lang}):\n{error.diagnostic or error}"
+        write_stamp(svg, stamp)
         return None

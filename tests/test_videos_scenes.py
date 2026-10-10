@@ -6,6 +6,7 @@ from pytest import raises
 
 from deckz.configuring.settings import GlobalPaths, GlobalSettings
 from deckz.exceptions import VideoSceneError
+from deckz.stamps import digest, write_stamp
 from deckz.videos.scenes import out_of_date, quality, renders, scenes, video_file
 
 
@@ -206,3 +207,48 @@ def test_out_of_date_true_when_quality_differs(tmp_path: Path) -> None:
 
 def test_quality_is_none_without_a_stamp(tmp_path: Path) -> None:
     assert quality(tmp_path / "demo.mp4") is None
+
+
+def _rendered(render_file: Path, quality: str = "h") -> None:
+    render_file.parent.mkdir(parents=True, exist_ok=True)
+    render_file.write_bytes(b"video")
+    render_file.with_suffix(".png").write_bytes(b"poster")
+    render_file.with_suffix(".quality").write_text(quality, encoding="utf8")
+
+
+def test_out_of_date_false_when_stamped_whatever_the_times(tmp_path: Path) -> None:
+    # A checkout makes the module look newer than its render.
+    init_repository(str(tmp_path))
+    module = tmp_path / "figures" / "scenes" / "nn" / "demo.py"
+    _write(module, _SIMPLE_SCENE)
+    settings = _settings(tmp_path)
+    scene = scenes(settings)[0]
+    render = renders(settings.paths.videos_dir, scene)[0]
+    _rendered(render.file)
+    write_stamp(render.file, digest(scene.sources()))
+    future = render.file.stat().st_mtime_ns + 2_000_000_000
+    os.utime(module, ns=(future, future))
+
+    assert not out_of_date(render, "h")
+
+
+def test_out_of_date_true_when_an_imported_helper_changed(tmp_path: Path) -> None:
+    init_repository(str(tmp_path))
+    scenes_dir = tmp_path / "figures" / "scenes"
+    _write(scenes_dir / "__init__.py", "")
+    lesson = scenes_dir / "lesson.py"
+    _write(lesson, "TITLE = 1\n")
+    _write(
+        scenes_dir / "nn" / "demo.py",
+        "from scenes.lesson import TITLE\n" + _SIMPLE_SCENE,
+    )
+    settings = _settings(tmp_path)
+    scene = scenes(settings)[0]
+    render = renders(settings.paths.videos_dir, scene)[0]
+    _rendered(render.file)
+    write_stamp(render.file, digest(scene.sources()))
+
+    assert lesson in scene.sources()
+    assert not out_of_date(render, "h")
+    lesson.write_text("TITLE = 2\n", encoding="utf8")
+    assert out_of_date(render, "h")

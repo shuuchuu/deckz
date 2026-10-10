@@ -18,6 +18,7 @@ from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
 from ..exceptions import MissingExtraError
+from ..stamps import digest, write_stamp
 from .scenes import DEFAULT_LANGUAGE, Render
 
 if TYPE_CHECKING:
@@ -39,12 +40,14 @@ def ensure_manim_installed() -> None:
 
 
 def render_one(render: Render, quality: str, scenes_dir: Path) -> str | None:
-    """Render one video and its poster frame, and stamp its quality.
+    """Render one video and its poster frame, and stamp its quality and sources.
 
     Returns:
         An error message, or None if it succeeded.
     """
     scene, language, video = render.scene, render.language, render.file
+    # Digested before rendering: an edit during the render makes it stale.
+    stamp = digest(scene.sources())
     label = f"{scene.video}" + (f" ({language})" if language else "")
     with TemporaryDirectory() as media_dir:
         env = {
@@ -109,6 +112,7 @@ def render_one(render: Render, quality: str, scenes_dir: Path) -> str | None:
     if poster.returncode != 0:
         return f"{label}: no poster frame: {poster.stderr.strip()}"
     video.with_suffix(".quality").write_text(quality, encoding="utf8")
+    write_stamp(video, stamp)
     return None
 
 

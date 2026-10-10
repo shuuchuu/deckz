@@ -15,9 +15,10 @@ def render(
 ) -> None:
     """Render the registered scenes that are out of date into videos.
 
-    Only the renders missing, older than their scene's module, or at
-    another quality than QUALITY are rendered (in parallel), unless
-    --force. Needs the `deckz[videos]` extra (Manim) and `ffmpeg`.
+    Only the renders missing, at another quality than QUALITY, or made
+    before a change of their scene's module or of a repo module it imports
+    are rendered (in parallel), unless --force. Needs the `deckz[videos]`
+    extra (Manim) and `ffmpeg`.
 
     Args:
         scene: Only render this video (its path, as `deckz videos list`

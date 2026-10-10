@@ -528,6 +528,16 @@ layout](#repository-layout)). `watched_dirs` only matters for `deckz run
 assets --watch`: it tells the watch loop which source directories should
 trigger a rebuild.
 
+`build_assets` runs before every build, so it should only rebuild what
+changed. Don't decide that from file times: a git checkout gives every file
+it writes the current time, so after a clone or a branch switch, sources look
+newer than their outputs (and committed outputs older than their sources).
+`deckz.stamps` decides from contents instead: `digest` the inputs, rebuild
+unless `is_fresh(output, stamp, inputs)`, then `write_stamp(output, stamp)`,
+which writes `<output>.stamp`. Commit the stamps of committed outputs, so a
+fresh clone rebuilds none of them. `python_sources` lists a Python module and
+the repo's modules it imports, the inputs of an output a module builds.
+
 `deckz` ships one ready-made builder, `TypstFiguresAssetsBuilder`
 (`deckz.components.typst_figures_builder`), for a Typst-themed repo whose
 figures are Typst sources compiled to SVG: wire it into your own
@@ -1000,12 +1010,15 @@ The main commands:
 - `deckz videos render [SCENE] [--quality] [--force]` (extra: `deckz[videos]`,
   Manim, plus `ffmpeg`): render every `@register_scene` class under
   `videos.scenes_dir` that's missing, stale, or at another quality than
-  `--quality` (default `videos.published_quality`), in parallel. A scene
+  `--quality` (default `videos.published_quality`), in parallel. A render
+  is stale when its scene's module, or a module under `scenes_dir`'s parent
+  it imports, has changed since (a `.stamp` next to the render, see
+  `deckz.stamps`). A scene
   is marked with `deckz.videos.register_scene` (optionally
   `languages=("fr", "en")` for one with on-screen text, rendered once per
   language). SCENE restricts to one video (its path, as `deckz videos
   list` prints it, or its class name); `--force` re-renders even what
-  looks up to date.
+  looks up to date (after editing a data file a scene reads, say).
 - `deckz videos list`: list every registered scene's renders, one per
   line (quality stamp or `-`, path under `videos.videos_dir`, class name).
 - `deckz videos publish [--break-published-links]`: replace the videos

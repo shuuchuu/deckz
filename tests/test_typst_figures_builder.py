@@ -25,6 +25,12 @@ def _touch_future(path: Path, after_ns: int) -> None:
     os.utime(path, ns=(future, future))
 
 
+def _touch_past(path: Path, than: Path) -> None:
+    # Older than `than`: only a content check can see `path` changed.
+    past = than.stat().st_mtime_ns - 2_000_000_000
+    os.utime(path, ns=(past, past))
+
+
 def test_build_assets_compiles_one_svg_per_language(tmp_path: Path) -> None:
     assets_dir, input_dir, output_dir = _make_layout(tmp_path)
     builder = TypstFiguresAssetsBuilder(input_dir, output_dir, assets_dir)
@@ -35,6 +41,7 @@ def test_build_assets_compiles_one_svg_per_language(tmp_path: Path) -> None:
     assert (output_dir / "fig.en.svg").exists()
     assert (output_dir / "fig.yml").exists()
     assert (output_dir / "_svg.typ").exists()
+    assert (output_dir / "fig.fr.svg.stamp").exists()
     assert not (output_dir / "_lib.fr.svg").exists()
 
 
@@ -60,12 +67,55 @@ def test_build_assets_rebuilds_on_figure_change(tmp_path: Path) -> None:
     assets_dir, input_dir, output_dir = _make_layout(tmp_path)
     builder = TypstFiguresAssetsBuilder(input_dir, output_dir, assets_dir)
     builder.build_assets()
-    before = (output_dir / "fig.fr.svg").stat().st_mtime_ns
-    _touch_future(input_dir / "fig.typ", before)
+    before = (output_dir / "fig.fr.svg").read_bytes()
+    (input_dir / "fig.typ").write_text("Changed\n", encoding="utf8")
+    _touch_past(input_dir / "fig.typ", output_dir / "fig.fr.svg")
 
     builder.build_assets()
 
-    assert (output_dir / "fig.fr.svg").stat().st_mtime_ns > before
+    assert (output_dir / "fig.fr.svg").read_bytes() != before
+
+
+def test_build_assets_skips_a_figure_only_touched(tmp_path: Path) -> None:
+    # A checkout or a copy changes file times, not contents.
+    assets_dir, input_dir, output_dir = _make_layout(tmp_path)
+    builder = TypstFiguresAssetsBuilder(input_dir, output_dir, assets_dir)
+    builder.build_assets()
+    before = (output_dir / "fig.fr.svg").stat().st_mtime_ns
+    _touch_future(input_dir / "fig.typ", before)
+    _touch_future(input_dir / "_lib.typ", before)
+
+    builder.build_assets()
+
+    assert (output_dir / "fig.fr.svg").stat().st_mtime_ns == before
+
+
+def test_build_assets_stamps_an_unstamped_up_to_date_figure(tmp_path: Path) -> None:
+    # An SVG built before stamps existed isn't rebuilt if it's newer.
+    assets_dir, input_dir, output_dir = _make_layout(tmp_path)
+    builder = TypstFiguresAssetsBuilder(input_dir, output_dir, assets_dir)
+    builder.build_assets()
+    stamp = output_dir / "fig.fr.svg.stamp"
+    stamp.unlink()
+    before = (output_dir / "fig.fr.svg").stat().st_mtime_ns
+
+    builder.build_assets()
+
+    assert (output_dir / "fig.fr.svg").stat().st_mtime_ns == before
+    assert stamp.is_file()
+
+
+def test_build_assets_rebuilds_on_library_change(tmp_path: Path) -> None:
+    assets_dir, input_dir, output_dir = _make_layout(tmp_path)
+    builder = TypstFiguresAssetsBuilder(input_dir, output_dir, assets_dir)
+    builder.build_assets()
+    before = (output_dir / "fig.fr.svg").stat().st_mtime_ns
+    (input_dir / "_lib.typ").write_text("#let unused = 2\n", encoding="utf8")
+    _touch_past(input_dir / "_lib.typ", output_dir / "fig.fr.svg")
+
+    builder.build_assets()
+
+    assert (output_dir / "fig.fr.svg").stat().st_mtime_ns != before
 
 
 def test_build_assets_rebuilds_on_extra_watched_file_change(tmp_path: Path) -> None:
@@ -77,11 +127,12 @@ def test_build_assets_rebuilds_on_extra_watched_file_change(tmp_path: Path) -> N
     )
     builder.build_assets()
     before = (output_dir / "fig.fr.svg").stat().st_mtime_ns
-    _touch_future(theme, before)
+    theme.write_text("// changed\n", encoding="utf8")
+    _touch_past(theme, output_dir / "fig.fr.svg")
 
     builder.build_assets()
 
-    assert (output_dir / "fig.fr.svg").stat().st_mtime_ns > before
+    assert (output_dir / "fig.fr.svg").stat().st_mtime_ns != before
 
 
 def test_build_assets_removes_stale_output(tmp_path: Path) -> None:
@@ -95,6 +146,7 @@ def test_build_assets_removes_stale_output(tmp_path: Path) -> None:
     builder.build_assets()
 
     assert not (output_dir / "fig.fr.svg").exists()
+    assert not (output_dir / "fig.fr.svg.stamp").exists()
     assert not (output_dir / "fig.en.svg").exists()
     assert not (output_dir / "fig.yml").exists()
 

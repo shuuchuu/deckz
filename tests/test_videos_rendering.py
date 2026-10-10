@@ -7,7 +7,7 @@ from pytest import MonkeyPatch, raises
 from deckz.exceptions import MissingExtraError
 from deckz.videos import rendering
 from deckz.videos.rendering import ensure_manim_installed, render_all, render_one
-from deckz.videos.scenes import Render, Scene
+from deckz.videos.scenes import Render, Scene, out_of_date
 
 _DEMO_SCENE = (
     "from manim import Circle, Scene\n\n\n"
@@ -62,6 +62,7 @@ def test_render_one_renders_a_real_scene(tmp_path: Path) -> None:
     assert video.is_file()
     assert video.with_suffix(".png").is_file()
     assert video.with_suffix(".quality").read_text(encoding="utf8") == "l"
+    assert not out_of_date(render, "l")
 
 
 def test_render_one_reports_an_error_for_a_failing_scene(tmp_path: Path) -> None:

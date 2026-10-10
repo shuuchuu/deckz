@@ -234,10 +234,10 @@ A deckz command, usable without studioz: `deckz worktree add <name> [--base <rev
    `core.hooksPath` is the committed, relative `.githooks`, so the worktree's own
    copy runs).
 
-With hash stamps, a seeded output whose source changed in the main checkout's working
-tree is simply rebuilt in the workspace. Before stamps exist, step 2 copies only the outputs
-whose sources match the base commit in the main checkout's working tree, and resets
-their mtimes after the checkout. Good enough for the spike, not for good.
+With hash stamps (done), a seeded output whose source changed in the main checkout's
+working tree is simply rebuilt in the workspace. Step 2 copies each output with its
+`.stamp`, and skips an output that has none: a fresh copy is newer than the
+workspace's sources, so `deckz.stamps` would adopt it unchecked.
 
 ## Workspaces
 
@@ -497,9 +497,14 @@ earlier work: about 2 GB each, `typst_memory_max` at 5 GiB).
    **Reproducible plots: done** (slides a1713041, 2026-10-10): each plot gets fresh
    rcParams and a fixed NumPy seed, no creation date (Kaleido's is overwritten), and
    the plots seed their own randomness; all regenerated once, every one rebuilding to
-   the same bytes except `membership-time` (it times real code). Still to do: the
-   hash stamps, which stop the rebuild itself; bytes are only guaranteed on one
-   machine (fonts such as `mpl/scales`' Roboto, numeric libraries).
+   the same bytes except `membership-time` (it times real code).
+   **Hash stamps: done** (2026-10-10): `deckz.stamps` (`<output>.stamp`, a digest of
+   the inputs' bytes; an unstamped output newer than its inputs is adopted, so the
+   switch rebuilt nothing). The Typst figures (figure, libraries, theme, language),
+   the video renders (the scene and the repo modules it imports, closing the
+   `--force` gap) and slides' plots and SVG mirrors use it; the plots' stamps are
+   committed, so a fresh clone rebuilds none and cross-machine bytes no longer
+   matter. Seeding a workspace copies the stamps with the outputs.
 2. `deckz worktree add/remove` and `setup.seed`.
 3. A machine-wide compilation limit (`typst_machine_compilations`, flock slots in the
    user cache dir).
