@@ -1,6 +1,7 @@
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from deckz.agent_hooks import (
     bash_denial,
@@ -380,3 +381,61 @@ def test_session_start_keeps_an_existing_snapshot(tmp_path: Path) -> None:
 
     after = json.loads(state_file.read_text(encoding="utf8"))
     assert after == before
+
+
+_RAW_LATEX = "# Topic\n\n```{=latex}\nraw\n```\n"
+
+
+def _both_sides_committed(repo: Path) -> tuple[GlobalSettings, Path, Path]:
+    fr, en = _pair(repo)
+    _write(fr, "# Topic\n")
+    _write(en, "# Topic\n")
+    _commit(repo, "Add topic")
+    return _settings(repo), fr, en
+
+
+def test_stop_report_checks_a_content_file_written_without_the_edit_tool(
+    tmp_path: Path,
+) -> None:
+    settings, fr, en = _both_sides_committed(_init(tmp_path))
+    session_start(settings, {"session_id": "s1"})
+    # E.g. `cat >> file` from Bash: no PostToolUse hook saw it.
+    _write(fr, _RAW_LATEX)
+    _write(en, "# Topic\n\nUpdated.\n")
+
+    report = stop_report(settings, {"session_id": "s1"})
+
+    assert report is not None
+    assert "content/topic/topic.md: raw-latex" in report
+    assert "content/topic/en/topic.md" not in report
+    assert "one side only" not in report
+    # Reported once, like a one-sided change.
+    assert stop_report(settings, {"session_id": "s1"}) is None
+
+
+def test_stop_report_skips_what_post_edit_found_clean(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    settings, fr, en = _both_sides_committed(_init(tmp_path))
+    session_start(settings, {"session_id": "s1"})
+    for path in (fr, en):
+        _write(path, "# Topic\n\nUpdated.\n")
+        payload = {"session_id": "s1", "tool_input": {"file_path": str(path)}}
+        assert post_edit_report(settings, payload) is None
+
+    def unexpected(*_: Any) -> None:
+        msg = "checked again"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr("deckz.agent_hooks._content_problems", unexpected)
+
+    assert stop_report(settings, {"session_id": "s1"}) is None
+
+
+def test_stop_report_leaves_other_sessions_uncommitted_files(tmp_path: Path) -> None:
+    settings, fr, _ = _both_sides_committed(_init(tmp_path))
+    # Another session's broken, uncommitted edit, there before this session.
+    _write(fr, _RAW_LATEX)
+    session_start(settings, {"session_id": "s1"})
+
+    assert stop_report(settings, {"session_id": "s1"}) is None

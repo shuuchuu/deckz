@@ -539,7 +539,11 @@ earlier work: about 2 GB each, `typst_memory_max` at 5 GiB).
    right page. For studioz, writing the frames next to the PDF at build time (the
    `--watch` worker's compiler is warm) would make the lookup free.
 5. The `stop` hook runs the post-edit checks on every content file the worktree
-   changed, whatever wrote it.
+   changed, whatever wrote it. **Done** (2026-10-10): `stop_report` checks every
+   content file the session changed that the post-edit hook hasn't passed as it is
+   now (the post-edit hook records what it found clean, so edit-tool sessions pay
+   nothing extra); the session-start snapshot includes uncommitted content files,
+   so another session's are left alone.
 
 ### Phase 2: workspaces without agents
 

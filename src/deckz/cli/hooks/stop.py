@@ -5,7 +5,7 @@ from . import app, read_payload, report_error
 
 @app.command(name="stop")
 def stop(*, workdir: Path = Path()) -> None:
-    """Flag a content file or lab notebook changed on one language side only.
+    """Flag the session's one-sided fr/en changes, and content failing the checks.
 
     Wired as Claude Code's Stop hook by `deckz hooks install` (see
     `deckz.agent_hooks.stop_report`), comparing the working tree against

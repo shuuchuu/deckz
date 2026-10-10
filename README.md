@@ -621,9 +621,13 @@ they enforce need no repo-specific knowledge:
   (built-ins plus `templates/checks.py`'s) against it, reporting any
   problem back to the agent right away.
 - **SessionStart**/**Stop**: snapshot the repo's fr/en content and lab
-  notebook pairs when the session starts, and flag at `Stop` any pair
-  changed on one language side only since then (same pairing as `deckz
-  i18n stale`, but for the live session, not git history).
+  notebook pairs (and its uncommitted content files) when the session
+  starts. At `Stop`, flag any pair changed on one language side only
+  since then (same pairing as `deckz i18n stale`, but for the live
+  session, not git history), and run the PostToolUse checks on every
+  content file the session changed that they haven't passed as it is
+  now: one a shell command wrote, which no PostToolUse hook sees. Each
+  finding is reported once.
 
 A repo can add its own Bash denials (e.g. never publish, never push to a
 themed remote) from an optional `templates/hooks.py` module exposing:
