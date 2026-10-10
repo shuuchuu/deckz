@@ -989,9 +989,10 @@ first tool and found nothing to translate (42 s, 0,34 $ estimated);
 "Nouvelle formation" with a Markdown program and a new conversation kept the
 file, loaded `nouvelle-formation`, which read it and asked its two questions
 as a form (stopped there); a misspelled key showed its two errors on the
-workspace page. Left: the declaration itself in slides' `deckz.yml` (the
-user's call; the trial's is in the increment's report), the home page's
-workflows (increment 2), and `qa-fix` after a QA (increment 4).
+workspace page. The user approved those four for slides: committed as
+`7bd8a6f9` in the workspace `studioz-workflows` (`../slides--studioz-workflows`),
+for the user to sync from studioz. Left: the home page's workflows
+(increment 2), and `qa-fix` after a QA (increment 4).
 
 ### Phase 5: long jobs and the remaining previews
 
