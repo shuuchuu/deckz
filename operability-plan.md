@@ -31,8 +31,8 @@ They're kept for good, beyond this plan, as "Operability guidelines" in `CLAUDE.
 
 **Status (2026-10-10):** done on branch `operability` (worktree `../deckz-operability`),
 not merged. Tried on slides through `uv run --with-editable ../deckz-operability`, which
-takes precedence over slides' editable `../deckz`. Left open: "`deckz upload` and
-skipped PDFs", at the end.
+takes precedence over slides' editable `../deckz`. `deckz upload` refuses outdated PDFs
+(see the end).
 
 ### 1.1 `--sync` removes orphans, not what this run didn't build
 
@@ -269,16 +269,11 @@ Once each phase has shipped:
    commit from the colleague carries `Lang-sync: pending` (5.2 makes the hook offer it),
    and `deckz status` lists what's pending, so no scheduled agent is needed.
 
-## Open: `deckz upload` and skipped PDFs
+## Resolved: `deckz upload` and skipped PDFs
 
-`deckz upload` sends every PDF of a deck's `pdf/` directory. The old `--sync` kept that
-directory to exactly what the last build produced, so the README's `.env` example (whole
-handouts only, `DECKZ_RUN_SYNC=true`) left nothing else to upload. Now that `--sync` keeps
-what a build skips, a presentation built months ago stays, and gets uploaded with its
-old content. Options:
-
-1. `deckz upload` skips (or asks about) PDFs older than their deck's sources, the
-   freshness test `deckz status` needs anyway (phase 3, item 5). Recommended: it fixes
-   the problem where the risk is, whatever built the directory.
-2. A separate `deckz clean pdfs --except-last-build`, run before an upload.
-3. Bring back the old behavior as an option (`--sync=exact`).
+Since `--sync` keeps what a build skips, a deck's `pdf/` can hold PDFs built long ago.
+`deckz upload` now refuses when a PDF doesn't match the deck's content
+(`pipelines.outdated_pdfs`: a fragment changed since it was built, the Markdown
+conversion changed, or no build produces it), before signing in; `--include-stale`
+overrides. Skipping them instead would have deleted their remote copies, and the links
+already shared. `deckz status` (phase 3, item 5) reuses `outdated_pdfs`.

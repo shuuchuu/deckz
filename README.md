@@ -865,7 +865,10 @@ The main commands:
   stdout, e.g. `deckz generate-agent-notes > CLAUDE.md`.
 - `deckz generate-completion {bash,zsh,fish}`: print a shell completion
   script (see [Shell completion](#shell-completion)).
-- `deckz upload`: upload built PDFs to Google Drive.
+- `deckz upload`: upload built PDFs to Google Drive. It refuses, naming
+  them, when a PDF doesn't match the deck's content anymore: a content
+  fragment changed since it was built, the Markdown conversion changed, or
+  no build produces it. Rebuild or delete those, or pass `--include-stale`.
 - `deckz extras issue TITLE [BODY]`: create a GitHub issue.
 - `deckz extras random REASON`: roll a dice and email the result (handy for
   arbitrary decision-making, e.g. picking who does a task).
