@@ -1,5 +1,111 @@
 # studioz plan: a UI for operating a deckz repo, agents included
 
+## Where things stand, and how to resume (2026-10-10)
+
+**Done:** phases 0, 1 and 2 (workspaces without agents: increments 1 to 8 under
+"Phase 2"). **Next:** phase 3, the agent in a workspace (see "Starting phase 3"
+below). Nothing since `c58160d` is pushed (`git log origin/main..main` in
+`../deckz` lists it), and nothing released since 31.3.3: push and release are the
+user's call.
+
+### Code map
+
+studioz is `studioz/src/studioz/` (deckz's `CLAUDE.md`, "studioz", has the
+architecture):
+
+| Module | Does |
+|---|---|
+| `app.py` | every route (FastAPI, server-rendered Jinja in French, htmx) and the `Studio` holding the long-lived parts |
+| `workspaces.py` | the home page's view of `deckz worktree`'s worktrees |
+| `watches.py` | one `deckz run --watch` per workspace for the deck on screen; `environment()`/`workspace_environment()` for every command run in a workspace |
+| `sources.py` | what the editor may read and save (never over a version it didn't read, keeping line endings) |
+| `background.py` | commands rerun when a workspace's files change (`deckz status`, `deckz show affected`); `git status` parsing |
+| `problems.py`, `changes.py` | the navigator's Problems and Changes panels; `changes.LangPairs` caches deckz's fr/en pairs |
+| `baselines.py`, `comparison.py` | handouts as of the last commit, frame-by-frame before/after |
+| `commits.py`, `sync.py` | the Commit and Synchronisation dialogs |
+| `jobs.py`, `actions.py` | the job queue; build, upload, publish |
+| `static/` | `deck.js` (pdf.js viewer, comparison), `editor.js` (CodeMirror), `dialogs.js` (dialogs opened from reloading panels), vendored JS (`uv run doit vendor`) |
+
+Tests: `studioz/tests/`, against temporary repositories, a fake `deckz` (a script
+in the workspace's `.venv/bin/`) and a local bare remote; nothing in them touches
+the network.
+
+### Developing and trying a change
+
+- Work in the worktree `../deckz-studioz` (branch `studioz`), never in `../deckz`
+  (live for slides: deckz's `CLAUDE.md`, "This working tree is live"). Check with
+  `uv run doit check test` there; when finished, commit there (the pre-commit hook
+  runs the same) and fast-forward `../deckz` (`git merge --ff-only studioz`). Before
+  merging a change of behavior, tell the running slides sessions (`ListAgents`).
+- Try it on slides: from the worktree, `uv run --quiet studioz --workdir
+  ../slides --port 8431 --no-browser`, then <http://localhost:8431/>. The dev
+  workspace is `studioz-dev` (`../slides--studioz-dev`, branch `ws/studioz-dev`,
+  clean at `697e9401`, one commit behind `origin/main`); the Fortinet deck
+  (`orsys/INTRA/2026-10-fortinet`) is the usual test deck. Leave it clean: a scratch
+  commit comes back off with `git reset --soft 697e9401 && git reset -q` (or the new
+  base after an update), and files are restored from a copy taken first.
+- A workspace runs its own deckz, installed from `../deckz` (main). To try deckz
+  changes from the worktree, point the workspace at it for the trial:
+  `.venv/lib/python3.12/site-packages/deckz.pth` holds
+  `/home/mog/repos/shuuchuu/deckz/src`; write
+  `/home/mog/repos/shuuchuu/deckz-studioz/src` there, and put it back after.
+- Never click "Publier" (labs, videos, or Sync's push) nor "Envoyer" on slides: they
+  publish to trainees, slides' origin or Google Drive. The tests cover them with
+  fakes; on slides, stop at the confirmation.
+- The browser (Claude in Chrome) needs Claude Code started with `claude --chrome`.
+  The navigator's panels reload themselves, so an element found then clicked a
+  second later may have moved: click from a script (`javascript_tool`) once the
+  page has settled. Typing into CodeMirror goes through its Markdown mode (Enter
+  continues a list): to change a file's content, write it on disk, the editor
+  follows.
+- A shell with deckz's own `.venv` active runs that deckz from slides' git hooks
+  (they take `deckz` from the `PATH`), whose Python lacks slides' plotting
+  libraries: the `python` check then fails. Commit in a workspace with its
+  `.venv/bin` first on the `PATH` (as studioz does), or from studioz.
+
+### Open items
+
+Found along the way, not done (each increment's "Left" has the rest):
+
+- A broken Jinja tag (`{{ x`) passes `deckz check` (and so the pre-commit hook);
+  it fails only at build. A deckz check that renders each content file would catch
+  it.
+- `tests/test_deck_builder.py::test_interrupt_does_not_wait_for_running_compilations`
+  failed once in about 20 full runs, under load: a timing test (a 0.5 s sleep),
+  not looked into yet. (`test_labs_gpu.py::test_queue_kills_what_a_run_leaves_running`
+  failed the same way: it checked a process gone right after `kill -9`, which
+  returns before the process exits; it now waits.)
+- deckz's messages are in English in a French UI; the lab checks read every notebook
+  again each (6 of `deckz status`'s 10 s on slides).
+- The Commit dialog's draft is lost when the page changes; jobs don't survive a
+  studioz restart, and their end isn't notified beyond the top bar's colour.
+- An untracked `.claude/` (Claude Code's settings, created 2026-10-10 19:18) sits
+  in `../deckz`: neither studioz's nor deckz's; the user decides.
+
+### Starting phase 3
+
+Read "Running agents", "Credentials", the spike's results (phase 0) and "Agent
+configuration" first: they hold what was checked and measured (the spike's scripts
+are gone). studioz doesn't depend on `claude-agent-sdk` yet: pin a version at least
+two weeks old. A suggested order, each a usable increment:
+
+1. **The conversation panel**: one Agent SDK session per workspace (`cwd`,
+   `setting_sources=["project"]`, auto memory off, `ANTHROPIC_API_KEY` removed, the
+   login checked with `claude auth status --json`), its messages streamed to the
+   page (server-sent events, like the watches), resumed across visits (`resume=`),
+   "Nouvelle conversation".
+2. **Questions**: `AskUserQuestion` through `can_use_tool` (streaming input plus the
+   no-op `PreToolUse` hook) shown as a form.
+3. **Guardrails**: the programmatic `PreToolUse` hook refusing commits, pushes and
+   branch moves ("Committing and syncing"), `permission_mode="auto"` with the
+   sandbox; a checkpoint after each turn (private index, `refs/studioz/<workspace>/`)
+   and "Annuler ce tour".
+4. **Usage**: each run's usage, rate-limit pauses with the reset time.
+5. **The agent in the existing dialogs**: drafting the commit message, "translate
+   now" for a one-sided pair, "ask the agent to fix it" after a refusal, resolving a
+   Sync conflict (the person sees the result before continuing), comments on frames
+   as instructions.
+
 ## Why
 
 The operability plan (`operability-plan.md`) made shuuchuu/slides runnable without an
