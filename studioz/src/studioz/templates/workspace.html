@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ workspace.name }}{% endblock %}
+{% block head %}<script type="module" src="/static/agent.js"></script>{% endblock %}
 {% block topbar %}{% include "_workspace_topbar.html" %}{% endblock %}
 {% block body %}
 <div class="workspace">
@@ -8,5 +9,6 @@
     <p class="empty">Choisissez une formation à gauche.</p>
     <p class="hint">Dossier de l'espace : <code>{{ workspace.worktree.path }}</code></p>
   </main>
+  {% include "_agent.html" %}
 </div>
 {% endblock %}

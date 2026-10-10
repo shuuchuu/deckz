@@ -3,8 +3,8 @@
 ## Where things stand, and how to resume (2026-10-10)
 
 **Done:** phases 0, 1 and 2 (workspaces without agents: increments 1 to 8 under
-"Phase 2"). **Next:** phase 3, the agent in a workspace (see "Starting phase 3"
-below). Everything is pushed to `origin/main` (`git log origin/main..main` in
+"Phase 2"), and phase 3's increment 1 (the conversation panel, under "Phase 3").
+**Next:** phase 3's increment 2, question forms (see "Phase 3's increments" below). Everything is pushed to `origin/main` (`git log origin/main..main` in
 `../deckz` lists what isn't), and nothing is released since 31.3.3: push and
 release are the user's call.
 
@@ -24,11 +24,12 @@ architecture):
 | `baselines.py`, `comparison.py` | handouts as of the last commit, frame-by-frame before/after |
 | `commits.py`, `sync.py` | the Commit and Synchronisation dialogs |
 | `jobs.py`, `actions.py` | the job queue; build, upload, publish |
-| `static/` | `deck.js` (pdf.js viewer, comparison), `editor.js` (CodeMirror), `dialogs.js` (dialogs opened from reloading panels), vendored JS (`uv run doit vendor`) |
+| `agent.py` | each workspace's agent conversation (Agent SDK): options, the git refusal hook, the transcript |
+| `static/` | `deck.js` (pdf.js viewer, comparison), `editor.js` (CodeMirror), `dialogs.js` (dialogs opened from reloading panels), `agent.js` (the agent panel), vendored JS (`uv run doit vendor`) |
 
 Tests: `studioz/tests/`, against temporary repositories, a fake `deckz` (a script
-in the workspace's `.venv/bin/`) and a local bare remote; nothing in them touches
-the network.
+in the workspace's `.venv/bin/`), a local bare remote and a fake Agent SDK client
+yielding the SDK's own message objects; nothing in them touches the network.
 
 ### Developing and trying a change
 
@@ -79,27 +80,29 @@ Found along the way, not done (each increment's "Left" has the rest):
   again each (6 of `deckz status`'s 10 s on slides).
 - The Commit dialog's draft is lost when the page changes; jobs don't survive a
   studioz restart, and their end isn't notified beyond the top bar's colour.
-- An untracked `.claude/` (Claude Code's settings, created 2026-10-10 19:18) sits
-  in `../deckz`: neither studioz's nor deckz's; the user decides.
+- The untracked `.claude/` in `../deckz` is the frontend plugin's install: the
+  user's, kept, never committed.
+- slides depends on studioz (editable), which now depends on `claude-agent-sdk`:
+  slides' `uv.lock` needs `uv lock` there once deckz main has it (a slides change,
+  the user's call).
+- The agent writes its commands' descriptions in English, although the appended
+  prompt asks for French; and a command failing for an ordinary reason (`grep`
+  finding nothing, exit 1) shows as "Refusé ou en échec".
 
-### Starting phase 3
+### Phase 3's increments
 
 Read "Running agents", "Credentials", the spike's results (phase 0) and "Agent
 configuration" first: they hold what was checked and measured (the spike's scripts
-are gone). studioz doesn't depend on `claude-agent-sdk` yet: pin a version at least
-two weeks old. A suggested order, each a usable increment:
+are gone). studioz pins `claude-agent-sdk==0.2.160` (bundling Claude Code
+2.1.283). Each a usable increment:
 
-1. **The conversation panel**: one Agent SDK session per workspace (`cwd`,
-   `setting_sources=["project"]`, auto memory off, `ANTHROPIC_API_KEY` removed, the
-   login checked with `claude auth status --json`), its messages streamed to the
-   page (server-sent events, like the watches), resumed across visits (`resume=`),
-   "Nouvelle conversation".
-2. **Questions**: `AskUserQuestion` through `can_use_tool` (streaming input plus the
-   no-op `PreToolUse` hook) shown as a form.
-3. **Guardrails**: the programmatic `PreToolUse` hook refusing commits, pushes and
-   branch moves ("Committing and syncing"), `permission_mode="auto"` with the
-   sandbox; a checkpoint after each turn (private index, `refs/studioz/<workspace>/`)
-   and "Annuler ce tour".
+1. **The conversation panel**: done (see "Phase 3"), with the commit and branch
+   refusals and `auto` permissions in the sandbox, planned for 3.
+2. **Questions**: `AskUserQuestion` through `can_use_tool` (already called, the
+   no-op `PreToolUse` hook is there; it now denies with "ask in your reply") shown
+   as a form.
+3. **Guardrails**: a checkpoint after each turn (private index,
+   `refs/studioz/<workspace>/`) and "Annuler ce tour".
 4. **Usage**: each run's usage, rate-limit pauses with the reset time.
 5. **The agent in the existing dialogs**: drafting the commit message, "translate
    now" for a one-sided pair, "ask the agent to fix it" after a refusal, resolving a
@@ -818,6 +821,37 @@ a studioz restart, the videos' renders and labs on GPU (phase 5).
 The conversation panel, question forms, comments on frames as instructions,
 checkpoints and "Annuler ce tour", the commit denials, usage display and rate-limit
 pauses, the agent drafting commit messages and resolving Sync conflicts.
+
+**Increment 1: done** (2026-10-10): the conversation panel. Every workspace
+and deck page has an "Agent" column (foldable, the choice kept per browser):
+the transcript (the person's messages, the agent's text, each tool use on one
+line in French with its command or file, failures and refusals, how each turn
+ended), a message box (Enter sends), "Arrêter" during a turn, and "Nouvelle
+conversation" (a second click confirms). `studioz.agent` holds one Agent SDK
+conversation per workspace, in the workspace (`cwd`), with the repository's
+project settings only, auto memory off, the `claude_code` system prompt plus a
+French note (answer simply, say what changed file by file, never commit, ask
+questions in the reply), `permission_mode="auto"` in Claude Code's sandbox
+(Bash auto-allowed there), the workspace's own `.venv` and caches under
+`.run/cache/`. A `PreToolUse` hook refuses `git` commands that commit, push,
+pull, rebase, reset, check out, stash, merge or move branches and tags (read-only
+`git branch`, `tag -l`, `worktree list` pass); a tool call the permission rules
+would ask about is denied with a message. The login is the person's own
+(`claude auth status --json`, the bundled CLI, checked every 5 min; otherwise the
+panel says to run `uv run studioz login`, the bundled CLI's `auth login`), `ANTHROPIC_API_KEY` is removed at start. The
+session id and the transcript are kept in `.run/studioz/agent/`, so the
+conversation resumes after a studioz restart (`resume=`); the Claude Code
+process (about 0.5 GB) stops after 15 min idle, and with studioz. The page
+follows the conversation through server-sent events, and refreshes the
+navigator's panels and the before/after view when a turn ends. Two fixes
+came with it: `local_only` is now a plain ASGI middleware (Starlette's
+`BaseHTTPMiddleware` logged an error each time a page closed an event
+stream), and Ctrl-C ends the pages' event streams (`Studio.closing`) instead
+of waiting for the pages to close (the deck page's stream did too). Measured
+on slides (`studioz-dev`): a first turn reading a deck file, 19 s including
+Claude Code's start; a short resumed turn, 4 s; the agent asked to `git commit
+--allow-empty` was refused by the hook and said so, no commit made. Left: the
+other increments; a turn's usage (increment 4).
 
 ### Phase 4: workflows
 

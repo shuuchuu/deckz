@@ -442,10 +442,18 @@ reloading under its button doesn't drop the answer.
 deck's full build, `deckz upload` after showing `deckz upload --dry-run`,
 `deckz labs|videos publish`), each workspace's one after the other, their
 logs shown from the top bar; deckz's own refusals still decide.
+`studioz.agent` backs the agent panel beside every workspace and deck page:
+one Claude Code conversation per workspace through the Agent SDK, logged in as
+the person (never an API key: studioz removes `ANTHROPIC_API_KEY`), in the
+workspace with the repository's project settings, `auto` permissions in the
+sandbox, and a `PreToolUse` hook refusing the `git` commands that commit, push
+or move a branch (the person commits from studioz). Its session and transcript
+are kept in `.run/studioz/agent/`, resumed after a restart; the page follows it
+through server-sent events, which end when studioz stops (`Studio.closing`).
 
 Its tests are in `studioz/tests/`, driving the app with FastAPI's test client
-on a temporary repository, and the watches with a fake `deckz` printing the
-same log lines.
+on a temporary repository, the watches with a fake `deckz` printing the
+same log lines, and the agent with a fake Agent SDK client.
 
 ## Conventions
 

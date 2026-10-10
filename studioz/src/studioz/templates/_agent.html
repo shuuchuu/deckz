@@ -1,0 +1,20 @@
+<aside class="agent" id="agent" data-events="/espaces/{{ workspace.name }}/agent/evenements"
+       data-base="/espaces/{{ workspace.name }}/agent" data-running="false">
+  <header class="agent-bar">
+    <h2>Agent</h2>
+    <span class="agent-status" id="agent-status">Connexion…</span>
+    <button type="button" class="secondary" id="agent-new" title="Oublier cette conversation et en commencer une nouvelle">Nouvelle conversation</button>
+    <button type="button" class="secondary agent-fold" id="agent-fold" title="Replier ou déplier le panneau de l'agent" aria-expanded="true">⇥</button>
+  </header>
+  <div class="agent-log" id="agent-log" aria-live="polite"></div>
+  <p class="agent-login" id="agent-login" hidden></p>
+  <form class="agent-form" id="agent-form">
+    <textarea name="message" id="agent-message" rows="3"
+              placeholder="Demandez à l'agent : « Ajoute un cadre sur… », « Relis la partie 2 »… (Entrée envoie, Maj+Entrée va à la ligne)"></textarea>
+    <div class="agent-actions">
+      <button type="submit" id="agent-send">Envoyer</button>
+      <button type="button" class="secondary" id="agent-stop" hidden>Arrêter</button>
+      <span class="hint">L'agent modifie les fichiers de l'espace ; vous committez quand vous le décidez.</span>
+    </div>
+  </form>
+</aside>

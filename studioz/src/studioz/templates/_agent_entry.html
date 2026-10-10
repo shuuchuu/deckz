@@ -1,0 +1,5 @@
+<div class="agent-entry" data-kind="{{ entry.kind }}">
+  {% if entry.kind == "person" %}<p class="who">Vous</p>{% endif %}
+  <div class="agent-text">{{ entry.text }}</div>
+  {% if entry.detail %}<pre class="agent-detail">{{ entry.detail }}</pre>{% endif %}
+</div>

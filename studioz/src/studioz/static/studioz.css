@@ -82,7 +82,8 @@ table.workspaces { width: 100%; border-collapse: collapse; margin-top: 1rem; }
 tr.refused td { background: var(--error-bg); }
 tr.closed td { color: var(--muted); }
 
-.workspace { display: grid; grid-template-columns: 18rem 1fr; height: calc(100vh - 2.8rem); }
+.workspace { display: grid; grid-template-columns: 18rem minmax(0, 1fr) 24rem; height: calc(100vh - 2.8rem); }
+.agent-folded .workspace { grid-template-columns: 18rem minmax(0, 1fr) 2.6rem; }
 .navigator { border-right: 1px solid var(--line); padding: 0 1rem 1rem; overflow-y: auto; background: var(--panel); }
 .navigator ul { list-style: none; padding: 0; margin: 0; }
 .navigator li { padding: 0.15rem 0; font-size: 0.9em; overflow-wrap: anywhere; }
@@ -284,3 +285,34 @@ tr.closed td { color: var(--muted); }
 .publishable { border-top: 1px solid var(--line); padding-top: 0.4rem; }
 .publishable h3 { margin: 0; font-size: 0.95em; }
 .publishable ul { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; font-size: 0.9em; }
+
+/* The agent, right of the preview. */
+.agent { display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--line); background: var(--panel); }
+.agent-bar { display: flex; gap: 0.5rem; align-items: center; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--line); }
+.agent-bar h2 { margin: 0; }
+.agent-bar button { padding: 0.1rem 0.5rem; font-size: 0.85em; }
+#agent-new { margin-left: auto; }
+.agent-status { color: var(--muted); font-size: 0.85em; }
+.agent[data-running="true"] .agent-status { color: var(--accent); }
+.agent-log { flex: 1; min-height: 0; overflow-y: auto; padding: 0.5rem 0.7rem; display: flex; flex-direction: column; gap: 0.4rem; }
+.agent-entry { font-size: 0.9em; }
+.agent-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.agent-entry[data-kind="person"] { align-self: flex-end; max-width: 90%; background: color-mix(in srgb, var(--accent) 12%, transparent); padding: 0.3rem 0.6rem; border-radius: 8px; }
+.agent-entry .who { margin: 0; font-size: 0.75em; color: var(--muted); }
+.agent-entry[data-kind="tool"], .agent-entry[data-kind="end"] { color: var(--muted); font-size: 0.82em; }
+.agent-entry[data-kind="tool"] .agent-text::before { content: "→ "; }
+.agent-entry[data-kind="end"] { border-bottom: 1px dashed var(--line); padding-bottom: 0.3rem; }
+.agent-entry[data-kind="error"] { background: var(--error-bg); padding: 0.3rem 0.6rem; border-radius: 4px; }
+.agent-detail { margin: 0.15rem 0 0; font-size: 0.85em; max-height: 8rem; overflow: auto; color: var(--muted); }
+.agent-login { margin: 0.5rem 0.7rem; background: var(--error-bg); padding: 0.4rem 0.6rem; border-radius: 4px; font-size: 0.9em; }
+.agent-login[hidden] { display: none; }
+.agent-form { border-top: 1px solid var(--line); padding: 0.5rem 0.6rem; display: flex; flex-direction: column; gap: 0.4rem; }
+.agent-form textarea { font: inherit; font-size: 0.9em; padding: 0.4rem 0.5rem; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--text); resize: vertical; }
+.agent-actions { display: flex; gap: 0.5rem; align-items: center; }
+.agent-actions .hint { font-size: 0.78em; }
+.agent-folded .agent > :not(.agent-bar), .agent-folded .agent-bar > :not(.agent-fold) { display: none; }
+.agent-folded .agent-bar { flex-direction: column; padding: 0.4rem 0.2rem; border: 0; }
+@media (max-width: 700px) {
+  .workspace, .agent-folded .workspace { grid-template-columns: 1fr; }
+  .agent { min-height: 50vh; border-left: 0; border-top: 1px solid var(--line); }
+}

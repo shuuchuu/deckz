@@ -5,10 +5,12 @@ import json
 import subprocess
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from importlib.resources import files
 from pathlib import Path
+from threading import Event
+from time import monotonic
 from typing import Annotated, Any
 from urllib.parse import quote
 
@@ -33,6 +35,7 @@ from deckz.worktrees import main_checkout, remove
 from . import (
     __version__,
     actions,
+    agent,
     background,
     changes,
     commits,
@@ -44,7 +47,7 @@ from . import (
 from .baselines import Baselines
 from .comparison import compare, signatures
 from .jobs import Job, Jobs
-from .local_only import local_only
+from .local_only import LocalOnly
 from .watches import Snapshot, State, Watch, Watches, handout
 
 _PACKAGE = Path(str(files("studioz")))
@@ -64,6 +67,18 @@ class Studio:
     baselines: Baselines
     pairs: changes.LangPairs
     jobs: Jobs
+    agents: agent.Agents
+    login: "Login"
+    closing: Event = field(default_factory=Event)
+    """Set when studioz stops: the pages' server-sent events end."""
+
+    async def gone(self, request: Request) -> bool:
+        """Whether a stream to `request`'s page should end.
+
+        Returns:
+            Whether the page went, or studioz stops.
+        """
+        return self.closing.is_set() or await request.is_disconnected()
 
     def workspace(self, name: str) -> workspaces.Workspace:
         found = workspaces.find(self.settings, name)
@@ -84,6 +99,25 @@ class Studio:
         if path is None:
             raise HTTPException(404, f"Pas de fichier modifiable « {file} »")
         return path
+
+
+@dataclass
+class Login:
+    """Whether Claude Code is logged in as the person, checked now and then."""
+
+    checked: float = -1e9
+    ok: bool = False
+    account: str = ""
+    check: Callable[[], tuple[bool, str]] = agent.logged_in
+
+    async def status(self) -> tuple[bool, str]:
+        # `claude auth status` takes about a second: kept five minutes, less
+        # while it says nobody is logged in.
+        keep = 300 if self.ok else 10
+        if monotonic() - self.checked > keep:
+            self.ok, self.account = await asyncio.to_thread(self.check)
+            self.checked = monotonic()
+        return self.ok, self.account
 
 
 def _studio(request: Request) -> Studio:
@@ -257,7 +291,7 @@ async def events(
         watch_events(
             watch,
             pdf_url,
-            request.is_disconnected,
+            lambda: studio.gone(request),
             # A build of a workspace with no change is its last commit's.
             lambda: studio.baselines.capture(found.worktree.path, directory, lang),
         ),
@@ -1006,6 +1040,94 @@ def publish(
     return _started(request, found)
 
 
+def _agent_entry(entry: agent.Entry) -> str:
+    return templates.get_template("_agent_entry.html").render(entry=entry)
+
+
+@router.get("/espaces/{name}/agent/evenements")
+async def agent_events(
+    request: Request, studio: StudioDep, name: str
+) -> StreamingResponse:
+    """The workspace's conversation, as it goes.
+
+    Returns:
+        Server-sent events: `reset` then an `entry` per line of the \
+        transcript (its HTML), `state` (whether the agent works, whether \
+        Claude Code is logged in), and the next entries as they come.
+    """
+    found = studio.workspace(name)
+    conversation = studio.agents.conversation(found.worktree.path)
+
+    async def stream() -> AsyncIterator[str]:
+        sent = 0
+        quiet = 0.0
+        last_state: dict[str, object] | None = None
+        yield _event("reset", {})
+        while not await studio.gone(request):
+            if len(conversation.entries) < sent:
+                sent = 0
+                yield _event("reset", {})
+            for entry in conversation.entries[sent:]:
+                yield _event("entry", {"html": _agent_entry(entry)})
+            sent = len(conversation.entries)
+            ok, account = await studio.login.status()
+            state: dict[str, object] = {
+                "running": conversation.running,
+                "loggedIn": ok,
+                "account": account,
+            }
+            if state != last_state:
+                last_state = state
+                yield _event("state", state)
+            version = conversation.version
+            # Not longer than a second: studioz may be stopping.
+            await conversation.wait(version, 1.0)
+            quiet = quiet + 1.0 if conversation.version == version else 0.0
+            if quiet >= _HEARTBEAT:
+                quiet = 0.0
+                yield ": heartbeat\n\n"
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/espaces/{name}/agent/message")
+async def agent_message(
+    studio: StudioDep, name: str, message: Annotated[str, Form()] = ""
+) -> Response:
+    """Give the agent a message.
+
+    Returns:
+        204, or 409 while the agent is at work or Claude Code isn't logged in.
+    """
+    found = studio.workspace(name)
+    ok, why = await studio.login.status()
+    if not ok:
+        return JSONResponse({"error": why}, status_code=409)
+    conversation = studio.agents.conversation(found.worktree.path)
+    # A browser posts a form's text with CRLF line endings.
+    if not await conversation.send(message.replace("\r\n", "\n")):
+        return JSONResponse({"error": "L'agent travaille encore"}, status_code=409)
+    return Response(status_code=204)
+
+
+@router.post("/espaces/{name}/agent/arreter")
+async def agent_stop(studio: StudioDep, name: str) -> Response:
+    found = studio.workspace(name)
+    await studio.agents.conversation(found.worktree.path).interrupt()
+    return Response(status_code=204)
+
+
+@router.post("/espaces/{name}/agent/nouvelle")
+async def agent_reset(studio: StudioDep, name: str) -> Response:
+    found = studio.workspace(name)
+    await studio.agents.conversation(found.worktree.path).reset()
+    return Response(status_code=204)
+
+
 @router.get("/espaces/{name}/taille", response_class=HTMLResponse)
 def size(studio: StudioDep, name: str) -> str:
     return _size(workspaces.size(studio.workspace(name).worktree.path))
@@ -1026,10 +1148,11 @@ def close(
     return _render(request, "_closed.html", workspace=found, kept=kept)
 
 
-async def _stop_idle_watches(watches: Watches) -> None:
+async def _stop_idle(studio: Studio) -> None:
     while True:
         await asyncio.sleep(5)
-        await asyncio.to_thread(watches.stop_idle)
+        await asyncio.to_thread(studio.watches.stop_idle)
+        await studio.agents.stop_idle()
 
 
 def create_app(
@@ -1038,6 +1161,8 @@ def create_app(
     statuses: problems.Statuses | None = None,
     affected: changes.Affected | None = None,
     baselines: Baselines | None = None,
+    agents: agent.Agents | None = None,
+    login: Login | None = None,
 ) -> FastAPI:
     """The studioz application for the deckz repository `repository`.
 
@@ -1047,6 +1172,8 @@ def create_app(
         statuses: The workspaces' `deckz status` runs (tests replace it too).
         affected: The workspaces' `deckz show affected` runs (same).
         baselines: The baselines' builds (same).
+        agents: The workspaces' agents (tests replace the Agent SDK's client).
+        login: Claude Code's login check (same).
 
     Returns:
         The application.
@@ -1061,11 +1188,13 @@ def create_app(
         baselines or Baselines(),
         changes.LangPairs(),
         Jobs(),
+        agents or agent.Agents(),
+        login or Login(),
     )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        reaper = asyncio.create_task(_stop_idle_watches(studio.watches))
+        reaper = asyncio.create_task(_stop_idle(studio))
         try:
             yield
         finally:
@@ -1076,6 +1205,7 @@ def create_app(
             studio.statuses.stop_all()
             studio.affected.stop_all()
             await asyncio.to_thread(studio.jobs.stop_all)
+            await studio.agents.close_all()
             await asyncio.to_thread(studio.baselines.stop_all)
 
     app = FastAPI(
@@ -1086,7 +1216,7 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.studio = studio
-    app.middleware("http")(local_only)
+    app.add_middleware(LocalOnly)
     app.mount("/static", StaticFiles(directory=_PACKAGE / "static"), name="static")
     app.include_router(router)
     return app

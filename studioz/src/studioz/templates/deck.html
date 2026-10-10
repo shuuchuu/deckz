@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ deck }} · {{ workspace.name }}{% endblock %}
 {% block head %}
+<script type="module" src="/static/agent.js"></script>
 <link rel="stylesheet" href="/static/vendor/pdfjs/web/pdf_viewer.css">
 <script type="module" src="/static/deck.js"></script>
 {% endblock %}
@@ -63,5 +64,6 @@
       </section>
     </div>
   </main>
+  {% include "_agent.html" %}
 </div>
 {% endblock %}
