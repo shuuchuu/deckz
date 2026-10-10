@@ -885,7 +885,15 @@ The main commands:
   `--force` is passed. Also adds deckz's generic Claude Code hooks to
   `.claude/settings.json` (safe to call repeatedly; every other key of
   the file is left untouched) -- see [Claude Code
-  hooks](#claude-code-hooks).
+  hooks](#claude-code-hooks). With `--ci`, also writes
+  `.github/workflows/deckz.yml`, a GitHub Actions workflow giving every
+  contributor's commits the hooks' checks, installed or not: `deckz check`
+  and `deckz hooks check-commits` (the `Lang-sync` rule, on the pushed or
+  proposed commits) on every push and pull request, and `deckz.yml`'s
+  `ci.nightly_checks` every night. Its `ci` settings: `deckz_repository`
+  and `deckz_ref` (a deckz checked out next to the repository, for one
+  installing it from `../deckz`), `apt_packages` (system packages its
+  dependencies need to build), `nightly_checks`.
 - `deckz show` (alias for `deckz show tree`): show the resolved tree of
   sections and files for the current deck.
 - `deckz show settings` / `deckz show variables` / `deckz show paths`:

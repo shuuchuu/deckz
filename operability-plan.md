@@ -238,6 +238,14 @@ These rules are enforced today only by what an agent remembers (reviewed in slid
 
 ## Phase 6: CI for the managed repo
 
+**Status (2026-10-10):** done on branch `operability`, not merged, never run on GitHub
+(that needs a push). Adds `ci.apt_packages`: slides' `uv sync` builds pycairo (manim),
+which needs `libcairo2-dev` and `pkg-config` (and likely `libpango1.0-dev`), and
+downloads tensorflow, so its first runs will need adjusting. Builds of changed decks
+aren't in it: they need the assets toolchain (pdftocairo, xelatex, renders), a later
+step. The commit-msg rule runs on the commits themselves (`deckz hooks
+check-commits`), not on a message file.
+
 `deckz hooks install --ci` writes `.github/workflows/deckz.yml` (marked like the git
 hooks, refusing to overwrite a hand-written one):
 

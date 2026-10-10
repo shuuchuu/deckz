@@ -172,3 +172,32 @@ def test_session_start_then_stop_is_silent_without_a_change(
     main(("hooks", "stop"))
 
     assert capsys.readouterr().out == ""
+
+
+def test_check_commits_refuses_a_one_sided_commit(
+    repo: Path, caplog: LogCaptureFixture
+) -> None:
+    _write(repo / "content" / "topic" / "topic.md", "fr v1")
+    _write(repo / "content" / "topic" / "en" / "topic.md", "en v1")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "Add topic")
+    _write(repo / "content" / "topic" / "topic.md", "fr v2")
+    _git(repo, "commit", "-am", "Update fr")
+
+    with raises(SystemExit) as exc_info:
+        main(("hooks", "check-commits", "HEAD~1..HEAD"))
+
+    assert exc_info.value.code == 1
+    assert "Update fr" in caplog.text
+    assert "content/topic/topic.md (not content/topic/en/topic.md)" in caplog.text
+
+
+def test_check_commits_accepts_a_trailer(repo: Path) -> None:
+    _write(repo / "content" / "topic" / "topic.md", "fr v1")
+    _write(repo / "content" / "topic" / "en" / "topic.md", "en v1")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "Add topic")
+    _write(repo / "content" / "topic" / "topic.md", "fr v2")
+    _git(repo, "commit", "-am", "Fix typo\n\nLang-sync: fr-only (typo)")
+
+    main(("hooks", "check-commits", "HEAD~1..HEAD"))  # Should not raise.

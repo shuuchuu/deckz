@@ -152,3 +152,37 @@ def test_install_claude_hooks_updates_an_older_deckz_command(tmp_path: Path) -> 
     assert settings["hooks"]["Stop"] == [
         {"hooks": [{"type": "command", "command": deckz_command("hooks stop")}]}
     ]
+
+
+def test_install_ci_workflow_writes_a_valid_workflow(tmp_path: Path) -> None:
+    import yaml
+
+    from deckz.configuring.settings import CiSettings
+    from deckz.hooks_install import install_ci_workflow
+
+    ci = CiSettings(deckz_repository="owner/deckz", nightly_checks=("missing-en",))
+    path = install_ci_workflow(tmp_path, ci)
+
+    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["check"]["steps"]
+    assert any(
+        step.get("with", {}).get("repository") == "owner/deckz" for step in steps
+    )
+    runs = [step.get("run", "") for step in steps]
+    assert "uv run deckz check --plain" in runs
+    assert "uv run deckz check --plain missing-en" in runs
+    assert any("deckz hooks check-commits" in run for run in runs)
+    # Ours: overwritten without --force.
+    install_ci_workflow(tmp_path, ci)
+
+
+def test_install_ci_workflow_refuses_a_foreign_workflow(tmp_path: Path) -> None:
+    from deckz.configuring.settings import CiSettings
+    from deckz.hooks_install import install_ci_workflow
+
+    path = tmp_path / ".github" / "workflows" / "deckz.yml"
+    path.parent.mkdir(parents=True)
+    path.write_text("name: mine\n", encoding="utf-8")
+
+    with raises(HookInstallRefusedError):
+        install_ci_workflow(tmp_path, CiSettings())

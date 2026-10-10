@@ -29,11 +29,14 @@ form) and leaves every other key of the file untouched.
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pygit2 import Repository
 
 from .exceptions import HookInstallRefusedError
+
+if TYPE_CHECKING:
+    from .configuring.settings import CiSettings
 
 _MARKER = "# deckz-managed hook: safe to overwrite (deckz hooks install)"
 
@@ -179,4 +182,126 @@ def install_claude_hooks(git_dir: Path) -> Path:
         groups.append(group)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+_CI_PATH = Path(".github") / "workflows" / "deckz.yml"
+
+
+def ci_workflow(ci: "CiSettings") -> str:
+    """The GitHub Actions workflow `install_ci_workflow` writes.
+
+    Returns:
+        Its YAML text.
+    """
+    repo = "${{ github.event.repository.name }}"
+    deckz_checkout = (
+        f"""
+      - name: Check out deckz next to it
+        uses: actions/checkout@v4
+        with:
+          repository: {ci.deckz_repository}
+          ref: {ci.deckz_ref}
+          path: deckz
+"""
+        if ci.deckz_repository
+        else ""
+    )
+    apt = (
+        f"""
+      - name: Install the system packages the dependencies need
+        run: apt-get update && apt-get install -y --no-install-recommends \\
+          {" ".join(ci.apt_packages)}
+
+"""
+        if ci.apt_packages
+        else ""
+    )
+    nightly = (
+        f"""
+      - name: Nightly checks
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: uv run deckz check --plain {" ".join(ci.nightly_checks)}
+"""
+        if ci.nightly_checks
+        else ""
+    )
+    return f"""{_MARKER.replace("hook", "workflow", 1)}
+# Every contributor's commits get the checks the git hooks run, installed or not.
+name: deckz
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    container: shuuchuu/deckz-ci:latest
+    defaults:
+      run:
+        working-directory: {repo}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          path: {repo}
+          fetch-depth: 0
+{deckz_checkout}
+{apt}      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install the dependencies
+        run: uv sync
+
+      - name: Content checks
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        run: uv run deckz check --plain
+
+      - name: Lang-sync trailers
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        env:
+          BEFORE: ${{{{ github.event.pull_request.base.sha || github.event.before }}}}
+        run: |
+          git config --global --add safe.directory "$PWD"
+          # A new branch has no "before": check its last commit only.
+          case "$BEFORE" in
+            "" | 0000000000000000000000000000000000000000) RANGE=HEAD~1..HEAD ;;
+            *) RANGE="$BEFORE..HEAD" ;;
+          esac
+          uv run deckz hooks check-commits "$RANGE"
+{nightly}"""
+
+
+def install_ci_workflow(
+    git_dir: Path, ci: "CiSettings", *, force: bool = False
+) -> Path:
+    """Write the GitHub Actions workflow running deckz's checks on every push.
+
+    Args:
+        git_dir: Root of the deckz-managed repository.
+        ci: Its `ci` settings.
+        force: Overwrite a workflow file deckz didn't write.
+
+    Returns:
+        The workflow's path.
+
+    Raises:
+        HookInstallRefusedError: If the file exists without deckz's marker \
+            and `force` isn't set.
+    """
+    path = git_dir / _CI_PATH
+    if (
+        path.exists()
+        and not force
+        and "deckz-managed" not in path.read_text(encoding="utf-8")
+    ):
+        msg = f"{path} already exists and isn't a deckz-managed workflow"
+        raise HookInstallRefusedError(msg)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(ci_workflow(ci), encoding="utf-8")
     return path

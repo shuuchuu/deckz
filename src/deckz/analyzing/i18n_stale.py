@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
-from ..exceptions import InvalidConfigurationError
+from ..exceptions import DeckzError, InvalidConfigurationError
 from ..utils import content_dirs
 
 if TYPE_CHECKING:
@@ -305,3 +305,63 @@ def staged_one_sided_pairs(settings: "GlobalSettings") -> list[OneSidedChange]:
         for fr, en in pairs
         if (str(fr) in staged_paths) != (str(en) in staged_paths)
     ]
+
+
+@dataclass(frozen=True)
+class OneSidedCommit:
+    """A commit changing one side of fr/en pairs with no `Lang-sync` trailer."""
+
+    sha: str
+    subject: str
+    changes: tuple[OneSidedChange, ...]
+
+
+def one_sided_commits(
+    settings: "GlobalSettings", revisions: str
+) -> list[OneSidedCommit]:
+    """The commits of `revisions` the commit-msg hook would have refused.
+
+    For CI, where a contributor's commits arrive whether or not they
+    installed the hooks: each commit touching one side of a pair (as the
+    pairs stand now) without a `Lang-sync` trailer. A `revisions` git can't
+    list raises a `DeckzError` naming git's error.
+
+    Args:
+        settings: The repository's settings.
+        revisions: A git revision range, e.g. `origin/main..HEAD`.
+
+    Returns:
+        The offending commits, oldest first.
+    """
+    from subprocess import run
+
+    git_dir = settings.paths.git_dir
+
+    def git(*args: str) -> str:
+        result = run(
+            ["git", *args], cwd=git_dir, capture_output=True, text=True, check=False
+        )
+        if result.returncode:
+            msg = f"git {' '.join(args)}: {result.stderr.strip()}"
+            raise DeckzError(msg)
+        return result.stdout
+
+    pairs = [*content_pairs(settings), *notebook_pairs(settings)]
+    found = []
+    for sha in git("rev-list", "--reverse", "--no-merges", revisions).split():
+        message = git("show", "-s", "--format=%B", sha)
+        if lang_sync_kind(message) is not None:
+            continue
+        changed = set(
+            git("diff-tree", "--no-commit-id", "--name-only", "-r", "-z", sha).split(
+                "\0"
+            )
+        )
+        changes = tuple(
+            OneSidedChange(fr, en, "fr" if str(fr) in changed else "en")
+            for fr, en in pairs
+            if (str(fr) in changed) != (str(en) in changed)
+        )
+        if changes:
+            found.append(OneSidedCommit(sha, message.splitlines()[0], changes))
+    return found

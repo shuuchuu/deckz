@@ -220,6 +220,22 @@ class SetupSettings(BaseModel):
     """Commands a fresh clone needs once, e.g. vendoring JavaScript."""
 
 
+class CiSettings(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    deckz_repository: str | None = None
+    """GitHub repository (`owner/name`) of the deckz the repository installs \
+    from a sibling checkout (a uv path dependency on `../deckz`): the workflow \
+    checks it out next to the repository. Unset: deckz comes from the index."""
+    deckz_ref: str = "main"
+    """Branch, tag or commit of `deckz_repository` to check out."""
+    apt_packages: tuple[str, ...] = ()
+    """Debian packages the repository's dependencies need to install, e.g. \
+    `libcairo2-dev` and `pkg-config` to build pycairo."""
+    nightly_checks: tuple[str, ...] = ()
+    """Checks too slow for every push (usually some of `checks.opt_in`), run \
+    every night, e.g. `missing-en`."""
+
+
 class GlobalSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
     schema_version: SchemaVersion = SCHEMA_VERSION
@@ -290,6 +306,8 @@ class GlobalSettings(BaseModel):
     i18n: I18nSettings = Field(default_factory=I18nSettings)
     videos: VideosSettings = Field(default_factory=VideosSettings)
     setup: SetupSettings = Field(default_factory=SetupSettings)
+    ci: CiSettings = Field(default_factory=CiSettings)
+    """What `deckz hooks install --ci`'s workflow runs and needs."""
     """What `deckz setup` checks and runs on top of deckz's own needs."""
     paths: GlobalPaths = Field(default_factory=GlobalPaths)
 

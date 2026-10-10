@@ -4,7 +4,7 @@ from . import app
 
 
 @app.command()
-def install(*, force: bool = False, workdir: Path = Path()) -> None:
+def install(*, force: bool = False, ci: bool = False, workdir: Path = Path()) -> None:
     """Install deckz's git hooks and generic Claude Code hooks.
 
     The pre-commit hook runs `deckz check --staged`; the commit-msg hook
@@ -24,14 +24,26 @@ def install(*, force: bool = False, workdir: Path = Path()) -> None:
     can add further Bash denials.
 
     Args:
-        force: Overwrite an existing git hook even if it isn't deckz's own
+        force: Overwrite an existing git hook (or with --ci, workflow) even
+            if it isn't deckz's own
+        ci: Also write `.github/workflows/deckz.yml`, a GitHub Actions
+            workflow running `deckz check` and the `Lang-sync` rule on every
+            push and pull request (`deckz hooks check-commits`), and
+            `deckz.yml`'s `ci.nightly_checks` every night: every
+            contributor's commits get them, hooks installed or not
         workdir: Path to move into before running the command
 
     """
     from ...configuring.settings import GlobalSettings
-    from ...hooks_install import install_claude_hooks, install_hooks
+    from ...hooks_install import (
+        install_ci_workflow,
+        install_claude_hooks,
+        install_hooks,
+    )
 
     settings = GlobalSettings.from_yaml(workdir)
     for path in install_hooks(settings.paths.git_dir, force=force):
         print(path)
     print(install_claude_hooks(settings.paths.git_dir))
+    if ci:
+        print(install_ci_workflow(settings.paths.git_dir, settings.ci, force=force))

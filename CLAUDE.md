@@ -290,6 +290,11 @@ overwrite a hook file without deckz's own marker line unless `--force`
 (`HookInstallRefusedError`). `deckz.yml`'s `checks.opt_in` lists checks that
 `deckz check`, the pre-commit hook and the post-edit Claude Code hook skip
 unless named (slow, networked, or not yet passing ones).
+`deckz hooks install --ci` writes a GitHub Actions workflow
+(`hooks_install.ci_workflow`, from `deckz.yml`'s `ci` settings) running the
+same checks on every push and pull request, the trailer rule through
+`deckz hooks check-commits` (`i18n_stale.one_sided_commits`) on the commits
+themselves.
 The commit-msg hook (`deckz hooks check-commit-msg`, `cli/hooks/`) reuses
 `analyzing/i18n_stale.py`'s fr/en pairing (`content_pairs`/
 `notebook_pairs`/`lang_sync_kind`) to refuse, via `CommitRefusedError`, a
