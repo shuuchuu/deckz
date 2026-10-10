@@ -283,8 +283,12 @@ it documents these commands.
 pointer, the CI workflow (its steps pass in the `shuuchuu/deckz-ci` image; deckz
 4c20039 and 7b27baf fixed the template on the way), `nouvelle-formation`/
 `nouvelle-section` calling `new deck`/`new section`/`labs new`, and `install_hooks`
-gone. Left: the memory moves (phase 7b), the "Agents only" section of `CLAUDE.md`, the
-other skills, and the acceptance test.
+gone. Slides 71de77d0 then moved the memory-only rules into the repo (reorganization
+plan phase 7b: `docs/conventions.md`, `docs/decisions.md`, `labs/README.md`, docstrings),
+added `CLAUDE.md`'s "Agents only" section and pointed the skills at the docs and at
+`deckz status`; the `labs gpu` lessons went to this guide (f08ef47). Left: the
+acceptance test, and automating the Evidently outputs rewrite (`labs.outputs.hooks`,
+5.2, still a manual step in slides' `labs/README.md`).
 
 Once each phase has shipped:
 
