@@ -90,9 +90,10 @@ Typst worker.
 
 **Status (2026-10-10):** done and merged. Built as planned,
 except that videos are only reported unless `--videos` (a render at the published
-quality takes minutes per video). For slides, still to do: `setup.requires`
-(pdftocairo, ffmpeg, xelatex, npm) and a `setup.steps` entry running `uv run doit web`
-(`creates: assets/web/vendor`); then the doit `install_hooks` task can go.
+quality takes minutes per video). Slides follows in 53f81102: `setup.requires`
+(pdftocairo, npm, ffmpeg, xelatex, dvisvgm, with Ubuntu packages and the Fira fonts the
+videos need) and a `setup.steps` entry running `uv run doit web`; doit `install_hooks`
+is gone.
 
 One idempotent command for a fresh clone, and to re-run after pulling. It prints a
 checklist: ok, fixed, or missing, with how to install each missing piece.
@@ -166,9 +167,11 @@ Building blocks:
 lab name rule is deckz's generic one (kebab-case path parts), not slides' framework and
 forbidden-word rules, which belong in a slides check; `labs.link_snippet` prints the
 repository's own link syntax; `new deck` doesn't check the catalog layout (a slides
-convention). For slides, still to do: `templates/scaffold/deck/` (`deck.yml` with
-`$about@...` first and `$contact@full` last, `variables.yml` with `deck_title`,
-`content/about/description.md` and its `en/`), and `labs.link_snippet`.
+convention). Slides follows in 53f81102: `templates/scaffold/deck/` (`deck.yml.jinja`,
+whose `$about@CHOISIR` fails the build until a flavor is picked, `variables.yml.jinja`,
+`content/about/description.md` and its `en/`), and `labs.link_snippet`. A template's
+YAML files take a `.jinja` suffix, which `new deck` drops: deckz found a template's
+`deck.yml` as a deck (94f799c).
 
 The judgment part (which sections fit a program, what a lab should teach) stays with
 people and skills. The file layout shouldn't need either.
@@ -275,6 +278,13 @@ it documents these commands.
 - `generate-agent-notes` points agents at the same guide instead of repeating it.
 
 ## Then, in slides
+
+**Status (2026-10-10):** slides 53f81102 has `HANDBOOK.md` (French), the README
+pointer, the CI workflow (its steps pass in the `shuuchuu/deckz-ci` image; deckz
+4c20039 and 7b27baf fixed the template on the way), `nouvelle-formation`/
+`nouvelle-section` calling `new deck`/`new section`/`labs new`, and `install_hooks`
+gone. Left: the memory moves (phase 7b), the "Agents only" section of `CLAUDE.md`, the
+other skills, and the acceptance test.
 
 Once each phase has shipped:
 
