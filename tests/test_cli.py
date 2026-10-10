@@ -1,7 +1,7 @@
 import json
 import sys  # ruff: ignore[unused-import]
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from json import loads
 from pathlib import Path
 from shutil import copytree, move
@@ -807,3 +807,22 @@ def test_preview_settings_leaves_the_deck_settings_untouched(
     assert preview.paths.pdf_dir == scratch_dir / "standard" / "pdf"
     assert preview.paths.build_dir == scratch_dir / "standard" / ".build"
     assert preview.paths.current_dir == settings.paths.current_dir
+
+
+def test_help_lists_the_commands_by_task(capsys: Any) -> None:
+    with suppress(SystemExit):
+        main(("--help",))
+
+    output = capsys.readouterr().out
+    groups = [
+        "Everyday",
+        "Finding content",
+        "Translation",
+        "Labs and videos",
+        "Setting up",
+        "Repository maintenance",
+        "Commands",
+    ]
+    positions = [output.index(f"─ {group} ") for group in groups]
+    assert positions == sorted(positions)
+    assert output.index("setup ") > output.index("─ Setting up ")

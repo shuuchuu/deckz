@@ -2,9 +2,10 @@ from typing import Literal
 
 from .. import app_name
 from . import app
+from ._groups import SETUP
 
 
-@app.command()
+@app.command(group=SETUP)
 def generate_completion(shell: Literal["zsh", "bash", "fish"]) -> None:
     """Generate a completion script so that you can install it manually.
 

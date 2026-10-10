@@ -1,9 +1,10 @@
 from pathlib import Path
 
 from . import app
+from ._groups import EVERYDAY
 
 
-@app.command()
+@app.command(group=EVERYDAY)
 def upload(*, include_stale: bool = False, workdir: Path = Path()) -> None:
     """Upload pdfs to Google Drive.
 

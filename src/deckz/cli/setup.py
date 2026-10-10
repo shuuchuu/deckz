@@ -1,9 +1,10 @@
 from pathlib import Path
 
 from . import app
+from ._groups import SETUP
 
 
-@app.command()
+@app.command(group=SETUP)
 def setup(
     *,
     check: bool = False,

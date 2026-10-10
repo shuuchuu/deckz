@@ -3,8 +3,10 @@ from typing import Any
 from cyclopts import App
 
 from .. import app as _parent_app
+from .._groups import SETUP
 
 app = App(
+    group=SETUP,
     name="hooks",
     help="Install deckz's git hooks (pre-commit, commit-msg) and Claude "
     "Code hooks into the current repository.",

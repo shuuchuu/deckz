@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import app
+from ._groups import CONTENT
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -11,7 +12,7 @@ if TYPE_CHECKING:
     from ..models import UnresolvedPath
 
 
-@app.command()
+@app.command(group=CONTENT)
 def deps(
     section: str | None = None,
     flavor: str | None = None,

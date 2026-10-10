@@ -1,9 +1,10 @@
 from pathlib import Path
 
 from . import app
+from ._groups import CONTENT
 
 
-@app.command()
+@app.command(group=CONTENT)
 def section_flavors(section: str, /, *, workdir: Path = Path()) -> None:
     """Print a shared section's flavor names, one per line.
 

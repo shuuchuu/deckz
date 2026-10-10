@@ -2,9 +2,10 @@ from pathlib import Path
 
 from ..models import FlavorName, Lang
 from . import app
+from ._groups import CONTENT
 
 
-@app.command()
+@app.command(group=CONTENT)
 def section_files(
     section: str, flavor: str, /, *, lang: Lang = "fr", workdir: Path = Path()
 ) -> None:

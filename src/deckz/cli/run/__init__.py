@@ -2,8 +2,10 @@ from cyclopts import App
 from cyclopts.config import Env
 
 from .. import app as _parent_app
+from .._groups import EVERYDAY
 
 app = App(
+    group=EVERYDAY,
     name="run",
     help="Compile a deck, a single file, a section flavor, project assets, or "
     "validate the whole repository ('decks'/'shared'/'all'). Add --watch to "

@@ -1,10 +1,11 @@
 from pathlib import Path
 
 from . import app
+from ._groups import CONTENT
 from ._options import Langs, unique
 
 
-@app.command()
+@app.command(group=CONTENT)
 def search_sections(
     keywords: list[str],
     /,

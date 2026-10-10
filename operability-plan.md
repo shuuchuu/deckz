@@ -176,6 +176,13 @@ people and skills. The file layout shouldn't need either.
 
 ### 5.1 Task-oriented help
 
+**Status (2026-10-10):** 5.1, 5.2 (the check messages and the commit-msg hint, without a
+structured `Finding` type yet: `deckz status` will need one) and 5.3 done on branch
+`operability`, not merged. Groups as planned, except that `upload` is under Everyday
+and `generate-completion` under Setting up; there is no `new` group until phase 4.
+`lab-secrets` and `lab-format` find nothing on slides and take about 2 s each, so they
+needn't be opt-in there.
+
 Group the top-level commands with cyclopts `Group`s: **Everyday** (`run`, `check`,
 `status`, `show`), **New content** (`new`, `labs new`, `search-sections`), **Translation**
 (`i18n`), **Labs and videos** (`labs`, `videos`), **Repository maintenance** (`flavor`,

@@ -3,7 +3,7 @@ from logging import DEBUG, INFO, WARNING, basicConfig, getLogger
 from os import environ
 from typing import Annotated
 
-from cyclopts import App, Parameter
+from cyclopts import App, Group, Parameter
 from rich.console import Console
 from rich.logging import RichHandler
 
@@ -11,8 +11,14 @@ from .. import __version__
 from ..exceptions import DeckParsingError, DeckzError
 
 # Ctrl-C is handled by `_launch`, which needs the KeyboardInterrupt that
-# cyclopts would otherwise turn into a bare `sys.exit(130)`.
-app = App(version=__version__, suppress_keyboard_interrupt=False)
+# cyclopts would otherwise turn into a bare `sys.exit(130)`. Commands are
+# listed by task (see `_groups`), the help and version flags last (sub-apps
+# inherit `group_commands`, hence its default name).
+app = App(
+    version=__version__,
+    suppress_keyboard_interrupt=False,
+    group_commands=Group("Commands", sort_key=10),
+)
 app.meta.suppress_keyboard_interrupt = False
 app.register_install_completion_command()
 

@@ -1,4 +1,5 @@
 from . import app
+from ._groups import SETUP
 
 _AGENT_NOTES = """\
 # Working in this repo
@@ -131,7 +132,7 @@ without aborting.
 """
 
 
-@app.command()
+@app.command(group=SETUP)
 def generate_agent_notes() -> None:
     """Print onboarding notes for an AI coding agent working in this repo.
 
