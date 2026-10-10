@@ -17,10 +17,12 @@ test keeps); its schema lives here, and refuses unknown keys so that a typo
 shows instead of being dropped.
 """
 
+import json
 import re
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from string import Formatter
 from typing import Annotated, Literal, Self
@@ -72,6 +74,79 @@ class Input(BaseModel):
     """For a file: the types offered, as HTML's `accept` (`.pdf,.md`)."""
 
 
+def _fields(prompt: str) -> set[str]:
+    """The fields `{name}` of a prompt.
+
+    Returns:
+        Their names.
+
+    Raises:
+        ValueError: If its braces don't parse.
+    """
+    try:
+        return {name for _, name, _, _ in Formatter().parse(prompt) if name}
+    except ValueError as error:
+        msg = f"prompt : {error} (une accolade s'écrit deux fois : {{{{)"
+        raise ValueError(msg) from None
+
+
+CHOSEN = "chosen"
+"""A follow-up's field: the findings ticked, as a Markdown list."""
+REPORT = "report"
+"""A follow-up's field: the report's path in the workspace."""
+
+
+class Then(BaseModel):
+    """What a workflow's report offers to do next with the findings ticked."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: Text
+    skill: Annotated[str, Field(pattern=r"^[A-Za-z0-9][\w.-]*$")]
+    prompt: Annotated[str, Field(min_length=1)]
+    description: Text | None = None
+
+    @property
+    def title(self) -> str:
+        return text(self.name)
+
+    def message(self, values: dict[str, str]) -> tuple[str, str]:
+        """The turn it starts.
+
+        Args:
+            values: `deck`, `chosen` and `report`.
+
+        Returns:
+            What the agent receives, naming the skill, and what the \
+            transcript shows.
+        """
+        asked = self.prompt.format_map(
+            {name: values.get(name, "") for name in (DECK, CHOSEN, REPORT)}
+        ).strip()
+        return (
+            f"Suis la skill `{self.skill}` du dépôt pour cette demande.\n\n{asked}",
+            f"{self.title} : {asked}",
+        )
+
+
+def report_instruction(path: str) -> str:
+    """What a workflow with a report asks besides its prompt.
+
+    The checklist's format is studioz's (it reads it back), not the skill's.
+
+    Returns:
+        The instruction, in French.
+    """
+    return (
+        f"Quand tu as fini, écris aussi tes constats dans `{path}` (même si la "
+        "méthode suivie ne modifie aucun fichier par ailleurs), pour que la "
+        "personne y choisisse ceux à traiter : un titre `## ` par catégorie, "
+        "puis un constat par case à cocher (`- [ ] …`), chacun compréhensible "
+        "seul (fichier, cadre ou cellule, le problème, ce que tu proposes), en "
+        "Markdown, sans rien d'autre que de courtes remarques sous les titres."
+    )
+
+
 class Workflow(BaseModel):
     """A workflow, as declared."""
 
@@ -84,6 +159,10 @@ class Workflow(BaseModel):
     scope: Literal["workspace", "deck"] = "workspace"
     """`deck`: about one deck, chosen in the form or the deck on screen."""
     inputs: tuple[Input, ...] = ()
+    report: bool = False
+    """Whether the agent writes its findings as a checklist (`Report`)."""
+    then: Then | None = None
+    """What to do with the findings ticked in the report."""
 
     @model_validator(mode="after")
     def _fields(self) -> Self:
@@ -94,17 +173,23 @@ class Workflow(BaseModel):
         if DECK in names:
             msg = f"`{DECK}` est le champ de la formation, pas un nom de champ"
             raise ValueError(msg)
-        known = {*names, *([DECK] if self.scope == "deck" else [])}
-        try:
-            used = {name for _, name, _, _ in Formatter().parse(self.prompt) if name}
-        except ValueError as error:
-            msg = f"prompt : {error} (une accolade s'écrit deux fois : {{{{)"
-            raise ValueError(msg) from None
-        if unknown := sorted(used - known):
+        scoped = [DECK] if self.scope == "deck" else []
+        if unknown := sorted(_fields(self.prompt) - {*names, *scoped}):
             msg = f"le {{{unknown[0]}}} du prompt n'est aucun champ" + (
                 " (`{deck}` demande `scope: deck`)" if unknown[0] == DECK else ""
             )
             raise ValueError(msg)
+        if self.then is not None:
+            if not self.report:
+                msg = "`then` demande `report: true` (ses constats à cocher)"
+                raise ValueError(msg)
+            allowed = {CHOSEN, REPORT, *scoped}
+            if unknown := sorted(_fields(self.then.prompt) - allowed):
+                msg = (
+                    f"le {{{unknown[0]}}} du prompt de `then` n'est aucun champ "
+                    f"({', '.join(f'{{{n}}}' for n in sorted(allowed))})"
+                )
+                raise ValueError(msg)
         return self
 
     @property
@@ -150,11 +235,14 @@ class Workflow(BaseModel):
                 return f"Remplissez « {text(one.label)} »."
         return None
 
-    def message(self, values: dict[str, str]) -> tuple[str, str]:
+    def message(
+        self, values: dict[str, str], report: str | None = None
+    ) -> tuple[str, str]:
         """The turn this workflow starts with `values`.
 
         Args:
             values: Each field's value (a file's path in the workspace).
+            report: Where its report goes, if it has one.
 
         Returns:
             What the agent receives, naming the skill, and what the \
@@ -164,10 +252,10 @@ class Workflow(BaseModel):
             {one.name: values.get(one.name, "") for one in self.inputs}
             | {DECK: values.get(DECK, "")}
         ).strip()
-        return (
-            f"Suis la skill `{self.skill}` du dépôt pour cette demande.\n\n{asked}",
-            f"{self.title} : {asked}",
-        )
+        told = f"Suis la skill `{self.skill}` du dépôt pour cette demande.\n\n{asked}"
+        if report:
+            told += f"\n\n{report_instruction(report)}"
+        return told, f"{self.title} : {asked}"
 
 
 class _Section(BaseModel):
@@ -333,3 +421,175 @@ def keep_file(workspace: Path, filename: str, data: bytes) -> str:
         msg = f"trop de fichiers nommés {name.name}"
         raise OSError(msg)
     return candidate.relative_to(workspace).as_posix()
+
+
+REPORTS_DIR = STATE_DIR / "rapports"
+"""The workflows' reports, relative to the workspace: `<id>.md` and `<id>.json`."""
+
+
+@dataclass(frozen=True)
+class Item:
+    """A finding of a report: a box to tick."""
+
+    index: int
+    line: int
+    """Its line in the file, where its box is."""
+    checked: bool
+    text: str
+
+
+@dataclass(frozen=True)
+class Part:
+    """A report's heading and the findings under it."""
+
+    title: str
+    notes: str
+    items: list[Item]
+
+
+@dataclass(frozen=True)
+class Report:
+    """A workflow's report in a workspace."""
+
+    id: str
+    workflow: str
+    """The workflow's key."""
+    deck: str
+    started: str
+    path: Path
+    """The checklist, which the agent writes."""
+
+    @property
+    def relative(self) -> str:
+        return (REPORTS_DIR / self.path.name).as_posix()
+
+    def parts(self) -> list[Part]:
+        return checklist(self.path.read_text(encoding="utf8"))
+
+    def chosen(self) -> list[Item]:
+        return [item for part in self.parts() for item in part.items if item.checked]
+
+
+def report_id(workflow: Workflow, deck: str) -> str:
+    """The report's name: one per workflow and deck, the last run's.
+
+    Returns:
+        The workflow's key, then the deck's path if any.
+    """
+    name = workflow.key + (f"--{deck}" if deck else "")
+    return re.sub(r"[^A-Za-z0-9_-]+", "-", name)
+
+
+def start_report(workspace: Path, workflow: Workflow, deck: str) -> str:
+    """Prepare the report of a workflow starting: the previous one goes.
+
+    Returns:
+        Its path, relative to the workspace, for the agent.
+    """
+    directory = workspace / REPORTS_DIR
+    directory.mkdir(parents=True, exist_ok=True)
+    name = report_id(workflow, deck)
+    (directory / f"{name}.md").unlink(missing_ok=True)
+    (directory / f"{name}.json").write_text(
+        json.dumps(
+            {
+                "workflow": workflow.key,
+                "deck": deck,
+                "started": datetime.now(UTC).isoformat(),
+            }
+        ),
+        encoding="utf8",
+    )
+    return (REPORTS_DIR / f"{name}.md").as_posix()
+
+
+def reports(workspace: Path) -> list[Report]:
+    """The workspace's reports, written or still awaited.
+
+    Returns:
+        Them, the latest first.
+    """
+    found = []
+    for meta in (workspace / REPORTS_DIR).glob("*.json"):
+        try:
+            data = json.loads(meta.read_text(encoding="utf8"))
+        except (OSError, ValueError):
+            continue
+        found.append(
+            Report(
+                meta.stem,
+                str(data.get("workflow", "")),
+                str(data.get("deck", "")),
+                str(data.get("started", "")),
+                meta.with_suffix(".md"),
+            )
+        )
+    return sorted(found, key=lambda report: report.started, reverse=True)
+
+
+def report(workspace: Path, report_name: str) -> Report | None:
+    return next((r for r in reports(workspace) if r.id == report_name), None)
+
+
+_BOX = re.compile(r"^(?P<indent>\s*)[-*+] \[(?P<mark>[ xX])\] ?(?P<text>.*)$")
+_HEADING = re.compile(r"^#{1,6}\s+(?P<title>.*?)\s*#*\s*$")
+
+
+def checklist(text: str) -> list[Part]:
+    """A report's findings: Markdown task lists, under their headings.
+
+    A line indented under a box continues its finding; other lines are the
+    heading's notes.
+
+    Returns:
+        The parts, in order; the first one untitled if the report starts
+        without a heading.
+    """
+    parts: list[Part] = [Part("", "", [])]
+    notes: list[list[str]] = [[]]
+    count = 0
+    current: list[str] | None = None
+    current_indent = 0
+    for number, line in enumerate(text.splitlines()):
+        if heading := _HEADING.match(line):
+            parts.append(Part(heading["title"], "", []))
+            notes.append([])
+            current = None
+        elif box := _BOX.match(line):
+            current = [box["text"]]
+            current_indent = len(box["indent"])
+            parts[-1].items.append(Item(count, number, box["mark"] != " ", box["text"]))
+            count += 1
+        elif (
+            current is not None
+            and line.strip()
+            and (len(line) - len(line.lstrip()) > current_indent)
+        ):
+            current.append(line.strip())
+            parts[-1].items[-1] = _with_text(parts[-1].items[-1], current)
+        else:
+            current = None
+            if line.strip():
+                notes[-1].append(line)
+    found = [
+        Part(part.title, "\n".join(lines), part.items)
+        for part, lines in zip(parts, notes, strict=True)
+    ]
+    return [part for part in found if part.title or part.items or part.notes]
+
+
+def _with_text(item: Item, lines: list[str]) -> Item:
+    return Item(item.index, item.line, item.checked, "\n".join(lines))
+
+
+def tick(path: Path, chosen: set[int]) -> None:
+    """Tick exactly the findings `chosen` (by index) in the report's file."""
+    text = path.read_text(encoding="utf8")
+    lines = text.splitlines(keepends=True)
+    for part in checklist(text):
+        for item in part.items:
+            mark = "x" if item.index in chosen else " "
+            lines[item.line] = re.sub(
+                r"\[[ xX]\]", f"[{mark}]", lines[item.line], count=1
+            )
+    path.write_text("".join(lines), encoding="utf8")

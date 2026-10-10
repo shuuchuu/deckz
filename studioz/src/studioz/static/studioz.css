@@ -360,3 +360,17 @@ button.small { padding: 0 0.4rem; font-size: 0.8em; }
 .workflow-prompt { font-size: 0.9em; color: var(--muted); }
 .workflow-prompt p { margin-top: 0.3rem; }
 .workflow-prompt blockquote { margin: 0.3rem 0; padding: 0.2rem 0.6rem; border-left: 3px solid var(--line); color: var(--text); }
+
+/* Reports: the navigator's panel, and their checklists. */
+.reports ul { list-style: none; padding: 0; margin: 0; }
+.reports li { display: flex; flex-wrap: wrap; gap: 0.2rem 0.5rem; align-items: baseline; font-size: 0.9em; padding: 0.1rem 0; }
+.reports .path { font-family: var(--mono); font-size: 0.85em; overflow-wrap: anywhere; }
+.reports .hint { font-size: 0.85em; }
+button.link { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-align: left; }
+button.link:hover { text-decoration: underline; }
+.report-parts { max-height: 60vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 4px; padding: 0.2rem 0.8rem; }
+.report-parts h3 { font-size: 0.95em; margin: 0.6rem 0 0.2rem; }
+.report-parts ul { list-style: none; padding: 0; margin: 0; }
+.report-parts li label { display: flex; gap: 0.5rem; align-items: baseline; padding: 0.2rem 0; border-bottom: 1px solid var(--line); }
+.report-parts .markdown p { margin: 0; }
+.report-notes { color: var(--muted); font-size: 0.9em; }

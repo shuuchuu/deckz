@@ -5,9 +5,9 @@
 **Done:** phases 0, 1 and 2 (workspaces without agents: increments 1 to 8 under
 "Phase 2"), and phase 3 (the agent in a workspace: increments 1 to 5 under
 "Phase 3"), which the user then tried on real work, satisfied; phase 4's
-increments 1 to 3 (workflows declared, a workspace opened from one,
-questions answered later: under "Phase 4"). **Next:** phase 4's increment 4
-(see "Starting phase 4" below). `git log origin/main..main` in
+increments 1 to 4 (workflows declared, a workspace opened from one,
+questions answered later, QA → fix: under "Phase 4"). **Next:** phase 4's
+increment 5 (see "Starting phase 4" below). `git log origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed;
 nothing is released since 31.3.3. Push and release are the user's call.
 
@@ -118,8 +118,7 @@ build on. slides' skills are `nouvelle-formation`, `nouvelle-section`,
 1. **Workflows declared**: done (see "Phase 4").
 2. **Opening a workspace from a workflow**: done (see "Phase 4").
 3. **Questions answered later** (`defer`): done (see "Phase 4").
-4. **QA → fix**: `qa-formation`'s findings as a checklist in the workspace,
-   "Appliquer les corrections" running `qa-fix` on the ones ticked.
+4. **QA → fix**: done (see "Phase 4").
 5. **The translation backlog**: `deckz i18n stale`'s list, each item "Traduire
    avec l'agent" (as the Commit dialog's).
 
@@ -1031,6 +1030,28 @@ agent asked "Thé ou café ?", the turn ended with no Claude Code process left,
 studioz was restarted, the form was back with its new hint, and "Café" made
 the agent answer « Café. » 6 s later (0,19 $ estimated for both turns, the
 resumed context). Left: a limit pause still doesn't survive a restart.
+
+**Increment 4: done** (2026-10-11): QA → fix, generically. A workflow may
+declare `report: true`: studioz appends to its prompt where and how to write
+its findings (a Markdown task list in `.run/studioz/rapports/<workflow>--<deck>.md`,
+`## ` per category, `- [ ] ` per self-contained finding: the format is
+studioz's, since it reads it back, the content stays the skill's, so neither
+`qa-formation` nor `qa-fix` changed). The navigator's "Rapports" panel lists
+the reports (written or awaited, how many ticked) and opens each as a
+checklist under its headings, each tick written back into the file; `then`
+(a name, skill, prompt and description, its prompt getting `{chosen}`,
+`{report}` and `{deck}`) is the button under it, sending the findings ticked
+to the conversation. A new run on the same deck removes the previous report.
+slides' QA workflow declares it (`ce4b0a69`, in the workspace
+`studioz-workflows` with `7bd8a6f9`; it needs this deckz, whose schema refuses
+keys it doesn't know). Tried on slides (`studioz-dev`, the declaration copied
+for the trial), kept cheap since the week's window stood at 81 %: the QA of
+the Fortinet deck limited by its "points à regarder" field to the deck's own
+`content/about/` and no subagent (62 s, 0,51 $ estimated) wrote a clean
+checklist of 5 findings under the skill's categories; the dialog showed it,
+a tick reached the file, and "Appliquer les corrections" started `qa-fix` with
+that finding (stopped after 7 s, nothing changed). Not measured: a full QA's
+usage (still to do on a real one). Left: nothing for this increment.
 
 ### Phase 5: long jobs and the remaining previews
 

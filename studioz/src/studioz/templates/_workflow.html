@@ -43,6 +43,8 @@
     <blockquote>{{ workflow.preview(answers.formation) }}</blockquote>
     <p>en suivant la skill <code>{{ workflow.skill }}</code> du dépôt, qui décide de la suite et vous pose ses
       questions dans le panneau de l'agent.</p>
+    {% if workflow.report %}<p>Ses constats arriveront dans « Rapports », à gauche, à cocher{% if workflow.then %}
+      avant « {{ workflow.then.title }} »{% endif %}.</p>{% endif %}
   </details>
   {% if conversation %}
   <label><input type="checkbox" name="nouvelle" value="1"{% if answers.fresh %} checked{% endif %}>

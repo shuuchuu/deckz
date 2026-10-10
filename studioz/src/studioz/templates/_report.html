@@ -1,0 +1,39 @@
+{% set base = "/espaces/" ~ workspace.name ~ "/rapports/" ~ report.id %}
+<form class="commit-form report-form" hx-post="{{ base }}/suite" hx-target="#action-dialog" hx-swap="innerHTML"
+      hx-disabled-elt="find button[type=submit]">
+  <header>
+    <h2>{{ workflow.title if workflow else report.workflow }}{% if report.deck %} · {{ report.deck }}{% endif %}</h2>
+    <button type="button" class="secondary" onclick="this.closest('dialog').close()">Fermer</button>
+  </header>
+  {% if not parts %}
+  <p class="empty">L'agent n'a pas encore écrit ce rapport (<code>{{ report.relative }}</code>) : il l'écrit à la fin de son travail.</p>
+  {% else %}
+  <p class="hint">Cochez les constats à traiter ; vos choix sont gardés dans le rapport (<code>{{ report.relative }}</code>).</p>
+  <div class="report-parts" hx-post="{{ base }}/coches" hx-trigger="change" hx-swap="none" hx-include="closest form">
+    {% for part in parts %}
+    <section>
+      {% if part.title %}<h3>{{ part.title }}</h3>{% endif %}
+      {% if part.notes %}<div class="markdown report-notes">{{ part.notes | markdown }}</div>{% endif %}
+      {% if part.items %}
+      <ul>
+        {% for item in part.items %}
+        <li><label><input type="checkbox" name="item" value="{{ item.index }}"{% if item.checked %} checked{% endif %}>
+          <span class="markdown">{{ item.text | markdown }}</span></label></li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <footer>
+    {% if workflow and workflow.then %}
+    <button type="submit"{% if not parts %} disabled{% endif %}>{{ workflow.then.title }}</button>
+    <span class="hint">{% if workflow.then.description %}{{ workflow.then.description | workflow_text }} — {% endif %}l'agent suit la skill
+      <code>{{ workflow.then.skill }}</code> sur les constats cochés.</span>
+    {% else %}
+    <span class="hint">Ce workflow ne propose pas de suite : écrivez à l'agent ce qu'il faut faire des constats.</span>
+    {% endif %}
+  </footer>
+</form>

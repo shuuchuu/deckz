@@ -1417,7 +1417,12 @@ async def _begin(
         )
     if answers.fresh:
         await conversation.reset()
-    prompt, shown = workflow.message({**values, workflows.DECK: answers.deck})
+    report = (
+        workflows.start_report(path, workflow, answers.deck)
+        if workflow.report
+        else None
+    )
+    prompt, shown = workflow.message({**values, workflows.DECK: answers.deck}, report)
     return None if await conversation.send(prompt, shown) else busy
 
 
@@ -1547,6 +1552,133 @@ async def home_workflow_start(
     if workflow.scope == "deck":
         target += f"/formations/{quote(answers.deck)}"
     return Response(headers={"HX-Redirect": f"{target}?agent=1"})
+
+
+@router.get("/espaces/{name}/rapports", response_class=HTMLResponse)
+def reports_panel(
+    request: Request, studio: StudioDep, name: str, formation: str = ""
+) -> Response:
+    """The navigator's Rapports panel: the workflows' reports.
+
+    Returns:
+        The panel, empty when there's none.
+    """
+    found = studio.workspace(name)
+    path = found.worktree.path
+    declared = workflows.declared(path)
+    conversation = studio.agents.conversation(path)
+    return _render(
+        request,
+        "_reports.html",
+        workspace=found,
+        reports=workflows.reports(path),
+        declared=declared,
+        running=conversation.running,
+        deck=formation,
+    )
+
+
+def _report(
+    studio: Studio, name: str, report_id: str
+) -> tuple[workspaces.Workspace, workflows.Report]:
+    found = studio.workspace(name)
+    report = workflows.report(found.worktree.path, report_id)
+    if report is None:
+        raise HTTPException(404, f"Pas de rapport « {report_id} » dans « {name} »")
+    return found, report
+
+
+def _report_dialog(
+    request: Request,
+    studio: Studio,
+    found: workspaces.Workspace,
+    report: workflows.Report,
+    **context: Any,
+) -> Response:
+    workflow = workflows.declared(found.worktree.path).get(report.workflow)
+    return _render(
+        request,
+        "_report.html",
+        workspace=found,
+        report=report,
+        parts=report.parts() if report.path.is_file() else [],
+        workflow=workflow,
+        **context,
+    )
+
+
+@router.post("/espaces/{name}/rapports/{report_id}", response_class=HTMLResponse)
+def report_dialog(
+    request: Request, studio: StudioDep, name: str, report_id: str
+) -> Response:
+    """A report's findings, each a box to tick, and what to do with them.
+
+    Returns:
+        The dialog's content.
+    """
+    found, report = _report(studio, name, report_id)
+    return _report_dialog(request, studio, found, report)
+
+
+def _ticked(form: Any) -> set[int]:
+    return {int(value) for value in form.getlist("item") if str(value).isdigit()}
+
+
+@router.post("/espaces/{name}/rapports/{report_id}/coches")
+async def report_ticks(
+    request: Request, studio: StudioDep, name: str, report_id: str
+) -> Response:
+    """Keep the findings ticked, in the report's file.
+
+    Returns:
+        204.
+    """
+    _, report = _report(studio, name, report_id)
+    if report.path.is_file():
+        workflows.tick(report.path, _ticked(await request.form()))
+    return Response(status_code=204)
+
+
+@router.post("/espaces/{name}/rapports/{report_id}/suite", response_class=HTMLResponse)
+async def report_then(
+    request: Request, studio: StudioDep, name: str, report_id: str
+) -> Response:
+    """Send the agent the workflow's `then`, with the findings ticked.
+
+    Returns:
+        Nothing to show, telling the page (`agent-started`); or the dialog \
+        again with why not.
+    """
+    found, report = _report(studio, name, report_id)
+    path = found.worktree.path
+    workflow = workflows.declared(path).get(report.workflow)
+
+    def refuse(error: str) -> Response:
+        return _report_dialog(request, studio, found, report, error=error)
+
+    if workflow is None or workflow.then is None:
+        return refuse("Ce workflow ne propose plus de suite (deckz.yml a changé).")
+    if not report.path.is_file():
+        return refuse("L'agent n'a pas encore écrit ce rapport.")
+    workflows.tick(report.path, _ticked(await request.form()))
+    chosen = report.chosen()
+    if not chosen:
+        return refuse("Cochez au moins un constat.")
+    ok, why = await studio.login.status()
+    if not ok:
+        return refuse(why)
+    prompt, shown = workflow.then.message(
+        {
+            workflows.DECK: report.deck,
+            workflows.CHOSEN: "\n".join(
+                "- " + item.text.replace("\n", "\n  ") for item in chosen
+            ),
+            workflows.REPORT: report.relative,
+        }
+    )
+    if not await studio.agents.conversation(path).send(prompt, shown):
+        return refuse("L'agent travaille encore : attendez la fin de son tour.")
+    return Response(headers={"HX-Trigger": "agent-started", "HX-Reswap": "none"})
 
 
 @router.post("/espaces/{name}/agent/annuler")

@@ -468,7 +468,10 @@ the section, which a deckz test keeps): each a form on the workspace page or a d
 page whose answers fill a prompt naming one of the repository's skills, sent to the
 conversation like a message; a file given goes into `.run/studioz/fichiers/`. The
 home page offers those of the main checkout's `HEAD` (read through git,
-`declared_at`), each opening a new workspace from it where the agent starts.
+`declared_at`), each opening a new workspace from it where the agent starts. A
+workflow with `report: true` has the agent write its findings as a Markdown task
+list in `.run/studioz/rapports/`, which the navigator's Rapports panel shows as a
+checklist, `then` sending the ticked ones to a follow-up skill.
 
 Its tests are in `studioz/tests/`, driving the app with FastAPI's test client
 on a temporary repository, the watches with a fake `deckz` printing the

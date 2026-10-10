@@ -44,6 +44,11 @@ studioz:
       skill: qa-formation
       scope: deck                       # on a deck's page; `{deck}` is its path
       prompt: "Fais le QA de la formation {deck}."
+      report: true                      # its findings as a checklist
+      then:                             # what to do with the ones ticked
+        name: Appliquer les corrections
+        skill: qa-fix
+        prompt: "Applique ces corrections du QA de {deck} ({report}) : {chosen}"
 ```
 
 Each is a form, on the workspace page (and, for `scope: deck`, behind a deck page's
@@ -57,6 +62,14 @@ an invalid section, or a skill the workspace lacks, is shown on its page. The ho
 page offers the workflows of the main checkout's last commit, each opening a new
 workspace from that commit (named as the person says, else after the deck or the
 workflow) where the agent starts it.
+
+With `report: true`, studioz also asks the agent to write its findings into the
+workspace's `.run/studioz/rapports/` as a Markdown task list (`## ` per category,
+`- [ ] ` per finding: the format is studioz's, the content the skill's). The
+navigator's "Rapports" panel opens each report as a checklist, the ticks kept in the
+file; `then` is the button under it, a workflow whose prompt gets `{chosen}` (the
+findings ticked, as a list), `{report}` (the file) and, for a deck's workflow,
+`{deck}`. A new run of the workflow on the same deck replaces its report.
 
 The JavaScript it serves is pinned in `package.json` and copied into
 `src/studioz/static/vendor/` (CodeMirror as one bundle of what `codemirror.mjs`

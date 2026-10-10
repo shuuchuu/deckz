@@ -427,3 +427,147 @@ def test_a_workflow_waits_for_the_installation(
     assert "install pandoc" in shown
     assert "n'a donc pas commencé" in shown
     assert recorder.prompts == []
+
+
+_WITH_REPORT = """\
+studioz:
+  workflows:
+    - name: Relire la formation (QA)
+      skill: qa-formation
+      scope: deck
+      prompt: "Fais le QA de {deck}."
+      report: true
+      then:
+        name: Appliquer les corrections
+        skill: qa-fix
+        prompt: "Corrige dans {deck} :\\n{chosen}\\nRapport : {report}"
+"""
+
+_REPORT = """\
+# QA de client/abc
+
+## Erreurs
+
+- [ ] `a.md`, cadre « X » : faux.
+  Remplacer par Y.
+- [ ] `b.md` : coquille.
+
+## Incohérences
+
+Rien de grave.
+
+* [x] `c.md` : deux noms.
+"""
+
+
+def test_then_needs_a_report(tmp_path: Path) -> None:
+    def one(fields: str) -> str:
+        return _error(tmp_path, f"  workflows:\n    - {{{fields}}}\n")
+
+    assert "`then` demande `report: true`" in one(
+        "name: a, skill: s, prompt: p, then: {name: b, skill: t, prompt: q}"
+    )
+    assert "le {deck} du prompt de `then` n'est aucun champ ({chosen}, {report})" in (
+        one(
+            "name: a, skill: s, prompt: p, report: true,"
+            " then: {name: b, skill: t, prompt: '{deck}'}"
+        )
+    )
+
+
+def test_checklists(tmp_path: Path) -> None:
+    parts = workflows.checklist(_REPORT)
+    assert [(p.title, p.notes) for p in parts] == [
+        ("QA de client/abc", ""),
+        ("Erreurs", ""),
+        ("Incohérences", "Rien de grave."),
+    ]
+    items = [item for part in parts for item in part.items]
+    assert [(i.index, i.checked, i.text) for i in items] == [
+        (0, False, "`a.md`, cadre « X » : faux.\nRemplacer par Y."),
+        (1, False, "`b.md` : coquille."),
+        (2, True, "`c.md` : deux noms."),
+    ]
+    path = tmp_path / "r.md"
+    path.write_text(_REPORT, encoding="utf8")
+    workflows.tick(path, {1})
+    ticked = path.read_text(encoding="utf8")
+    assert "- [x] `b.md`" in ticked
+    assert "* [ ] `c.md`" in ticked
+    assert ticked.replace("[x]", "[ ]") == _REPORT.replace("[x]", "[ ]")
+
+
+@fixture
+def reporting(
+    repository: Path, workspace: Path, recorder: _Recorder
+) -> Iterator[TestClient]:
+    _declare(workspace, _WITH_REPORT, skills=("qa-formation", "qa-fix"))
+    app = create_app(
+        repository,
+        agents=Agents(recorder),
+        login=Login(check=lambda: (True, "a@b.fr")),
+    )
+    with TestClient(app, base_url="http://localhost:8421") as client:
+        yield client
+
+
+def test_a_report_then_its_follow_up(
+    reporting: TestClient, workspace: Path, recorder: _Recorder
+) -> None:
+    report = workspace / ".run/studioz/rapports/relire-la-formation-qa--client-abc.md"
+    report.parent.mkdir(parents=True)
+    report.write_text("ancien\n", encoding="utf8")
+    reporting.post(
+        "/espaces/demo/workflows/relire-la-formation-qa",
+        data={"deck": "client/abc"},
+        headers=ORIGIN,
+    )
+    conversation = _conversation(reporting, workspace)
+    _wait_idle(conversation)
+    assert not report.exists()  # the previous run's is gone
+    assert recorder.prompts[-1].endswith(
+        "écris aussi tes constats dans "
+        "`.run/studioz/rapports/relire-la-formation-qa--client-abc.md` (même si la "
+        "méthode suivie ne modifie aucun fichier par ailleurs), pour que la personne "
+        "y choisisse ceux à traiter : un titre `## ` par catégorie, puis un constat "
+        "par case à cocher (`- [ ] …`), chacun compréhensible seul (fichier, cadre ou "
+        "cellule, le problème, ce que tu proposes), en Markdown, sans rien d'autre "
+        "que de courtes remarques sous les titres."
+    )
+    panel = reporting.get("/espaces/demo/rapports").text
+    assert "Relire la formation (QA)</button>" in panel
+    assert "pas encore écrit" in panel
+    waiting = reporting.post(
+        "/espaces/demo/rapports/relire-la-formation-qa--client-abc", headers=ORIGIN
+    ).text
+    assert "L'agent n'a pas encore écrit ce rapport" in waiting
+
+    # The agent wrote it.
+    report.write_text(_REPORT, encoding="utf8")
+    assert "1/3 cochés" in reporting.get("/espaces/demo/rapports").text
+    base = "/espaces/demo/rapports/relire-la-formation-qa--client-abc"
+    dialog = reporting.post(base, headers=ORIGIN).text
+    assert '<input type="checkbox" name="item" value="2" checked>' in dialog
+    assert "Appliquer les corrections</button>" in dialog
+    assert reporting.post(f"{base}/coches", data={"item": ["0"]}, headers=ORIGIN)
+    assert "- [x] `a.md`" in report.read_text(encoding="utf8")
+    assert "* [ ] `c.md`" in report.read_text(encoding="utf8")
+
+    none = reporting.post(f"{base}/suite", headers=ORIGIN).text
+    assert "Cochez au moins un constat." in none
+    sent = reporting.post(f"{base}/suite", data={"item": ["0", "1"]}, headers=ORIGIN)
+    assert sent.headers["HX-Trigger"] == "agent-started"
+    _wait_idle(conversation)
+    assert recorder.prompts[-1] == (
+        "Suis la skill `qa-fix` du dépôt pour cette demande.\n\n"
+        "Corrige dans client/abc :\n"
+        "- `a.md`, cadre « X » : faux.\n  Remplacer par Y.\n"
+        "- `b.md` : coquille.\n"
+        "Rapport : .run/studioz/rapports/relire-la-formation-qa--client-abc.md"
+    )
+    assert conversation.entries[-2].text.startswith("Appliquer les corrections : ")
+
+
+def test_no_reports_no_panel(studio: TestClient) -> None:
+    assert "<h2>Rapports" not in studio.get("/espaces/demo/rapports").text
+    assert 'hx-get="/espaces/demo/rapports"' in studio.get("/espaces/demo").text

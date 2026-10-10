@@ -1,0 +1,21 @@
+<section class="reports" id="reports" hx-get="/espaces/{{ workspace.name }}/rapports{% if deck %}?formation={{ deck | urlencode }}{% endif %}"
+         hx-swap="outerHTML" hx-trigger="workspace-changed from:body{% if running %}, every 5s{% endif %}">
+  {% if reports %}
+  <h2>Rapports <span class="count">{{ reports | length }}</span></h2>
+  <ul>
+    {% for report in reports %}
+    {% set workflow = declared.get(report.workflow) %}
+    <li>
+      <button type="button" class="link" data-dialog="#action-dialog"
+              data-url="/espaces/{{ workspace.name }}/rapports/{{ report.id }}"
+              title="Les constats, à cocher">{{ workflow.title if workflow else report.workflow }}</button>
+      {% if report.deck %}<span class="path">{{ report.deck }}</span>{% endif %}
+      <span class="hint">
+        {%- if report.path.is_file() %}{% set items = report.parts() | map(attribute="items") | sum(start=[]) %}
+        {{ items | selectattr("checked") | list | length }}/{{ items | length }} cochés
+        {%- elif running %} en cours…{% else %} pas encore écrit{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
