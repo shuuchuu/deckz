@@ -3,9 +3,10 @@
 ## Where things stand, and how to resume (2026-10-10)
 
 **Done:** phases 0, 1 and 2 (workspaces without agents: increments 1 to 8 under
-"Phase 2"), and phase 3's increments 1 to 3 (the conversation panel, question
-forms, checkpoints and "Annuler ce tour", under "Phase 3"). **Next:** phase 3's
-increment 4, usage and rate-limit pauses (see "Phase 3's increments" below). `git log origin/main..main` in
+"Phase 2"), and phase 3's increments 1 to 4 (the conversation panel, question
+forms, checkpoints and "Annuler ce tour", usage and limit pauses, under "Phase
+3"). **Next:** phase 3's increment 5, the agent in the existing dialogs (see
+"Phase 3's increments" below). `git log origin/main..main` in
 `../deckz` (and in `../slides`, for its `uv.lock`) lists what isn't pushed;
 nothing is released since 31.3.3. Push and release are the user's call.
 
@@ -103,7 +104,7 @@ are gone). studioz pins `claude-agent-sdk==0.2.160` (bundling Claude Code
    refusals and `auto` permissions in the sandbox, planned for 3.
 2. **Questions**: done (see "Phase 3").
 3. **Guardrails**: done (see "Phase 3").
-4. **Usage**: each run's usage, rate-limit pauses with the reset time.
+4. **Usage**: done (see "Phase 3").
 5. **The agent in the existing dialogs**: drafting the commit message, "translate
    now" for a one-sided pair, "ask the agent to fix it" after a refusal, resolving a
    Sync conflict (the person sees the result before continuing), comments on frames
@@ -889,6 +890,21 @@ the turn listed it, the undo put it back (`git status` clean, refs removed),
 and the agent, asked next, knew the file was back. Left: undoing more than the
 last turn; the `refs/studioz/` of a closed workspace stay (harmless, a few
 objects); the button itself not yet tried in a browser.
+
+**Increment 4: done** (2026-10-10): usage and limit pauses. The panel's header
+shows the account's windows as Claude Code reports them in each
+`RateLimitEvent` (`raw.unifiedWindows`, checked with 2.1.283: « 5 h : 14 % · 7 j
+: 77 % », in red from 75 %, the reset times in its tooltip; they count every
+use of the account, not only studioz's). Each turn ends with its estimated
+usage (`total_cost_usd`, at API prices: what it took from the subscription,
+not a bill). A turn a limit stops (`status: rejected`) ends as "Interrompu par
+la limite", and the conversation pauses: it resumes by itself at the reset
+time (the reaper, every 5 s), telling the agent to carry on; "Annuler la
+reprise" cancels it, a message from the person replaces it. Tried on slides:
+a one-word turn on the long trial conversation showed 0,32 $ (the resumed
+context), the header 14 % and 77 %. A real limit wasn't hit (tested with
+fakes). Left: a pause doesn't survive a studioz restart; no warning before a
+long task when a window is nearly full.
 
 ### Phase 4: workflows
 

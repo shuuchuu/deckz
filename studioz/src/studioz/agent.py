@@ -16,6 +16,11 @@ ask about is refused with a message, never shown to the person. A question
 the agent asks (`AskUserQuestion`, as slides' skills do) is shown as a form,
 and the turn waits for the answer (`can_use_tool`).
 
+Claude's usage limits are the account's (the person's other uses of Claude
+count too): the panel shows the five-hour and seven-day windows as Claude Code
+reports them, each turn's estimated usage, and a turn stopped by a limit is a
+pause: the conversation resumes by itself once the limit resets.
+
 The conversation outlives a page and studioz itself: its session id and the
 transcript shown are kept under the workspace's `.run/studioz/agent/`, and
 the next message resumes the session (`resume=`). The Claude Code process
@@ -32,7 +37,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from itertools import count
 from pathlib import Path
-from time import monotonic
+from time import monotonic, time
 from typing import Any, Protocol
 
 from claude_agent_sdk import (
@@ -47,6 +52,7 @@ from claude_agent_sdk import (
     PermissionResultAllow,
     PermissionResultDeny,
     RateLimitEvent,
+    RateLimitInfo,
     ResultMessage,
     TextBlock,
     ToolPermissionContext,
@@ -300,36 +306,121 @@ def _failed_tools(workspace: Path, message: UserMessage) -> list[Entry]:
     return found
 
 
-def _result(message: ResultMessage, stopped: bool) -> list[Entry]:
+def _result(message: ResultMessage, stopped: bool, limited: bool) -> list[Entry]:
     seconds = round(message.duration_ms / 1000)
+    if limited and message.is_error:
+        return [Entry("end", f"Interrompu par la limite au bout de {seconds} s")]
     # An interrupted turn may end on an error result (`ede_diagnostic`).
     if stopped or message.terminal_reason in {"aborted_streaming", "aborted_tools"}:
         return [Entry("end", f"Arrêté au bout de {seconds} s")]
     if message.is_error:
         errors = "\n".join(message.errors or []) or message.result or ""
         return [Entry("error", "Le tour s'est arrêté sur une erreur", _short(errors))]
-    return [Entry("end", f"Terminé en {seconds} s")]
+    cost = message.total_cost_usd
+    usage = (
+        f"Usage estimé : {cost:.2f} $ au tarif de l'API, décompté de votre "
+        "abonnement".replace(".", ",", 1)
+        if cost
+        else ""
+    )
+    return [Entry("end", f"Terminé en {seconds} s", usage)]
+
+
+def when(timestamp: float) -> str:
+    """A reset time, in French.
+
+    Returns:
+        « 18:30 » today, else « le 13/10 à 08:00 ».
+    """
+    moment = datetime.fromtimestamp(timestamp)
+    if moment.date() == datetime.now().date():
+        return moment.strftime("%H:%M")
+    return moment.strftime("le %d/%m à %H:%M")
 
 
 def _rate_limit(message: RateLimitEvent) -> list[Entry]:
     info = message.rate_limit_info
     if info.status != "rejected":
         return []
-    when = (
-        datetime.fromtimestamp(info.resets_at).strftime("%H:%M")
-        if info.resets_at
-        else "plus tard"
+    reset = f"elle se renouvelle {when(info.resets_at)}" if info.resets_at else ""
+    return [Entry("error", "Limite d'utilisation de votre abonnement atteinte", reset)]
+
+
+@dataclass(frozen=True)
+class Window:
+    """One of the account's usage windows."""
+
+    name: str
+    """`five_hour`, `seven_day`…"""
+    used: float
+    """The share used, from 0 to 1."""
+    resets_at: float | None
+
+
+_WINDOWS = {"five_hour": ("5 h", "des 5 heures"), "seven_day": ("7 j", "de la semaine")}
+_WARN = 0.75
+
+
+def windows(info: RateLimitInfo) -> tuple[Window, ...]:
+    """The usage windows a `RateLimitEvent` reports.
+
+    Returns:
+        Them, from `unifiedWindows` (seen with Claude Code 2.1.283), else the one
+        the event is about.
+    """
+    unified = (info.raw or {}).get("unifiedWindows") or {}
+    found = tuple(
+        Window(name, float(data.get("utilization") or 0), data.get("resetsAt"))
+        for name, data in unified.items()
+        if isinstance(data, dict)
     )
-    return [
-        Entry(
-            "error",
-            "Limite d'utilisation de votre abonnement atteinte : "
-            f"reprise possible à {when}",
-        )
+    if found or info.utilization is None:
+        return found
+    return (Window(info.rate_limit_type or "?", info.utilization, info.resets_at),)
+
+
+def usage_summary(found: tuple[Window, ...]) -> dict[str, object]:
+    """What the panel shows of the account's usage.
+
+    Returns:
+        `text` (« 5 h : 11 % · 7 j : 77 % »), `title` (with the reset times),
+        `warn` (a window at 75 % or more); empty before Claude Code reported any.
+    """
+    if not found:
+        return {"text": "", "title": "", "warn": False}
+    text = " · ".join(
+        f"{_WINDOWS.get(w.name, (w.name, ''))[0]} : {round(w.used * 100)} %"
+        for w in found
+    )
+    details = [
+        f"{round(w.used * 100)} % de la fenêtre {_WINDOWS.get(w.name, ('', w.name))[1]}"
+        + (f", renouvelée {when(w.resets_at)}" if w.resets_at else "")
+        for w in found
     ]
+    title = (
+        "Votre abonnement Claude (tout ce que vous faites avec Claude compte) : "
+        + " ; ".join(details)
+    )
+    return {"text": text, "title": title, "warn": any(w.used >= _WARN for w in found)}
 
 
-def entries(workspace: Path, message: object, stopped: bool = False) -> list[Entry]:
+RESUME = (
+    "La limite d'utilisation de l'abonnement est passée : reprends là où tu "
+    "t'étais arrêté."
+)
+"""Sent when a conversation paused by a limit resumes by itself."""
+
+
+class Account:
+    """What every conversation shares: the account's usage windows."""
+
+    def __init__(self) -> None:
+        self.windows: tuple[Window, ...] = ()
+
+
+def entries(
+    workspace: Path, message: object, stopped: bool = False, limited: bool = False
+) -> list[Entry]:
     """What a message adds to the transcript.
 
     A subagent's own messages aren't shown: the tool use that started it is.
@@ -338,6 +429,7 @@ def entries(workspace: Path, message: object, stopped: bool = False) -> list[Ent
         workspace: The workspace, which paths are shown relative to.
         message: The Agent SDK's message.
         stopped: Whether the person stopped the turn it ends.
+        limited: Whether a usage limit stopped it.
 
     Returns:
         Its entries, maybe none.
@@ -348,7 +440,7 @@ def entries(workspace: Path, message: object, stopped: bool = False) -> list[Ent
         # Once stopped, the tools interrupted fail: "Arrêté" says it.
         return [] if stopped else _failed_tools(workspace, message)
     if isinstance(message, ResultMessage):
-        return _result(message, stopped)
+        return _result(message, stopped, limited)
     if isinstance(message, RateLimitEvent):
         return _rate_limit(message)
     return []
@@ -512,8 +604,13 @@ class Conversation:
         self,
         workspace: Path,
         client_factory: Callable[[ClaudeAgentOptions], Client] = _sdk_client,
+        account: Account | None = None,
     ) -> None:
         self.workspace = workspace
+        self.account = account or Account()
+        self.paused_until: float | None = None
+        """When a limit stopped the agent: it resumes by itself then."""
+        self._limited_until: float | None = None
         self._factory = client_factory
         self._directory = workspace / AGENT_DIR
         self.entries: list[Entry] = self._load()
@@ -584,13 +681,27 @@ class Conversation:
         """
         if self.running or not prompt.strip():
             return False
+        # The person takes over from a pause.
+        self.paused_until = None
+        await self._add(Entry("person", prompt.strip()))
+        self._start(prompt.strip())
+        return True
+
+    def _start(self, prompt: str) -> None:
         self.running = True
         self._stopped = False
-        await self._add(Entry("person", prompt.strip()))
+        self._limited_until = None
         note, self._note = self._note, None
-        told = f"{note}\n\n{prompt.strip()}" if note else prompt.strip()
+        told = f"{note}\n\n{prompt}" if note else prompt
         self._task = asyncio.create_task(self._turn(told))
-        return True
+
+    async def resume_if_due(self) -> None:
+        """Resume a conversation a limit paused, once the limit reset."""
+        if self.paused_until is None or self.running or time() < self.paused_until:
+            return
+        self.paused_until = None
+        await self._add(Entry("notice", "Reprise après la limite d'utilisation"))
+        self._start(RESUME)
 
     async def _turn(self, prompt: str) -> None:
         index = self._directory / "index"
@@ -605,6 +716,8 @@ class Conversation:
                 self._client = client
             await self._client.query(prompt)
             async for message in self._client.receive_response():
+                if isinstance(message, RateLimitEvent):
+                    self._limited(message.rate_limit_info)
                 if isinstance(message, ResultMessage) and message.session_id:
                     self._directory.mkdir(parents=True, exist_ok=True)
                     (self._directory / _SESSION).write_text(
@@ -614,7 +727,14 @@ class Conversation:
                     # Before "Terminé": the files changed belong to the turn.
                     checked = True
                     await self._checkpoint(index, before)
-                await self._add(*entries(self.workspace, message, self._stopped))
+                await self._add(
+                    *entries(
+                        self.workspace,
+                        message,
+                        self._stopped,
+                        self._limited_until is not None,
+                    )
+                )
         except asyncio.CancelledError:
             raise
         except Exception as error:
@@ -626,7 +746,23 @@ class Conversation:
             if not checked:
                 await self._checkpoint(index, before)
             self.running = False
+            if self._limited_until is not None and not self._stopped:
+                self.paused_until = self._limited_until
+                await self._add(
+                    Entry(
+                        "notice",
+                        f"En pause : l'agent reprendra seul {when(self.paused_until)}",
+                        "« Arrêter » annule la reprise ; un message de votre part "
+                        "la remplace.",
+                    )
+                )
             await self._notify()
+
+    def _limited(self, info: RateLimitInfo) -> None:
+        self.account.windows = windows(info) or self.account.windows
+        if info.status == "rejected":
+            # Unknown reset: try again in an hour.
+            self._limited_until = info.resets_at or time() + 3600
 
     async def _checkpoint(self, index: Path, before: str | None) -> None:
         after = await asyncio.to_thread(checkpoints.snapshot, self.workspace, index)
@@ -738,7 +874,11 @@ class Conversation:
             self.question.answers.set_result(None)
 
     async def interrupt(self) -> None:
-        """Stop the agent's turn; what it changed so far stays."""
+        """Stop the agent's turn, or cancel a pause; what it changed stays."""
+        if self.paused_until is not None and not self.running:
+            self.paused_until = None
+            await self._add(Entry("notice", "Reprise annulée"))
+            return
         if self.running and self._client is not None:
             self._stopped = True
             self._drop_question()
@@ -789,15 +929,20 @@ class Agents:
     ) -> None:
         self._factory = client_factory
         self._conversations: dict[Path, Conversation] = {}
+        self.account = Account()
 
     def conversation(self, workspace: Path) -> Conversation:
         if workspace not in self._conversations:
-            self._conversations[workspace] = Conversation(workspace, self._factory)
+            self._conversations[workspace] = Conversation(
+                workspace, self._factory, self.account
+            )
         return self._conversations[workspace]
 
     async def stop_idle(self) -> None:
+        """Stop the idle agents' processes, and resume the paused ones due."""
         for conversation in list(self._conversations.values()):
             await conversation.stop_if_idle()
+            await conversation.resume_if_due()
 
     async def close_all(self) -> None:
         for conversation in list(self._conversations.values()):

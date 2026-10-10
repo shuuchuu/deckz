@@ -2,7 +2,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
-from time import monotonic, sleep
+from time import monotonic, sleep, time
 from typing import Any
 
 from claude_agent_sdk import (
@@ -143,7 +143,9 @@ def test_entries(tmp_path: Path) -> None:
     assert stopped[0].text == "Arrêté au bout de 2 s"
 
     limit = RateLimitEvent(RateLimitInfo("rejected", resets_at=None), "u", "s")
-    assert "reprise possible à plus tard" in entries(tmp_path, limit)[0].text
+    assert entries(tmp_path, limit)[0].text == (
+        "Limite d'utilisation de votre abonnement atteinte"
+    )
     warning = RateLimitEvent(RateLimitInfo("allowed_warning"), "u", "s")
     assert entries(tmp_path, warning) == []
 
@@ -265,6 +267,18 @@ class FakeClient:
             (cwd / "nouveau.md").write_text("nouveau\n", "utf8")
             yield _assistant(TextBlock("Écrit."))
             yield _result()
+            return
+        if self.prompts[-1] == "limite":
+            yield RateLimitEvent(
+                RateLimitInfo(
+                    "rejected",
+                    resets_at=int(time()) + 3600,
+                    raw={"unifiedWindows": {"five_hour": {"utilization": 1.0}}},
+                ),
+                "u",
+                "s",
+            )
+            yield _result(is_error=True, errors=["limit"])
             return
         if self.prompts[-1] == "demande":
             # As Claude Code asks: the tool use, then the permission request.
@@ -652,3 +666,80 @@ def test_the_last_turn_survives_a_restart(
     assert again.undoable is not None
     assert asyncio.run(again.undo()) is None
     assert not (workspace / "nouveau.md").exists()
+
+
+def test_usage_windows() -> None:
+    info = RateLimitInfo(
+        "allowed_warning",
+        raw={
+            "unifiedWindows": {
+                "five_hour": {"utilization": 0.11, "resetsAt": time() + 600},
+                "seven_day": {"utilization": 0.77, "resetsAt": time() + 3 * 86400},
+            }
+        },
+    )
+    found = agent.windows(info)
+    assert [(w.name, w.used) for w in found] == [
+        ("five_hour", 0.11),
+        ("seven_day", 0.77),
+    ]
+    summary = agent.usage_summary(found)
+    assert summary["text"] == "5 h : 11 % · 7 j : 77 %"
+    assert summary["warn"] is True
+    assert "77 % de la fenêtre de la semaine, renouvelée le " in str(summary["title"])
+    assert agent.usage_summary(()) == {"text": "", "title": "", "warn": False}
+    single = RateLimitInfo("allowed", rate_limit_type="five_hour", utilization=0.2)
+    assert [(w.name, w.used) for w in agent.windows(single)] == [("five_hour", 0.2)]
+
+
+def test_a_turn_says_its_usage(tmp_path: Path) -> None:
+    end = entries(tmp_path, _result(total_cost_usd=0.094))[0]
+    assert end.detail == (
+        "Usage estimé : 0,09 $ au tarif de l'API, décompté de votre abonnement"
+    )
+
+
+def test_a_limit_pauses_then_resumes(tmp_path: Path, factory: FakeFactory) -> None:
+    agents = Agents(factory)
+    conversation = agents.conversation(tmp_path)
+
+    async def scenario() -> None:
+        await _send_and_wait(conversation, "limite")
+        assert conversation.paused_until is not None
+        assert agents.account.windows[0].used >= 1
+        texts = [e.text for e in conversation.entries]
+        assert texts[-3] == "Limite d'utilisation de votre abonnement atteinte"
+        assert texts[-2] == "Interrompu par la limite au bout de 2 s"
+        assert texts[-1].startswith("En pause : l'agent reprendra seul ")
+
+        await agents.stop_idle()  # not due yet
+        assert factory.clients[0].prompts == ["limite"]
+
+        conversation.paused_until = time() - 1
+        await agents.stop_idle()
+        assert conversation._task is not None
+        await conversation._task
+        assert factory.clients[0].prompts[-1] == agent.RESUME
+        assert conversation.paused_until is None
+        assert "Reprise après la limite d'utilisation" in [
+            e.text for e in conversation.entries
+        ]
+
+    asyncio.run(scenario())
+
+
+def test_a_pause_is_cancelled(tmp_path: Path, factory: FakeFactory) -> None:
+    conversation = Conversation(tmp_path, factory)
+
+    async def scenario() -> None:
+        await _send_and_wait(conversation, "limite")
+        await conversation.interrupt()
+        assert conversation.paused_until is None
+        assert conversation.entries[-1].text == "Reprise annulée"
+        await _send_and_wait(conversation, "limite")
+        assert conversation.paused_until is not None
+        # A message from the person takes over.
+        await _send_and_wait(conversation, "Bonjour")
+        assert conversation.paused_until is None
+
+    asyncio.run(scenario())

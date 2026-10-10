@@ -1114,6 +1114,10 @@ async def agent_events(
             state: dict[str, object] = {
                 "running": conversation.running,
                 "asking": question is not None,
+                "usage": agent.usage_summary(conversation.account.windows),
+                "pausedUntil": agent.when(conversation.paused_until)
+                if conversation.paused_until
+                else "",
                 "undoable": len(conversation.undoable.files)
                 if conversation.undoable
                 else 0,

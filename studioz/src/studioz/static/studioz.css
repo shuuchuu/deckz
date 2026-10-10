@@ -294,6 +294,8 @@ tr.closed td { color: var(--muted); }
 #agent-new { margin-left: auto; }
 .agent-status { color: var(--muted); font-size: 0.85em; }
 .agent[data-running="true"] .agent-status { color: var(--accent); }
+.agent-usage { color: var(--muted); font-size: 0.78em; white-space: nowrap; cursor: help; }
+.agent-usage.warn { color: var(--danger); }
 .agent-log { flex: 1; min-height: 0; overflow-y: auto; padding: 0.5rem 0.7rem; display: flex; flex-direction: column; gap: 0.4rem; }
 .agent-entry { font-size: 0.9em; }
 .agent-text { white-space: pre-wrap; overflow-wrap: anywhere; }

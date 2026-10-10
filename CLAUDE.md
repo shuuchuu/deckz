@@ -451,7 +451,9 @@ or move a branch (the person commits from studioz); a question it asks
 (`AskUserQuestion`) is a form in the panel, the turn waiting in `can_use_tool`
 for the answer. `studioz.checkpoints` snapshots the workspace's files around
 each turn (a private index, trees under `refs/studioz/`), so that "Annuler ce
-tour" puts back what the last one changed. Its session and transcript
+tour" puts back what the last one changed. The panel shows the account's usage
+windows and each turn's usage; a turn stopped by a usage limit pauses the
+conversation, which resumes by itself at the reset time. Its session and transcript
 are kept in `.run/studioz/agent/`, resumed after a restart; the page follows it
 through server-sent events, which end when studioz stops (`Studio.closing`).
 

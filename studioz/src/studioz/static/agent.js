@@ -14,18 +14,22 @@ if (panel) {
   const fold = document.getElementById("agent-fold");
   const slot = document.getElementById("agent-question");
   const undo = document.getElementById("agent-undo");
+  const usage = document.getElementById("agent-usage");
   const base = panel.dataset.base;
   let running = false;
   let asking = false;
   let undoable = 0;
+  let pausedUntil = "";
   let loggedIn = false;
 
   const atBottom = () => log.scrollHeight - log.scrollTop - log.clientHeight < 40;
 
   function update() {
     panel.dataset.running = String(running);
-    status.textContent = !loggedIn ? "" : asking ? "attend votre réponse" : running ? "travaille…" : "prêt";
-    stop.hidden = !running;
+    status.textContent = !loggedIn ? "" : asking ? "attend votre réponse" : running ? "travaille…"
+      : pausedUntil ? `en pause jusqu'à ${pausedUntil.replace(/^le /, "")}` : "prêt";
+    stop.hidden = !running && !pausedUntil;
+    stop.textContent = running ? "Arrêter" : "Annuler la reprise";
     undo.hidden = running || !undoable;
     send.disabled = running || !loggedIn;
     message.disabled = !loggedIn;
@@ -44,6 +48,10 @@ if (panel) {
     running = state.running;
     asking = state.asking;
     undoable = state.undoable;
+    pausedUntil = state.pausedUntil;
+    usage.textContent = state.usage.text;
+    usage.title = state.usage.title;
+    usage.classList.toggle("warn", state.usage.warn);
     loggedIn = state.loggedIn;
     login.hidden = loggedIn;
     status.title = loggedIn && state.account ? `Compte Claude : ${state.account}` : "";
