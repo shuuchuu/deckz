@@ -77,7 +77,8 @@ def test_status_runs_again_only_after_a_change(tmp_path: Path, workspace: Path) 
 
     report = _finished(statuses, workspace)
 
-    (group,) = report.groups  # The built decks aren't a problem here.
+    assert report.result is not None
+    (group,) = report.result  # The built decks aren't a problem here.
     assert group.title == "Vérifications"
     (problem,) = group.problems
     assert (problem.file, problem.line) == ("content/greeting/hello.md", 2)
@@ -106,7 +107,7 @@ def test_a_failed_status_says_why(workspace: Path) -> None:
     report = _finished(statuses, workspace)
 
     assert report.error == "boom"
-    assert report.groups == ()
+    assert report.result is None
 
 
 def test_build_problems_link_the_failing_file(workspace: Path) -> None:
@@ -176,4 +177,4 @@ def test_panel_with_the_deck_s_shrunk_frames(
     assert 'data-file="content/greeting/hello.md"' in page
     assert 'data-line="2"' in page
     assert 'data-page="3"' in page
-    assert "problems-refresh from:body" in page
+    assert "workspace-changed from:body" in page

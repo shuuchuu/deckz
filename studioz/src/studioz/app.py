@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import subprocess
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from dataclasses import asdict, dataclass
@@ -28,9 +29,11 @@ from deckz.exceptions import DeckzError, WorktreeError
 from deckz.models import Lang
 from deckz.worktrees import main_checkout, remove
 
-from . import __version__, problems, sources, workspaces
+from . import __version__, background, changes, problems, sources, workspaces
+from .baselines import Baselines
+from .comparison import compare, signatures
 from .local_only import local_only
-from .watches import Snapshot, Watch, Watches, handout
+from .watches import Snapshot, State, Watch, Watches, handout
 
 _PACKAGE = Path(str(files("studioz")))
 
@@ -45,6 +48,8 @@ class Studio:
     settings: GlobalSettings
     watches: Watches
     statuses: problems.Statuses
+    affected: changes.Affected
+    baselines: Baselines
 
     def workspace(self, name: str) -> workspaces.Workspace:
         found = workspaces.find(self.settings, name)
@@ -180,11 +185,15 @@ def _state(snapshot: Snapshot, workspace: Path) -> dict[str, object]:
 
 
 async def watch_events(
-    watch: Watch, pdf_url: str, disconnected: Callable[[], Awaitable[bool]]
+    watch: Watch,
+    pdf_url: str,
+    disconnected: Callable[[], Awaitable[bool]],
+    on_built: Callable[[], object] | None = None,
 ) -> AsyncIterator[str]:
     """`watch`'s state and new PDFs as server-sent events, until `disconnected`.
 
-    Following them keeps the watch running.
+    Following them keeps the watch running. `on_built` is called, in a \
+    thread, after each new PDF is announced.
 
     Yields:
         `state` events (building, built or failed, with the errors), and \
@@ -205,6 +214,8 @@ async def watch_events(
                 last_pdf = snapshot.pdf_version
                 quiet = 0.0
                 yield _event("pdf", {"url": f"{pdf_url}&v={last_pdf}"})
+                if on_built is not None and snapshot.state is State.BUILT:
+                    await asyncio.to_thread(on_built)
             if quiet >= _HEARTBEAT:
                 quiet = 0.0
                 yield ": heartbeat\n\n"
@@ -229,15 +240,118 @@ async def events(
     )
     pdf_url = f"/espaces/{quote(name)}/formations/{quote(deck)}/pdf?lang={lang}"
     return StreamingResponse(
-        watch_events(watch, pdf_url, request.is_disconnected),
+        watch_events(
+            watch,
+            pdf_url,
+            request.is_disconnected,
+            # A build of a workspace with no change is its last commit's.
+            lambda: studio.baselines.capture(found.worktree.path, directory, lang),
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
 
 
+@router.get("/espaces/{name}/formations/{deck:path}/avant.pdf")
+def baseline_pdf(
+    studio: StudioDep, name: str, deck: str, lang: Lang = "fr"
+) -> Response:
+    """The deck's handout as of the workspace's last commit.
+
+    Returns:
+        The PDF.
+
+    Raises:
+        HTTPException: 404 until its baseline is there.
+    """
+    found, directory = studio.deck(name, deck)
+    state = studio.baselines.get(found.worktree.path, directory, lang)
+    if state.baseline is None or state.baseline.pdf is None:
+        raise HTTPException(404, "Pas de version du dernier commit")
+    return FileResponse(
+        state.baseline.pdf,
+        media_type="application/pdf",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.get("/espaces/{name}/formations/{deck:path}/comparaison")
+def comparison(
+    request: Request, studio: StudioDep, name: str, deck: str, lang: Lang = "fr"
+) -> Response:
+    """The deck's frames changed since the workspace's last commit.
+
+    Returns:
+        The before/after view, which reloads itself while the baseline is \
+        built, and on a `comparison-refresh` event.
+    """
+    found, directory = studio.deck(name, deck)
+    path = found.worktree.path
+    base = f"/espaces/{quote(name)}/formations/{quote(deck)}"
+    context: dict[str, Any] = {
+        "url": f"{base}/comparaison?lang={lang}",
+        "retry_url": f"{base}/comparaison/reessayer?lang={lang}",
+    }
+    watch = studio.watches.get(path)
+    snapshot = (
+        watch.snapshot()
+        if watch and watch.deck == directory and watch.lang == lang
+        else None
+    )
+    if not background.changes(path):
+        return _render(request, "_comparison.html", status="clean", **context)
+    state = studio.baselines.get(path, directory, lang)
+    context["state"] = state
+    context["commit"] = background.git(
+        path, "log", "-1", "--format=%h %s", state.commit
+    )
+    if state.baseline is None:
+        return _render(request, "_comparison.html", status="baseline", **context)
+    current = handout(directory, lang)
+    if snapshot is None or not snapshot.built or not current.is_file():
+        # The PDF there may be older than the files.
+        return _render(request, "_comparison.html", status="waiting", **context)
+    try:
+        before = state.baseline.pdf
+        result = compare(
+            state.baseline.titles,
+            signatures(before) if before else (),
+            frames(DeckSettings.from_yaml(directory), current, query=False),
+            signatures(current),
+        )
+    except (DeckzError, OSError, subprocess.CalledProcessError) as error:
+        return _render(
+            request, "_comparison.html", status="error", error=str(error), **context
+        )
+    return _render(
+        request,
+        "_comparison.html",
+        status="compared",
+        comparison=result,
+        failed=snapshot.state is State.FAILED,
+        before_url=f"{base}/avant.pdf?lang={lang}&c={state.commit}",
+        after_url=f"{base}/pdf?lang={lang}&v={current.stat().st_mtime_ns}",
+        **context,
+    )
+
+
+@router.post("/espaces/{name}/formations/{deck:path}/comparaison/reessayer")
+def retry_baseline(
+    request: Request, studio: StudioDep, name: str, deck: str, lang: Lang = "fr"
+) -> Response:
+    found, directory = studio.deck(name, deck)
+    studio.baselines.retry(found.worktree.path, directory, lang)
+    return comparison(request, studio, name, deck, lang)
+
+
 @router.get("/espaces/{name}/formations/{deck:path}", response_class=HTMLResponse)
 def deck_page(
-    request: Request, studio: StudioDep, name: str, deck: str, lang: Lang = "fr"
+    request: Request,
+    studio: StudioDep,
+    name: str,
+    deck: str,
+    lang: Lang = "fr",
+    vue: str | None = None,
 ) -> Response:
     found, _ = studio.deck(name, deck)
     workspaces.mark_used(found.worktree.path)
@@ -248,6 +362,7 @@ def deck_page(
         decks=workspaces.decks(found.worktree.path),
         deck=deck,
         lang=lang,
+        view="changes" if vue == "modifications" else "slides",
     )
 
 
@@ -302,7 +417,7 @@ def problems_panel(
 
     Returns:
         The panel, which reloads itself while `deckz status` runs, and on \
-        a `problems-refresh` event.
+        a `workspace-changed` event.
     """
     found = studio.workspace(name)
     path = found.worktree.path
@@ -314,7 +429,7 @@ def problems_panel(
         if watch and watch.deck == directory and watch.lang == lang:
             groups.append(problems.build_problems(path, watch.snapshot()))
         groups.append(problems.shrunk(path, directory, lang))
-    groups += report.groups
+    groups += report.result or ()
     shown = [group for group in groups if group is not None]
     query = f"?formation={quote(formation)}&lang={lang}" if formation else ""
     return _render(
@@ -325,6 +440,37 @@ def problems_panel(
         count=sum(len(group.problems) for group in shown),
         report=report,
         deck=formation,
+    )
+
+
+@router.get("/espaces/{name}/modifications", response_class=HTMLResponse)
+def changes_panel(
+    request: Request,
+    studio: StudioDep,
+    name: str,
+    formation: str | None = None,
+    lang: Lang = "fr",
+) -> Response:
+    """The workspace's Changes panel.
+
+    Returns:
+        The panel, which reloads itself, more often while the decks the \
+        changes reach are being found.
+    """
+    found = studio.workspace(name)
+    path = found.worktree.path
+    groups = changes.grouped(path, workspaces.decks(path))
+    query = f"?formation={quote(formation)}&lang={lang}" if formation else ""
+    return _render(
+        request,
+        "_changes.html",
+        workspace=found,
+        url=f"/espaces/{quote(name)}/modifications{query}",
+        groups=groups,
+        count=sum(len(group.files) for group in groups),
+        affected=studio.affected.report(path),
+        deck=formation,
+        lang=lang,
     )
 
 
@@ -358,6 +504,8 @@ def create_app(
     repository: Path,
     watches: Watches | None = None,
     statuses: problems.Statuses | None = None,
+    affected: changes.Affected | None = None,
+    baselines: Baselines | None = None,
 ) -> FastAPI:
     """The studioz application for the deckz repository `repository`.
 
@@ -365,6 +513,8 @@ def create_app(
         repository: Any checkout of the repository.
         watches: The live builds' manager (tests replace deckz's command).
         statuses: The workspaces' `deckz status` runs (tests replace it too).
+        affected: The workspaces' `deckz show affected` runs (same).
+        baselines: The baselines' builds (same).
 
     Returns:
         The application.
@@ -375,6 +525,8 @@ def create_app(
         GlobalSettings.from_yaml(main),
         watches or Watches(),
         statuses or problems.Statuses(workspaces.base_branch(main)),
+        affected or changes.Affected(),
+        baselines or Baselines(),
     )
 
     @asynccontextmanager
@@ -388,6 +540,8 @@ def create_app(
                 await reaper
             await asyncio.to_thread(studio.watches.stop_all)
             studio.statuses.stop_all()
+            studio.affected.stop_all()
+            await asyncio.to_thread(studio.baselines.stop_all)
 
     app = FastAPI(
         title="studioz",

@@ -73,18 +73,18 @@ def handout(deck: Path, lang: Lang) -> Path:
     return lang_dir(settings.paths.pdf_dir, lang) / f"{name}-handout.pdf"
 
 
-def watch_command(workspace: Path, lang: Lang) -> list[str]:
-    """`deckz run --watch` of a deck's handout, every option spelled out.
+def build_command(workspace: Path, lang: Lang) -> list[str]:
+    """`deckz run` of a deck's whole handout, every option spelled out.
 
     The workspace's own deckz, and no option left to the person's `.env`.
 
     Returns:
-        The command, to run in the deck's directory.
+        The command, to run in the deck's directory (of the workspace, or \
+        of another checkout).
     """
     return [
         str(workspace / ".venv" / "bin" / "deckz"),
         "run",
-        "--watch",
         "--handout",
         "--no-presentation",
         "--no-print",
@@ -94,6 +94,16 @@ def watch_command(workspace: Path, lang: Lang) -> list[str]:
         "--lang",
         lang,
     ]
+
+
+def watch_command(workspace: Path, lang: Lang) -> list[str]:
+    """`build_command`, watching.
+
+    Returns:
+        The command, to run in the deck's directory.
+    """
+    deckz, run, *options = build_command(workspace, lang)
+    return [deckz, run, "--watch", *options]
 
 
 def environment() -> dict[str, str]:

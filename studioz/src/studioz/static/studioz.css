@@ -103,8 +103,19 @@ tr.closed td { color: var(--muted); }
 .navigator li.current a { color: var(--accent); font-weight: 600; }
 .filter { width: 100%; margin-bottom: 0.4rem; }
 .decks { max-height: 35vh; overflow-y: auto; }
-.problems h3 { font-size: 0.85em; font-weight: 600; margin: 0.6rem 0 0.2rem; }
+.problems h3, .changes h3 { font-size: 0.85em; font-weight: 600; margin: 0.6rem 0 0.2rem; overflow-wrap: anywhere; }
 .problems li { padding: 0.25rem 0; border-bottom: 1px solid var(--line); }
+.changes li { display: flex; flex-wrap: wrap; gap: 0 0.4rem; align-items: baseline; }
+.changes .status { font-size: 0.75em; color: var(--muted); min-width: 4.2rem; }
+.changes .status[data-status="nouveau"] { color: #2e7d32; }
+.changes .status[data-status="supprimé"], .changes .status[data-status="en conflit"] { color: var(--danger); }
+.changes .path, .changes a.change { font-family: var(--mono); font-size: 0.85em; overflow-wrap: anywhere; min-width: 0; }
+.navigator .changes a.change, .navigator .changes h3 a { color: var(--accent); }
+.changes .lang-alone { font-size: 0.75em; color: #8a4b08; border: 1px solid currentcolor; border-radius: 999px; padding: 0 0.4rem; cursor: help; }
+.changes .hint, .changes .error { font-size: 0.85em; margin: 0.4rem 0; }
+@media (prefers-color-scheme: dark) {
+  .changes .lang-alone { color: #e0a96d; }
+}
 .problems .problem { white-space: pre-wrap; overflow-wrap: anywhere; }
 .navigator .problems a.problem { color: var(--accent); }
 .problems .fix { display: block; color: var(--muted); font-size: 0.85em; }
@@ -134,6 +145,39 @@ tr.closed td { color: var(--muted); }
 .viewer-container .page:hover { outline: 3px solid var(--accent); }
 .waiting { position: absolute; inset: 2rem 1rem auto; text-align: center; color: #e8e7e3; }
 .waiting[hidden] { display: none; }
+.views button { padding: 0.1rem 0.6rem; font-size: 0.9em; }
+.views button[aria-pressed="false"] { background: transparent; color: var(--accent); }
+.views button + button { margin-left: -0.25rem; }
+
+/* The before/after view, over the PDF, which stays laid out for pdf.js. */
+.deck[data-view="changes"] .viewer-container, .deck[data-view="changes"] .page-number { visibility: hidden; }
+.deck[data-view="changes"] .waiting { display: none; }
+.deck[data-view="slides"] .comparison { display: none; }
+.comparison { position: absolute; inset: 0; overflow: auto; padding: 1rem; background: var(--bg); }
+.comparison > p { max-width: 60rem; }
+.comparison .summary { margin-top: 0; }
+.comparison .error-lines { background: var(--error-bg); padding: 0.5rem 0.8rem; border-radius: 4px; }
+.pair { margin: 0 0 1.5rem; }
+.pair figcaption { display: flex; gap: 0.6rem; align-items: baseline; margin-bottom: 0.3rem; }
+.pair .badge { font-size: 0.75em; padding: 0 0.5rem; border-radius: 999px; border: 1px solid currentcolor; }
+.pair[data-kind="changed"] .badge { color: var(--accent); }
+.pair[data-kind="new"] .badge { color: #2e7d32; }
+.pair[data-kind="removed"] .badge { color: var(--danger); }
+.pair .frame-title { font-weight: 600; overflow-wrap: anywhere; }
+.pair .frame-title.old { font-weight: 400; color: var(--muted); text-decoration: line-through; }
+.pair .sides { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+.pair .side { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+.pair canvas { width: 100%; aspect-ratio: 4 / 3; background: #fff; box-shadow: 0 0 0 1px var(--line); }
+.pair canvas[width] { aspect-ratio: auto; }
+.pair canvas[data-file] { cursor: pointer; }
+.pair canvas[data-file]:hover { outline: 3px solid var(--accent); }
+.pair .label { font-size: 0.8em; color: var(--muted); }
+.pair .absent { display: grid; place-items: center; aspect-ratio: 4 / 3; border: 1px dashed var(--line); color: var(--muted); }
+.pair[data-kind="new"] .side:last-child canvas { box-shadow: 0 0 0 2px #2e7d32; }
+.pair[data-kind="removed"] .side:first-child canvas { box-shadow: 0 0 0 2px var(--danger); opacity: 0.8; }
+@media (max-width: 700px) {
+  .pair .sides { grid-template-columns: 1fr; }
+}
 
 /* The source editor, beside the PDF. */
 .editor-pane { display: flex; flex-direction: column; flex: 1; min-width: 0; border-left: 1px solid var(--line); background: var(--panel); }

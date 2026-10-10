@@ -1,0 +1,43 @@
+<section class="changes" id="changes" hx-get="{{ url }}" hx-swap="outerHTML"
+         hx-trigger="workspace-changed from:body, every {% if affected.running %}2{% else %}10{% endif %}s">
+  <h2>Modifications <span class="count">{{ count }}</span></h2>
+  {% for group in groups %}
+  <h3>{% if group.deck %}<a href="/espaces/{{ workspace.name }}/formations/{{ group.deck }}?lang={{ lang }}&vue=modifications"
+     title="Avant/après de cette formation">{{ group.title }}</a>{% else %}{{ group.title }}{% endif %}</h3>
+  <ul>
+    {% for file in group.files %}
+    <li>
+      <span class="status" data-status="{{ file.status }}">{{ file.status }}</span>
+      {% if deck and file.editable and file.status != "supprimé" %}
+      <a href="#" class="change" data-file="{{ file.path }}">{{ file.path }}</a>
+      {% else %}
+      <span class="path">{{ file.path }}</span>
+      {% endif %}
+      {% if file.other_lang %}
+      <span class="lang-alone" title="Sa traduction {{ file.other_lang }} n'a pas changé : à porter, ou à justifier par un trailer Lang-sync au commit">traduction inchangée</span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">Rien depuis le dernier commit.</p>
+  {% endfor %}
+  {% if groups %}
+  <h3>Formations touchées</h3>
+  {% if affected.result %}
+  <ul class="affected">
+    {% for path in affected.result %}
+    <li{% if path == deck %} class="current"{% endif %}><a href="/espaces/{{ workspace.name }}/formations/{{ path }}?lang={{ lang }}&vue=modifications"
+        title="Construire cette formation et la comparer au dernier commit">{{ path }}</a></li>
+    {% endfor %}
+  </ul>
+  {% elif affected.running %}
+  <p class="hint">Recherche des formations touchées…</p>
+  {% elif affected.error %}
+  <p class="error">La recherche des formations touchées a échoué : {{ affected.error }}</p>
+  {% else %}
+  <p class="empty">Aucune.</p>
+  {% endif %}
+  {% if affected.result and affected.running %}<p class="hint">Mise à jour…</p>{% endif %}
+  {% endif %}
+</section>

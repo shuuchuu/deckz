@@ -169,15 +169,23 @@ def add(
         raise WorktreeError(msg)
     sha = _git(main, "rev-parse", "--verify", f"{base or 'HEAD'}^{{commit}}").strip()
     _git(main, "worktree", "add", "--quiet", "-b", branch, str(path), sha)
-    copied = _seed(main, path, settings.worktree.seed)
+    copied = seed(main, path, settings.worktree.seed)
     return AddedWorktree(path, branch, sha, copied)
 
 
-def _seed(main: Path, path: Path, entries: tuple[str, ...]) -> int:
+def seed(source: Path, path: Path, entries: tuple[str, ...]) -> int:
+    """Copy `source`'s ignored files under `entries` into the checkout `path`.
+
+    What `add` does with `deckz.yml`'s `worktree.seed`; also for other \
+    checkouts, e.g. a scratch one seeded from a worktree.
+
+    Returns:
+        How many files were copied.
+    """
     if not entries:
         return 0
     listed = _git(
-        main,
+        source,
         "ls-files",
         "-z",
         "--others",
@@ -191,7 +199,7 @@ def _seed(main: Path, path: Path, entries: tuple[str, ...]) -> int:
         destination = path / file
         destination.parent.mkdir(parents=True, exist_ok=True)
         # Times kept: see the module docstring.
-        copy2(main / file, destination, follow_symlinks=False)
+        copy2(source / file, destination, follow_symlinks=False)
     return len(files)
 
 

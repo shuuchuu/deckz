@@ -613,6 +613,27 @@ show: they are for the build and upload increment. Left: deckz's messages
 are in English in a French UI, and the lab checks (6 of the 10 s) each read
 every notebook again.
 
+**Increment 5: done** (2026-10-10): the navigator's Changes panel, live
+(everything since the last commit, grouped: a deck's own files, shared
+content, labs, videos, images and theme, the rest; a content file or
+notebook whose other language didn't change is flagged; the decks the
+changes reach, from the workspace's `deckz show affected`, 7 s, in the
+background), and a deck's "Avant/après" view: the frames changed since the
+last commit side by side (pdf.js), new and removed ones marked, a frame
+replaced in place shown with both titles, a click on "after" opening its
+source. Frames are matched by title (`difflib`) from what each build
+recorded, and compared on 40 dpi grayscale renders (`pdftoppm`, 0.2 s for 85
+pages) minus the bottom right corner, where the frame number changes after
+an insertion. Baselines (`.run/studioz/baselines/<commit>/`): the live
+build when it finishes on a workspace with no change, else a build of the
+commit in a scratch checkout `<workspace>.baseline` (seeded from the
+workspace with deckz's now public `worktrees.seed`, removed afterwards):
+17 s on the Fortinet deck (checkout 2.6 s, seeding 0.3 s, build 9.8 s).
+Left: keeping the current builds as baselines at commit (Commit increment),
+only frame pages are compared (not the outline or dividers), figures'
+and labs' before/after, and the comparison ignores a theme placing its
+frame number elsewhere.
+
 ### Phase 3: the agent in a workspace
 
 The conversation panel, question forms, comments on frames as instructions,

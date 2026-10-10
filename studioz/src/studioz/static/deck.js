@@ -1,6 +1,8 @@
 // The deck page: its handout in pdf.js, reloaded at the same place each time
 // the workspace's `deckz run --watch` finishes a build (server-sent events).
-// A click on a page opens its frame's source in the editor beside it.
+// A click on a page opens its frame's source in the editor beside it. The
+// "Avant/après" view shows the frames changed since the last commit
+// (`_comparison.html`), each page drawn by pdf.js once in view.
 import { SourceEditor } from "/static/editor.js";
 import * as pdfjsLib from "/static/vendor/pdfjs/pdf.min.mjs";
 
@@ -141,6 +143,7 @@ async function show(url) {
       showPageNumber();
       await loadFrames();
       editor.refresh();
+      if (deck.dataset.view === "changes") refreshComparison();
     } catch (error) {
       console.error("studioz: could not show", url, error);
     }
@@ -148,9 +151,9 @@ async function show(url) {
   loading = false;
 }
 
-// The Problems panel's links (`_problems.html`).
+// The Problems and Changes panels' links (`_problems.html`, `_changes.html`).
 document.addEventListener("click", (event) => {
-  const link = event.target.closest("a.problem");
+  const link = event.target.closest("a.problem, a.change");
   if (!link) return;
   event.preventDefault();
   const page = Number(link.dataset.page) || null;
@@ -162,7 +165,7 @@ document.addEventListener("click", (event) => {
 
 function setState(state, lines = []) {
   if (state !== build.dataset.state && (state === "built" || state === "failed")) {
-    document.body.dispatchEvent(new Event("problems-refresh"));
+    document.body.dispatchEvent(new Event("workspace-changed"));
   }
   build.dataset.state = state;
   build.textContent = LABELS[state] ?? state;
@@ -179,3 +182,82 @@ source.addEventListener("state", (event) => {
 });
 source.addEventListener("pdf", (event) => show(JSON.parse(event.data).url));
 source.addEventListener("error", () => setState("disconnected"));
+
+// The before/after view.
+function refreshComparison() {
+  document.body.dispatchEvent(new Event("comparison-refresh"));
+}
+
+function setView(view) {
+  deck.dataset.view = view;
+  for (const button of document.querySelectorAll(".views button")) {
+    button.setAttribute("aria-pressed", String(button.dataset.view === view));
+  }
+  for (const link of [location, ...document.querySelectorAll(".langs a")]) {
+    const url = new URL(link.href);
+    if (view === "changes") url.searchParams.set("vue", "modifications");
+    else url.searchParams.delete("vue");
+    if (link === location) history.replaceState(null, "", url);
+    else link.href = url;
+  }
+  if (view === "changes") refreshComparison();
+}
+
+for (const button of document.querySelectorAll(".views button")) {
+  button.addEventListener("click", () => setView(button.dataset.view));
+}
+
+// The PDFs the view draws pages of, the last used last.
+const documents = new Map();
+
+function pdfDocument(url) {
+  let loaded = documents.get(url);
+  documents.delete(url);
+  loaded ??= pdfjsLib.getDocument({ url }).promise;
+  documents.set(url, loaded);
+  if (documents.size > 4) {
+    const [oldest, old] = documents.entries().next().value;
+    documents.delete(oldest);
+    old.then((pdf) => pdf.destroy(), () => {});
+  }
+  return loaded;
+}
+
+async function drawPage(canvas) {
+  try {
+    const pdf = await pdfDocument(canvas.dataset.src);
+    const page = await pdf.getPage(Number(canvas.dataset.page));
+    const scale =
+      (canvas.clientWidth * devicePixelRatio) / page.getViewport({ scale: 1 }).width;
+    const viewport = page.getViewport({ scale });
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    await page.render({ canvas, viewport }).promise;
+  } catch (error) {
+    console.error("studioz: could not draw", canvas.dataset.src, error);
+  }
+}
+
+const inView = new IntersectionObserver(
+  (entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      inView.unobserve(entry.target);
+      drawPage(entry.target);
+    }
+  },
+  { rootMargin: "300px" },
+);
+
+document.body.addEventListener("htmx:afterSettle", () => {
+  for (const canvas of document.querySelectorAll("#comparison canvas:not([data-drawn])")) {
+    canvas.dataset.drawn = "";
+    inView.observe(canvas);
+  }
+});
+
+// A frame as it is now opens its source.
+document.addEventListener("click", (event) => {
+  const canvas = event.target.closest("#comparison canvas[data-file]");
+  if (canvas) openSource(canvas.dataset.file, Number(canvas.dataset.line), null);
+});

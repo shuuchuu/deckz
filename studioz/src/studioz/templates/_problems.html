@@ -1,5 +1,5 @@
 <section class="problems" id="problems" hx-get="{{ url }}" hx-swap="outerHTML"
-         hx-trigger="problems-refresh from:body{% if report.running %}, every 2s{% endif %}">
+         hx-trigger="workspace-changed from:body{% if report.running %}, every 2s{% endif %}">
   <h2>Problèmes <span class="count">{{ count }}</span>
     {% if report.running %}<span class="checking">vérification…</span>{% endif %}</h2>
   {% for group in groups %}

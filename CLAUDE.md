@@ -417,6 +417,13 @@ the file the editor didn't read.
 workspace's files changed (`git status`), plus the deck on screen's build
 failure and the frames its build recorded as shrunk; each problem naming a
 file links to the editor.
+`studioz.changes` fills the Changes panel (`studioz.background` runs a
+workspace's slow commands, `deckz status` and `deckz show affected`, again
+when its files change), `studioz.baselines` keeps each deck's handout as of
+the last commit (from the live build of a clean workspace, else built in a
+scratch checkout next to it), and `studioz.comparison` matches frames by
+title and compares their rendered pages for the "Avant/après" view.
+
 Its tests are in `studioz/tests/`, driving the app with FastAPI's test client
 on a temporary repository, and the watches with a fake `deckz` printing the
 same log lines.

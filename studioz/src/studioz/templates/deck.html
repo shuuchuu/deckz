@@ -8,7 +8,7 @@
 {% block body %}
 <div class="workspace">
   {% include "_navigator.html" %}
-  <main class="deck" id="deck"
+  <main class="deck" id="deck" data-view="{{ view }}"
         data-events="/espaces/{{ workspace.name }}/formations/{{ deck }}/evenements?lang={{ lang }}"
         data-frames="/espaces/{{ workspace.name }}/formations/{{ deck }}/cadres?lang={{ lang }}"
         data-files="/espaces/{{ workspace.name }}/fichiers">
@@ -16,8 +16,13 @@
       <span class="deck-path">{{ deck }}</span>
       <span class="langs">
         {% for code in ("fr", "en") %}
-        <a href="?lang={{ code }}"{% if code == lang %} class="current" aria-current="true"{% endif %}>{{ code }}</a>
+        <a href="?lang={{ code }}{% if view == 'changes' %}&vue=modifications{% endif %}"{% if code == lang %} class="current" aria-current="true"{% endif %}>{{ code }}</a>
         {% endfor %}
+      </span>
+      <span class="views">
+        <button type="button" data-view="slides" aria-pressed="{{ 'true' if view == 'slides' else 'false' }}">Diapositives</button>
+        <button type="button" data-view="changes" aria-pressed="{{ 'true' if view == 'changes' else 'false' }}"
+                title="Les cadres modifiés depuis le dernier commit, avant et après">Avant/après</button>
       </span>
       <span class="build" id="build" data-state="building">Connexion…</span>
       <span class="notice" id="notice" role="status"></span>
@@ -33,6 +38,9 @@
         <div class="viewer-container" id="viewer-container" title="Cliquer sur une diapositive pour ouvrir sa source">
           <div id="viewer" class="pdfViewer"></div>
         </div>
+        <section class="comparison" id="comparison" hx-swap="outerHTML"
+                 hx-get="/espaces/{{ workspace.name }}/formations/{{ deck }}/comparaison?lang={{ lang }}"
+                 hx-trigger="comparison-refresh from:body{% if view == 'changes' %}, load{% endif %}"></section>
         <p class="empty waiting" id="waiting">Première construction de la formation… (de quelques secondes à quelques minutes selon sa taille)</p>
       </div>
       <section class="editor-pane" id="editor-pane" hidden>

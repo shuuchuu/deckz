@@ -1,0 +1,58 @@
+<section class="comparison" id="comparison" hx-get="{{ url }}" hx-swap="outerHTML"
+         hx-trigger="comparison-refresh from:body{% if status in ('baseline', 'waiting') and not (state and state.error) %}, every 2s{% endif %}">
+  {% if status == "clean" %}
+  <p class="empty">Rien n'a changé depuis le dernier commit.</p>
+  {% elif status == "baseline" and state.error %}
+  <p class="error">La version du dernier commit (<code>{{ commit }}</code>) n'a pas pu être construite :</p>
+  <pre class="error-lines">{{ state.error }}</pre>
+  <button type="button" hx-post="{{ retry_url }}" hx-target="#comparison" hx-swap="outerHTML">Réessayer</button>
+  {% elif status == "baseline" %}
+  <p class="empty">Construction de la version du dernier commit (<code>{{ commit }}</code>), pour comparer…</p>
+  <p class="hint">Dans une copie temporaire de l'espace : quelques secondes de copie, plus la construction de la formation.</p>
+  {% elif status == "waiting" %}
+  <p class="empty">En attente de la construction de la formation…</p>
+  {% elif status == "error" %}
+  <p class="error">Comparaison impossible : {{ error }}</p>
+  {% else %}
+  <p class="summary">
+    Par rapport au dernier commit (<code>{{ commit }}</code>) :
+    {% set changed, new, removed = comparison.count("changed"), comparison.count("new"), comparison.count("removed") %}
+    {{ changed }} cadre{{ "s" if changed > 1 }} modifié{{ "s" if changed > 1 }},
+    {{ new }} nouveau{{ "x" if new > 1 }},
+    {{ removed }} supprimé{{ "s" if removed > 1 }},
+    {{ comparison.unchanged }} inchangé{{ "s" if comparison.unchanged > 1 }}.
+  </p>
+  {% if failed %}<p class="error">La dernière construction a échoué : « après » est le dernier PDF construit.</p>{% endif %}
+  {% if not state.baseline.pdf %}<p class="hint">La formation n'existait pas au dernier commit.</p>{% endif %}
+  {% for row in comparison.rows %}
+  <figure class="pair" data-kind="{{ row.kind }}">
+    <figcaption>
+      <span class="badge">{{ {"changed": "modifié", "new": "nouveau", "removed": "supprimé"}[row.kind] }}</span>
+      {% if row.before_title %}<span class="frame-title old">{{ row.before_title }}</span> →{% endif %}
+      <span class="frame-title">{{ row.title }}</span>
+    </figcaption>
+    <div class="sides">
+      <div class="side">
+        {% if row.before %}
+        <canvas data-src="{{ before_url }}" data-page="{{ row.before }}"></canvas>
+        <span class="label">Avant, p. {{ row.before }}</span>
+        {% else %}
+        <div class="absent">Nouveau cadre</div>
+        {% endif %}
+      </div>
+      <div class="side">
+        {% if row.after %}
+        <canvas data-src="{{ after_url }}" data-page="{{ row.after }}"
+                {% if row.file %}data-file="{{ row.file }}" data-line="{{ row.line or 1 }}" title="Ouvrir sa source"{% endif %}></canvas>
+        <span class="label">Après, p. {{ row.after }}</span>
+        {% else %}
+        <div class="absent">Cadre supprimé</div>
+        {% endif %}
+      </div>
+    </div>
+  </figure>
+  {% else %}
+  <p class="empty">Aucun cadre de cette formation n'a changé{% if comparison.unchanged %} ({{ comparison.unchanged }} cadres comparés){% endif %}.</p>
+  {% endfor %}
+  {% endif %}
+</section>

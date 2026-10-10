@@ -71,7 +71,8 @@ def test_workspace_page_lists_decks_and_changes(
     page = client.get("/espaces/demo").text
 
     assert "client/abc" in page
-    assert "notes.md" in page
+    assert 'hx-get="/espaces/demo/modifications"' in page
+    assert "notes.md" in client.get("/espaces/demo/modifications").text
     assert (repository.parent / "repo--demo" / ".run/studioz/last-use").is_file()
 
 

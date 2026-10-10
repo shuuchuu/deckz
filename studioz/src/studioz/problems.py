@@ -4,8 +4,8 @@ Two sources:
 
 - the workspace's `deckz status` (the content checks, what its changes leave
   to translate, labs and videos not published), run by the workspace's own
-  deckz in the background, and again whenever the workspace's files changed
-  since (`git status`, about 20 ms): the checks take some 10 s on a large
+  deckz in the background (`studioz.background`), and again whenever the
+  workspace's files changed since: the checks take some 10 s on a large
   repository;
 - the deck on screen: its live build's failure (`studioz.watches`), and the
   frames its last build shrank to fit the page (`deckz.analyzing.overflow`,
@@ -16,14 +16,9 @@ page can open it in the editor.
 """
 
 import json
-import os
 import re
-import signal
-import subprocess
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from dataclasses import dataclass
 from pathlib import Path
-from threading import Lock, Thread
 
 from deckz.analyzing.overflow import shrunk_frames
 from deckz.configuring.settings import DeckSettings
@@ -31,7 +26,8 @@ from deckz.exceptions import DeckzError
 from deckz.models import Lang
 
 from . import sources
-from .watches import Snapshot, State, environment
+from .background import Report, Runs, git
+from .watches import Snapshot, State
 
 # `deckz status`'s sections shown, by key. Its built decks not matching their
 # content are for building and uploading, not a problem while editing (and
@@ -43,7 +39,6 @@ _TITLES = {
     "videos": "Vidéos",
 }
 _LOCATION = re.compile(r"(?P<file>[^\s:'\"`()]+\.(?:md|yml))(?::(?P<line>\d+))?")
-_TIMEOUT = 600
 
 
 @dataclass(frozen=True)
@@ -64,16 +59,7 @@ class Group:
     problems: tuple[Problem, ...]
 
 
-@dataclass(frozen=True)
-class StatusReport:
-    groups: tuple[Group, ...]
-    """The sections with problems, in `deckz status`'s order."""
-    running: bool
-    """Whether a run is under way, whose result will replace this one."""
-    checked: datetime | None
-    """When the run reported finished, None before the first one."""
-    error: str | None = None
-    """Why the last run failed."""
+StatusReport = Report[tuple[Group, ...]]
 
 
 def locate(workspace: Path, text: str) -> tuple[str | None, int | None]:
@@ -93,35 +79,6 @@ def locate(workspace: Path, text: str) -> tuple[str | None, int | None]:
         if sources.source(workspace, file) is not None:
             return file, int(match["line"]) if match["line"] else None
     return None, None
-
-
-def _git(workspace: Path, *args: str) -> str | None:
-    result = subprocess.run(
-        ["git", "-C", str(workspace), *args],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return result.stdout.strip() if result.returncode == 0 else None
-
-
-def _fingerprint(workspace: Path) -> tuple[str, ...]:
-    """What `deckz status` depends on.
-
-    Returns:
-        HEAD, and each changed file's status, time and size.
-    """
-    status = _git(workspace, "status", "--porcelain=v1", "-z", "--untracked-files=all")
-    changed = []
-    for entry in (status or "").split("\0"):
-        path = workspace / entry[3:]
-        try:
-            stat = path.stat()
-        except OSError:
-            changed.append(entry)
-            continue
-        changed.append(f"{entry}\0{stat.st_mtime_ns}\0{stat.st_size}")
-    return (_git(workspace, "rev-parse", "HEAD") or "", *changed)
 
 
 def status_command(workspace: Path, since: str | None) -> list[str]:
@@ -150,16 +107,7 @@ def _groups(workspace: Path, sections: list[dict]) -> tuple[Group, ...]:
     return tuple(groups)
 
 
-@dataclass
-class _Run:
-    fingerprint: tuple[str, ...] | None = None
-    process: subprocess.Popen[str] | None = None
-    report: StatusReport = field(
-        default_factory=lambda: StatusReport((), running=False, checked=None)
-    )
-
-
-class Statuses:
+class Statuses(Runs[tuple[Group, ...]]):
     """Each workspace's `deckz status`, run again when its files change."""
 
     def __init__(self, base: str | None, command=status_command) -> None:
@@ -170,81 +118,14 @@ class Statuses:
                 base with it): the branch they sync with.
             command: `status_command`, which tests replace.
         """
-        self._base = base
-        self._command = command
-        self._runs: dict[Path, _Run] = {}
-        self._lock = Lock()
 
-    def report(self, workspace: Path) -> StatusReport:
-        """The workspace's last status, starting a new run if it changed since.
+        def run(workspace: Path) -> list[str]:
+            since = git(workspace, "merge-base", "HEAD", base) if base else None
+            return command(workspace, since)
 
-        Returns:
-            The last run's report, `running` if a new one is under way.
-        """
-        fingerprint = _fingerprint(workspace)
-        with self._lock:
-            run = self._runs.setdefault(workspace, _Run())
-            if run.fingerprint != fingerprint and not run.report.running:
-                run.fingerprint = fingerprint
-                run.report = StatusReport(
-                    run.report.groups, True, run.report.checked, run.report.error
-                )
-                Thread(target=self._run, args=(workspace, run), daemon=True).start()
-            return run.report
-
-    def _run(self, workspace: Path, run: _Run) -> None:
-        since = (
-            _git(workspace, "merge-base", "HEAD", self._base) if self._base else None
+        super().__init__(
+            run, lambda workspace, out: _groups(workspace, json.loads(out)["sections"])
         )
-        try:
-            process = subprocess.Popen(
-                self._command(workspace, since),
-                cwd=workspace,
-                env=environment(),
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                start_new_session=True,
-            )
-        except OSError as error:
-            self._finish(run, None, str(error))
-            return
-        with self._lock:
-            run.process = process
-        try:
-            out, err = process.communicate(timeout=_TIMEOUT)
-        except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
-            out, err = process.communicate()
-        try:
-            sections = json.loads(out)["sections"]
-        except (json.JSONDecodeError, KeyError, TypeError):
-            lines = (err or out).strip().splitlines()
-            self._finish(
-                run, None, lines[-1] if lines else f"code {process.returncode}"
-            )
-            return
-        self._finish(run, _groups(workspace, sections), None)
-
-    def _finish(
-        self, run: _Run, groups: tuple[Group, ...] | None, error: str | None
-    ) -> None:
-        with self._lock:
-            run.process = None
-            run.report = StatusReport(
-                run.report.groups if groups is None else groups,
-                running=False,
-                checked=datetime.now(UTC),
-                error=error,
-            )
-
-    def stop_all(self) -> None:
-        with self._lock:
-            processes = [run.process for run in self._runs.values() if run.process]
-        for process in processes:
-            if process.poll() is None:
-                os.killpg(process.pid, signal.SIGKILL)
 
 
 def build_problems(workspace: Path, snapshot: Snapshot) -> Group | None:
