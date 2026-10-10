@@ -280,7 +280,12 @@ def _wait_for_env(pid: int, entry: bytes) -> None:
 
 
 def _zombie(pid: int) -> bool:
-    return Path(f"/proc/{pid}/stat").read_text().split(") ")[1].startswith("Z")
+    # Gone between the caller's `exists()` and this read counts too.
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except (FileNotFoundError, ProcessLookupError):
+        return True
+    return stat.split(") ")[1].startswith("Z")
 
 
 def test_status_parses_the_machine_queue(repo: Path) -> None:
