@@ -492,8 +492,14 @@ earlier work: about 2 GB each, `typst_memory_max` at 5 GiB).
 
 1. Hash stamps instead of mtimes: deckz's video renders and Typst figures, and the
    builder protocol's documentation; slides' plot and SVG builders follow, writing
-   reproducible PDFs. Urgent on its own: a fresh clone's first build dirties 101
-   committed plots today.
+   reproducible PDFs. Urgent on its own: a fresh clone's first build dirtied 101
+   committed plots.
+   **Reproducible plots: done** (slides a1713041, 2026-10-10): each plot gets fresh
+   rcParams and a fixed NumPy seed, no creation date (Kaleido's is overwritten), and
+   the plots seed their own randomness; all regenerated once, every one rebuilding to
+   the same bytes except `membership-time` (it times real code). Still to do: the
+   hash stamps, which stop the rebuild itself; bytes are only guaranteed on one
+   machine (fonts such as `mpl/scales`' Roboto, numeric libraries).
 2. `deckz worktree add/remove` and `setup.seed`.
 3. A machine-wide compilation limit (`typst_machine_compilations`, flock slots in the
    user cache dir).
