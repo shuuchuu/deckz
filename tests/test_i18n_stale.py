@@ -2,7 +2,7 @@ import subprocess
 from pathlib import Path
 from pathlib import PurePosixPath as P
 
-from pytest import raises
+from pytest import CaptureFixture, MonkeyPatch, raises
 
 from deckz.analyzing.i18n_stale import OneSidedChange, one_sided, stale_files
 from deckz.configuring.settings import GlobalPaths, GlobalSettings, I18nSettings
@@ -220,3 +220,41 @@ def test_one_sided_pairs() -> None:
     assert [(c.changed_path, c.other_path) for c in found] == [
         (P("c/a.md"), P("c/en/a.md"))
     ]
+
+
+def test_stale_as_json(
+    tmp_path: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    import json
+
+    from deckz.cli import main
+
+    repo = _init(tmp_path)
+    _write(repo / "content" / "topic" / "topic.md", "fr v1")
+    _write(repo / "content" / "topic" / "en" / "topic.md", "en v1")
+    _commit(repo, "Add topic")
+    since = _git(repo, "rev-parse", "HEAD").strip()
+    _write(repo / "content" / "topic" / "topic.md", "fr v2")
+    _commit(repo, "Update fr")
+    monkeypatch.chdir(repo)
+
+    with raises(SystemExit) as exited:
+        main(["i18n", "stale", "--json"])
+
+    assert exited.value.code == 1
+    found = json.loads(capsys.readouterr().out)
+    assert found == {
+        "stale": [
+            {
+                "path": "content/topic/topic.md",
+                "sibling": "content/topic/en/topic.md",
+                "since": since,
+                "commits": [
+                    {
+                        "sha": _git(repo, "rev-parse", "HEAD").strip(),
+                        "subject": "Update fr",
+                    }
+                ],
+            }
+        ]
+    }

@@ -471,7 +471,10 @@ home page offers those of the main checkout's `HEAD` (read through git,
 `declared_at`), each opening a new workspace from it where the agent starts. A
 workflow with `report: true` has the agent write its findings as a Markdown task
 list in `.run/studioz/rapports/`, which the navigator's Rapports panel shows as a
-checklist, `then` sending the ticked ones to a follow-up skill.
+checklist, `then` sending the ticked ones to a follow-up skill. `studioz.backlog`
+runs the workspace's `deckz i18n stale --json` again when its HEAD moves, for the
+navigator's "À traduire" panel, each file with "Traduire avec l'agent"; the Commit
+dialog presets the `Lang-sync` answer of a commit porting only backlog files.
 
 Its tests are in `studioz/tests/`, driving the app with FastAPI's test client
 on a temporary repository, the watches with a fake `deckz` printing the

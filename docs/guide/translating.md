@@ -22,8 +22,8 @@ your message, so committing again is quick.
 ## Catching up
 
 - `deckz i18n stale` lists every file changed since its other-language version, with
-  the commits to port and the `git diff` to read. A file leaves the list when a commit
-  touches its sibling.
+  the commits to port and the `git diff` to read (`--plain` or `--json` for a script).
+  A file leaves the list when a commit touches its sibling.
 - `deckz i18n missing-en --workdir <deck>` (`--all` for every deck) lists the files
   and titles with no English version; an English build fails on them.
 - `deckz status` shows the backlog in one line.

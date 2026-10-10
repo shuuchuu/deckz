@@ -5,7 +5,7 @@ import json
 import subprocess
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from importlib.resources import files
 from pathlib import Path
@@ -49,6 +49,7 @@ from . import (
     workflows,
     workspaces,
 )
+from .backlog import Backlog, catching_up
 from .baselines import Baselines
 from .comparison import compare, signatures
 from .jobs import Job, Jobs
@@ -71,6 +72,8 @@ class Studio:
     affected: changes.Affected
     baselines: Baselines
     pairs: changes.LangPairs
+    backlog: Backlog
+    """The workspaces' translation backlogs (`deckz i18n stale`)."""
     jobs: Jobs
     agents: agent.Agents
     login: "Login"
@@ -626,6 +629,13 @@ def _commit_dialog(
     pairs = studio.pairs.get(path)
     selected = draft.selected(changed, shown=True)
     alone = one_sided(set(commits.to_stage(changed, selected)), pairs)
+    ported = catching_up(
+        [str(c.changed_path) for c in alone], studio.backlog.report(path).result or ()
+    )
+    if ported and not draft.lang_sync and not draft.reason:
+        # Porting the backlog changes one side only, with nothing to bring back.
+        reason = "portage de " + ", ".join(stale.path for stale in ported)
+        draft = replace(draft, lang_sync="only", reason=reason)
     report = studio.statuses.report(path)
     return _render(
         request,
@@ -1554,6 +1564,26 @@ async def home_workflow_start(
     return Response(headers={"HX-Redirect": f"{target}?agent=1"})
 
 
+@router.get("/espaces/{name}/traductions", response_class=HTMLResponse)
+def backlog_panel(
+    request: Request, studio: StudioDep, name: str, formation: str = ""
+) -> Response:
+    """The navigator's "À traduire" panel: the workspace's translation backlog.
+
+    Returns:
+        The panel, which reloads itself while `deckz i18n stale` runs, and \
+        on a `workspace-changed` event (a commit moves HEAD).
+    """
+    found = studio.workspace(name)
+    return _render(
+        request,
+        "_backlog.html",
+        workspace=found,
+        report=studio.backlog.report(found.worktree.path),
+        deck=formation,
+    )
+
+
 @router.get("/espaces/{name}/rapports", response_class=HTMLResponse)
 def reports_panel(
     request: Request, studio: StudioDep, name: str, formation: str = ""
@@ -1745,6 +1775,7 @@ def create_app(
     agents: agent.Agents | None = None,
     login: Login | None = None,
     drafter: Callable[[Path, list[str]], Awaitable[str]] | None = None,
+    backlog: Backlog | None = None,
 ) -> FastAPI:
     """The studioz application for the deckz repository `repository`.
 
@@ -1757,6 +1788,7 @@ def create_app(
         agents: The workspaces' agents (tests replace the Agent SDK's client).
         login: Claude Code's login check (same).
         drafter: What writes a commit message (same).
+        backlog: The workspaces' `deckz i18n stale` runs (same).
 
     Returns:
         The application.
@@ -1770,6 +1802,7 @@ def create_app(
         affected or changes.Affected(),
         baselines or Baselines(),
         changes.LangPairs(),
+        backlog or Backlog(),
         Jobs(),
         agents or agent.Agents(),
         login or Login(),
@@ -1788,6 +1821,7 @@ def create_app(
             await asyncio.to_thread(studio.watches.stop_all)
             studio.statuses.stop_all()
             studio.affected.stop_all()
+            studio.backlog.stop_all()
             await asyncio.to_thread(studio.jobs.stop_all)
             await studio.agents.close_all()
             await asyncio.to_thread(studio.baselines.stop_all)

@@ -1,0 +1,21 @@
+<section class="backlog" id="backlog" hx-get="/espaces/{{ workspace.name }}/traductions{% if deck %}?formation={{ deck | urlencode }}{% endif %}"
+         hx-swap="outerHTML" hx-trigger="workspace-changed from:body{% if report.running %}, every 2s{% endif %}">
+  {% set stale = report.result or () %}
+  {% if stale or report.error %}
+  <h2>À traduire <span class="count">{{ stale | length }}</span>
+    {% if report.running %}<span class="checking">recherche…</span>{% endif %}</h2>
+  {% if report.error %}<p class="error">{{ report.error }}</p>{% endif %}
+  <p class="hint">Des fichiers ont changé dans des commits que leur version dans l'autre langue n'a pas suivis.</p>
+  <ul>
+    {% for item in stale %}
+    <li>
+      <span class="path" title="{{ item.subjects | join('\n') }}">{{ item.path }}</span>
+      <span class="hint">→ {{ item.sibling }}, {{ item.subjects | length }} commit{% if item.subjects | length > 1 %}s{% endif %}</span>
+      <button type="button" class="small secondary" data-agent-task="rattraper"
+              data-agent-values='{{ {"changed": item.path, "other": item.sibling, "since": item.since or "", "subject": item.subjects | list} | tojson }}'
+              title="Demander à l'agent de porter ces changements dans {{ item.sibling }}">Traduire avec l'agent</button>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>

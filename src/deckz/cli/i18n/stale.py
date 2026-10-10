@@ -1,6 +1,10 @@
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from . import app
+
+if TYPE_CHECKING:
+    from ...analyzing.i18n_stale import StaleFile
 
 _EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
@@ -11,6 +15,7 @@ def stale(
     /,
     *,
     plain: bool = False,
+    json: bool = False,
     workdir: Path = Path(),
 ) -> None:
     """Report content files and notebooks with changes not ported to their sibling.
@@ -30,6 +35,9 @@ def stale(
         plain: Compact, stable lines for a script or an agent (one per
             stale file and commit), instead of the diff command suggested
             for a human
+        json: The findings as JSON, `{"stale": [{path, sibling, since,
+            commits: [{sha, subject}]}]}`, for a script or a UI (`since`:
+            the sibling's last commit before them, null if none)
         workdir: Path to move into before running the command
 
     """
@@ -39,10 +47,31 @@ def stale(
     settings = GlobalSettings.from_yaml(workdir)
     findings = stale_files(settings, paths or ())
 
-    if not findings:
-        print("Nothing to port.")
-        return
+    if json:
+        from json import dumps
 
+        print(dumps({"stale": [_as_json(f) for f in findings]}, ensure_ascii=False))
+    elif not findings:
+        print("Nothing to port.")
+    else:
+        _print(findings, plain=plain)
+
+    if findings:
+        from sys import exit as sys_exit
+
+        sys_exit(1)
+
+
+def _as_json(finding: "StaleFile") -> dict[str, object]:
+    return {
+        "path": str(finding.path),
+        "sibling": str(finding.sibling),
+        "since": finding.since,
+        "commits": [{"sha": c.sha, "subject": c.subject} for c in finding.commits],
+    }
+
+
+def _print(findings: "list[StaleFile]", *, plain: bool) -> None:
     for finding in findings:
         if plain:
             for commit in finding.commits:
@@ -54,7 +83,3 @@ def stale(
             print(f"  {commit.sha[:8]}  {commit.subject}")
         range_start = finding.since or _EMPTY_TREE
         print(f"  git diff {range_start}..HEAD -- {finding.path}")
-
-    from sys import exit as sys_exit
-
-    sys_exit(1)

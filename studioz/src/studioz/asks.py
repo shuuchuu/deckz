@@ -23,7 +23,7 @@ from claude_agent_sdk import (
 
 from .watches import workspace_environment
 
-TASKS = frozenset({"traduire", "corriger", "conflit"})
+TASKS = frozenset({"traduire", "rattraper", "corriger", "conflit"})
 
 _DIFF_LIMIT = 30_000
 _DRAFT_MODEL = "haiku"
@@ -34,7 +34,9 @@ def prompt(task: str, values: dict[str, list[str]]) -> str:
     """The prompt a dialog's "Demander à l'agent" sends.
 
     Args:
-        task: `traduire` (`changed`, `other`: a pair's paths), `corriger`
+        task: `traduire` (`changed`, `other`: a pair's paths), `rattraper`
+            (`changed`, `other`, `since`: the other's last commit, maybe
+            empty, `subject`: the commits to port), `corriger`
             (`refused`: what the repository said, `path`: the files ticked) or
             `conflit` (`path`: the files in conflict, `upstream`: the branch).
         values: The button's values, each a list.
@@ -54,6 +56,23 @@ def prompt(task: str, values: dict[str, list[str]]) -> str:
             f"{one['changed']}`), en suivant les conventions de traduction du "
             "dépôt, puis dis-moi ce que tu as changé. Je committerai les deux "
             "fichiers ensemble depuis studioz."
+        )
+    if task == "rattraper" and one.get("changed") and one.get("other"):
+        changed, other = one["changed"], one["other"]
+        diff = (
+            f"git diff {one['since']}..HEAD -- {changed}"
+            if one.get("since")
+            else f"git log -p -- {changed}"
+        )
+        subjects = "".join(f"\n- {subject}" for subject in values.get("subject", []))
+        subjects = subjects or " (voir l'historique)"
+        return (
+            f"`{changed}` a changé dans des commits que sa version dans l'autre "
+            f"langue, `{other}`, n'a pas suivis :{subjects}"
+            f"\n\nPorte ces changements dans `{other}` (vois `{diff}`, et lis "
+            f"`{other}` tel qu'il est : un changement a pu y être porté autrement), "
+            "en suivant les conventions de traduction du dépôt, puis dis-moi ce que "
+            "tu as changé. Je committerai depuis studioz."
         )
     if task == "corriger" and one.get("refused"):
         return (

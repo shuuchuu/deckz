@@ -1,13 +1,14 @@
 # studioz plan: a UI for operating a deckz repo, agents included
 
-## Where things stand, and how to resume (2026-10-10)
+## Where things stand, and how to resume (2026-10-11)
 
 **Done:** phases 0, 1 and 2 (workspaces without agents: increments 1 to 8 under
 "Phase 2"), and phase 3 (the agent in a workspace: increments 1 to 5 under
-"Phase 3"), which the user then tried on real work, satisfied; phase 4's
-increments 1 to 4 (workflows declared, a workspace opened from one,
-questions answered later, QA → fix: under "Phase 4"). **Next:** phase 4's
-increment 5 (see "Starting phase 4" below). `git log origin/main..main` in
+"Phase 3"), which the user then tried on real work, satisfied; and phase 4
+(workflows: increments 1 to 5 under "Phase 4"), done overnight on 2026-10-11
+while the user slept, not yet tried by them. **Next:** the user's answer on
+closing a translation backlog entry with nothing to port (see "Open items"),
+then phase 5 (long jobs), which needs planning first: GPU runs cost money. `git log origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed;
 nothing is released since 31.3.3. Push and release are the user's call.
 
@@ -104,6 +105,19 @@ Found along the way, not done (each increment's "Left" has the rest):
   second time during phase 3, in the pre-commit hook; it passes alone.
 - A limit pause doesn't survive a studioz restart (a pending question now
   does); no warning before a long task when a usage window is nearly full.
+- **Nothing to port, after the fact** (found in phase 4, increment 5; needs
+  the user's decision): a backlog entry whose changes need no porting (French
+  typography, a case fix: slides' `content/when-how-ml/when-how-ml-light.md`,
+  commit `576d9d22` with no trailer) can't leave `deckz i18n stale`: only a
+  commit changing the sibling, or moving `i18n.synced_at` for the whole
+  repository, clears it. A proposal: an empty commit with a trailer naming
+  the file (`Lang-sync: fr-only (<why>) <path>`, or a new key), which deckz's
+  walk would count as settling that file; then a "Rien à porter…" button in
+  the panel. It's a new repository convention (hooks, CI, `sync-langs`, the
+  docs), so it waits for the user.
+- slides' workflows are committed in the workspace `studioz-workflows`
+  (`7bd8a6f9`, `ce4b0a69`), not synced: the user syncs them from studioz once
+  this deckz is pushed (the QA's `report`/`then` need it).
 
 ### Starting phase 4
 
@@ -119,8 +133,7 @@ build on. slides' skills are `nouvelle-formation`, `nouvelle-section`,
 2. **Opening a workspace from a workflow**: done (see "Phase 4").
 3. **Questions answered later** (`defer`): done (see "Phase 4").
 4. **QA → fix**: done (see "Phase 4").
-5. **The translation backlog**: `deckz i18n stale`'s list, each item "Traduire
-   avec l'agent" (as the Commit dialog's).
+5. **The translation backlog**: done (see "Phase 4").
 
 ### Phase 3's increments
 
@@ -1052,6 +1065,34 @@ checklist of 5 findings under the skill's categories; the dialog showed it,
 a tick reached the file, and "Appliquer les corrections" started `qa-fix` with
 that finding (stopped after 7 s, nothing changed). Not measured: a full QA's
 usage (still to do on a real one). Left: nothing for this increment.
+
+**Increment 5: done** (2026-10-11): the translation backlog. deckz: `deckz
+i18n stale --json` (`{"stale": [{path, sibling, since, commits}]}`).
+studioz: `studioz.backlog` runs the workspace's own one in the background,
+again when its HEAD moves (2.2 s on slides), for the navigator's "À
+traduire" panel (hidden when empty): each file, its other-language sibling
+and the commits not followed (their subjects in a tooltip), with "Traduire
+avec l'agent" sending the conversation a prompt (`asks`'s `rattraper`: the
+commits, the `git diff` since the sibling's last change, read the sibling as
+it is). The Commit dialog presets "rien à traduire" with the reason "portage
+de <file>" when every one-sided file chosen is a backlog entry's sibling,
+since the commit-msg hook asks a trailer of such a port. Tried on slides
+(`studioz-dev`, pointed at the worktree's deckz for `--json`, then put back):
+the panel showed slides' one entry 2.7 s after the page opened; the agent
+read the diff and found nothing to port (French typography, a case fix: 14 s,
+0,22 $ estimated), which exposed the gap under "Open items"; with a scratch
+edit of the English file, the Commit dialog came preset. Left: that gap.
+
+**Phase 4 is done.** Not tried by the user yet: the four workflows on slides
+(once synced), a full QA and its fixes, a question answered after a
+restart, the backlog panel.
+
+### Starting phase 5
+
+Not planned in detail yet. Read "Previews" (labs, videos rows), "Agent
+configuration" (the job queue) and phase 2's increment 8 (`studioz.jobs`).
+GPU runs (`deckz labs gpu`) rent a machine and cost money: never start one
+without the user saying so, and ask how they want it confirmed in the UI.
 
 ### Phase 5: long jobs and the remaining previews
 
