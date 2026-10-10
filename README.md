@@ -948,6 +948,13 @@ The main commands:
 - `deckz show settings` / `deckz show variables` / `deckz show paths`:
   print the resolved settings/variables/file paths for the current
   directory.
+- `deckz show frames [PDF] [--lang] [--json]`: each page of a built deck
+  PDF (default: the deck's whole handout) with the content file and line
+  of its frame's `# Title`, and its title; title, outline and divider
+  pages aren't listed. A deck build adds an invisible `<deckz-frame>`
+  Typst marker after each frame heading for it (on the converted copy,
+  never the content file), which this queries in the build: it builds
+  nothing itself.
 - `deckz deps [SECTION] [FLAVOR]`: show shared sections/flavors usage
   across the repository, including unused ones.
 - `deckz search-sections KEYWORDS...`: search shared sections by title or

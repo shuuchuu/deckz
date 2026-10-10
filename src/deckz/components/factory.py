@@ -188,6 +188,7 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
     ) -> DeckBuilderProtocol:
         from ..models import lang_dir
         from .deck_builder import DeckBuilder, Format, OutputFormat
+        from .frame_markers import FrameMarkingConverter
         from .progress import NullProgress
 
         paths = self._settings.paths
@@ -208,7 +209,8 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
             Format.Typst: OutputFormat(
                 template=paths.jinja2_main_template,
                 fragment_suffix=".typ",
-                markdown_converter=self.markdown_converter(),
+                # `deckz show frames` reads the markers it adds.
+                markdown_converter=FrameMarkingConverter(self.markdown_converter()),
                 compiler=self.compiler(),
                 output_dir=pdf_dir,
                 artifact_suffix=".pdf",

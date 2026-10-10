@@ -420,3 +420,30 @@ def test_build_reports_progress_through_the_reporter(working_dir: Path) -> None:
     # One handout for the whole deck, plus one per part.
     assert progress.tracked == [("Compiling…", 2)]
     assert progress.advances == 2
+
+
+def test_show_frames_maps_pages_to_content_files(
+    working_dir: Path, capsys: CaptureFixture[str]
+) -> None:
+    import json
+
+    main(_RUN_ARGS)
+    capsys.readouterr()
+
+    main(("show", "frames", "--json"))
+
+    found = json.loads(capsys.readouterr().out)
+    assert [(f["title"], f["file"], f["line"]) for f in found] == [
+        ("About", "company/abc/content/about.md", 1),
+        ("Hello", "content/greeting/hello.md", 1),
+    ]
+    assert all(isinstance(f["page"], int) and f["page"] >= 1 for f in found)
+    # The marked copies converted in place of the fragments are gone.
+    assert not list((working_dir / ".build").rglob(".*.frames.md"))
+
+
+def test_show_frames_needs_a_build(working_dir: Path) -> None:
+    with raises(SystemExit) as exc_info:
+        main(("show", "frames"))
+
+    assert exc_info.value.code == 1

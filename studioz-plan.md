@@ -531,7 +531,13 @@ earlier work: about 2 GB each, `typst_memory_max` at 5 GiB).
    files read-only (`flock` allows it). A slot is held only while compiling: idle
    `--watch` workers keep their memory without one.
 4. `deckz show frames` (each page of a built PDF → its frame, file and line), for the
-   before/after view and click-to-source.
+   before/after view and click-to-source. **Done** (2026-10-10): the deck build adds
+   an invisible `<deckz-frame>` marker after each frame heading (fragment, heading
+   index, `here().page()`) on the copy it converts; `show frames` queries the build
+   (about 4 s on an 85-page deck: a full compile). The PDF is unchanged (same text
+   on orsys/INTRA/2026-10-fortinet), and every one of its 63 frames maps to the
+   right page. For studioz, writing the frames next to the PDF at build time (the
+   `--watch` worker's compiler is warm) would make the lookup free.
 5. The `stop` hook runs the post-edit checks on every content file the worktree
    changed, whatever wrote it.
 
