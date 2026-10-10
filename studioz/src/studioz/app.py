@@ -24,6 +24,8 @@ from fastapi.responses import (
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from markdown_it import MarkdownIt
+from markupsafe import Markup
 
 from deckz.analyzing.frames import frames
 from deckz.analyzing.i18n_stale import lang_sync_kind, one_sided
@@ -120,6 +122,19 @@ class Login:
         return self.ok, self.account
 
 
+class _Static(StaticFiles):
+    """studioz's own files, checked again at each load (a 304 when unchanged).
+
+    Without it, browsers keep them by a guess from their date: after a
+    deckz update, a page could run yesterday's script against today's routes.
+    """
+
+    def file_response(self, *args: Any, **kwargs: Any) -> Response:
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 def _studio(request: Request) -> Studio:
     return request.app.state.studio
 
@@ -151,7 +166,17 @@ def _size(size: int) -> str:
     return f"{size} o"
 
 
+# The agent writes Markdown. Raw HTML in it stays text, and markdown-it
+# refuses `javascript:` links.
+_MARKDOWN = MarkdownIt("commonmark", {"html": False, "breaks": True}).enable("table")
+
+
+def _markdown(text: str) -> Markup:
+    return Markup(_MARKDOWN.render(text))
+
+
 templates.env.filters["ago"] = _ago
+templates.env.filters["markdown"] = _markdown
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -1044,6 +1069,14 @@ def _agent_entry(entry: agent.Entry) -> str:
     return templates.get_template("_agent_entry.html").render(entry=entry)
 
 
+def _agent_question(question: agent.Question | None) -> str:
+    if question is None:
+        return ""
+    return templates.get_template("_agent_question.html").render(
+        question=question, other=agent.OTHER
+    )
+
+
 @router.get("/espaces/{name}/agent/evenements")
 async def agent_events(
     request: Request, studio: StudioDep, name: str
@@ -1052,8 +1085,10 @@ async def agent_events(
 
     Returns:
         Server-sent events: `reset` then an `entry` per line of the \
-        transcript (its HTML), `state` (whether the agent works, whether \
-        Claude Code is logged in), and the next entries as they come.
+        transcript (its HTML), `state` (whether the agent works or waits \
+        for an answer, whether Claude Code is logged in), `question` (the \
+        form of the question the agent waits on, empty once answered), and \
+        the next entries as they come.
     """
     found = studio.workspace(name)
     conversation = studio.agents.conversation(found.worktree.path)
@@ -1062,6 +1097,7 @@ async def agent_events(
         sent = 0
         quiet = 0.0
         last_state: dict[str, object] | None = None
+        last_question: int | None = None
         yield _event("reset", {})
         while not await studio.gone(request):
             if len(conversation.entries) < sent:
@@ -1071,8 +1107,13 @@ async def agent_events(
                 yield _event("entry", {"html": _agent_entry(entry)})
             sent = len(conversation.entries)
             ok, account = await studio.login.status()
+            question = conversation.question
+            if (question_id := question.id if question else None) != last_question:
+                last_question = question_id
+                yield _event("question", {"html": _agent_question(question)})
             state: dict[str, object] = {
                 "running": conversation.running,
+                "asking": question is not None,
                 "loggedIn": ok,
                 "account": account,
             }
@@ -1111,6 +1152,39 @@ async def agent_message(
     # A browser posts a form's text with CRLF line endings.
     if not await conversation.send(message.replace("\r\n", "\n")):
         return JSONResponse({"error": "L'agent travaille encore"}, status_code=409)
+    return Response(status_code=204)
+
+
+@router.post("/espaces/{name}/agent/reponse")
+async def agent_answer(request: Request, studio: StudioDep, name: str) -> Response:
+    """Answer the question the agent waits on (`_agent_question.html`'s form).
+
+    Returns:
+        204, 422 when a question has no answer, or 409 when the question \
+        doesn't wait anymore.
+    """
+    found = studio.workspace(name)
+    conversation = studio.agents.conversation(found.worktree.path)
+    form = await request.form()
+    question = conversation.question
+    if question is None or str(question.id) != form.get("question"):
+        return JSONResponse(
+            {"error": "Cette question n'attend plus de réponse"}, status_code=409
+        )
+    answers = {
+        asked.question: asked.answer(
+            [str(v) for v in form.getlist(f"q{i}")], str(form.get(f"q{i}-autre", ""))
+        )
+        for i, asked in enumerate(question.asked)
+    }
+    if missing := [q for q, a in answers.items() if not a]:
+        return JSONResponse(
+            {"error": f"Pas de réponse à « {missing[0]} »"}, status_code=422
+        )
+    if not conversation.answer(question.id, answers):
+        return JSONResponse(
+            {"error": "Cette question n'attend plus de réponse"}, status_code=409
+        )
     return Response(status_code=204)
 
 
@@ -1217,6 +1291,6 @@ def create_app(
     )
     app.state.studio = studio
     app.add_middleware(LocalOnly)
-    app.mount("/static", StaticFiles(directory=_PACKAGE / "static"), name="static")
+    app.mount("/static", _Static(directory=_PACKAGE / "static"), name="static")
     app.include_router(router)
     return app

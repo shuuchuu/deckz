@@ -1,5 +1,6 @@
 <div class="agent-entry" data-kind="{{ entry.kind }}">
-  {% if entry.kind == "person" %}<p class="who">Vous</p>{% endif %}
-  <div class="agent-text">{{ entry.text }}</div>
+  {% if entry.kind == "person" %}<p class="who">Vous</p>{% elif entry.kind == "question" %}<p class="who">L'agent vous demande</p>{% endif %}
+  {% if entry.kind == "text" %}<div class="agent-text markdown">{{ entry.text | markdown }}</div>
+  {%- else %}<div class="agent-text">{{ entry.text }}</div>{% endif %}
   {% if entry.detail %}<pre class="agent-detail">{{ entry.detail }}</pre>{% endif %}
 </div>

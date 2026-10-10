@@ -12,9 +12,9 @@ settings only (its `CLAUDE.md`, skills and hooks; not the person's own
 command sandbox, and the workspace's own deckz and caches (plan, "Finding 2").
 It never commits, pushes nor moves the branch: a `PreToolUse` hook refuses
 it, the person commits from studioz. A tool call the permission rules would
-ask about is refused with a message, never shown to the person; a skill's
-question (`AskUserQuestion`) is asked as text until studioz shows question
-forms.
+ask about is refused with a message, never shown to the person. A question
+the agent asks (`AskUserQuestion`, as slides' skills do) is shown as a form,
+and the turn waits for the answer (`can_use_tool`).
 
 The conversation outlives a page and studioz itself: its session id and the
 transcript shown are kept under the workspace's `.run/studioz/agent/`, and
@@ -26,10 +26,11 @@ import asyncio
 import json
 import re
 import subprocess
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import suppress
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
+from itertools import count
 from pathlib import Path
 from time import monotonic
 from typing import Any, Protocol
@@ -42,6 +43,8 @@ from claude_agent_sdk import (
     HookInput,
     HookJSONOutput,
     HookMatcher,
+    PermissionResult,
+    PermissionResultAllow,
     PermissionResultDeny,
     RateLimitEvent,
     ResultMessage,
@@ -75,8 +78,10 @@ de chaque commande que tu lances : la personne la voit.
 - Ne committe jamais, ne pousse jamais, ne change pas de branche : la personne \
 committe elle-même depuis studioz quand elle le décide, en voyant les \
 modifications.
-- Quand tu as une question, pose-la dans ta réponse et arrête-toi : la \
-personne te répondra dans la conversation.
+- Quand la personne doit choisir (une option, une façon de faire), \
+demande-le avec AskUserQuestion : elle voit un formulaire, et ton tour \
+attend sa réponse. Pour une question ouverte, pose-la dans ta réponse et \
+arrête-toi : elle te répondra dans la conversation.
 """
 """Appended to Claude Code's system prompt."""
 
@@ -139,6 +144,80 @@ class Entry:
     at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
+ASK = "AskUserQuestion"
+OTHER = "__autre__"
+"""A radio button's value for a free answer."""
+
+
+@dataclass(frozen=True)
+class Choice:
+    label: str
+    description: str = ""
+
+
+@dataclass(frozen=True)
+class Asked:
+    """One of the questions in an `AskUserQuestion` call."""
+
+    question: str
+    header: str
+    choices: tuple[Choice, ...]
+    multiple: bool
+
+    def answer(self, chosen: list[str], other: str) -> str:
+        """The answer Claude Code expects, from a form's fields.
+
+        Args:
+            chosen: The labels ticked (or `OTHER`).
+            other: The free answer, if any.
+
+        Returns:
+            The labels chosen, in the question's order, then the free answer,
+            joined by ", " (a single choice: the free answer replaces it); empty
+            if nothing was answered.
+        """
+        labels = [c.label for c in self.choices if c.label in chosen]
+        free = other.strip() if OTHER in chosen or self.multiple else ""
+        if not self.multiple:
+            return free or (labels[0] if labels else "")
+        return ", ".join([*labels, *([free] if free else [])])
+
+
+def asked(data: dict[str, Any]) -> list[Asked]:
+    """The questions of an `AskUserQuestion` call's input.
+
+    Returns:
+        Them, maybe none if the input isn't what Claude Code sends.
+    """
+    found = []
+    for item in data.get("questions") or []:
+        if not isinstance(item, dict) or not item.get("question"):
+            continue
+        choices = tuple(
+            Choice(str(o.get("label", "")), str(o.get("description", "")))
+            for o in item.get("options") or []
+            if isinstance(o, dict) and o.get("label")
+        )
+        found.append(
+            Asked(
+                str(item["question"]),
+                str(item.get("header", "")),
+                choices,
+                bool(item.get("multiSelect")),
+            )
+        )
+    return found
+
+
+@dataclass
+class Question:
+    """A question the agent waits on."""
+
+    id: int
+    asked: list[Asked]
+    answers: "asyncio.Future[dict[str, str] | None]"
+
+
 def _short(text: str, limit: int = _DETAIL) -> str:
     text = text.strip()
     return text if len(text) <= limit else text[: limit - 1] + "…"
@@ -197,7 +276,8 @@ def _assistant(workspace: Path, message: AssistantMessage) -> list[Entry]:
     for block in message.content:
         if isinstance(block, TextBlock) and block.text.strip():
             found.append(Entry("text", block.text.strip()))
-        elif isinstance(block, ToolUseBlock):
+        elif isinstance(block, ToolUseBlock) and block.name != ASK:
+            # A question shows as its own entry, once asked (`Conversation`).
             found.append(tool_entry(workspace, block))
     return found
 
@@ -264,7 +344,8 @@ def entries(workspace: Path, message: object, stopped: bool = False) -> list[Ent
     if isinstance(message, AssistantMessage) and not message.parent_tool_use_id:
         return _assistant(workspace, message)
     if isinstance(message, UserMessage) and not message.parent_tool_use_id:
-        return _failed_tools(workspace, message)
+        # Once stopped, the tools interrupted fail: "Arrêté" says it.
+        return [] if stopped else _failed_tools(workspace, message)
     if isinstance(message, ResultMessage):
         return _result(message, stopped)
     if isinstance(message, RateLimitEvent):
@@ -319,17 +400,9 @@ async def _no_op(  # ruff: ignore[unused-async]
     return {}
 
 
-async def _can_use_tool(  # ruff: ignore[unused-async]
+async def _deny(  # ruff: ignore[unused-async]
     tool: str, _input: dict[str, Any], _context: ToolPermissionContext
-) -> PermissionResultDeny:
-    if tool == "AskUserQuestion":
-        return PermissionResultDeny(
-            message=(
-                "Pas de formulaire de question dans studioz pour l'instant : pose "
-                "ta question dans ta réponse, avec ses choix, puis arrête-toi ; "
-                "la personne te répondra dans la conversation."
-            )
-        )
+) -> PermissionResult:
     return PermissionResultDeny(
         message=(
             f"{tool} n'est pas autorisé ici, et studioz ne montre pas de demande "
@@ -339,8 +412,20 @@ async def _can_use_tool(  # ruff: ignore[unused-async]
     )
 
 
-def options(workspace: Path, resume: str | None) -> ClaudeAgentOptions:
+def options(
+    workspace: Path,
+    resume: str | None,
+    can_use_tool: Callable[
+        [str, dict[str, Any], ToolPermissionContext], Awaitable[PermissionResult]
+    ] = _deny,
+) -> ClaudeAgentOptions:
     """The agent's options in a workspace (see the module docstring).
+
+    Args:
+        workspace: The workspace.
+        resume: The session to resume.
+        can_use_tool: What decides the tool calls the permission rules would
+            ask about, and answers the agent's questions; all denied by default.
 
     Returns:
         The options, resuming `resume` if given.
@@ -371,7 +456,7 @@ def options(workspace: Path, resume: str | None) -> ClaudeAgentOptions:
                 HookMatcher(matcher=None, hooks=[_no_op]),
             ]
         },
-        can_use_tool=_can_use_tool,
+        can_use_tool=can_use_tool,
     )
 
 
@@ -435,6 +520,9 @@ class Conversation:
         self._stopped = False
         self.version = 0
         """Grows at each change, which the pages follow."""
+        self.question: Question | None = None
+        """The question the agent waits on, if any."""
+        self._questions = count(1)
         self._client: Client | None = None
         self._task: asyncio.Task[None] | None = None
         self._changed = asyncio.Condition()
@@ -500,7 +588,9 @@ class Conversation:
     async def _turn(self, prompt: str) -> None:
         try:
             if self._client is None:
-                client = self._factory(options(self.workspace, self.session))
+                client = self._factory(
+                    options(self.workspace, self.session, self._can_use_tool)
+                )
                 await client.connect()
                 self._client = client
             await self._client.query(prompt)
@@ -521,10 +611,57 @@ class Conversation:
             self.running = False
             await self._notify()
 
+    async def _can_use_tool(
+        self, tool: str, data: dict[str, Any], context: ToolPermissionContext
+    ) -> PermissionResult:
+        found = asked(data) if tool == ASK else []
+        if not found:
+            return await _deny(tool, data, context)
+        answers: asyncio.Future[dict[str, str] | None] = (
+            asyncio.get_running_loop().create_future()
+        )
+        self.question = Question(next(self._questions), found, answers)
+        await self._add(Entry("question", "\n".join(a.question for a in found)))
+        try:
+            given = await answers
+        finally:
+            self.question = None
+            await self._notify()
+        if given is None:
+            return PermissionResultDeny(message="La personne a arrêté sans répondre.")
+        await self._add(Entry("person", "\n".join(f"{q} → {given[q]}" for q in given)))
+        return PermissionResultAllow(updated_input={**data, "answers": given})
+
+    def answer(self, question_id: int, answers: dict[str, str]) -> bool:
+        """Answer the question the agent waits on.
+
+        Args:
+            question_id: The question answered, which must still be waiting.
+            answers: Each question's answer (`Asked.answer`), by its text.
+
+        Returns:
+            Whether the agent got the answers.
+        """
+        question = self.question
+        if (
+            question is None
+            or question.id != question_id
+            or question.answers.done()
+            or set(answers) != {a.question for a in question.asked}
+        ):
+            return False
+        question.answers.set_result(answers)
+        return True
+
+    def _drop_question(self) -> None:
+        if self.question is not None and not self.question.answers.done():
+            self.question.answers.set_result(None)
+
     async def interrupt(self) -> None:
         """Stop the agent's turn; what it changed so far stays."""
         if self.running and self._client is not None:
             self._stopped = True
+            self._drop_question()
             await self._client.interrupt()
 
     async def reset(self) -> None:
@@ -548,6 +685,7 @@ class Conversation:
                 return
 
     async def close(self) -> None:
+        self._drop_question()
         if self._task is not None and not self._task.done():
             self._task.cancel()
             await asyncio.wait({self._task}, timeout=10)

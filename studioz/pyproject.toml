@@ -12,6 +12,7 @@ dependencies = [
   "cyclopts >= 4, < 5",
   "fastapi >= 0.115, < 1",
   "jinja2 >= 3, < 4",
+  "markdown-it-py >= 3, < 5",
   "python-multipart >= 0.0.20",
   "uvicorn >= 0.34, < 1",
 ]

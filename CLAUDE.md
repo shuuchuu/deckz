@@ -447,7 +447,9 @@ one Claude Code conversation per workspace through the Agent SDK, logged in as
 the person (never an API key: studioz removes `ANTHROPIC_API_KEY`), in the
 workspace with the repository's project settings, `auto` permissions in the
 sandbox, and a `PreToolUse` hook refusing the `git` commands that commit, push
-or move a branch (the person commits from studioz). Its session and transcript
+or move a branch (the person commits from studioz); a question it asks
+(`AskUserQuestion`) is a form in the panel, the turn waiting in `can_use_tool`
+for the answer. Its session and transcript
 are kept in `.run/studioz/agent/`, resumed after a restart; the page follows it
 through server-sent events, which end when studioz stops (`Studio.closing`).
 

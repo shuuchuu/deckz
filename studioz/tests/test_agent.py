@@ -8,17 +8,30 @@ from typing import Any
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
+    PermissionResultAllow,
+    PermissionResultDeny,
     RateLimitEvent,
     RateLimitInfo,
     ResultMessage,
     TextBlock,
+    ToolPermissionContext,
     ToolResultBlock,
     ToolUseBlock,
     UserMessage,
 )
 from fastapi.testclient import TestClient
 from pytest import fixture, mark, raises
-from studioz.agent import AGENT_DIR, Agents, Conversation, Entry, entries, refused_git
+from studioz.agent import (
+    AGENT_DIR,
+    OTHER,
+    Agents,
+    Choice,
+    Conversation,
+    Entry,
+    asked,
+    entries,
+    refused_git,
+)
 from studioz.app import Login, create_app
 from studioz.cli import login
 
@@ -114,6 +127,7 @@ def test_entries(tmp_path: Path) -> None:
             ]
         ),
     )
+    assert entries(tmp_path, UserMessage([ToolResultBlock("2", "x", True)]), True) == []
     assert [(e.text, e.detail) for e in failed] == [
         ("Refusé ou en échec", "No such file: b.md"),
         ("Refusé par studioz", "`git commit` est refusé"),
@@ -145,10 +159,44 @@ def test_the_hook_refuses_commits() -> None:
     assert "`git commit` est refusé" in output["permissionDecisionReason"]
 
 
-def test_a_question_is_asked_in_text() -> None:
-    context: Any = None
-    denied = asyncio.run(agent._can_use_tool("AskUserQuestion", {}, context))
-    assert "pose ta question dans ta réponse" in denied.message
+def test_other_permission_requests_are_denied() -> None:
+    denied = asyncio.run(agent._deny("WebFetch", {}, ToolPermissionContext()))
+    assert isinstance(denied, PermissionResultDeny)
+    assert "studioz ne montre pas de demande" in denied.message
+
+
+_QUESTIONS = {
+    "questions": [
+        {
+            "question": "Quelle couleur ?",
+            "header": "Couleur",
+            "options": [
+                {"label": "Rouge", "description": "La couleur rouge"},
+                {"label": "Bleu", "description": "La couleur bleue"},
+            ],
+            "multiSelect": False,
+        },
+        {
+            "question": "Quels fruits ?",
+            "header": "Fruits",
+            "options": [{"label": "Pomme"}, {"label": "Poire"}, {"label": "Kiwi"}],
+            "multiSelect": True,
+        },
+    ]
+}
+
+
+def test_answers_as_claude_code_expects_them() -> None:
+    color, fruits = asked(_QUESTIONS)
+    assert color.choices[0] == Choice("Rouge", "La couleur rouge")
+    assert color.answer(["Bleu"], "") == "Bleu"
+    # A free answer counts once picked (typing it picks it, in the page).
+    assert color.answer(["Bleu"], "Vert") == "Bleu"
+    assert color.answer([OTHER], "Vert") == "Vert"
+    assert color.answer([], "") == ""
+    assert fruits.answer(["Kiwi", "Pomme"], "") == "Pomme, Kiwi"
+    assert fruits.answer(["Poire"], " Mangue ") == "Poire, Mangue"
+    assert asked({"questions": [{"header": "sans question"}, "?"]}) == []
 
 
 def test_options(tmp_path: Path, monkeypatch: Any) -> None:
@@ -211,6 +259,22 @@ class FakeClient:
         self.prompts.append(prompt)
 
     async def receive_response(self) -> AsyncIterator[Any]:
+        if self.prompts[-1] == "demande":
+            # As Claude Code asks: the tool use, then the permission request.
+            yield _assistant(ToolUseBlock("q", agent.ASK, _QUESTIONS))
+            assert self.options.can_use_tool is not None
+            decision = await self.options.can_use_tool(
+                agent.ASK, _QUESTIONS, ToolPermissionContext(tool_use_id="q")
+            )
+            if isinstance(decision, PermissionResultAllow):
+                assert decision.updated_input is not None
+                yield _assistant(
+                    TextBlock(f"Reçu : {decision.updated_input['answers']}")
+                )
+            else:
+                yield _assistant(TextBlock(f"Refusé : {decision.message}"))
+            yield _result()
+            return
         if self.prompts[-1] == "attends":
             while not self.interrupted:
                 await asyncio.sleep(0.01)
@@ -430,3 +494,103 @@ def test_login_runs_claude_code(tmp_path: Path, monkeypatch: Any) -> None:
 
     assert exited.value.code == 3
     assert called.read_text(encoding="utf8") == "auth login --claudeai\n"
+
+
+def _wait_question(conversation: Conversation, timeout: float = 10) -> int:
+    deadline = monotonic() + timeout
+    while conversation.question is None:
+        assert monotonic() < deadline, "the agent never asked"
+        sleep(0.02)
+    return conversation.question.id
+
+
+def test_the_agent_asks_and_waits_for_the_answer(
+    agent_client: TestClient, workspace: Path
+) -> None:
+    agent_client.post(f"{BASE}/message", data={"message": "demande"}, headers=ORIGIN)
+    conversation = _conversation(agent_client, workspace)
+    question = _wait_question(conversation)
+    assert conversation.running
+    assert [e.kind for e in conversation.entries] == ["person", "question"]
+    assert conversation.entries[-1].text == "Quelle couleur ?\nQuels fruits ?"
+
+    def reply(**fields: Any) -> Any:
+        return agent_client.post(f"{BASE}/reponse", data=fields, headers=ORIGIN)
+
+    unanswered = reply(question=str(question), q0="Rouge")
+    assert unanswered.status_code == 422
+    assert unanswered.json() == {"error": "Pas de réponse à « Quels fruits ? »"}
+    assert reply(question="999", q0="Rouge", q1="Kiwi").status_code == 409
+
+    answered = reply(question=str(question), q0="Rouge", q1=["Kiwi", "Pomme"])
+    assert answered.status_code == 204
+    _wait_idle(conversation)
+
+    answers = {"Quelle couleur ?": "Rouge", "Quels fruits ?": "Pomme, Kiwi"}
+    assert [(e.kind, e.text) for e in conversation.entries][1:] == [
+        ("question", "Quelle couleur ?\nQuels fruits ?"),
+        ("person", "Quelle couleur ? → Rouge\nQuels fruits ? → Pomme, Kiwi"),
+        ("text", f"Reçu : {answers}"),
+        ("end", "Terminé en 2 s"),
+    ]
+    assert conversation.question is None
+    assert reply(question=str(question), q0="Bleu", q1="Kiwi").status_code == 409
+
+
+def test_stopping_drops_the_question(agent_client: TestClient, workspace: Path) -> None:
+    agent_client.post(f"{BASE}/message", data={"message": "demande"}, headers=ORIGIN)
+    conversation = _conversation(agent_client, workspace)
+    _wait_question(conversation)
+
+    agent_client.post(f"{BASE}/arreter", headers=ORIGIN)
+    _wait_idle(conversation)
+
+    assert conversation.question is None
+    assert [e.text for e in conversation.entries][-2:] == [
+        "Refusé : La personne a arrêté sans répondre.",
+        "Arrêté au bout de 2 s",
+    ]
+
+
+def test_the_question_form(agent_client: TestClient, workspace: Path) -> None:
+    from studioz.app import _agent_question
+
+    agent_client.post(f"{BASE}/message", data={"message": "demande"}, headers=ORIGIN)
+    conversation = _conversation(agent_client, workspace)
+    _wait_question(conversation)
+    form = _agent_question(conversation.question)
+    assert f'name="question" value="{conversation.question.id}"' in form  # ty: ignore[unresolved-attribute]
+    assert '<input type="radio" name="q0" value="Rouge">' in form
+    assert '<input type="checkbox" name="q1" value="Kiwi">' in form
+    assert f'<input type="radio" name="q0" value="{OTHER}">' in form
+    assert 'name="q1-autre"' in form
+    assert "La couleur rouge" in form
+    agent_client.post(f"{BASE}/arreter", headers=ORIGIN)
+    _wait_idle(conversation)
+
+
+def test_the_agent_text_is_markdown_without_html() -> None:
+    from studioz.app import _agent_entry
+
+    html = _agent_entry(
+        Entry(
+            "text",
+            "Tu veux **eni/ml5**.\n\n"
+            "<script>alert(1)</script> [x](javascript:alert(1))",
+        )
+    )
+    assert "<strong>eni/ml5</strong>" in html
+    assert "<script>" not in html
+    assert "&lt;script&gt;" in html
+    assert 'href="javascript' not in html
+    # Only the agent's text: the person's stays as typed.
+    assert "**a**" in _agent_entry(Entry("person", "**a**"))
+
+
+def test_static_files_are_checked_again(agent_client: TestClient) -> None:
+    response = agent_client.get("/static/agent.js")
+    assert response.headers["Cache-Control"] == "no-cache"
+    again = agent_client.get(
+        "/static/agent.js", headers={"If-None-Match": response.headers["ETag"]}
+    )
+    assert again.status_code == 304

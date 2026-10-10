@@ -1,0 +1,24 @@
+<form class="agent-question" id="agent-question-form">
+  <input type="hidden" name="question" value="{{ question.id }}">
+  <p class="who">L'agent vous demande</p>
+  {% for asked in question.asked %}
+  {% set i = loop.index0 %}
+  <fieldset>
+    <legend>{% if asked.header %}<span class="chip">{{ asked.header }}</span> {% endif %}{{ asked.question }}</legend>
+    {% for choice in asked.choices %}
+    <label class="choice">
+      <input type="{{ 'checkbox' if asked.multiple else 'radio' }}" name="q{{ i }}" value="{{ choice.label }}">
+      <span><strong>{{ choice.label }}</strong>{% if choice.description %}<span class="hint">{{ choice.description }}</span>{% endif %}</span>
+    </label>
+    {% endfor %}
+    <label class="choice other">
+      {% if not asked.multiple %}<input type="radio" name="q{{ i }}" value="{{ other }}">{% endif %}
+      <input type="text" name="q{{ i }}-autre" placeholder="{{ 'En plus, ou autre chose :' if asked.multiple else 'Autre réponse :' }}">
+    </label>
+  </fieldset>
+  {% endfor %}
+  <div class="agent-actions">
+    <button type="submit">Répondre</button>
+    <span class="hint">L'agent attend votre réponse pour continuer ; « Arrêter » met fin au tour.</span>
+  </div>
+</form>

@@ -304,6 +304,26 @@ tr.closed td { color: var(--muted); }
 .agent-entry[data-kind="end"] { border-bottom: 1px dashed var(--line); padding-bottom: 0.3rem; }
 .agent-entry[data-kind="error"] { background: var(--error-bg); padding: 0.3rem 0.6rem; border-radius: 4px; }
 .agent-detail { margin: 0.15rem 0 0; font-size: 0.85em; max-height: 8rem; overflow: auto; color: var(--muted); }
+.agent-text.markdown { white-space: normal; }
+.agent-text.markdown > :first-child { margin-top: 0; }
+.agent-text.markdown > :last-child { margin-bottom: 0; }
+.agent-text.markdown p, .agent-text.markdown ul, .agent-text.markdown ol, .agent-text.markdown pre { margin: 0.4rem 0; }
+.agent-text.markdown ul, .agent-text.markdown ol { padding-left: 1.3rem; }
+.agent-text.markdown pre { overflow-x: auto; font-size: 0.85em; }
+.agent-text.markdown h1, .agent-text.markdown h2, .agent-text.markdown h3 { font-size: 1em; margin: 0.6rem 0 0.3rem; }
+.agent-text.markdown table { border-collapse: collapse; font-size: 0.9em; }
+.agent-text.markdown th, .agent-text.markdown td { border: 1px solid var(--line); padding: 0.1rem 0.4rem; }
+.agent-entry[data-kind="question"] { border-left: 3px solid var(--accent); padding-left: 0.5rem; }
+.agent-question-slot:empty { display: none; }
+.agent-question-slot { border-top: 1px solid var(--line); padding: 0.5rem 0.6rem; max-height: 50%; overflow-y: auto; }
+.agent-question { display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.9em; }
+.agent-question .who { margin: 0; font-size: 0.8em; color: var(--accent); }
+.agent-question fieldset { border: 1px solid var(--line); border-radius: 4px; margin: 0; padding: 0.3rem 0.6rem 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; }
+.agent-question legend { padding: 0 0.3rem; font-weight: 600; }
+.agent-question .chip { font-size: 0.75em; font-weight: normal; padding: 0 0.5rem; border-radius: 999px; border: 1px solid currentcolor; color: var(--accent); }
+.agent-question .choice { display: flex; gap: 0.4rem; align-items: baseline; }
+.agent-question .choice .hint { display: block; font-size: 0.85em; }
+.agent-question .other input[type=text] { flex: 1; font: inherit; padding: 0.2rem 0.4rem; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--text); }
 .agent-login { margin: 0.5rem 0.7rem; background: var(--error-bg); padding: 0.4rem 0.6rem; border-radius: 4px; font-size: 0.9em; }
 .agent-login[hidden] { display: none; }
 .agent-form { border-top: 1px solid var(--line); padding: 0.5rem 0.6rem; display: flex; flex-direction: column; gap: 0.4rem; }

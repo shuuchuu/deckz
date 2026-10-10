@@ -12,15 +12,17 @@ if (panel) {
   const login = document.getElementById("agent-login");
   const fresh = document.getElementById("agent-new");
   const fold = document.getElementById("agent-fold");
+  const slot = document.getElementById("agent-question");
   const base = panel.dataset.base;
   let running = false;
+  let asking = false;
   let loggedIn = false;
 
   const atBottom = () => log.scrollHeight - log.scrollTop - log.clientHeight < 40;
 
   function update() {
     panel.dataset.running = String(running);
-    status.textContent = !loggedIn ? "" : running ? "travaille…" : "prêt";
+    status.textContent = !loggedIn ? "" : asking ? "attend votre réponse" : running ? "travaille…" : "prêt";
     stop.hidden = !running;
     send.disabled = running || !loggedIn;
     message.disabled = !loggedIn;
@@ -37,6 +39,7 @@ if (panel) {
     const state = JSON.parse(event.data);
     const finished = running && !state.running;
     running = state.running;
+    asking = state.asking;
     loggedIn = state.loggedIn;
     login.hidden = loggedIn;
     status.title = loggedIn && state.account ? `Compte Claude : ${state.account}` : "";
@@ -47,6 +50,26 @@ if (panel) {
       // What the agent changed shows in the panels and the before/after view.
       document.body.dispatchEvent(new Event("workspace-changed"));
       document.body.dispatchEvent(new Event("comparison-refresh"));
+    }
+  });
+  // The question the agent waits on: a form above the message box.
+  events.addEventListener("question", (event) => {
+    slot.innerHTML = JSON.parse(event.data).html;
+    const form = slot.querySelector("form");
+    if (!form) return;
+    form.querySelector("input:not([type=hidden])")?.focus();
+    form.addEventListener("submit", async (submitted) => {
+      submitted.preventDefault();
+      const button = form.querySelector("button[type=submit]");
+      button.disabled = true;
+      if (!(await post("reponse", new FormData(form)))) button.disabled = false;
+    });
+    // Typing a free answer picks it.
+    for (const text of form.querySelectorAll(".other input[type=text]")) {
+      text.addEventListener("input", () => {
+        const radio = text.parentElement.querySelector("input[type=radio]");
+        if (radio && text.value.trim()) radio.checked = true;
+      });
     }
   });
   events.addEventListener("error", () => { status.textContent = "reconnexion…"; });

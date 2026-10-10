@@ -3,10 +3,10 @@
 ## Where things stand, and how to resume (2026-10-10)
 
 **Done:** phases 0, 1 and 2 (workspaces without agents: increments 1 to 8 under
-"Phase 2"), and phase 3's increment 1 (the conversation panel, under "Phase 3").
-**Next:** phase 3's increment 2, question forms (see "Phase 3's increments"
-below). Not pushed yet: the agent panel in deckz (`git log origin/main..main` in
-`../deckz` lists it) and slides' matching `uv.lock` (`1cf2de1d`, on slides' main);
+"Phase 2"), and phase 3's increments 1 and 2 (the conversation panel, question
+forms, under "Phase 3"). **Next:** phase 3's increment 3, checkpoints and "Annuler
+ce tour" (see "Phase 3's increments" below). `git log origin/main..main` in
+`../deckz` (and in `../slides`, for its `uv.lock`) lists what isn't pushed;
 nothing is released since 31.3.3. Push and release are the user's call.
 
 ### Code map
@@ -100,9 +100,7 @@ are gone). studioz pins `claude-agent-sdk==0.2.160` (bundling Claude Code
 
 1. **The conversation panel**: done (see "Phase 3"), with the commit and branch
    refusals and `auto` permissions in the sandbox, planned for 3.
-2. **Questions**: `AskUserQuestion` through `can_use_tool` (already called, the
-   no-op `PreToolUse` hook is there; it now denies with "ask in your reply") shown
-   as a form.
+2. **Questions**: done (see "Phase 3").
 3. **Guardrails**: a checkpoint after each turn (private index,
    `refs/studioz/<workspace>/`) and "Annuler ce tour".
 4. **Usage**: each run's usage, rate-limit pauses with the reset time.
@@ -854,6 +852,24 @@ on slides (`studioz-dev`): a first turn reading a deck file, 19 s including
 Claude Code's start; a short resumed turn, 4 s; the agent asked to `git commit
 --allow-empty` was refused by the hook and said so, no commit made. Left: the
 other increments; a turn's usage (increment 4).
+
+**Increment 2: done** (2026-10-10): question forms. A question the agent asks
+(`AskUserQuestion`, as slides' skills do, and as the appended prompt now says
+for a choice) shows above the message box as a form: each question with its
+header, its options and their descriptions (radio buttons, or checkboxes when
+several answers are allowed), and a free answer ("Autre réponse", or "En plus"
+next to checkboxes; typing it picks it). The turn waits in `can_use_tool` until
+"Répondre"; the answers go back as Claude Code expects them (checked against
+2.1.283: a string per question, by its text, the labels joined by ", ", a free
+answer as typed), and show in the transcript as the person's. "Arrêter" drops
+the question. Also: the agent's text is rendered as Markdown (markdown-it, raw
+HTML left as text), tool failures after a stop are no longer shown ("Arrêté"
+says it), and studioz's static files are served `no-cache` (revalidated with
+their ETag), since a browser kept a stylesheet older than the page. Tried on
+slides: a two-question form (one single, one multiple choice with a free
+answer) answered from the page, the agent repeating the answers; a question
+stopped. Left: a question pending when studioz stops is lost (the turn with
+it): `defer` and answering on resume, with phase 4's workflows.
 
 ### Phase 4: workflows
 
