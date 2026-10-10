@@ -816,6 +816,7 @@ def test_help_lists_the_commands_by_task(capsys: Any) -> None:
     output = capsys.readouterr().out
     groups = [
         "Everyday",
+        "New content",
         "Finding content",
         "Translation",
         "Labs and videos",

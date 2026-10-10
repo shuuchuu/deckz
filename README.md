@@ -209,6 +209,8 @@ typst_ignore_system_fonts: true
     `labs`/`main`).
   - `solution_heading`: the markdown heading text (case-insensitive)
     marking a notebook's collapsed answer cells (default `Solution`).
+  - `link_snippet`: how a content file links a lab, printed by `deckz
+    labs new` with `{lab}` and `{kind}` filled in (default none).
   - `not_secrets`: values the `lab-secrets` check (and `deckz labs
     publish`, which refuses a notebook holding a credential) would take for
     one but aren't, e.g. a public dataset's read-only key.
@@ -762,6 +764,17 @@ The main commands:
   don't match them. Each item says how to resolve it; `--json` for
   scripts. `deckz show affected PATH...` prints the decks a change to
   PATHs reaches.
+- `deckz new deck DIR --name NAME --title TITLE`, `deckz new section
+  PATH [--title TITLE]`, `deckz labs new LAB hands-on|demo`: create the
+  files of a new deck, shared section (its `.yml` with a `full` flavor, a
+  first file and its `en/` twin; existing sections sharing a word with it
+  are listed first) or lab notebook pair (same cells in both languages,
+  in deckz's format, with their IDs), refusing to overwrite anything. A
+  repository's own starting files go under `templates/scaffold/`:
+  `deck/` (every file, rendered with Jinja's `{{ name }}`/`{{ title }}`)
+  and `lab/hands-on.ipynb`/`lab/demo.ipynb`. `labs.link_snippet` (e.g.
+  `'{{ "{lab}" | lab("{kind}") }}'`) is printed after `labs new`, filled
+  in, for the content file linking the lab.
 - `deckz setup`: set up a clone, and run it again after pulling. It
   checks the executables deckz and the repository need (`setup.requires`
   above), saying how to install a missing one; installs the git hooks;

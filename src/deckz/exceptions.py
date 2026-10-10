@@ -53,6 +53,10 @@ class CompilationError(DeckzError):
     pass
 
 
+class ScaffoldRefusedError(DeckzError):
+    """`deckz new`/`deckz labs new` would overwrite something, or got a bad name."""
+
+
 class LabIdConflictError(DeckzError):
     """`deckz labs ids` found a duplicate or already-taken notebook ID."""
 

@@ -236,6 +236,13 @@ function or a `DECKZ_HOOKS_VERSION` other than `HOOKS_VERSION` into a
 Its module docstring documents the trust boundary (the hooks are arbitrary
 code from the target repo).
 
+### Scaffolding
+
+`scaffolding.py` backs `deckz new deck|section` (`cli/new/`) and `deckz labs
+new`: the files a new deck, shared section or lab notebook pair needs, in
+both languages, from the repository's `templates/scaffold/` when present,
+refusing (`ScaffoldRefusedError`) to overwrite anything.
+
 ### Status
 
 `status.py` backs `deckz status`: one `StatusSection` per concern (checks,

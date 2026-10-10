@@ -162,6 +162,14 @@ Building blocks:
 
 ## Phase 4: scaffolding for the mechanical half of new work
 
+**Status (2026-10-10):** done on branch `operability`, not merged. Differences: the
+lab name rule is deckz's generic one (kebab-case path parts), not slides' framework and
+forbidden-word rules, which belong in a slides check; `labs.link_snippet` prints the
+repository's own link syntax; `new deck` doesn't check the catalog layout (a slides
+convention). For slides, at merge time: `templates/scaffold/deck/` (`deck.yml` with
+`$about@...` first and `$contact@full` last, `variables.yml` with `deck_title`,
+`content/about/description.md` and its `en/`), and `labs.link_snippet`.
+
 The judgment part (which sections fit a program, what a lab should teach) stays with
 people and skills. The file layout shouldn't need either.
 

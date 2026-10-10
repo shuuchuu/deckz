@@ -144,6 +144,10 @@ class LabsSettings(BaseModel):
     `deckz.labs.Notebook` library."""
     gpu: LabsGpuSettings = Field(default_factory=LabsGpuSettings)
     """Machines `deckz labs gpu` rents to run notebooks as Colab would."""
+    link_snippet: str | None = None
+    """How a content file links a lab, printed by `deckz labs new` with \
+    `{lab}` and `{kind}` filled in, e.g. \
+    `{{ "{lab}" | lab("{kind}") }}` for a repository's own Jinja filter."""
     not_secrets: tuple[str, ...] = ()
     """Values the `lab-secrets` check (and `deckz labs publish`) would take \
     for a credential but aren't, e.g. a public dataset's read-only key."""
