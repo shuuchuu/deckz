@@ -4,10 +4,11 @@
 
 **Done:** phases 0, 1 and 2 (workspaces without agents: increments 1 to 8 under
 "Phase 2"), and phase 3 (the agent in a workspace: increments 1 to 5 under
-"Phase 3"). **Next:** phase 4, workflows (see "Phase 4"); first, a trial of
-phase 3 by the user on real work. `git log origin/main..main` in
-`../deckz` (and in `../slides`, for its `uv.lock`) lists what isn't pushed;
-nothing is released since 31.3.3. Push and release are the user's call.
+"Phase 3"), which the user then tried on real work, satisfied. **Next:** phase
+4, workflows (see "Starting phase 4" below). Everything is pushed (`git log
+origin/main..main` in `../deckz`, and in `../slides` for its `uv.lock`, lists
+what isn't); nothing is released since 31.3.3. Push and release are the user's
+call.
 
 ### Code map
 
@@ -89,9 +90,41 @@ Found along the way, not done (each increment's "Left" has the rest):
   `uv.lock` stale, and the next `uv run` there rewrites it. Merge such a change
   with a `uv lock` committed in slides at once (as `1cf2de1d` did for
   `claude-agent-sdk`); each workspace's own `uv.lock` follows when it syncs.
-- The agent writes its commands' descriptions in English, although the appended
-  prompt asks for French; and a command failing for an ordinary reason (`grep`
-  finding nothing, exit 1) shows as "Refusé ou en échec".
+- The agent sometimes writes its commands' descriptions in English, although the
+  appended prompt asks for French (later turns were in French); a command failing
+  for an ordinary reason (`grep` finding nothing, exit 1) shows as "Refusé ou en
+  échec".
+- `test_interrupt_does_not_wait_for_running_compilations` (above) failed a
+  second time during phase 3, in the pre-commit hook; it passes alone.
+- A pending question or a limit pause doesn't survive a studioz restart (the
+  turn is lost); no warning before a long task when a usage window is nearly
+  full.
+
+### Starting phase 4
+
+Read "Workflows" (the `deckz.yml` declaration sketched), "Agent configuration"
+(the `defer` findings), "What a non-expert can expect", and phase 3's
+increments below: the agent's conversation (`studioz.agent`), its questions,
+checkpoints, usage and the dialogs' asks (`studioz.asks`) are what workflows
+build on. slides' skills are `nouvelle-formation`, `nouvelle-section`,
+`qa-formation`, `qa-fix`, `sync-langs`, `markdown-edge-cases`
+(`../slides/.claude/skills/`). deckz's settings models set no pydantic `extra`,
+so a `studioz:` section in `deckz.yml` should be ignored by deckz (not tried):
+check it first, and keep its schema in studioz (a rule studioz needs from deckz
+goes into deckz). A suggested order, each a usable increment:
+
+1. **Workflows declared**: `studioz.workflows` read from `deckz.yml` (name,
+   skill, inputs, prompt, scope), listed where they apply (the workspace, a
+   deck's page), each a form whose prompt starts a turn in the conversation.
+2. **Opening a workspace from a workflow**: the home page's "new workspace"
+   with a workflow, its inputs (a file put in the workspace) filled in.
+3. **Questions answered later** (`defer`): a pending question that survives the
+   person leaving and studioz restarting, answered on resume (see "Agent
+   configuration").
+4. **QA → fix**: `qa-formation`'s findings as a checklist in the workspace,
+   "Appliquer les corrections" running `qa-fix` on the ones ticked.
+5. **The translation backlog**: `deckz i18n stale`'s list, each item "Traduire
+   avec l'agent" (as the Commit dialog's).
 
 ### Phase 3's increments
 
