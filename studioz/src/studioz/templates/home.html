@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Accueil{% endblock %}
+{% block body %}
+<main class="page">
+  <section>
+    <h1>Espaces de travail</h1>
+    <p class="hint">
+      Un espace de travail est une copie du dépôt pour une ligne de travail
+      (une formation, une relecture…). Vous y modifiez le contenu en voyant le
+      résultat, puis vous enregistrez (commit) quand vous le décidez.
+    </p>
+    <form class="create" hx-post="/espaces" hx-target="#create-result"
+          hx-indicator="#create-progress" hx-disabled-elt="find button">
+      <label for="name">Nouvel espace de travail</label>
+      <input id="name" name="name" required pattern="[A-Za-z0-9][A-Za-z0-9_\-]*"
+             placeholder="pnd-2026" title="Lettres, chiffres, - et _">
+      <button type="submit">Créer</button>
+      <span id="create-progress" class="indicator">Création et installation… (quelques secondes)</span>
+    </form>
+    <div id="create-result"></div>
+    {% if workspaces %}
+    <table class="workspaces">
+      <thead>
+        <tr>
+          <th>Nom</th>
+          <th>Modifications non enregistrées</th>
+          <th>Commits à synchroniser</th>
+          <th>En retard sur {{ upstream or "la branche amont" }}</th>
+          <th title="La place que fermer l'espace libérerait">Taille</th>
+          <th>Dernière utilisation</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for workspace in workspaces %}
+        {% include "_workspace_row.html" %}
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">Aucun espace de travail pour l'instant.</p>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

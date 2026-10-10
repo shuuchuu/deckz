@@ -72,10 +72,18 @@ dev = [
   "ty >= 0.0.33",
   "types-appdirs >= 1, < 2",
   "types-pyyaml >= 6",
+  "httpx2 >= 2",
+  "studioz",
 ]
 
 [project.scripts]
 deckz = 'deckz.cli:main'
+
+[tool.uv.workspace]
+members = ["studioz"]
+
+[tool.uv.sources]
+studioz = { workspace = true }
 
 [tool.ruff]
 target-version = "py312"
@@ -90,6 +98,7 @@ convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["private-member-access"]
+"studioz/tests/*" = ["private-member-access"]
 
 [bumpver]
 commit = true
@@ -107,6 +116,13 @@ version_pattern = "MAJOR.MINOR.PATCH"
   '^current_version = "{version}"$',
 ]
 "src/deckz/__init__.py" = [
+  '^__version__ = "{version}"$',
+]
+"studioz/pyproject.toml" = [
+  '^version = "{version}"$',
+  '^  "deckz == {version}",$',
+]
+"studioz/src/studioz/__init__.py" = [
   '^__version__ = "{version}"$',
 ]
 

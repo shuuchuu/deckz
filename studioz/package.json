@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "description": "The JavaScript studioz serves, copied into src/studioz/static/vendor/ by `uv run doit vendor`.",
+  "dependencies": {
+    "htmx.org": "2.0.11"
+  }
+}

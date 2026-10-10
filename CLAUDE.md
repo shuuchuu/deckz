@@ -23,7 +23,7 @@ Dependency management and running: this project uses `uv`; run tools via
 
 - Lint + format-check + typecheck: `uv run doit check` (or individually:
   `uv run ruff check src/deckz tests`, `uv run ruff format --check src/deckz tests`,
-  `uv run ty check src/deckz tests`)
+  `uv run ty check src/deckz tests`; each also covers `studioz/src studioz/tests`)
 - Tests: `uv run doit test` (runs `pytest -n auto`, parallel via pytest-xdist)
   or `uv run pytest` (serial)
   - Single test: `uv run pytest tests/test_cli.py::test_name`
@@ -36,7 +36,10 @@ Dependency management and running: this project uses `uv`; run tools via
   and isn't affected by `install_hooks`.
 - Docs: built with `mkdocs` from docstrings (see `mkdocs.yml`, `docs/`).
 - Version bumps: `bumpver` (see `[bumpver]` in `pyproject.toml`); do not hand-edit
-  the version strings it manages in `pyproject.toml` / `src/deckz/__init__.py`.
+  the version strings it manages in `pyproject.toml` / `src/deckz/__init__.py`, and
+  studioz's (`studioz/pyproject.toml`, its pin on deckz, `studioz/src/studioz/__init__.py`).
+- studioz's JavaScript: `uv run doit vendor` (`npm ci` in `studioz/`, then copies the
+  pinned files into `studioz/src/studioz/static/vendor/`, which is committed).
 
 ### This working tree is live
 
@@ -371,12 +374,34 @@ by the `dev` group: the CLI wrappers import them inside
 library (`src/deckz/labs/`) is plain deckz code with no optional
 dependency, backing the top-level `labs` sub-app (`cli/labs/`).
 
+### studioz
+
+`studioz/` is a second package, studioz: a local web UI to work on a
+deckz-managed repository (workspaces, previews, editing, commit and sync, and later
+agents), on each person's machine. `studioz-plan.md` is its plan, with what is done.
+The repository is a uv workspace for it (`[tool.uv.workspace]`, a deliberate
+divergence from the Copier template): one `uv.lock`, studioz depends on deckz through
+`{ workspace = true }`, pinned to the same version, and the `dev` group installs it
+for the tests. deckz's core never imports studioz nor its web stack; studioz uses
+deckz's Python API (`deckz.worktrees`, `deckz.setting_up`…), and a rule it needs goes
+into deckz, never into studioz.
+
+`studioz.app` holds the FastAPI routes (server-rendered Jinja pages in French,
+`templates/`, with htmx), `studioz.workspaces` what the pages show of `deckz
+worktree`'s worktrees (studioz's own state goes in each workspace's
+`.run/studioz/`), and `studioz.local_only` refuses requests not naming a local host,
+and changes not coming from studioz's own pages (DNS rebinding, cross-site
+requests): every route that changes something is a POST. Its tests are in
+`studioz/tests/`, driving the app with FastAPI's test client on a temporary
+repository.
+
 ## Conventions
 
 - ruff config selects an explicit rule set (see `[tool.ruff.lint]` in
   `pyproject.toml`) with `preview = true`; docstrings follow Google
   convention and undocumented-code rules (`D1`) are ignored.
-- Type checking is done with `ty` (not mypy), scoped to `src/deckz tests`.
+- Type checking is done with `ty` (not mypy), scoped to `src/deckz tests` and
+  `studioz/src studioz/tests`.
 
 ## Operability guidelines
 

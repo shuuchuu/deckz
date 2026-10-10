@@ -1,0 +1,5 @@
+<tr id="workspace-{{ workspace.name }}" class="closed">
+  <td>{{ workspace.name }}</td>
+  <td colspan="6">Fermé.{% if kept %} Ses commits non synchronisés restent sur la branche
+    {{ workspace.worktree.branch }}.{% endif %}</td>
+</tr>

@@ -1,0 +1,30 @@
+[project]
+authors = [
+  {name = "m09", email = "142691+m09@users.noreply.github.com"},
+  {name = "NyxAether", email = "contact.nyxhemera@gmail.com"},
+]
+dependencies = [
+  "deckz == 31.3.3",
+  "cyclopts >= 4, < 5",
+  "fastapi >= 0.115, < 1",
+  "jinja2 >= 3, < 4",
+  "python-multipart >= 0.0.20",
+  "uvicorn >= 0.34, < 1",
+]
+description = "A local web UI to work on a deckz repository, agents included."
+homepage = "https://github.com/shuuchuu/deckz"
+license = "Apache-2.0"
+name = "studioz"
+readme = "README.md"
+requires-python = ">= 3.12"
+version = "31.3.3"
+
+[project.scripts]
+studioz = "studioz.cli:main"
+
+[tool.uv.sources]
+deckz = { workspace = true }
+
+[build-system]
+build-backend = "uv_build"
+requires = ["uv_build>=0.12.15,<0.13.0"]

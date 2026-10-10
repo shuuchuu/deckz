@@ -1,0 +1,9 @@
+<div class="error">
+  <p>L'espace de travail <a href="/espaces/{{ created.name }}">{{ created.name }}</a>
+    est créé, mais son installation (<code>deckz setup</code>) n'est pas complète :</p>
+  <ul>
+    {% for item in created.setup if item.status.value in ("missing", "failed") %}
+    <li><strong>{{ item.name }}</strong> : {{ item.detail }}</li>
+    {% endfor %}
+  </ul>
+</div>

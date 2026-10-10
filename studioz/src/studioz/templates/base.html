@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}studioz{% endblock %} · {{ repository }}</title>
+  <link rel="stylesheet" href="/static/studioz.css">
+  <script src="/static/vendor/htmx.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">studioz</a>
+    <span class="repository">{{ repository }}</span>
+    {% block topbar %}{% endblock %}
+  </header>
+  {% block body %}{% endblock %}
+</body>
+</html>

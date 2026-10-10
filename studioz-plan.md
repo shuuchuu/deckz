@@ -554,6 +554,19 @@ build/upload/publish with confirmations, the job queue. This alone gives the
 colleague who doesn't want agents a Codespace-like way to do everything in
 `HANDBOOK.md`.
 
+**Increment 1: done** (2026-10-10): the uv workspace (slides depends on studioz),
+`uv run studioz` serving the home page (each workspace with its uncommitted
+changes, unsynced commits, how far behind the upstream branch, size, last use;
+create, which runs `deckz setup` there; close, refused while it holds work, then
+forced after a confirmation) and a workspace page with its decks and changes. The
+JavaScript is pinned in `studioz/package.json` and committed into the package
+(`doit vendor`), not built at release time, so that the editable install from
+slides needs no npm. Measured on slides: a workspace is ready in 7 s and frees
+915 MB when closed (its `.venv` counts 3 GB, all but 6 MB hard links into uv's
+cache). A local web app can be driven by any website open in the browser, so
+studioz refuses requests not naming a local host and changes not coming from its
+own pages (`studioz.local_only`).
+
 ### Phase 3: the agent in a workspace
 
 The conversation panel, question forms, comments on frames as instructions,

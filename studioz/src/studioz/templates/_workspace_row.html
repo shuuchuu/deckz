@@ -1,0 +1,14 @@
+{% set worktree = workspace.worktree %}
+<tr id="workspace-{{ workspace.name }}">
+  <td><a href="/espaces/{{ workspace.name }}">{{ workspace.name }}</a></td>
+  <td>{{ worktree.changes | length or "aucune" }}</td>
+  <td>{{ worktree.unsynced or "aucun" }}</td>
+  <td>{% if workspace.behind is none %}—{% else %}{{ workspace.behind or "à jour" }}{% endif %}</td>
+  <td hx-get="/espaces/{{ workspace.name }}/taille" hx-trigger="load">…</td>
+  <td>{{ workspace.last_use | ago }}</td>
+  <td>
+    <button class="secondary" hx-post="/espaces/{{ workspace.name }}/fermer"
+            hx-target="#workspace-{{ workspace.name }}" hx-swap="outerHTML"
+            hx-confirm="Fermer l'espace de travail « {{ workspace.name }} » ?">Fermer</button>
+  </td>
+</tr>
