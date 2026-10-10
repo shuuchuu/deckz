@@ -252,7 +252,12 @@ jobs:
           path: {repo}
           fetch-depth: 0
 {deckz_checkout}
-{apt}      - name: Install uv
+{apt}      # The container runs as root, the checkouts belong to the runner's user:
+      # git refuses to read them until told they're safe.
+      - name: Trust the checkouts
+        run: git config --global --add safe.directory "*"
+
+      - name: Install uv
         uses: astral-sh/setup-uv@v4
 
       - name: Install the dependencies
@@ -267,7 +272,6 @@ jobs:
         env:
           BEFORE: ${{{{ github.event.pull_request.base.sha || github.event.before }}}}
         run: |
-          git config --global --add safe.directory "$PWD"
           # A new branch has no "before": check its last commit only.
           case "$BEFORE" in
             "" | 0000000000000000000000000000000000000000) RANGE=HEAD~1..HEAD ;;

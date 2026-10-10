@@ -172,6 +172,10 @@ def test_install_ci_workflow_writes_a_valid_workflow(tmp_path: Path) -> None:
     assert "uv run deckz check --plain" in runs
     assert "uv run deckz check --plain missing-en" in runs
     assert any("deckz hooks check-commits" in run for run in runs)
+    # The container's root can only run git on the runner's checkouts once
+    # they're trusted, and `deckz check` runs git.
+    trust = next(i for i, run in enumerate(runs) if "safe.directory" in run)
+    assert trust < runs.index("uv run deckz check --plain")
     # Ours: overwritten without --force.
     install_ci_workflow(tmp_path, ci)
 
