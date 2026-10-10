@@ -183,6 +183,31 @@ def stale_pdfs(targets: Iterable[BuildTarget], outputs: OutputKinds) -> list[Pat
     )
 
 
+def outdated_pdfs(targets: Iterable[BuildTarget]) -> list[Path]:
+    """The PDFs of `targets`' output directories that don't match their content.
+
+    Either no build of the deck produces them anymore (see `stale_pdfs`), \
+    or a content fragment they include is new or changed since they were \
+    built, or they were never built here (no build directory, e.g. after \
+    `deckz clean`). Their deck's yaml files and the main template aren't \
+    compared, only the content fragments.
+
+    Returns:
+        The outdated PDFs that exist, sorted.
+    """
+    targets = list(targets)
+    outdated = set(stale_pdfs(targets, _EVERY_PDF))
+    for target in targets:
+        builder = _deck_builder(target, _EVERY_PDF, _NULL_PROGRESS, whole_deck=True)
+        outdated.update(
+            planned.output_path
+            for planned in builder.plan()
+            if planned.output_path.is_file()
+            and (planned.full_render or planned.changed_fragments)
+        )
+    return sorted(outdated)
+
+
 def plan(targets: Iterable[BuildTarget], outputs: OutputKinds) -> list[PlannedCompile]:
     """What `build` would compile and render, without building anything.
 

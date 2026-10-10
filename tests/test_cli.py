@@ -684,6 +684,36 @@ def test_run_sync_without_any_pdf_leaves_the_pdfs_alone(bilingual_dir: Path) -> 
     assert all(pdf.exists() for pdf in orphans + skipped)
 
 
+def test_outdated_pdfs_are_changed_or_orphaned_ones(bilingual_dir: Path) -> None:
+    from deckz.configuring.settings import DeckSettings
+    from deckz.pipelines import deck_targets, outdated_pdfs
+
+    main(("run", *_HANDOUT_ONLY, "--no-part-handouts"))
+    targets = deck_targets(DeckSettings.from_yaml(bilingual_dir), ["fr"])
+    assert outdated_pdfs(targets) == []
+
+    handout = bilingual_dir / "pdf" / "bilingual-handout.pdf"
+    orphan = bilingual_dir / "pdf" / "old.pdf"
+    orphan.write_bytes(b"%PDF-1.4 leftover")
+    content = bilingual_dir / "content" / "hello.md"
+    content.write_text(content.read_text() + "\nMore.\n", encoding="utf8")
+
+    assert outdated_pdfs(targets) == [handout, orphan]
+
+
+def test_upload_refuses_outdated_pdfs(bilingual_dir: Path, caplog: Any) -> None:
+    main(("run", *_HANDOUT_ONLY, "--no-part-handouts"))
+    content = bilingual_dir / "content" / "hello.md"
+    content.write_text(content.read_text() + "\nMore.\n", encoding="utf8")
+
+    with raises(SystemExit) as exc_info:
+        main(("upload",))
+
+    assert exc_info.value.code == 1
+    assert "company/bilingual/pdf/bilingual-handout.pdf" in caplog.text
+    assert "--include-stale" in caplog.text
+
+
 def test_run_en_missing_file_fails_loudly(
     bilingual_dir: Path, caplog: Any, capsys: Any
 ) -> None:
