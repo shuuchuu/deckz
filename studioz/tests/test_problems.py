@@ -157,7 +157,7 @@ def test_panel_with_the_deck_s_shrunk_frames(
 
     deck = workspace / "client" / "abc"
     build = deck / ".build" / "abc-handout"
-    fragment = build / "greeting" / "hello-0123456789abcdef.md"
+    fragment = build / "greeting" / "hello.md"
     fragment.parent.mkdir(parents=True)
     fragment.write_text("Intro\n# Hello\n\nText\n", encoding="utf8")
     (build / "abc-handout.typ").write_text("", encoding="utf8")

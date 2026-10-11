@@ -190,7 +190,7 @@ deck = pathlib.Path.cwd()
 build = deck / ".build" / "abc-handout"
 build.mkdir(parents=True, exist_ok=True)
 text = (deck / "content" / "slides.md").read_text()
-fragment = build / "content" / "slides-0123456789abcdef.md"
+fragment = build / "content" / "slides.md"
 fragment.parent.mkdir(exist_ok=True)
 fragment.write_text(text)
 frames = [part.splitlines() for part in text.split("# ")[1:]]

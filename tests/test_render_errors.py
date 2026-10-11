@@ -36,8 +36,9 @@ def _render(tmp_path: Path, text: str) -> tuple[Path, Path]:
     render_dependencies(
         _Renderer(),  # ty: ignore[invalid-argument-type]
         _Converter(),  # ty: ignore[invalid-argument-type]
-        [CopiedDependency(copy, {}, source)],
+        [CopiedDependency(copy, source)],
         ".typ",
+        {},
     )
     return source, copy
 

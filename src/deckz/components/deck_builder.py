@@ -7,7 +7,7 @@ from collections.abc import (
     Set,
 )
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from hashlib import sha256
 from json import dumps
@@ -30,7 +30,6 @@ from ..models import (
     Part,
     PartName,
     PartSlides,
-    ResolvedDeck,
     ResolvedPath,
     Section,
     Title,
@@ -89,38 +88,39 @@ class OutputFormat:
         return self.output_dir / f"{name}{self.output_suffix}"
 
 
-def variables_fingerprint(variables: Mapping[str, Any]) -> str:
-    """A short, stable hash of `variables`'s content.
+def render_fingerprint(converter_fingerprint: str, variables: Mapping[str, Any]) -> str:
+    """A stable hash of what renders every fragment besides its own source.
 
-    Used to disambiguate the same physical file included more than once in \
-    the same build with different effective variables (e.g. two flavors of \
-    the same section merged into one deck): each distinct fingerprint gets \
-    its own rendered copy instead of colliding on one shared build artifact.
+    A build copy is re-rendered when its source changed, but a change of the \
+    Markdown converter's command or filters, or of the deck's variables, \
+    touches no source: a build dir whose stored fingerprint differs renders \
+    every fragment again.
 
     Returns:
-        A 16-character hex digest of `variables`'s content.
+        A hex digest of `converter_fingerprint` and `variables`'s content.
     """
     return sha256(
-        dumps(variables, sort_keys=True, default=str).encode("utf8")
-    ).hexdigest()[:16]
+        dumps([converter_fingerprint, variables], sort_keys=True, default=str).encode(
+            "utf8"
+        )
+    ).hexdigest()
 
 
 def dependency_relative_path(
-    resolved_path: Path, basedirs: Iterable[Path], fingerprint: str
+    resolved_path: Path, basedirs: Iterable[Path]
 ) -> PurePosixPath:
     """The extensionless path used both to `#include` a fragment and to name it.
 
-    Relative to whichever of `basedirs` contains `resolved_path`, with \
-    `fingerprint` appended to the stem -- the single place this naming \
-    scheme is decided, so the main template's content reference (built by \
-    `_SlidesNodeVisitor`) \
-    and the on-disk rendered copy (built by \
+    Relative to whichever of `basedirs` contains `resolved_path` -- the single \
+    place this naming scheme is decided, so the main template's content \
+    reference (built by `_SlidesNodeVisitor`) and the on-disk rendered copy \
+    (built by \
     [`copy_dependencies`][deckz.components.deck_builder.copy_dependencies]) \
     always agree.
 
     Returns:
         `resolved_path`, relative to its `basedirs` entry, without its \
-        suffix, with `fingerprint` appended to the stem.
+        suffix.
 
     Raises:
         ValueError: If `resolved_path` isn't relative to any of `basedirs`.
@@ -132,25 +132,7 @@ def dependency_relative_path(
     else:
         msg = f"could not find file {resolved_path}"
         raise ValueError(msg)
-    stem_path = relative_path.with_suffix("")
-    return PurePosixPath(stem_path.parent / f"{stem_path.name}-{fingerprint}")
-
-
-@dataclass(frozen=True)
-class DependencyRef:
-    """A file to render into a build dir, identified by content, not just path.
-
-    Two occurrences of the same `resolved_path` with different effective \
-    `variables` (see [`File.variables`][deckz.models.File.variables]) are \
-    two distinct `DependencyRef`s: `variables` is excluded from equality/hash \
-    (dicts aren't hashable, and it's a pure function of `variables_fingerprint` \
-    anyway), so a `set[DependencyRef]` naturally dedupes same-path-same-variables \
-    occurrences while keeping same-path-different-variables ones apart.
-    """
-
-    resolved_path: ResolvedPath
-    variables_fingerprint: str
-    variables: Mapping[str, Any] = field(compare=False)
+    return PurePosixPath(relative_path.with_suffix(""))
 
 
 @dataclass(frozen=True)
@@ -178,7 +160,7 @@ class PlannedCompile:
 @dataclass(frozen=True)
 class CompileItem:
     parts: Sequence[PartSlides]
-    dependencies: Set[DependencyRef]
+    dependencies: Set[ResolvedPath]
     compile_type: CompileType
     toc: bool
 
@@ -187,7 +169,7 @@ class DeckBuilder(DeckBuilderProtocol):
     def __init__(
         self,
         variables: dict[str, Any],
-        deck: ResolvedDeck,
+        deck: Deck,
         build_presentation: bool,
         build_handout: bool,
         build_print: bool,
@@ -244,18 +226,18 @@ class DeckBuilder(DeckBuilderProtocol):
         for name, item in self._list_items().items():
             output_format = self._formats[item.compile_type.format]
             build_dir = self._build_dir / name
-            fingerprint_path = build_dir / ".markdown-fingerprint"
-            full_render = (
-                not fingerprint_path.is_file()
-                or fingerprint_path.read_text(encoding="utf8")
-                != output_format.markdown_converter.fingerprint()
+            fingerprint_path = build_dir / ".render-fingerprint"
+            full_render = not fingerprint_path.is_file() or fingerprint_path.read_text(
+                encoding="utf8"
+            ) != render_fingerprint(
+                output_format.markdown_converter.fingerprint(), self._variables
             )
             changed = tuple(
                 sorted(
-                    dependency.resolved_path
+                    dependency
                     for dependency in item.dependencies
                     if file_changed(
-                        dependency.resolved_path,
+                        dependency,
                         build_copy_path(dependency, build_dir, self._basedirs),
                     )
                 )
@@ -279,8 +261,11 @@ class DeckBuilder(DeckBuilderProtocol):
                 "disabled"
             )
             return True
-        self._markdown_fingerprints = {
-            output_format: self._formats[output_format].markdown_converter.fingerprint()
+        self._render_fingerprints = {
+            output_format: render_fingerprint(
+                self._formats[output_format].markdown_converter.fingerprint(),
+                self._variables,
+            )
             for output_format in {item.compile_type.format for item in items.values()}
         }
         results = []
@@ -356,36 +341,37 @@ class DeckBuilder(DeckBuilderProtocol):
     def _build_item(self, name: str, item: CompileItem) -> CompileResult:
         start = perf_counter()
         output_format = self._formats[item.compile_type.format]
-        markdown_fingerprint = self._markdown_fingerprints[item.compile_type.format]
+        fingerprint = self._render_fingerprints[item.compile_type.format]
         build_dir = setup_build_dir(self._build_dir, name, self._dirs_to_link)
         main_path = build_dir / f"{name}{output_format.template.suffix}"
         # `copy_dependencies` only re-copies (and so re-renders/re-converts) a
         # fragment whose source differs from its build copy, but a pandoc
-        # command or filter change doesn't touch any source: force a full
-        # pass whenever the converter's fingerprint moved since this item's
+        # command, filter or variable change doesn't touch any source: force
+        # a full pass whenever the render fingerprint moved since this item's
         # last successful render.
-        fingerprint_path = build_dir / ".markdown-fingerprint"
-        markdown_stale = (
+        fingerprint_path = build_dir / ".render-fingerprint"
+        render_stale = (
             not fingerprint_path.is_file()
-            or fingerprint_path.read_text(encoding="utf8") != markdown_fingerprint
+            or fingerprint_path.read_text(encoding="utf8") != fingerprint
         )
-        if markdown_stale:
+        if render_stale:
             self._logger.debug(
                 "%s: rendering every fragment, first build or the Markdown "
-                "converter changed",
+                "converter or the variables changed",
                 name,
             )
         copied = copy_dependencies(
-            item.dependencies, build_dir, self._basedirs, force=markdown_stale
+            item.dependencies, build_dir, self._basedirs, force=render_stale
         )
         render_dependencies(
             self._renderer,
             output_format.markdown_converter,
             copied,
             output_format.fragment_suffix,
+            self._variables,
         )
-        if markdown_stale:
-            fingerprint_path.write_text(markdown_fingerprint, encoding="utf8")
+        if render_stale:
+            fingerprint_path.write_text(fingerprint, encoding="utf8")
         # After the fragments: a main template may inline them (`fragment`).
         self._render_main(item, output_format, main_path)
         rendered = perf_counter()
@@ -479,18 +465,16 @@ def setup_build_dir(build_dir: Path, name: str, dirs_to_link: Iterable[Path]) ->
 
 
 def build_copy_path(
-    dependency: DependencyRef, target_build_dir: Path, basedirs: Iterable[Path]
+    dependency: ResolvedPath, target_build_dir: Path, basedirs: Iterable[Path]
 ) -> Path:
-    """Where `dependency`'s source is copied in a build dir, to be rendered.
+    """Where `dependency` is copied in a build dir, to be rendered.
 
     Returns:
         The path of the copy, a `.j2` file next to its rendered output.
     """
-    relative_path = dependency_relative_path(
-        dependency.resolved_path, basedirs, dependency.variables_fingerprint
-    )
+    relative_path = dependency_relative_path(dependency, basedirs)
     return (target_build_dir / relative_path).with_name(
-        f"{relative_path.name}{dependency.resolved_path.suffix}.j2"
+        f"{relative_path.name}{dependency.suffix}.j2"
     )
 
 
@@ -498,13 +482,12 @@ def build_copy_path(
 class CopiedDependency:
     build_path: Path
     """The build copy, a template rendered next to itself."""
-    variables: Mapping[str, Any]
     source: Path
     """The content file it's a copy of."""
 
 
 def copy_dependencies(
-    dependencies: Iterable[DependencyRef],
+    dependencies: Iterable[ResolvedPath],
     target_build_dir: Path,
     basedirs: Iterable[Path],
     *,
@@ -513,15 +496,13 @@ def copy_dependencies(
     copied = []
     for dependency in dependencies:
         build_path = build_copy_path(dependency, target_build_dir, basedirs)
-        copy = CopiedDependency(
-            build_path, dependency.variables, dependency.resolved_path
-        )
+        copy = CopiedDependency(build_path, dependency)
         if force:
             build_path.parent.mkdir(parents=True, exist_ok=True)
-            copyfile(dependency.resolved_path, build_path)
+            copyfile(dependency, build_path)
             copied.append(copy)
-        elif copy_file_if_changed(dependency.resolved_path, build_path):
-            _logger.debug("Re-rendering %s: new or changed", dependency.resolved_path)
+        elif copy_file_if_changed(dependency, build_path):
+            _logger.debug("Re-rendering %s: new or changed", dependency)
             copied.append(copy)
     return copied
 
@@ -542,6 +523,7 @@ def render_dependencies(
     markdown_converter: MarkdownConverterProtocol,
     to_render: Iterable[CopiedDependency],
     fragment_suffix: str,
+    variables: Mapping[str, Any],
 ) -> None:
     """Render each copied content file, and convert the Markdown ones.
 
@@ -552,9 +534,7 @@ def render_dependencies(
         item_path = copied.build_path
         rendered_path = item_path.with_suffix("")
         try:
-            renderer.render_to_path(
-                item_path, rendered_path, variables=copied.variables
-            )
+            renderer.render_to_path(item_path, rendered_path, variables=variables)
         except TemplateError as error:
             # Its copy now matches its source: without it, the next build
             # would take the file as rendered and keep its previous output.
@@ -577,30 +557,24 @@ def _resolved_path(file: File) -> ResolvedPath:
     return file.resolved_path
 
 
-class PartDependenciesNodeVisitor(NodeVisitor[[MutableSet[DependencyRef]], None]):
-    def process(self, deck: Deck) -> dict[PartName, set[DependencyRef]]:
+class PartDependenciesNodeVisitor(NodeVisitor[[MutableSet[ResolvedPath]], None]):
+    def process(self, deck: Deck) -> dict[PartName, set[ResolvedPath]]:
         return {
             part_name: self._process_part(part)
             for part_name, part in deck.parts.items()
         }
 
-    def _process_part(self, part: Part) -> set[DependencyRef]:
-        dependencies: set[DependencyRef] = set()
+    def _process_part(self, part: Part) -> set[ResolvedPath]:
+        dependencies: set[ResolvedPath] = set()
         for node in part.nodes:
             node.accept(self, dependencies)
         return dependencies
 
-    def visit_file(self, file: File, dependencies: MutableSet[DependencyRef]) -> None:
-        dependencies.add(
-            DependencyRef(
-                _resolved_path(file),
-                variables_fingerprint(file.variables),
-                file.variables,
-            )
-        )
+    def visit_file(self, file: File, dependencies: MutableSet[ResolvedPath]) -> None:
+        dependencies.add(_resolved_path(file))
 
     def visit_section(
-        self, section: Section, dependencies: MutableSet[DependencyRef]
+        self, section: Section, dependencies: MutableSet[ResolvedPath]
     ) -> None:
         for node in section.nodes:
             node.accept(self, dependencies)
@@ -627,10 +601,7 @@ class _SlidesNodeVisitor(NodeVisitor[[MutableSequence[TitleOrContent], int], Non
     ) -> None:
         if file.title:
             sections.append(Title(file.title, level))
-        fingerprint = variables_fingerprint(file.variables)
-        reference = dependency_relative_path(
-            _resolved_path(file), self._basedirs, fingerprint
-        )
+        reference = dependency_relative_path(_resolved_path(file), self._basedirs)
         sections.append(str(reference))
 
     def visit_section(

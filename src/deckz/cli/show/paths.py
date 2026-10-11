@@ -30,7 +30,7 @@ def paths(*, lang: Lang = "fr", json: bool = False, workdir: Path = Path()) -> N
     deps = PartDependenciesNodeVisitor().process(deck)
     resolved: set[Path] = set()
     for part_deps in deps.values():
-        resolved.update(dependency.resolved_path for dependency in part_deps)
+        resolved.update(part_deps)
     if json:
         from .._presentation import print_json
 

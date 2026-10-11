@@ -31,13 +31,13 @@ def test_frame_headings_skips_code_blocks_and_lower_levels() -> None:
 
 
 def test_mark_frames_adds_one_marker_after_each_frame_heading() -> None:
-    marked = mark_frames(_TEXT, "/build/x-0123456789abcdef.md")
+    marked = mark_frames(_TEXT, "/build/x.md")
 
     lines = marked.splitlines()
     first = lines.index("# First {.standout}")
     assert lines[first + 2] == "```{=typst}"
     assert lines[first + 3] == (
-        '#context [#metadata((fragment: "/build/x-0123456789abcdef.md", index: 0, '
+        '#context [#metadata((fragment: "/build/x.md", index: 0, '
         "page: here().page())) <deckz-frame>]"
     )
     assert "index: 1," in lines[lines.index("# Second") + 3]

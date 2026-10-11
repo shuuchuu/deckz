@@ -40,7 +40,6 @@ if TYPE_CHECKING:
     from ..models import Lang
 
 _INCLUDE = re.compile(r'^#include "(.+)\.typ"$', re.MULTILINE)
-_FRAGMENT_HASH = re.compile(r"-[0-9a-f]{16}$")
 
 
 @dataclass(frozen=True)
@@ -125,7 +124,7 @@ def _headings(
         markdown = build_dir / f"{fragment}.md"
         if not markdown.exists():
             continue
-        name = _FRAGMENT_HASH.sub("", fragment) + ".md"
+        name = fragment + ".md"
         is_local = name == local_prefix or name.startswith(f"{local_prefix}/")
         where = (
             (current_dir / name).relative_to(git_dir)

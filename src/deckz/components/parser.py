@@ -290,35 +290,6 @@ class Parser(ParserProtocol):
                 if "title" in flavor_definition.model_fields_set
                 else section_definition.title,
             )
-        section = replace(section, variables=dict(flavor_definition.variables or {}))
-        missing = [
-            declaration.name
-            for declaration in section_definition.variables_to_define
-            if declaration.name not in section.variables
-        ]
-        if missing:
-            return replace(
-                section,
-                parsing_error=(
-                    f"flavor {flavor} does not define variable(s): "
-                    f"{', '.join(sorted(missing))}"
-                ),
-            )
-        invalid = [
-            f"{declaration.name}={section.variables[declaration.name]!r} "
-            f"not in {declaration.allowed_values}"
-            for declaration in section_definition.variables_to_define
-            if declaration.allowed_values is not None
-            and section.variables[declaration.name] not in declaration.allowed_values
-        ]
-        if invalid:
-            return replace(
-                section,
-                parsing_error=(
-                    f"flavor {flavor} has invalid variable value(s): "
-                    f"{'; '.join(invalid)}"
-                ),
-            )
         return replace(
             section,
             nodes=self._parse_nodes(

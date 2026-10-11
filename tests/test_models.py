@@ -125,51 +125,6 @@ def test_node_include_bare_string_has_no_title() -> None:
     assert deck.parts[0].sections[0].title is None
 
 
-def test_flavor_variables_defaults_to_none() -> None:
-    data = {"flavors": [{"name": "f1", "includes": ["hello"]}]}
-    definition = SectionDefinition.model_validate(data)
-    assert definition.flavors[0].variables is None
-
-
-def test_flavor_variables_accepts_a_dict() -> None:
-    data = {
-        "flavors": [
-            {"name": "f1", "variables": {"depth": "shallow"}, "includes": ["hello"]}
-        ]
-    }
-    definition = SectionDefinition.model_validate(data)
-    assert definition.flavors[0].variables == {"depth": "shallow"}
-
-
-def test_variables_to_define_defaults_to_empty() -> None:
-    definition = SectionDefinition.model_validate(
-        {"flavors": [{"name": "f1", "includes": ["hello"]}]}
-    )
-    assert definition.variables_to_define == []
-
-
-def test_variables_to_define_bare_string_has_no_allowed_values() -> None:
-    data = {
-        "variables_to_define": ["depth"],
-        "flavors": [{"name": "f1", "includes": ["hello"]}],
-    }
-    definition = SectionDefinition.model_validate(data)
-    (declaration,) = definition.variables_to_define
-    assert declaration.name == "depth"
-    assert declaration.allowed_values is None
-
-
-def test_variables_to_define_mapping_form_sets_allowed_values() -> None:
-    data = {
-        "variables_to_define": [{"depth": ["shallow", "deep"]}],
-        "flavors": [{"name": "f1", "includes": ["hello"]}],
-    }
-    definition = SectionDefinition.model_validate(data)
-    (declaration,) = definition.variables_to_define
-    assert declaration.name == "depth"
-    assert declaration.allowed_values == ["shallow", "deep"]
-
-
 def _deck() -> Deck:
     return Deck(
         name="deck",

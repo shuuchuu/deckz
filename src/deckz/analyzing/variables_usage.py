@@ -1,19 +1,15 @@
 """Static detection of `variables.xxx`/`variables['xxx']` usage gaps.
 
 Walks every shared section's every named flavor (not just the ones some \
-deck currently happens to use) plus every real deck's own tree, resolving \
-`variables` the same way a real build would (see \
-[`resolve_variables`][deckz.configuring.variables.resolve_variables]), and \
-reports:
+deck currently happens to use), with the repository-wide `variables.yml`, \
+plus every real deck's own tree, with the deck's own variables, as a real \
+build would, and reports:
 
-- a fragment referencing a variable that isn't in its resolved `variables` \
-    at that point in the tree (`undefined`);
-- a section declaring a `variables_to_define` name that no fragment \
-    reachable under it, in any flavor, ever reads (`unused`);
+- a fragment referencing a variable that those variables don't set \
+    (`undefined`);
 - a fragment that fails to parse with the target repo's own Jinja \
     environment (`unparsable`);
-- a flavor that fails to parse at all -- typically a `variables_to_define` \
-    contract violation raised by `Parser` -- reported as a `structural` \
+- a flavor or deck that fails to parse at all, reported as a `structural` \
     finding instead of aborting the whole survey.
 
 A shared flavor whose only failures are includes of deck-local files (a \
@@ -21,17 +17,16 @@ file some deck's own `content/` has, e.g. a per-deck description) can't be \
 resolved on its own, by design: it's skipped, the decks using it cover it.
 """
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from jinja2 import TemplateSyntaxError, nodes
-from pydantic import ValidationError
 
 from ..exceptions import DeckParsingError, DeckzError
-from ..models import Deck, File, FlavorName, Lang, Node, Section, SectionDefinition
-from ..utils import all_deck_settings, load_yaml, shared_section_ids
+from ..models import Deck, File, FlavorName, Lang, Node, Section
+from ..utils import all_deck_settings, shared_section_ids
 
 if TYPE_CHECKING:
     from ..components.protocols import RendererProtocol
@@ -41,23 +36,13 @@ if TYPE_CHECKING:
 @dataclass
 class VariablesReport:
     undefined: list[tuple[Path, str]] = field(default_factory=list)
-    """Fragments referencing a `variables.xxx` name not resolved at that point."""
-
-    unused: list[tuple[Path, str]] = field(default_factory=list)
-    """Section ymls declaring a `variables_to_define` name nothing ever reads."""
+    """Fragments referencing a `variables.xxx` name nothing sets."""
 
     unparsable: list[tuple[Path, str]] = field(default_factory=list)
     """Fragments that fail to parse with the target repo's own Jinja environment."""
 
     structural: list[tuple[str, str]] = field(default_factory=list)
     """`(context, error)` pairs for a flavor/deck that failed to parse at all."""
-
-
-@dataclass
-class _Accumulator:
-    declared: dict[Path, set[str]] = field(default_factory=dict)
-    referenced: dict[Path, set[str]] = field(default_factory=dict)
-    report: VariablesReport = field(default_factory=VariablesReport)
 
 
 def _content_suffix(path: Path) -> str:
@@ -71,7 +56,7 @@ def referenced_variable_names(ast: "nodes.Template") -> set[str]:
 
     Deliberately narrower than `jinja2.meta.find_undeclared_variables`, \
     which only sees top-level free names (`variables` itself, `handout`, \
-    etc.) -- fragments read declared/flavor variables as an attribute or \
+    etc.) -- fragments read variables as an attribute or \
     subscript on `variables` (`\V{variables.depth}`, \
     `\V{variables['depth']}`), which that utility doesn't decompose.
 
@@ -94,71 +79,43 @@ def referenced_variable_names(ast: "nodes.Template") -> set[str]:
     return names
 
 
-def _declared_names(acc: _Accumulator, yml_path: Path) -> set[str]:
-    if yml_path not in acc.declared:
-        try:
-            definition = SectionDefinition.model_validate(load_yaml(yml_path))
-            declared = {d.name for d in definition.variables_to_define}
-        except (DeckzError, OSError, ValidationError):
-            declared = set()
-        acc.declared[yml_path] = declared
-        acc.referenced.setdefault(yml_path, set())
-    return acc.declared[yml_path]
-
-
 def _check_file(
-    file: File,
-    ancestors: list[tuple[Path, set[str]]],
+    path: Path,
+    variables: Mapping[str, Any],
     renderer: "RendererProtocol",
-    acc: _Accumulator,
+    report: VariablesReport,
 ) -> None:
-    path = file.resolved_path
-    if path is None:
-        return
     try:
         env = renderer.environment_for(_content_suffix(path))
         ast = env.parse(path.read_text(encoding="utf8"))
     except TemplateSyntaxError as e:
-        acc.report.unparsable.append((path, str(e)))
+        report.unparsable.append((path, str(e)))
         return
-    for name in referenced_variable_names(ast):
-        if name not in file.variables:
-            acc.report.undefined.append((path, name))
-        for yml_path, declared in ancestors:
-            if name in declared:
-                acc.referenced[yml_path].add(name)
+    report.undefined.extend(
+        (path, name)
+        for name in sorted(referenced_variable_names(ast))
+        if name not in variables
+    )
 
 
-def _walk_node(
-    node: Node,
-    ancestors: list[tuple[Path, set[str]]],
-    renderer: "RendererProtocol",
-    acc: _Accumulator,
-) -> None:
-    if isinstance(node, Section):
-        if node.parsing_error is not None or node.resolved_path is None:
-            return
-        yml_path = node.resolved_path / f"{node.resolved_path.name}.yml"
-        declared = _declared_names(acc, yml_path)
-        new_ancestors = [*ancestors, (yml_path, declared)] if declared else ancestors
-        for child in node.nodes:
-            _walk_node(child, new_ancestors, renderer, acc)
-    elif isinstance(node, File):
-        _check_file(node, ancestors, renderer, acc)
+def _files(nodes: Iterable[Node]) -> Iterator[Path]:
+    for node in nodes:
+        if isinstance(node, Section):
+            if node.parsing_error is None and node.resolved_path is not None:
+                yield from _files(node.nodes)
+        elif isinstance(node, File) and node.resolved_path is not None:
+            yield node.resolved_path
 
 
 def _walk_deck(
     deck: Deck,
-    base_variables: dict[str, Any],
+    variables: Mapping[str, Any],
     renderer: "RendererProtocol",
-    acc: _Accumulator,
+    report: VariablesReport,
 ) -> None:
-    from ..configuring.variables import resolve_variables
-
-    resolved = resolve_variables(deck, base_variables)
-    for part in resolved.parts.values():
-        for node in part.nodes:
-            _walk_node(node, [], renderer, acc)
+    for part in deck.parts.values():
+        for path in _files(part.nodes):
+            _check_file(path, variables, renderer, report)
 
 
 def _failed_nodes(nodes: Iterable[Node]) -> Iterator[Node]:
@@ -222,7 +179,7 @@ def check_variables(settings: "GlobalSettings", lang: Lang = "fr") -> VariablesR
     from ..configuring.settings import DeckSettings
     from ..configuring.variables import get_variables
 
-    acc = _Accumulator()
+    report = VariablesReport()
     renderer = GlobalSettingsFactory(settings).renderer()
     git_dir = settings.paths.git_dir
 
@@ -238,12 +195,12 @@ def check_variables(settings: "GlobalSettings", lang: Lang = "fr") -> VariablesR
             if not _only_deck_local_gaps(
                 e.deck, local_content_dirs, settings.file_extensions
             ):
-                acc.report.structural.append((context, str(e)))
+                report.structural.append((context, str(e)))
             continue
         except DeckzError as e:
-            acc.report.structural.append((context, str(e)))
+            report.structural.append((context, str(e)))
             continue
-        _walk_deck(deck, shared_base_variables, renderer, acc)
+        _walk_deck(deck, shared_base_variables, renderer, report)
 
     for deck_settings in all_decks:
         deck_context = str(
@@ -255,13 +212,9 @@ def check_variables(settings: "GlobalSettings", lang: Lang = "fr") -> VariablesR
         try:
             deck = deck_parser.from_deck_definition(deck_settings.paths.deck_definition)
         except DeckzError as e:
-            acc.report.structural.append((deck_context, str(e)))
+            report.structural.append((deck_context, str(e)))
             continue
         deck_base_variables = {**get_variables(deck_settings, lang), "lang": lang}
-        _walk_deck(deck, deck_base_variables, renderer, acc)
+        _walk_deck(deck, deck_base_variables, renderer, report)
 
-    for yml_path, declared in acc.declared.items():
-        for name in sorted(declared - acc.referenced.get(yml_path, set())):
-            acc.report.unused.append((yml_path, name))
-
-    return acc.report
+    return report

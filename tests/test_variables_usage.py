@@ -18,13 +18,11 @@ def _write(path: Path, content: str) -> None:
 def _repo(tmp_path: Path, monkeypatch: MonkeyPatch) -> Path:
     """A repo with three shared sections and one real deck.
 
-    - "greeting" declares `variables_to_define: [depth, format]`; its "loud"
-      flavor's body reads `variables.depth` (declared, fine) and
-      `variables.typo` (never declared/set anywhere -- undefined); "format"
-      is declared but no fragment under the section, in any flavor, ever
-      reads it -- unused.
-    - "broken" declares `variables_to_define: [x]`, but its only flavor
-      never sets it -- a parsing failure, reported as structural.
+    - "greeting"'s "loud" flavor's body reads `variables.theme` (set by the
+      root `variables.yml`, fine) and `variables.typo` (set nowhere --
+      undefined).
+    - "broken"'s only flavor includes a file that doesn't exist -- a parsing
+      failure, reported as structural.
     - "badsyntax" has a fragment with invalid Jinja syntax -- unparsable.
     - the real deck "D" includes a local file reading an undefined
       `variables.missing_local`.
@@ -48,25 +46,22 @@ def _repo(tmp_path: Path, monkeypatch: MonkeyPatch) -> Path:
 
     _write(
         git_dir / "content" / "greeting" / "greeting.yml",
-        "variables_to_define:\n  - depth\n  - format\nflavors:\n"
-        "  - name: loud\n    variables: { depth: shallow, format: bold }\n"
-        "    includes:\n      - body\n"
-        "  - name: quiet\n    variables: { depth: deep, format: italic }\n"
-        "    includes:\n      - body_quiet\n",
+        "flavors:\n"
+        "  - name: loud\n    includes:\n      - body\n"
+        "  - name: quiet\n    includes:\n      - body_quiet\n",
     )
     _write(
         git_dir / "content" / "greeting" / "body.md",
-        "{{ variables.depth }} {{ variables.typo }}\n",
+        "{{ variables.theme }} {{ variables.typo }}\n",
     )
     _write(
         git_dir / "content" / "greeting" / "body_quiet.md",
-        "{{ variables.depth }}\n",
+        "{{ variables.theme }}\n",
     )
 
     _write(
         git_dir / "content" / "broken" / "broken.yml",
-        "variables_to_define:\n  - x\nflavors:\n"
-        "  - name: incomplete\n    includes:\n      - body\n",
+        "flavors:\n  - name: incomplete\n    includes:\n      - body\n      - gone\n",
     )
     _write(git_dir / "content" / "broken" / "body.md", "static\n")
 
@@ -99,11 +94,8 @@ def test_check_variables_reports_all_finding_kinds(
     undefined_names = {(path.name, name) for path, name in report.undefined}
     assert ("body.md", "typo") in undefined_names
     assert ("local.md", "missing_local") in undefined_names
-    # "depth" is declared and set: never flagged as undefined.
-    assert not any(name == "depth" for _, name in undefined_names)
-
-    unused_names = {(path.name, name) for path, name in report.unused}
-    assert unused_names == {("greeting.yml", "format")}
+    # "theme" is set by the root variables.yml: never flagged as undefined.
+    assert not any(name == "theme" for _, name in undefined_names)
 
     assert any(path.parent.name == "badsyntax" for path, _ in report.unparsable)
 
@@ -134,7 +126,6 @@ def test_check_variables_clean_repo_has_no_findings(
     report = check_variables(settings)
 
     assert report.undefined == []
-    assert report.unused == []
     assert report.unparsable == []
     assert report.structural == []
 
@@ -149,14 +140,14 @@ def test_check_variables_json_output(
 
     assert exc_info.value.code == 1
     records = loads(capsys.readouterr().out)
-    assert {"undefined", "unused", "unparsable", "structural"} == {
+    assert {"undefined", "unparsable", "structural"} == {
         record["kind"] for record in records
     }
     assert {
-        "kind": "unused",
+        "kind": "undefined",
         "lang": "fr",
-        "section": str(git_dir / "content" / "greeting" / "greeting.yml"),
-        "name": "format",
+        "fragment": str(git_dir / "content" / "greeting" / "body.md"),
+        "name": "typo",
     } in records
 
 

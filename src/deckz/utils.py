@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .configuring.settings import DeckSettings
-    from .models import Lang, Node, ResolvedDeck
+    from .models import Lang, Node, ParsedDeck
 
 # Modules loaded by `import_module_from_path`, keyed by what makes a reload
 # necessary: a long-lived process (`--watch`) reuses an unchanged module --
@@ -231,10 +231,11 @@ def deck_name_from_dir(current_dir: Path) -> str:
     return str(load_yaml(config)["name"]).lower()
 
 
-def _parse_deck(settings: "DeckSettings", lang: "Lang") -> tuple[Path, "ResolvedDeck"]:
+def _parse_deck(settings: "DeckSettings", lang: "Lang") -> tuple[Path, "ParsedDeck"]:
     from .components.factory import DeckSettingsFactory
-    from .configuring.variables import get_variables, resolve_variables
+    from .configuring.variables import get_variables
     from .exceptions import DeckParsingError
+    from .models import ParsedDeck
 
     # A translation gap must not hide the rest of an en deck from analyses.
     parser = DeckSettingsFactory(settings, lang=lang, lenient=lang != "fr").parser()
@@ -253,7 +254,7 @@ def _parse_deck(settings: "DeckSettings", lang: "Lang") -> tuple[Path, "Resolved
     variables = get_variables(settings, lang, lenient=lang != "fr")
     return (
         settings.paths.deck_definition.parent.relative_to(settings.paths.git_dir),
-        resolve_variables(deck, {**variables, "lang": lang}),
+        ParsedDeck(deck, {**variables, "lang": lang}),
     )
 
 
@@ -269,8 +270,8 @@ def _without_unresolved_files(nodes: Iterable["Node"]) -> tuple["Node", ...]:
     )
 
 
-def all_decks(git_dir: Path, lang: "Lang" = "fr") -> dict[Path, "ResolvedDeck"]:
-    """Parse every deck of the repository, with variables resolved as in a build.
+def all_decks(git_dir: Path, lang: "Lang" = "fr") -> dict[Path, "ParsedDeck"]:
+    """Parse every deck of the repository, with its variables as in a build.
 
     Args:
         git_dir: Root of the repository.

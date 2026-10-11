@@ -37,7 +37,7 @@ def deck_files(settings: "DeckSettings") -> set[Path]:
     except DeckzError:
         return set()
     return {
-        Path(dependency.resolved_path)
+        Path(dependency)
         for part in PartDependenciesNodeVisitor().process(deck).values()
         for dependency in part
     }

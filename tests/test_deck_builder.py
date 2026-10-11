@@ -4,7 +4,6 @@ No pandoc or Typst needed: the fakes only record calls and write files.
 """
 
 import gc
-from collections.abc import Mapping
 from pathlib import Path, PurePath
 from signal import SIGINT, pthread_kill
 from threading import Event, get_ident
@@ -22,7 +21,6 @@ from deckz.models import (
     File,
     Part,
     PartName,
-    ResolvedDeck,
     ResolvedPath,
     UnresolvedPath,
 )
@@ -106,13 +104,12 @@ class Repo:
     def write(self, name: str, text: str) -> None:
         (self.content / name).write_text(text, encoding="utf8")
 
-    def file(self, name: str, variables: Mapping[str, Any] | None = None) -> File:
+    def file(self, name: str) -> File:
         return File(
             title=None,
             unresolved_path=UnresolvedPath(PurePath(name).with_suffix("")),
             resolved_path=ResolvedPath(self.content / name),
             parsing_error=None,
-            variables=variables or {},
         )
 
     def builder(
@@ -121,11 +118,12 @@ class Repo:
         handout: bool = True,
         html: bool = False,
         part_handouts: bool = True,
+        variables: dict[str, Any] | None = None,
     ) -> DeckBuilder:
         deck = Deck(name="deck", parts={PartName("p1"): Part(title=None, nodes=files)})
         return DeckBuilder(
-            variables={},
-            deck=ResolvedDeck(deck),
+            variables=variables or {},
+            deck=deck,
             build_presentation=False,
             build_handout=handout,
             build_print=False,
@@ -216,7 +214,7 @@ def test_rebuild_only_renders_changed_fragments(tmp_path: Path) -> None:
     ] * 2
     # a.md re-rendered once per PDF, b.md not at all.
     assert len(repo.renderer.fragments) == 2
-    assert all(p.name.startswith("a-") for p in repo.renderer.fragments)
+    assert all(p.name == "a.md.j2" for p in repo.renderer.fragments)
 
 
 def test_converter_change_renders_everything(tmp_path: Path) -> None:
@@ -234,18 +232,20 @@ def test_converter_change_renders_everything(tmp_path: Path) -> None:
     assert len(repo.renderer.fragments) == 4
 
 
-def test_same_file_with_different_variables_renders_twice(tmp_path: Path) -> None:
+def test_variables_change_renders_everything(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
+    files = (repo.file("a.md"), repo.file("b.md"))
+    repo.builder(*files, variables={"company": "A"}).build_deck()
+    repo.renderer.fragments.clear()
 
-    repo.builder(
-        repo.file("a.md", {"depth": "shallow"}), repo.file("a.md", {"depth": "deep"})
-    ).build_deck()
+    builder = repo.builder(*files, variables={"company": "B"})
+    planned = builder.plan()
+    builder.build_deck()
 
-    rendered = sorted(
-        path.read_text(encoding="utf8")
-        for path in (tmp_path / "build" / "deck-handout").glob("a-*.md")
-    )
-    assert rendered == ["A{'depth': 'deep'}", "A{'depth': 'shallow'}"]
+    assert all(p.full_render for p in planned)
+    assert len(repo.renderer.fragments) == 4
+    rendered = tmp_path / "build" / "deck-handout" / "a.md"
+    assert rendered.read_text(encoding="utf8") == "A{'company': 'B'}"
 
 
 def test_html_inlines_converted_fragments_and_publishes_a_directory(
@@ -292,7 +292,7 @@ def test_html_without_its_format_is_rejected(tmp_path: Path) -> None:
     with raises(ValueError, match="html"):
         DeckBuilder(
             variables={},
-            deck=ResolvedDeck(deck),
+            deck=deck,
             build_presentation=False,
             build_handout=False,
             build_print=False,

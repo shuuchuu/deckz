@@ -24,7 +24,6 @@ from ..exceptions import DeckzError
 if TYPE_CHECKING:
     from ..configuring.settings import DeckSettings
 
-_FRAGMENT_HASH = re.compile(r"-[0-9a-f]{16}$")
 _ATTRIBUTES = re.compile(r"\s*\{[^}]*\}\s*$")
 
 
@@ -145,7 +144,7 @@ def _source(
         relative = fragment.relative_to(build_dir)
     except ValueError:
         return None, headings, []
-    name = relative.parent / (_FRAGMENT_HASH.sub("", relative.stem) + ".md")
+    name = relative.with_suffix(".md")
     local_prefix = paths.local_content_dir.relative_to(paths.current_dir)
     source = (
         paths.current_dir / name

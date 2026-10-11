@@ -21,7 +21,7 @@ _MAIN_TYP = """\
 Part ⋅ Topic \\
 Some Title
 
-#include "content/topic-aaaaaaaaaaaaaaaa.typ"
+#include "content/topic.typ"
 #pagebreak()
 Divider page, no breadcrumb here
 """
@@ -66,7 +66,7 @@ def test_page_titles_reads_frame_and_divider_pages(tmp_path: Path) -> None:
     main_typ = tmp_path / "main.typ"
     # No include needed for this test: drop it to keep the fixture self-contained.
     main_typ.write_text(
-        _MAIN_TYP.replace('#include "content/topic-aaaaaaaaaaaaaaaa.typ"\n', ""),
+        _MAIN_TYP.replace('#include "content/topic.typ"\n', ""),
         encoding="utf8",
     )
     pdf = tmp_path / "main.pdf"
@@ -87,17 +87,13 @@ def test_headings_maps_local_and_shared_fragments(tmp_path: Path) -> None:
     (build_dir / "content").mkdir(parents=True)
     main_typ = build_dir / "deck-handout.typ"
     main_typ.write_text(
-        '#include "content/local-aaaaaaaaaaaaaaaa.typ"\n'
-        '#include "shared-bbbbbbbbbbbbbbbb.typ"\n'
-        '#include "content/missing-cccccccccccccccc.typ"\n',
+        '#include "content/local.typ"\n'
+        '#include "shared.typ"\n'
+        '#include "content/missing.typ"\n',
         encoding="utf8",
     )
-    (build_dir / "content" / "local-aaaaaaaaaaaaaaaa.md").write_text(
-        "# Local Title\n", encoding="utf8"
-    )
-    (build_dir / "shared-bbbbbbbbbbbbbbbb.md").write_text(
-        "# Shared Title\n", encoding="utf8"
-    )
+    (build_dir / "content" / "local.md").write_text("# Local Title\n", encoding="utf8")
+    (build_dir / "shared.md").write_text("# Shared Title\n", encoding="utf8")
     # No .md for "missing": the deck no longer includes it, must be ignored.
 
     found = _headings(
@@ -136,12 +132,10 @@ def test_shrunk_frames_reports_ratio_page_title_and_source(tmp_path: Path) -> No
     build_dir = current_dir / ".build" / "mydeck-handout"
     (build_dir / "content").mkdir(parents=True)
     (build_dir / "mydeck-handout.typ").write_text(_MAIN_TYP, encoding="utf8")
-    (build_dir / "content" / "topic-aaaaaaaaaaaaaaaa.typ").write_text(
+    (build_dir / "content" / "topic.typ").write_text(
         "Placeholder content.\n", encoding="utf8"
     )
-    (build_dir / "content" / "topic-aaaaaaaaaaaaaaaa.md").write_text(
-        "# Some Title\n", encoding="utf8"
-    )
+    (build_dir / "content" / "topic.md").write_text("# Some Title\n", encoding="utf8")
     pdf_dir = current_dir / "pdf"
     pdf_dir.mkdir()
     import typst
@@ -184,7 +178,7 @@ _TABLES_TYP = """\
 Part ⋅ Topic \\
 Some Title
 
-#include "content/topic-aaaaaaaaaaaaaaaa.typ"
+#include "content/topic.typ"
 """
 
 
@@ -194,12 +188,10 @@ def test_wrapped_tables_reports_most_wrapped_first(tmp_path: Path) -> None:
     build_dir = current_dir / ".build" / "deck-handout"
     (build_dir / "content").mkdir(parents=True)
     (build_dir / "deck-handout.typ").write_text(_TABLES_TYP, encoding="utf8")
-    (build_dir / "content" / "topic-aaaaaaaaaaaaaaaa.typ").write_text(
+    (build_dir / "content" / "topic.typ").write_text(
         "Placeholder content.\n", encoding="utf8"
     )
-    (build_dir / "content" / "topic-aaaaaaaaaaaaaaaa.md").write_text(
-        "# Some Title\n", encoding="utf8"
-    )
+    (build_dir / "content" / "topic.md").write_text("# Some Title\n", encoding="utf8")
     pdf_dir = current_dir / "pdf"
     pdf_dir.mkdir()
     import typst

@@ -41,7 +41,7 @@ def resolved_files(deck: Deck) -> set[ResolvedPath]:
     deps = PartDependenciesNodeVisitor().process(deck)
     paths: set[ResolvedPath] = set()
     for part_deps in deps.values():
-        paths.update(ref.resolved_path for ref in part_deps)
+        paths.update(part_deps)
     return paths
 
 

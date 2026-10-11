@@ -19,7 +19,7 @@ from .protocols import (
 
 if TYPE_CHECKING:
     from ..configuring.settings import DeckSettings, GlobalSettings
-    from ..models import Lang, ResolvedDeck
+    from ..models import Deck, Lang
     from .deck_builder import OutputFormat
 
 
@@ -183,7 +183,7 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
     def deck_builder(
         self,
         variables: dict[str, Any],
-        deck: "ResolvedDeck",
+        deck: "Deck",
         build_presentation: bool,
         build_handout: bool,
         build_print: bool,

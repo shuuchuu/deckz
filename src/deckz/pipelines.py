@@ -24,7 +24,7 @@ from .components.factory import DeckSettingsFactory, GlobalSettingsFactory
 from .components.progress import NullProgress, PrefixedProgress
 from .components.protocols import DeckBuilderProtocol, ProgressReporterProtocol
 from .configuring.settings import DeckSettings, GlobalSettings
-from .configuring.variables import get_variables, resolve_variables
+from .configuring.variables import get_variables
 from .exceptions import CompilationError, DeckzError
 from .models import Deck, FlavorName, Lang, PartName, lang_dir
 from .utils import all_deck_settings
@@ -91,7 +91,7 @@ def _deck_builder(
     )
     return DeckSettingsFactory(target.settings, lang=lang).deck_builder(
         variables=variables,
-        deck=resolve_variables(deck, variables),
+        deck=deck,
         build_handout=outputs.handout,
         build_presentation=outputs.presentation,
         build_print=outputs.print,

@@ -68,7 +68,7 @@ class SectionsAnalyzer:
 
     @cached_property
     def _decks(self) -> Mapping[Path, Deck]:
-        return all_decks(self._git_dir)
+        return {path: parsed.deck for path, parsed in all_decks(self._git_dir).items()}
 
     @cached_property
     def _shared_sections(self) -> dict[UnresolvedPath, SectionDefinition]:
@@ -101,8 +101,8 @@ class SectionsAnalyzer:
         files_usage_processor = _FilesUsageNodeVisitor()
         used: set[ResolvedPath] = set()
         for lang in get_args(Lang):
-            for deck in all_decks(self._git_dir, lang).values():
-                used.update(files_usage_processor.process(deck))
+            for parsed in all_decks(self._git_dir, lang).values():
+                used.update(files_usage_processor.process(parsed.deck))
         return frozenset(used)
 
 

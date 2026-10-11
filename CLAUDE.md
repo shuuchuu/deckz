@@ -170,11 +170,10 @@ optional `basedirs` to build each with), then
 either `build`s them or, under `--dry-run`, prints their `plan`. The
 `run`/`run_file`/…/`run_all` functions are `build` over those targets, kept
 for `watch()` to re-run (reparsing on each change). `build` builds the
-assets once, then for each target: resolve variables →
-cascade them through the parsed `Deck` (`configuring/variables.py::resolve_variables`:
-deck-wide `variables.yml`, overridden by each section's own matched-flavor
-`variables`, deepest section wins, returning a new `ResolvedDeck` whose
-every `File` carries its effective `variables`) → build assets via the assets builder (the
+assets once, then for each target: load the deck's variables
+(`configuring/variables.py::get_variables`: the `variables.yml` files from the
+repo root down to the deck, the same for every file of the deck, plus `lang`)
+→ build assets via the assets builder (the
 target repo's own `templates/assets_builders.py`, e.g. generated plots) → build the deck
 (render Jinja2 → convert Markdown to Typst with pandoc → compile with Typst) via
 the deck builder; a target's `basedirs` override is set only by
@@ -224,15 +223,16 @@ wrapper, not build-specific: each of `run/deck.py`, `run/file.py`,
 `--watch`, wrapping that same module's one-shot pipeline call instead of
 running it once.
 
-Because a section's resolved `variables` can differ by which flavor
-included it, the same physical file can need two different renders within
-one build (e.g. two flavors of the same section, each setting a different
-value, both pulled into one deck): `components/deck_builder.py` dedupes
-build-time dependencies by `DependencyRef` (resolved path + a short hash of
-its effective `variables`, from `variables_fingerprint`), not by path alone,
-and `dependency_relative_path` is the single place that naming scheme is
-decided so the main template's reference (`#include`) and the
-on-disk rendered copy always agree.
+A fragment is named by its content file's path (`dependency_relative_path`,
+the single place that naming is decided, so the main template's `#include`
+and the on-disk rendered copy always agree), and re-rendered when its
+source changed. What renders every fragment besides its source, the
+Markdown converter's command and filters and the deck's variables, is
+hashed into each build dir's `.render-fingerprint` (`render_fingerprint`):
+a change there renders every fragment again. Flavors have no variables of
+their own (they had, until 2026-10: the one repo using them found two
+interleaved versions of a file harder to maintain than one file per
+variant), so a file renders the same wherever a deck includes it.
 
 `shared_targets`/`all_targets` (backing `deckz run shared`/`deckz run all`)
 build their `Deck` purely in memory via `src/deckz/checking.py` — no yaml is
@@ -339,19 +339,10 @@ local content file/section references. `Parser` (`components/parser.py`)
 turns YAML deck/section definitions into this model; the rest of the
 pipeline operates on the model, not on YAML directly. The `Deck` tree
 (`Deck`/`Part`/`Section`/`File`) is frozen, with tuples of nodes: every
-transformation (`Deck.filter`, `resolve_variables`, the synthetic decks of
-`checking.py`) builds a new tree with `dataclasses.replace`.
-
-A `SectionDefinition` can declare `variables_to_define` (names every flavor
-below it must itself set in its own `variables`, optionally restricted to a
-fixed `allowed_values` list) -- a contract, not a default: `Parser` sets a
-`parsing_error` if a matched flavor is missing one or sets one out of range.
-A `Section`'s `variables` is always just its flavor's own declared delta. A
-`File`'s `variables` is empty in a parsed `Deck` and holds the fully
-cascaded dict in the `ResolvedDeck` (a `NewType` over `Deck`) returned by
-`resolve_variables` (see "Build pipeline" above); the deck builder and
-`utils.all_decks` take/return a `ResolvedDeck`, so the type checker
-catches an unresolved deck reaching them.
+transformation (`Deck.filter`, the synthetic decks of `checking.py`)
+builds a new tree with `dataclasses.replace`. `utils.all_decks` returns
+each deck as a `ParsedDeck`, the deck and the variables its files render
+with, for the analyses that render content (assets usage).
 
 ### Analyzing
 
@@ -365,16 +356,14 @@ checks (see "Checking" below). These back the
 commands.
 
 `variables_usage.py` (backing `deckz check variables`) surveys every shared
-section's every named flavor -- via `Parser.from_section`, not the
-synthetic "all files" flavor `checking.py` uses, since that one bypasses
-real flavors' `variables` entirely -- plus every real deck's own tree, and
-reports a fragment reading a `variables.xxx`/`variables['xxx']` name that
-isn't resolved at that point (`undefined`), a `variables_to_define` name
-nothing under its section ever reads (`unused`), a fragment that fails to
-parse with the target repo's own Jinja environment (`unparsable`), and a
-flavor/deck that fails to parse at all, typically a `variables_to_define`
-contract violation (`structural`, caught per-context so one bad flavor
-doesn't abort the whole survey).
+section's every named flavor -- via `Parser.from_section`, so that a
+broken flavor is reported -- with the repository-wide `variables.yml`,
+plus every real deck's own tree with its own, and reports a fragment
+reading a `variables.xxx`/`variables['xxx']` name nothing sets
+(`undefined`), a fragment that fails to parse with the target repo's own
+Jinja environment (`unparsable`), and a flavor/deck that fails to parse at
+all (`structural`, caught per-context so one bad flavor doesn't abort the
+whole survey).
 
 ### Extras
 

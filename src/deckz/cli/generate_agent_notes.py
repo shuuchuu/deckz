@@ -37,14 +37,11 @@ section without forking the whole section: if
 `content/<section>/<file>.md` for that deck only -- a local file
 always wins over a shared one at the same relative path.
 
-A flavor can set its own `variables`, merged into `variables.yml` on top
-(cascading down into every section it includes) -- the way to give two
-flavors of the same section different content without duplicating the
-section. A section's `variables_to_define` is a contract, not a default:
-it declares names every flavor below must itself set (optionally
-restricted to a fixed list of values), it never supplies a value. Run
-`deckz check variables` to find a `variables.xxx` reference nothing sets,
-or a declared variable nothing ever reads.
+Two flavors that differ by a few frames give each variant its own file,
+listed only by the flavor that shows it, and share the rest. A flavor has
+no variables of its own: every file of a deck renders with the same
+`variables.yml` values. Run `deckz check variables` to find a
+`variables.xxx` reference nothing sets.
 
 ## Commands you'll actually reach for while iterating
 

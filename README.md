@@ -399,39 +399,11 @@ flavors:
       - intro
 ```
 
-### Flavor-level variables
-
-A flavor can also set its own `variables`, merged into the rendering
-context of its content (and, cascading down, of every section it includes)
-on top of `variables.yml` -- the way to give two flavors of the same
-section genuinely different content instead of duplicating the section
-itself:
-
-```yaml
-title: Keras
-variables_to_define:
-  - depth: [shallow, deep]
-flavors:
-  - name: light
-    variables: { depth: shallow }
-    includes:
-      - body
-  - name: full
-    variables: { depth: deep }
-    includes:
-      - body
-```
-
-`body.md` then reads `{{ variables.depth }}` the same way it would read any
-deck-wide variable. `variables_to_define` is a contract, not a default: it
-never supplies a value itself, it just declares that every flavor below
-must set that key itself (optionally restricted to the given list of
-values) -- a flavor missing one, or setting one out of range, fails to
-parse. `deckz check variables` statically surveys every shared flavor and
-every real deck for two kinds of drift this contract doesn't catch by
-itself: a fragment reading a `variables.xxx` name nothing resolved at that
-point ever sets, and a declared name no fragment anywhere under its section
-ever reads.
+Two flavors that differ by a few frames give each variant its own file,
+listed only by the flavor that shows it, and list the files they share in
+both: the section's `.yml` then says exactly what each flavor shows. A
+flavor has no variables of its own: every file of a deck renders with the
+same `variables.yml` values.
 
 ### Titles, variables and `--lang`
 
@@ -875,13 +847,12 @@ The main commands:
   aborts the run, before anything is compiled. `run shared`/`run all` write their throwaway output
   under `<git_dir>/.run/`.
 - `deckz check variables`: statically survey every shared section's every
-  named flavor (not just the ones some deck currently uses) plus every real
-  deck, resolving `variables` the same way a real build would. Reports a
-  fragment reading a `variables.xxx`/`variables['xxx']` name nothing
-  resolved at that point sets (`UNDEFINED`), a `variables_to_define` name no
-  fragment under its section ever reads (`UNUSED`), a fragment that fails to
-  parse (`UNPARSABLE`), and a flavor/deck that fails to parse at all, e.g. a
-  `variables_to_define` contract violation (`STRUCTURAL`). A shared flavor
+  named flavor (not just the ones some deck currently uses), with the
+  repository-wide `variables.yml`, plus every real deck, with its own
+  `variables.yml` files, as a real build would. Reports a fragment reading a
+  `variables.xxx`/`variables['xxx']` name nothing sets (`UNDEFINED`), a
+  fragment that fails to parse (`UNPARSABLE`), and a flavor/deck that fails
+  to parse at all (`STRUCTURAL`). A shared flavor
   whose only failures are includes of deck-local files (one some deck's
   own `content/` has) is skipped: the decks using it cover it. Nothing is
   compiled.
