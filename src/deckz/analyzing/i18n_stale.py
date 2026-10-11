@@ -6,8 +6,11 @@ it after the last commit that changed its English sibling, unless that
 commit's `Lang-sync` trailer exempts it (`fr-only`); the English side holds
 symmetrically (`en-only`). A `Lang-sync: pending` commit, or one with no
 trailer, doesn't exempt anything -- it leaves the file stale until a later
-commit touches the sibling. `.yml` files aren't tracked here (see
-`deckz.analyzing.i18n_coverage` for their titles).
+commit touches the sibling, or names it in a `Lang-synced: <path>` trailer:
+the pair is then in sync as of that commit, whichever side is named, which
+`deckz i18n mark-synced` records in an empty commit when the changes need no
+port after all (a case fix, the language's own typography). `.yml` files
+aren't tracked here (see `deckz.analyzing.i18n_coverage` for their titles).
 
 `deckz.yml`'s `i18n.synced_at` names a commit up to which every pair is
 known to be in sync: it and its ancestors are ignored, so history from
@@ -31,6 +34,8 @@ EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 _TRAILER_LINE = re.compile(r"^[A-Za-z][\w-]*:\s?.*$")
 _LANG_SYNC_KIND = re.compile(r"^(fr-only|en-only|pending)\b")
+LANG_SYNCED = "Lang-synced"
+"""The trailer naming a file whose pair is in sync as of its commit."""
 
 
 @dataclass(frozen=True)
@@ -54,34 +59,47 @@ class StaleFile:
     path: PurePosixPath
     sibling: PurePosixPath
     since: str | None
-    """The sibling's last commit sha before `commits`, else `i18n.synced_at` \
-    if set, else None (the sibling was never touched)."""
+    """The last commit before `commits` changing the sibling or marking the \
+    pair in sync (`Lang-synced`), else `i18n.synced_at` if set, else None."""
     commits: tuple[CommitRef, ...]
     """The qualifying commits, oldest first."""
 
 
-def _parse_trailers(message: str) -> dict[str, str]:
-    """The trailers of a commit message's last paragraph.
+def _trailer_lines(message: str) -> list[tuple[str, str]]:
+    """The trailers of a commit message's last paragraph, in order.
 
     That's its body, not the subject line.
 
     Returns:
-        Each trailer key mapped to its value, or `{}` if the body's last \
-        paragraph isn't trailer-shaped (every line `Key: value`).
+        Each trailer's key and value, or `[]` if the body's last paragraph \
+        isn't trailer-shaped (every line `Key: value`).
     """
     _subject, _, body = message.partition("\n")
     body = body.strip()
     if not body:
-        return {}
+        return []
     paragraphs = re.split(r"\n\n+", body)
     lines = [line for line in paragraphs[-1].splitlines() if line.strip()]
     if not lines or not all(_TRAILER_LINE.match(line) for line in lines):
-        return {}
-    trailers = {}
+        return []
+    found = []
     for line in lines:
         key, _, value = line.partition(":")
-        trailers[key.strip()] = value.strip()
-    return trailers
+        found.append((key.strip(), value.strip()))
+    return found
+
+
+def _parse_trailers(message: str) -> dict[str, str]:
+    return dict(_trailer_lines(message))
+
+
+def lang_synced_paths(message: str) -> list[str]:
+    """The paths a commit message's `Lang-synced` trailers name.
+
+    Returns:
+        Each one, repository-relative, in order.
+    """
+    return [value for key, value in _trailer_lines(message) if key == LANG_SYNCED]
 
 
 def lang_sync_kind(message: str) -> str | None:
@@ -140,10 +158,18 @@ def notebook_pairs(
             yield fr, en
 
 
-def _changes_by_path(
-    git_dir: Path, paths: set[str], synced_at: str | None = None
-) -> dict[str, list[_Change]]:
+@dataclass(frozen=True)
+class _History:
+    changes: dict[str, list[_Change]]
+    """Each path's commits changing it, oldest first."""
+    synced: dict[str, list[_Change]]
+    """Each path's commits naming it in a `Lang-synced` trailer, oldest first."""
+
+
+def _history(git_dir: Path, paths: set[str], synced_at: str | None = None) -> _History:
     """Walk the whole history once, recording every change to `paths`.
+
+    And every commit marking one of them in sync (`Lang-synced`).
 
     Args:
         git_dir: Root of the repository.
@@ -151,7 +177,7 @@ def _changes_by_path(
         synced_at: A revision whose commit and ancestors are skipped, or None.
 
     Returns:
-        Each path mapped to its changes, oldest first.
+        What happened to each path.
 
     Raises:
         InvalidConfigurationError: If `synced_at` names no commit.
@@ -159,10 +185,12 @@ def _changes_by_path(
     from pygit2 import Commit, Repository
     from pygit2.enums import SortMode
 
-    changes: dict[str, list[_Change]] = {path: [] for path in paths}
+    history = _History(
+        changes={path: [] for path in paths}, synced={path: [] for path in paths}
+    )
     repo = Repository(str(git_dir))
     if repo.is_empty or repo.head_is_unborn:
-        return changes
+        return history
     walker = repo.walk(repo.head.target, SortMode.TOPOLOGICAL | SortMode.REVERSE)
     if synced_at is not None:
         try:
@@ -181,7 +209,8 @@ def _changes_by_path(
         )
         touched = {delta.new_file.path or delta.old_file.path for delta in diff.deltas}
         relevant = touched & paths
-        if not relevant:
+        synced = set(lang_synced_paths(commit.message)) & paths
+        if not relevant and not synced:
             continue
         change = _Change(
             sha=str(commit.id),
@@ -190,22 +219,29 @@ def _changes_by_path(
             lang_sync=lang_sync_kind(commit.message),
         )
         for path in relevant:
-            changes[path].append(change)
-    return changes
+            history.changes[path].append(change)
+        for path in synced:
+            history.synced[path].append(change)
+    return history
 
 
 def _pair_staleness(
     a: PurePosixPath,
     b: PurePosixPath,
-    changes: dict[str, list[_Change]],
+    history: _History,
     synced_at: str | None = None,
 ) -> Iterator[StaleFile]:
+    # Marking either side in sync settles the pair, both ways.
+    synced = [*history.synced.get(str(a), []), *history.synced.get(str(b), [])]
     for path, sibling, exempt in ((a, b, "fr-only"), (b, a, "en-only")):
-        sibling_events = changes.get(str(sibling), [])
-        baseline = sibling_events[-1] if sibling_events else None
+        baseline = max(
+            [*history.changes.get(str(sibling), []), *synced],
+            key=lambda change: change.ordinal,
+            default=None,
+        )
         qualifying = [
             change
-            for change in changes.get(str(path), [])
+            for change in history.changes.get(str(path), [])
             if (baseline is None or change.ordinal > baseline.ordinal)
             and change.lang_sync != exempt
         ]
@@ -247,14 +283,107 @@ def stale_files(
         ]
     paths = {str(path) for pair in pairs for path in pair}
     synced_at = settings.i18n.synced_at
-    changes = _changes_by_path(git_dir, paths, synced_at)
+    history = _history(git_dir, paths, synced_at)
 
     stale = [
         finding
         for a, b in pairs
-        for finding in _pair_staleness(a, b, changes, synced_at)
+        for finding in _pair_staleness(a, b, history, synced_at)
     ]
     return sorted(stale, key=lambda finding: finding.path)
+
+
+def mark_synced(
+    settings: "GlobalSettings", paths: Sequence[Path], reason: str
+) -> tuple[str, list[StaleFile]]:
+    """Record that what `deckz i18n stale` lists for `paths` needs no port.
+
+    For changes found to need nothing in the other language after they were
+    committed (a case fix, the language's own typography), when no commit is
+    left to give a `Lang-sync: fr-only` trailer: an empty commit naming each
+    file in a `Lang-synced` trailer, with `reason` in its body, after which
+    each one's pair counts as in sync. It commits nothing else, whatever is
+    staged.
+
+    Args:
+        settings: The repository's settings.
+        paths: Files listed by `deckz i18n stale` (either side of the pair), \
+            absolute or relative to the current directory.
+        reason: Why nothing needs porting.
+
+    Returns:
+        The commit's sha, and the entries it settled.
+
+    Raises:
+        DeckzError: If `reason` is empty, a path isn't in `deckz i18n stale` \
+            or git refuses the commit.
+    """
+    from subprocess import run
+
+    reason = reason.strip()
+    if not reason:
+        msg = 'say why nothing needs porting: --reason "<why>"'
+        raise DeckzError(msg)
+    git_dir = settings.paths.git_dir.resolve()
+    relative = []
+    for path in paths:
+        resolved = path.resolve()
+        if not resolved.is_relative_to(git_dir):
+            msg = f"{path}: not in the repository ({git_dir})"
+            raise DeckzError(msg)
+        relative.append(PurePosixPath(resolved.relative_to(git_dir).as_posix()))
+    stale = stale_files(settings, paths)
+    settled = [
+        finding
+        for finding in stale
+        if finding.path in relative or finding.sibling in relative
+    ]
+    listed = {finding.path for finding in stale} | {f.sibling for f in stale}
+    for path in relative:
+        if path not in listed:
+            msg = (
+                f"{path}: nothing waits for a port (`deckz i18n stale` doesn't "
+                "list it nor its sibling)"
+            )
+            raise DeckzError(msg)
+    subject = (
+        f"Nothing to port from {relative[0]}"
+        if len(relative) == 1
+        else f"Nothing to port from {len(relative)} files"
+    )
+    trailers = "\n".join(f"{LANG_SYNCED}: {path}" for path in relative)
+    message = f"{subject}\n\n{reason}\n\n{trailers}\n"
+    # `--only` with no path commits none of what's staged. `--no-verify`: the
+    # commit changes no file, so the pre-commit hook would only check HEAD's
+    # tree again (seconds, and failing on problems that aren't this commit's),
+    # and the commit-msg hook's rule is about files changed.
+    result = run(
+        [
+            "git",
+            "commit",
+            "--allow-empty",
+            "--only",
+            "--no-verify",
+            "--cleanup=whitespace",
+            "--file=-",
+        ],
+        cwd=git_dir,
+        input=message,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode:
+        msg = f"git commit: {(result.stderr or result.stdout).strip()}"
+        raise DeckzError(msg)
+    sha = run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=git_dir,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    return sha, settled
 
 
 @dataclass(frozen=True)

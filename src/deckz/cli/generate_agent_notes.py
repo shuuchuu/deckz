@@ -108,6 +108,9 @@ or a declared variable nothing ever reads.
 - `deckz i18n stale [PATHS...]` -- content files and lab notebooks with
   changes not yet ported to their other-language sibling, computed from
   git history and `Lang-sync` commit trailers alone (no stored marker).
+  When a listed file's changes need no port after all, `deckz i18n
+  mark-synced PATH... --reason "<why>"` records it in an empty commit
+  (a commit: only where committing is yours to do).
 - Most analysis commands above (`check content`, `check variables`, `i18n
   stale`, `search-sections`, ...) take `--plain` for a compact, stable,
   colorless report meant for a script or an agent to parse, and some take

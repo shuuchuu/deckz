@@ -1,0 +1,39 @@
+{% set problems %}
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  {% if refused %}
+  <div class="refused" role="alert">
+    <p>deckz a refusé :</p>
+    <pre>{{ refused }}</pre>
+  </div>
+  {% endif %}
+{% endset %}
+<form class="commit-form" hx-post="/espaces/{{ workspace.name }}/traductions/rien-a-porter"
+      hx-target="#action-dialog" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
+  <header>
+    <h2>Rien à porter</h2>
+    <button type="button" class="secondary" onclick="this.closest('dialog').close()">Fermer</button>
+  </header>
+  {% if done %}
+  <p class="committed" role="status">C'est noté : <code>{{ path }}</code> quitte la liste « À traduire ».</p>
+  <pre>{{ done }}</pre>
+  {% elif not stale %}
+  {% if not refused %}<p class="empty"><code>{{ path }}</code> n'est plus dans la liste « À traduire ».</p>{% endif %}
+  {{ problems }}
+  {% else %}
+  <p>Les changements de <code>{{ stale.path }}</code> n'ont rien à apporter à
+    <code>{{ stale.sibling }}</code> (une casse, la typographie d'une langue) ? Un commit vide
+    le note, avec votre raison, et le fichier quitte la liste. Ce commit ne contient aucun fichier,
+    même ceux que vous avez préparés.</p>
+  <ul>
+    {% for subject in stale.subjects %}<li>{{ subject }}</li>{% endfor %}
+  </ul>
+  <input type="hidden" name="path" value="{{ stale.path }}">
+  <label>Il n'y a rien à porter parce que :
+    <input class="reason" name="reason" value="{{ reason }}" required autofocus
+           aria-label="Pourquoi il n'y a rien à porter"></label>
+  {{ problems }}
+  <footer>
+    <button type="submit">Noter : rien à porter</button>
+  </footer>
+  {% endif %}
+</form>

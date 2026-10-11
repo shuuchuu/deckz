@@ -1,7 +1,7 @@
 import json
 import subprocess
 import sys
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from time import monotonic, sleep
 from typing import Any
@@ -31,13 +31,15 @@ _STALE = {
 }
 
 
-def _backlog(tmp_path: Path, found: dict[str, Any] = _STALE) -> Backlog:
+def _backlog(
+    tmp_path: Path, found: dict[str, Any] = _STALE, **mark: Callable[..., list[str]]
+) -> Backlog:
     script = tmp_path / "fake_stale.py"
     script.write_text(
         f"import sys\nprint({json.dumps(json.dumps(found))})\nsys.exit(1)\n",
         encoding="utf8",
     )
-    return Backlog(lambda _: [sys.executable, str(script)])
+    return Backlog(lambda _: [sys.executable, str(script)], **mark)
 
 
 def _finished(backlog: Backlog, workspace: Path) -> tuple[Stale, ...]:
@@ -178,3 +180,102 @@ def test_a_catch_up_commit_is_preset(
     ).text
     assert 'name="lang_sync" value="only" checked' in dialog
     assert "portage de content/a/a.md" in dialog
+
+
+def _marking(tmp_path: Path) -> Backlog:
+    """A backlog whose `deckz i18n mark-synced` commits, or refuses `refuse.md`.
+
+    Returns:
+        The backlog.
+    """
+    script = tmp_path / "fake_mark.py"
+    script.write_text(
+        "import subprocess, sys\n"
+        "path, reason = sys.argv[1], sys.argv[3]\n"
+        "if path == 'refuse.md':\n"
+        "    print('refuse.md: nothing waits for a port')\n"
+        "    sys.exit(1)\n"
+        "subprocess.run(['git', '-c', 'user.name=t', '-c', 'user.email=t@e',\n"
+        "    'commit', '-q', '--allow-empty', '-m', 'Nothing to port',\n"
+        "    '-m', reason, '-m', f'Lang-synced: {path}'], check=True)\n"
+        "print(f'{path}: in sync')\n",
+        encoding="utf8",
+    )
+    return _backlog(
+        tmp_path,
+        mark=lambda _, path, reason: [sys.executable, str(script), path, "-r", reason],
+    )
+
+
+def test_nothing_to_port(tmp_path: Path, repository: Path, workspace: Path) -> None:
+    backlog = _marking(tmp_path)
+    client = TestClient(
+        create_app(repository, backlog=backlog), base_url="http://localhost:8421"
+    )
+    _finished(backlog, workspace)
+    panel = client.get("/espaces/demo/traductions").text
+    assert "/traductions/rien-a-porter/formulaire" in panel
+    base = "/espaces/demo/traductions/rien-a-porter"
+
+    dialog = client.post(
+        f"{base}/formulaire", data={"path": "content/a/a.md"}, headers=ORIGIN
+    ).text
+    assert "<li>Fix a</li>" in dialog
+    assert 'name="path" value="content/a/a.md"' in dialog
+    gone = client.post(f"{base}/formulaire", data={"path": "x.md"}, headers=ORIGIN)
+    assert "n'est plus dans la liste" in gone.text
+
+    head = subprocess.run(
+        ["git", "-C", str(workspace), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    old = workspace / ".run/studioz/baselines" / head / "client/abc/fr"
+    old.mkdir(parents=True)
+    unsaid = client.post(
+        base, data={"path": "content/a/a.md", "reason": "  "}, headers=ORIGIN
+    )
+    assert "Dites pourquoi" in unsaid.text
+    assert "HX-Trigger" not in unsaid.headers
+
+    done = client.post(
+        base,
+        data={"path": "content/a/a.md", "reason": "une  casse"},
+        headers=ORIGIN,
+    )
+    assert "C'est noté" in done.text
+    assert done.headers["HX-Trigger"] == "workspace-changed"
+    message = subprocess.run(
+        ["git", "-C", str(workspace), "log", "-1", "--format=%B"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert "une casse\n\nLang-synced: content/a/a.md" in message
+    new = subprocess.run(
+        ["git", "-C", str(workspace), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    # The same files: the decks' baselines are the new commit's.
+    assert (workspace / ".run/studioz/baselines" / new / "client/abc/fr").is_dir()
+    assert not old.exists()
+
+
+def test_nothing_to_port_refused(
+    tmp_path: Path, repository: Path, workspace: Path
+) -> None:
+    backlog = _marking(tmp_path)
+    client = TestClient(
+        create_app(repository, backlog=backlog), base_url="http://localhost:8421"
+    )
+    _finished(backlog, workspace)
+    refused = client.post(
+        "/espaces/demo/traductions/rien-a-porter",
+        data={"path": "refuse.md", "reason": "une casse"},
+        headers=ORIGIN,
+    )
+    assert "refuse.md: nothing waits for a port" in refused.text
+    assert "HX-Trigger" not in refused.headers

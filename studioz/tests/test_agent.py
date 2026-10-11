@@ -160,6 +160,13 @@ def test_the_hook_refuses_commits() -> None:
     output = decision("git commit -am x")["hookSpecificOutput"]
     assert output["permissionDecision"] == "deny"
     assert "`git commit` est refusé" in output["permissionDecisionReason"]
+    for command in (
+        "uv run deckz i18n mark-synced content/a.md --reason x",
+        "cd .. && deckz --quiet i18n mark-synced a.md --reason 'casse'",
+    ):
+        output = decision(command)["hookSpecificOutput"]
+        assert "« Rien à porter… »" in output["permissionDecisionReason"]
+    assert decision("deckz i18n stale --plain") == {}
 
 
 def test_other_permission_requests_are_denied() -> None:

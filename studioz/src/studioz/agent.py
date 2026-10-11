@@ -129,6 +129,11 @@ _CHANGING = {
 }
 
 
+# deckz's own command making a commit (an empty one): the person makes it from
+# the "À traduire" panel.
+_MARK_SYNCED = re.compile(r"\bdeckz\b[^;&|\n]*\si18n\s+mark-synced\b")
+
+
 def refused_git(command: str) -> str | None:
     """Why the agent may not run `command`: it commits or moves the branch.
 
@@ -483,18 +488,27 @@ async def _refuse_git(  # ruff: ignore[unused-async]
     hook_input: HookInput, _tool_use_id: str | None, _context: HookContext
 ) -> HookJSONOutput:
     tool_input = hook_input.get("tool_input") or {}
-    verb = refused_git(str(tool_input.get("command", "")))
-    if verb is None:
+    command = str(tool_input.get("command", ""))
+    verb = refused_git(command)
+    if verb is not None:
+        reason = (
+            f"`git {verb}` est refusé dans studioz : la personne committe, "
+            "synchronise et change de branche elle-même. Laisse les "
+            "modifications dans l'espace et dis-lui ce que tu as fait."
+        )
+    elif _MARK_SYNCED.search(command):
+        reason = (
+            "`deckz i18n mark-synced` committe : refusé dans studioz. Dis à la "
+            "personne qu'il n'y a rien à porter, et pourquoi : elle le note "
+            "depuis le panneau « À traduire » (« Rien à porter… »)."
+        )
+    else:
         return {}
     return {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
-            "permissionDecisionReason": (
-                f"`git {verb}` est refusé dans studioz : la personne committe, "
-                "synchronise et change de branche elle-même. Laisse les "
-                "modifications dans l'espace et dis-lui ce que tu as fait."
-            ),
+            "permissionDecisionReason": reason,
         }
     }
 

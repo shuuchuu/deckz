@@ -50,7 +50,7 @@ from . import (
     workspaces,
 )
 from .backlog import Backlog, catching_up
-from .baselines import Baselines
+from .baselines import Baselines, carry_over, head
 from .comparison import compare, signatures
 from .jobs import Job, Jobs
 from .local_only import LocalOnly
@@ -1582,6 +1582,75 @@ def backlog_panel(
         report=studio.backlog.report(found.worktree.path),
         deck=formation,
     )
+
+
+def _nothing_to_port_dialog(
+    request: Request,
+    studio: Studio,
+    found: workspaces.Workspace,
+    path: str,
+    **context: Any,
+) -> Response:
+    return _render(
+        request,
+        "_nothing_to_port.html",
+        workspace=found,
+        path=path,
+        stale=studio.backlog.find(found.worktree.path, path),
+        **context,
+    )
+
+
+@router.post(
+    "/espaces/{name}/traductions/rien-a-porter/formulaire",
+    response_class=HTMLResponse,
+)
+def nothing_to_port_form(
+    request: Request, studio: StudioDep, name: str, path: Annotated[str, Form()]
+) -> Response:
+    """Ask why a backlog entry's changes need no port.
+
+    Returns:
+        The dialog's content.
+    """
+    return _nothing_to_port_dialog(request, studio, studio.workspace(name), path)
+
+
+@router.post("/espaces/{name}/traductions/rien-a-porter", response_class=HTMLResponse)
+def nothing_to_port(
+    request: Request,
+    studio: StudioDep,
+    name: str,
+    path: Annotated[str, Form()],
+    reason: Annotated[str, Form()] = "",
+) -> Response:
+    """Take a backlog entry off: `deckz i18n mark-synced`, an empty commit.
+
+    Returns:
+        The dialog, with what deckz said; on a commit, telling the page \
+        (`workspace-changed`), so that the panels follow.
+    """
+    found = studio.workspace(name)
+    workspace = found.worktree.path
+    reason = " ".join(reason.split())
+    if not reason:
+        return _nothing_to_port_dialog(
+            request,
+            studio,
+            found,
+            path,
+            error="Dites pourquoi il n'y a rien à porter.",
+        )
+    before = head(workspace)
+    marked = studio.backlog.mark_synced(workspace, path, reason)
+    if not marked.ok:
+        return _nothing_to_port_dialog(
+            request, studio, found, path, reason=reason, refused=marked.output
+        )
+    carry_over(workspace, before, head(workspace))
+    response = _nothing_to_port_dialog(request, studio, found, path, done=marked.output)
+    response.headers["HX-Trigger"] = "workspace-changed"
+    return response
 
 
 @router.get("/espaces/{name}/rapports", response_class=HTMLResponse)

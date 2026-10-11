@@ -324,7 +324,11 @@ The commit-msg hook (`deckz hooks check-commit-msg`, `cli/hooks/`) reuses
 `analyzing/i18n_stale.py`'s fr/en pairing (`content_pairs`/
 `notebook_pairs`/`lang_sync_kind`) to refuse, via `CommitRefusedError`, a
 commit whose staged diff touches one side of a pair (`staged_one_sided_pairs`)
-without a `Lang-sync` trailer in the draft message.
+without a `Lang-sync` trailer in the draft message. Changes found later to need no
+port leave `deckz i18n stale` through `deckz i18n mark-synced`
+(`i18n_stale.mark_synced`): an empty commit (`--only`, so nothing staged goes in)
+naming each file in a `Lang-synced` trailer, which the history walk counts as the
+pair's sync point.
 
 ### Data model
 
@@ -473,8 +477,11 @@ workflow with `report: true` has the agent write its findings as a Markdown task
 list in `.run/studioz/rapports/`, which the navigator's Rapports panel shows as a
 checklist, `then` sending the ticked ones to a follow-up skill. `studioz.backlog`
 runs the workspace's `deckz i18n stale --json` again when its HEAD moves, for the
-navigator's "À traduire" panel, each file with "Traduire avec l'agent"; the Commit
-dialog presets the `Lang-sync` answer of a commit porting only backlog files.
+navigator's "À traduire" panel, each file with "Traduire avec l'agent" and "Rien à
+porter…" (the workspace's `deckz i18n mark-synced`: an empty commit whose
+`Lang-synced: <path>` trailer settles the pair, which the agent's hook refuses like a
+commit); the Commit dialog presets the `Lang-sync` answer of a commit porting only
+backlog files.
 
 Its tests are in `studioz/tests/`, driving the app with FastAPI's test client
 on a temporary repository, the watches with a fake `deckz` printing the

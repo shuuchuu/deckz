@@ -24,7 +24,9 @@ def stale(
     when a commit changed it after the last commit that changed its
     other-language sibling, unless that commit's `Lang-sync` trailer
     (`fr-only (<reason>)`/`en-only (<reason>)`) exempts it. A `Lang-sync:
-    pending` commit, or one with no trailer, still counts.
+    pending` commit, or one with no trailer, still counts, until a commit
+    changes the sibling or names the file in a `Lang-synced: <path>`
+    trailer (`deckz i18n mark-synced`, when nothing needs porting after all).
 
     Restricts to the pairs with a path under one of PATHS if given, else
     every pair in the repository (shared content, every deck's own
@@ -83,3 +85,8 @@ def _print(findings: "list[StaleFile]", *, plain: bool) -> None:
             print(f"  {commit.sha[:8]}  {commit.subject}")
         range_start = finding.since or _EMPTY_TREE
         print(f"  git diff {range_start}..HEAD -- {finding.path}")
+    if not plain:
+        print(
+            "\nPort them, or, if nothing needs porting: "
+            'deckz i18n mark-synced <path> --reason "<why>"'
+        )

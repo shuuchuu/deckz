@@ -4,9 +4,14 @@ from pathlib import PurePosixPath as P
 
 from pytest import CaptureFixture, MonkeyPatch, raises
 
-from deckz.analyzing.i18n_stale import OneSidedChange, one_sided, stale_files
+from deckz.analyzing.i18n_stale import (
+    OneSidedChange,
+    mark_synced,
+    one_sided,
+    stale_files,
+)
 from deckz.configuring.settings import GlobalPaths, GlobalSettings, I18nSettings
-from deckz.exceptions import InvalidConfigurationError
+from deckz.exceptions import DeckzError, InvalidConfigurationError
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -173,6 +178,126 @@ def test_no_sibling_ever_touched_reports_since_none(tmp_path: Path) -> None:
 
     assert len(findings) == 1
     assert findings[0].since is None
+
+
+def _stale_fr(repo: Path) -> None:
+    _write(repo / "content" / "topic" / "topic.md", "fr v1")
+    _write(repo / "content" / "topic" / "en" / "topic.md", "en v1")
+    _commit(repo, "Add topic")
+    _write(repo / "content" / "topic" / "topic.md", "fr v2 (a case fix)")
+    _commit(repo, "Fix case")
+
+
+def test_lang_synced_trailer_settles_the_pair(tmp_path: Path) -> None:
+    repo = _init(tmp_path)
+    _stale_fr(repo)
+    _git(
+        repo,
+        "commit",
+        "--allow-empty",
+        "-m",
+        "Nothing to port",
+        "-m",
+        "Lang-synced: content/topic/topic.md",
+    )
+    marked = _git(repo, "rev-parse", "HEAD").strip()
+
+    assert stale_files(_settings(repo)) == []
+
+    _write(repo / "content" / "topic" / "topic.md", "fr v3")
+    _commit(repo, "Update fr again")
+
+    findings = stale_files(_settings(repo))
+    assert [c.subject for f in findings for c in f.commits] == ["Update fr again"]
+    assert findings[0].since == marked
+
+
+def test_lang_synced_trailer_may_name_either_side(tmp_path: Path) -> None:
+    repo = _init(tmp_path)
+    _stale_fr(repo)
+    _write(repo / "content" / "topic" / "en" / "topic.md", "en v2")
+    _commit(repo, "Fix en case")
+    _git(
+        repo,
+        "commit",
+        "--allow-empty",
+        "-m",
+        "Nothing to port",
+        "-m",
+        "Lang-synced: content/topic/en/topic.md\nLang-synced: content/other.md",
+    )
+
+    assert stale_files(_settings(repo)) == []
+
+
+def _identity(monkeypatch: MonkeyPatch) -> None:
+    for role in ("AUTHOR", "COMMITTER"):
+        monkeypatch.setenv(f"GIT_{role}_NAME", "t")
+        monkeypatch.setenv(f"GIT_{role}_EMAIL", "t@example.com")
+
+
+def test_mark_synced_commits_nothing_but_the_trailer(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    repo = _init(tmp_path)
+    _stale_fr(repo)
+    _write(repo / "content" / "topic" / "en" / "topic.md", "en v2, staged")
+    _git(repo, "add", "-A")
+    _identity(monkeypatch)
+    monkeypatch.chdir(repo)
+
+    sha, settled = mark_synced(
+        _settings(repo), [Path("content/topic/topic.md")], "  a case fix\n"
+    )
+
+    assert [f.path for f in settled] == [P("content/topic/topic.md")]
+    assert sha == _git(repo, "rev-parse", "HEAD").strip()
+    assert _git(repo, "show", "-s", "--format=%B", sha) == (
+        "Nothing to port from content/topic/topic.md\n\na case fix\n\n"
+        "Lang-synced: content/topic/topic.md\n\n"
+    )
+    assert _git(repo, "show", "--format=", "--name-only", sha) == ""
+    assert _git(repo, "diff", "--cached", "--name-only").split() == [
+        "content/topic/en/topic.md"
+    ]
+    assert stale_files(_settings(repo)) == []
+
+
+def test_mark_synced_refuses_what_isnt_stale(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    repo = _init(tmp_path)
+    _stale_fr(repo)
+    _write(repo / "content" / "other" / "other.md", "fr")
+    _write(repo / "content" / "other" / "en" / "other.md", "en")
+    _commit(repo, "Add other")
+    head = _git(repo, "rev-parse", "HEAD")
+    _identity(monkeypatch)
+    monkeypatch.chdir(repo)
+
+    with raises(DeckzError, match="nothing waits for a port"):
+        mark_synced(_settings(repo), [Path("content/other/other.md")], "why")
+    with raises(DeckzError, match="--reason"):
+        mark_synced(_settings(repo), [Path("content/topic/topic.md")], " ")
+    assert _git(repo, "rev-parse", "HEAD") == head
+
+
+def test_mark_synced_command(
+    tmp_path: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    from deckz.cli import main
+
+    repo = _init(tmp_path)
+    _stale_fr(repo)
+    _identity(monkeypatch)
+    monkeypatch.chdir(repo / "content" / "topic")
+
+    main(["i18n", "mark-synced", "topic.md", "--reason", "a case fix"])
+
+    sha = _git(repo, "rev-parse", "--short=8", "HEAD").strip()
+    assert capsys.readouterr().out == (
+        f"content/topic/topic.md: in sync with content/topic/en/topic.md as of {sha}\n"
+    )
 
 
 def _synced_settings(git_dir: Path, synced_at: str) -> GlobalSettings:

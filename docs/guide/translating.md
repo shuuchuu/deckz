@@ -24,6 +24,11 @@ your message, so committing again is quick.
 - `deckz i18n stale` lists every file changed since its other-language version, with
   the commits to port and the `git diff` to read (`--plain` or `--json` for a script).
   A file leaves the list when a commit touches its sibling.
+- When its changes need nothing in the other language after all (a case fix committed
+  without its `Lang-sync: fr-only` line), `deckz i18n mark-synced <file> --reason
+  "<why>"` takes it off the list: an empty commit whose message ends with
+  `Lang-synced: <file>`, after which the pair counts as in sync. It commits nothing
+  else, even what you've staged.
 - `deckz i18n missing-en --workdir <deck>` (`--all` for every deck) lists the files
   and titles with no English version; an English build fails on them.
 - `deckz status` shows the backlog in one line.

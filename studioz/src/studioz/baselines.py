@@ -20,6 +20,7 @@ import os
 import shutil
 import signal
 import subprocess
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import mkdtemp
@@ -69,6 +70,17 @@ def head(workspace: Path) -> str:
         Its hash, empty if git fails.
     """
     return git(workspace, "rev-parse", "HEAD") or ""
+
+
+def carry_over(workspace: Path, before: str, after: str) -> None:
+    """Make `before`'s baselines `after`'s, a commit changing no file on top.
+
+    Such as `deckz i18n mark-synced`'s: its decks are the same, so they aren't
+    built again.
+    """
+    directory = workspace / BASELINES_DIR
+    with suppress(OSError):
+        (directory / before).rename(directory / after)
 
 
 def _directory(workspace: Path, commit: str, deck: str, lang: Lang) -> Path:

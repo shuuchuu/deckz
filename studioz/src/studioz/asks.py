@@ -72,7 +72,9 @@ def prompt(task: str, values: dict[str, list[str]]) -> str:
             f"\n\nPorte ces changements dans `{other}` (vois `{diff}`, et lis "
             f"`{other}` tel qu'il est : un changement a pu y être porté autrement), "
             "en suivant les conventions de traduction du dépôt, puis dis-moi ce que "
-            "tu as changé. Je committerai depuis studioz."
+            "tu as changé. Je committerai depuis studioz. S'il n'y a rien à porter "
+            "(une casse, la typographie d'une langue), ne change rien et dis-moi "
+            "pourquoi en une phrase : je le noterai avec « Rien à porter… »."
         )
     if task == "corriger" and one.get("refused"):
         return (

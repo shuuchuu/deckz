@@ -157,7 +157,8 @@ def translation_section(
         StatusItem(
             f"{stale.path}: {_count(len(stale.commits), 'commit')} not ported to "
             f"{stale.sibling}",
-            f"`deckz i18n stale {stale.path}` shows them",
+            f"`deckz i18n stale {stale.path}` shows them (`deckz i18n "
+            f'mark-synced {stale.path} --reason "<why>"` if none needs porting)',
         )
         for stale in yours
     ]

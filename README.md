@@ -988,10 +988,17 @@ The main commands:
   with changes not yet ported to their other-language sibling, computed
   from git history alone (a `Lang-sync` commit trailer, not a stored
   marker, exempts a one-sided change). `--plain` for a script or an agent.
+  A file leaves it when a commit changes its sibling, or names either side
+  in a `Lang-synced: <path>` trailer.
   A repository moving to trailers from markers of its own (or with
   one-sided commits it already settled) sets `i18n.synced_at` in
   `deckz.yml` to the commit up to which every pair is in sync: that commit
   and its ancestors are ignored.
+- `deckz i18n mark-synced PATHS... --reason TEXT`: record that what
+  `deckz i18n stale` lists for these files needs no port after all (a
+  case fix committed without a `Lang-sync` trailer): an empty commit with
+  the reason and a `Lang-synced: <path>` trailer per file. Nothing staged
+  goes into it.
 - `deckz generate-agent-notes`: print onboarding notes for an AI coding
   agent working in the repo (conventions not already covered by `--help`,
   e.g. the section/flavor syntax and local-override resolution). Prints to

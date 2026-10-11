@@ -14,6 +14,10 @@
       <button type="button" class="small secondary" data-agent-task="rattraper"
               data-agent-values='{{ {"changed": item.path, "other": item.sibling, "since": item.since or "", "subject": item.subjects | list} | tojson }}'
               title="Demander à l'agent de porter ces changements dans {{ item.sibling }}">Traduire avec l'agent</button>
+      <button type="button" class="small secondary" data-dialog="#action-dialog"
+              data-url="/espaces/{{ workspace.name }}/traductions/rien-a-porter/formulaire"
+              data-values='{{ {"path": item.path} | tojson }}'
+              title="Ces changements n'ont rien à apporter à {{ item.sibling }} : le noter">Rien à porter…</button>
     </li>
     {% endfor %}
   </ul>
