@@ -105,11 +105,6 @@ Found along the way, not done (each increment's "Left" has the rest):
   second time during phase 3, in the pre-commit hook; it passes alone.
 - A limit pause doesn't survive a studioz restart (a pending question now
   does); no warning before a long task when a usage window is nearly full.
-- slides' own backlog entry (`content/when-how-ml/when-how-ml-light.md`, commit
-  `576d9d22`: French typography, a case fix) is still listed: closing it is a
-  real commit, the user's, from "Rien à porter…" once this deckz is in their
-  workspace (only tried in `studioz-dev`, then taken off). slides' `sync-langs`
-  skill may want to mention `deckz i18n mark-synced` for the same case.
 - slides' workflows are committed in the workspace `studioz-workflows`
   (`7bd8a6f9`, `ce4b0a69`), not synced: the user syncs them from studioz once
   this deckz is pushed (the QA's `report`/`then` need it).
@@ -1102,8 +1097,9 @@ prompt asks it to say why when there's nothing to port. Tried on slides
 extension wasn't connected): the real entry, an empty reason refused, the
 commit (empty, its trailer), the panel then empty, `deckz i18n stale` and
 `deckz status` clean, `deckz hooks check-commits` passing, a second mark
-refused; the commit then taken off and the baselines put back. Left: closing
-slides' entry for real (the user's commit).
+refused; the commit then taken off and the baselines put back. Then, at the
+user's request, slides' entry closed for real on its main (`4aa7e1be`) and
+`sync-langs` taught the command (`25d74f24`), neither pushed.
 
 ### Starting phase 5
 
