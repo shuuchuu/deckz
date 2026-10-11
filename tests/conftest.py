@@ -26,7 +26,7 @@ def _isolated_environment(monkeypatch: Any, tmp_path_factory: Any) -> None:
 
 
 @fixture(autouse=True)
-def _isolated_git(monkeypatch: Any) -> None:
+def _isolated_git(monkeypatch: Any, tmp_path_factory: Any) -> None:
     # A git hook (deckz's pre-commit runs the tests) exports GIT_DIR,
     # GIT_INDEX_FILE and the like. A test's own `git` calls would follow them
     # into the real repository instead of the test's temporary one: once, from
@@ -34,3 +34,12 @@ def _isolated_git(monkeypatch: Any) -> None:
     # core.bare and test remotes in the shared config.
     for name in [name for name in environ if name.startswith("GIT_")]:
         monkeypatch.delenv(name)
+    # Nor may the developer's own git configuration, and the code under test
+    # commits (`labs publish`'s commit-tree): CI's container has no identity,
+    # and git can't make one up from its hostname.
+    config = tmp_path_factory.mktemp("git") / "config"
+    config.write_text(
+        "[user]\n\tname = test\n\temail = test@example.com\n\tuseConfigOnly = true\n",
+        encoding="utf8",
+    )
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(config))

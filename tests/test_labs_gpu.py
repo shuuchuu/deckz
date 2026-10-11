@@ -1,7 +1,9 @@
 import json
 import os
+import signal
 import subprocess
 import time
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -266,7 +268,8 @@ def test_queue_kills_what_a_run_leaves_running(tmp_path: Path) -> None:
         assert Path(f"/proc/{other}").exists()
     finally:
         for pid in (left, other):
-            subprocess.run(["kill", "-9", str(pid)], check=False, capture_output=True)
+            with suppress(ProcessLookupError):
+                os.kill(pid, signal.SIGKILL)
 
 
 def _wait_for_env(pid: int, entry: bytes) -> None:

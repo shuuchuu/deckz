@@ -69,5 +69,7 @@ def test_a_studioz_section_is_left_to_studioz(tmp_path: Path) -> None:
 def test_tests_never_see_a_git_hook_environment() -> None:
     from os import environ
 
-    # See conftest's `_isolated_git`.
-    assert not [name for name in environ if name.startswith("GIT_")]
+    # See conftest's `_isolated_git`, which sets only its own global config.
+    assert [name for name in environ if name.startswith("GIT_")] == [
+        "GIT_CONFIG_GLOBAL"
+    ]

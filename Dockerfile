@@ -6,6 +6,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 RUN apt update \
   && apt install -y --no-install-recommends \
+  chromium \
   curl \
   ffmpeg \
   gcc \
@@ -16,6 +17,8 @@ RUN apt update \
   make \
   pandoc \
   pkg-config \
+  poppler-utils \
+  procps \
   && apt-get autoremove --purge -y \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*

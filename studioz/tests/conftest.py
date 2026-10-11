@@ -19,6 +19,15 @@ def _isolated(tmp_path: Path, monkeypatch: Any, tmp_path_factory: Any) -> None:
     for name in [n for n in environ if n.startswith(("DECKZ_", "GIT_"))]:
         monkeypatch.delenv(name)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path_factory.mktemp("config")))
+    # Nor the developer's own git configuration, and the code under test
+    # commits (a rebase, a baseline): CI's container has no identity, and git
+    # can't make one up from its hostname.
+    config = tmp_path_factory.mktemp("git") / "config"
+    config.write_text(
+        "[user]\n\tname = test\n\temail = test@example.com\n\tuseConfigOnly = true\n",
+        encoding="utf8",
+    )
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(config))
 
 
 def _git(cwd: Path, *args: str) -> str:
