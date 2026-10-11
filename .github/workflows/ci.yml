@@ -21,7 +21,7 @@ jobs:
         uses: astral-sh/setup-uv@v4
 
       - name: Install the package
-        run: uv sync
+        run: uv sync --all-extras
 
       - name: Test the package style conventions
         run: uv run doit check
