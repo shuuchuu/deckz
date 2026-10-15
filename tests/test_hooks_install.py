@@ -1,4 +1,5 @@
 import json
+import shlex
 from pathlib import Path
 
 from pygit2 import init_repository
@@ -192,7 +193,11 @@ def test_install_ci_workflow_writes_a_valid_workflow(tmp_path: Path) -> None:
     from deckz.configuring.settings import CiSettings
     from deckz.hooks_install import install_ci_workflow
 
-    ci = CiSettings(deckz_repository="owner/deckz", nightly_checks=("missing-en",))
+    ci = CiSettings(
+        deckz_repository="owner/deckz",
+        apt_packages=("build-essential", "pkg-config"),
+        nightly_checks=("missing-en",),
+    )
     path = install_ci_workflow(tmp_path, ci)
 
     workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -204,6 +209,10 @@ def test_install_ci_workflow_writes_a_valid_workflow(tmp_path: Path) -> None:
     assert "uv run deckz check --plain" in runs
     assert "uv run deckz check --plain missing-en" in runs
     assert any("deckz hooks check-commits" in run for run in runs)
+    # A plain scalar would fold the line continuation into `\ `, which makes
+    # the next package's name start with a space.
+    apt = next(run for run in runs if "apt-get install" in run)
+    assert shlex.split(apt)[-2:] == ["build-essential", "pkg-config"]
     # The container's root can only run git on the runner's checkouts once
     # they're trusted, and `deckz check` runs git.
     trust = next(i for i, run in enumerate(runs) if "safe.directory" in run)

@@ -217,8 +217,9 @@ def ci_workflow(ci: "CiSettings") -> str:
     apt = (
         f"""
       - name: Install the system packages the dependencies need
-        run: apt-get update && apt-get install -y --no-install-recommends \\
-          {" ".join(ci.apt_packages)}
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \\
+            {" ".join(ci.apt_packages)}
 """
         if ci.apt_packages
         else ""
