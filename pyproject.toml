@@ -68,7 +68,7 @@ dev = [
   "pytest >= 8",
   "pytest-cov >= 6",
   "pytest-xdist >= 3",
-  "ruff >= 0.11",
+  "ruff >= 0.16",
   "ty >= 0.0.33",
   "types-appdirs >= 1, < 2",
   "types-pyyaml >= 6",
@@ -89,7 +89,12 @@ studioz = { workspace = true }
 target-version = "py312"
 
 [tool.ruff.lint]
-ignore = ["D1", "incorrect-blank-line-before-class", "multi-line-summary-second-line", "non-empty-init-module"]
+ignore = [
+  "D1",
+  "incorrect-blank-line-before-class",
+  "multi-line-summary-second-line",
+  "non-empty-init-module",
+]
 preview = true
 select = ["A", "B", "C", "D", "DOC", "E", "EM", "F", "I", "N", "PIE", "PTH", "RET", "RUF", "SIM", "SLF", "TC", "UP", "W"]
 
