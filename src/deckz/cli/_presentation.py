@@ -7,7 +7,7 @@ This module is where the CLI turns those into rich widgets.
 """
 
 import sys
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Generator, Iterable, Sequence
 from contextlib import contextmanager
 from logging import getLogger
 from pathlib import Path, PurePath
@@ -45,7 +45,7 @@ class RichProgress(ProgressReporterProtocol):
         self._progress: Progress | None = None
 
     @contextmanager
-    def track(self, description: str, total: int) -> Iterator[Callable[[], None]]:
+    def track(self, description: str, total: int) -> Generator[Callable[[], None]]:
         # A task tracked within another (a deck's compilations within `run
         # decks`) is one more bar of the same display, not a display of its
         # own: two live displays at once overwrite each other, and flicker.

@@ -25,7 +25,7 @@ license = "Apache-2.0"
 license-files = ["LICENSE"]
 name = "deckz"
 readme = "README.md"
-requires-python = ">= 3.12"
+requires-python = ">= 3.13"
 version = "31.3.3"
 
 [project.optional-dependencies]
@@ -57,7 +57,7 @@ dev = [
   "deckz[labs]",
   "deckz[parity]",
   "deckz[videos]",
-  "bumpver >= 2025.1131",
+  "bumpver >= 2026.1132",
   "doit >= 0.37",
   "mkdocs >= 1",
   "mkdocs-gen-files >= 0.5",
@@ -65,11 +65,11 @@ dev = [
   "mkdocs-material >= 9",
   "mkdocs-section-index >= 0.3",
   "mkdocstrings[python] >= 0.29",
-  "pytest >= 8",
+  "pytest >= 9",
   "pytest-cov >= 6",
   "pytest-xdist >= 3",
-  "ruff >= 0.16",
-  "ty >= 0.0.33",
+  "ruff >= 0.17",
+  "ty >= 0.0.88",
   "types-appdirs >= 1, < 2",
   "types-pyyaml >= 6",
   "httpx2 >= 2",
@@ -86,7 +86,7 @@ members = ["studioz"]
 studioz = { workspace = true }
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py313"
 
 [tool.ruff.lint]
 ignore = [
@@ -133,4 +133,4 @@ version_pattern = "MAJOR.MINOR.PATCH"
 
 [build-system]
 build-backend = "uv_build"
-requires = ["uv_build>=0.12.15,<0.13.0"]
+requires = ["uv_build>=0.13.1,<0.14.0"]

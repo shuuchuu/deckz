@@ -1,4 +1,4 @@
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 
 from ..exceptions import MissingExtraError
@@ -22,7 +22,7 @@ _EXTRA_MODULES: Mapping[str, frozenset[str]] = {
 
 
 @contextmanager
-def extras_imports(extra: str = "extras") -> Iterator[None]:
+def extras_imports(extra: str = "extras") -> Generator[None]:
     """Turn a missing optional dependency into a user-facing error.
 
     Wrap the imports of an extras-backed command with it. Any other import

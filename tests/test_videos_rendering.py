@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 
@@ -41,7 +41,7 @@ class _CountingProgress:
         self, description: str, total: int
     ) -> AbstractContextManager[Callable[[], None]]:
         @contextmanager
-        def _ctx() -> Iterator[Callable[[], None]]:
+        def _ctx() -> Generator[Callable[[], None]]:
             def advance() -> None:
                 self.advances += 1
 

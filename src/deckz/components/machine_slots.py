@@ -15,7 +15,7 @@ allows; with none to open, it warns and compiles without the limit.
 """
 
 import os
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager, suppress
 from logging import getLogger
 from pathlib import Path
@@ -50,7 +50,7 @@ class MachineSlots:
         self._logger = getLogger(__name__)
 
     @contextmanager
-    def hold(self, cancelled: Callable[[], bool] = lambda: False) -> Iterator[bool]:
+    def hold(self, cancelled: Callable[[], bool] = lambda: False) -> Generator[bool]:
         """Hold a slot until exiting, waiting for one if they're all taken.
 
         Args:

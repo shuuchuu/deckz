@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
 
 from .protocols import ProgressReporterProtocol
@@ -8,7 +8,7 @@ class NullProgress(ProgressReporterProtocol):
     """Report nothing: the default when no one shows progress (tests, scripts)."""
 
     @contextmanager
-    def track(self, description: str, total: int) -> Iterator[Callable[[], None]]:
+    def track(self, description: str, total: int) -> Generator[Callable[[], None]]:
         yield lambda: None
 
 

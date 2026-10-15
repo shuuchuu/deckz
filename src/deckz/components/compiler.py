@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import AbstractContextManager, contextmanager, nullcontext, suppress
 from logging import getLogger
 from multiprocessing import get_context
@@ -125,7 +125,7 @@ def _next_request(connection: Connection) -> bool:
 
 
 @contextmanager
-def _sigint_blocked() -> Iterator[None]:
+def _sigint_blocked() -> Generator[None]:
     """Block SIGINT in this thread, and so in the processes it starts meanwhile.
 
     Ctrl-C reaches the whole process group, workers included: they must leave
@@ -268,7 +268,7 @@ def stop() -> None:
 
 
 @contextmanager
-def keep_warm() -> Iterator[None]:
+def keep_warm() -> Generator[None]:
     """Keep one Typst worker process per main file alive until exiting.
 
     For long-lived callers that compile the same main files repeatedly -- \

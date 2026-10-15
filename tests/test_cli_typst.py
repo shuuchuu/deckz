@@ -1,6 +1,6 @@
 import json
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager, suppress
 from logging import DEBUG, WARNING, getLogger
 from multiprocessing import active_children
@@ -403,7 +403,7 @@ class _RecordingProgress:
         self.advances = 0
 
     @contextmanager
-    def track(self, description: str, total: int) -> Iterator[Callable[[], None]]:
+    def track(self, description: str, total: int) -> Generator[Callable[[], None]]:
         self.tracked.append((description, total))
 
         def advance() -> None:

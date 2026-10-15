@@ -1,6 +1,6 @@
 import json
 import sys  # ruff: ignore[unused-import]
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager, suppress
 from json import loads
 from pathlib import Path
@@ -445,7 +445,7 @@ class _RecordingProgress:
         self.tracked: list[tuple[str, int]] = []
 
     @contextmanager
-    def track(self, description: str, total: int) -> Iterator[Callable[[], None]]:
+    def track(self, description: str, total: int) -> Generator[Callable[[], None]]:
         self.tracked.append((description, total))
         yield lambda: None
 

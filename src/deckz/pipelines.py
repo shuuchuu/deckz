@@ -7,7 +7,7 @@ do without doing any of it. The `run*` functions are `build` applied to \
 their command's targets.
 """
 
-from collections.abc import Callable, Iterable, Iterator, Sequence, Set
+from collections.abc import Callable, Generator, Iterable, Sequence, Set
 from contextlib import contextmanager
 from dataclasses import dataclass
 from logging import getLogger
@@ -155,7 +155,7 @@ def build(
 
 
 @contextmanager
-def deck_lock(build_dir: Path, label: str) -> Iterator[None]:
+def deck_lock(build_dir: Path, label: str) -> Generator[None]:
     """One compilation of a deck's outputs at a time, across deckz processes.
 
     Two builds of one deck (a `--watch` and a full build, two terminals, an

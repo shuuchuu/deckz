@@ -1,6 +1,6 @@
 """Provide general utility functions that would not fit in other modules."""
 
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Generator, Iterable, Iterator, Mapping
 from contextlib import contextmanager, suppress
 from dataclasses import replace
 from multiprocessing import get_context
@@ -341,6 +341,6 @@ def shared_section_ids(content_dir: Path) -> list[str]:
 
 
 @contextmanager
-def create_pool(processes: int | None = None) -> Iterator[Pool]:
+def create_pool(processes: int | None = None) -> Generator[Pool]:
     with get_context("spawn").Pool(processes=processes) as pool:
         yield pool
