@@ -107,3 +107,18 @@ def test_new_deck_renders_the_repository_template(repo: Path) -> None:
     ]
     description = repo / "company" / "new" / "content" / "about" / "description.md"
     assert description.read_text(encoding="utf8") == "# Nouveau\n"
+
+
+def test_new_lab_prints_a_multiline_link_snippet_indented(
+    repo: Path, capsys: Any
+) -> None:
+    with (repo / "deckz.yml").open("a") as config:
+        config.write(
+            "labs:\n  link_snippet: |-\n    Subject\\\n"
+            '    {{ "{lab}" | lab_links("{kind}") }}\n'
+        )
+
+    main(("labs", "new", "topic/word-count", "demo"))
+
+    out = capsys.readouterr().out
+    assert '  Subject\\\n  {{ "topic/word-count" | lab_links("demo") }}\n' in out

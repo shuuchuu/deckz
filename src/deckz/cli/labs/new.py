@@ -1,3 +1,4 @@
+import textwrap
 from pathlib import Path
 
 from . import app
@@ -28,4 +29,5 @@ def new(lab: str, kind: str, /, *, workdir: Path = Path()) -> None:
         print("IDs:", ", ".join(created.ids))
     if snippet := settings.labs.link_snippet:
         print("Link it from a content file with:")
-        print("  " + snippet.replace("{lab}", lab).replace("{kind}", kind))
+        filled = snippet.replace("{lab}", lab).replace("{kind}", kind)
+        print(textwrap.indent(filled, "  "))
