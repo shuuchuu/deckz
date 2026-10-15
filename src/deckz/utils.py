@@ -121,14 +121,17 @@ def import_module_from_path(path: Path, name: str) -> ModuleType:
 def import_module_and_submodules(package_name: str) -> None:
     """Import all modules and submodules from a package.
 
-    From https://github.com/allenai/allennlp/blob/master/allennlp/common/util.py.
+    From https://github.com/allenai/allennlp/blob/master/allennlp/common/util.py,
+    listing each level with `iter_modules`, which imports nothing: `walk_packages`
+    would import a subpackage under its bare name (a `matplotlib/` or `collections/`
+    subpackage would import the real library and walk it).
 
     Args:
         package_name: Name of the package to fully import.
     """
     from importlib import import_module, reload
     from importlib import invalidate_caches as importlib_invalidate_caches
-    from pkgutil import walk_packages
+    from pkgutil import iter_modules
     from sys import modules
 
     importlib_invalidate_caches()
@@ -138,18 +141,8 @@ def import_module_and_submodules(package_name: str) -> None:
         reload(module)
     else:
         module = import_module(package_name)
-    path = getattr(module, "__path__", [])
-    path_string = "" if not path else path[0]
-
-    for module_finder, name, _ in walk_packages(path):
-        if (
-            path_string
-            and hasattr(module_finder, "path")
-            and module_finder.path != path_string
-        ):
-            continue
-        subpackage = f"{package_name}.{name}"
-        import_module_and_submodules(subpackage)
+    for _, name, _ in iter_modules(getattr(module, "__path__", [])):
+        import_module_and_submodules(f"{package_name}.{name}")
 
 
 def dirs_hierarchy(
