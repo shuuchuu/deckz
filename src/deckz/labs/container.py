@@ -132,7 +132,10 @@ def _docker_memory(value: str) -> str:
 def dev_container(published_dir: Path, repository: str) -> Container:
     """Build (or name) the image of `published_dir`'s dev container.
 
-    `docker build` reuses its cache, so this is quick when nothing changed.
+    Its `build.dockerfile` is built; a prebuilt `image` is used as it is,
+    unless `customizations.deckz.dockerfile` names the Dockerfile it's built
+    from, which is then built under the image's name. `docker build` reuses
+    its cache, so this is quick when nothing changed.
 
     Returns:
         How to start it.
@@ -158,17 +161,21 @@ def dev_container(published_dir: Path, repository: str) -> Container:
     if "memory" in host:
         limits += ["--memory", _docker_memory(host["memory"])]
     workspace = f"/workspaces/{repository}"
-    if image := config.get("image"):
+    config_dir = config_path.parent
+    image = config.get("image")
+    # A prebuilt image's own Dockerfile (`customizations.deckz.dockerfile`) builds
+    # it here, under its name: a change is checked before CI publishes the image.
+    local = config.get("customizations", {}).get("deckz", {}).get("dockerfile")
+    build = {"dockerfile": local} if image and local else config.get("build", {})
+    if image and not local:
         return Container(image, user, workspace, tuple(limits))
-    build = config.get("build", {})
     if "dockerfile" not in build:
         msg = f"{config_path} names neither an `image` nor a `build.dockerfile`"
         raise LabContainerError(msg)
-    config_dir = config_path.parent
     dockerfile = config_dir / build["dockerfile"]
     context = config_dir / build.get("context", ".")
     digest = hashlib.sha256(str(config_dir.resolve()).encode()).hexdigest()[:12]
-    tag = f"deckz-labs-{digest}"
+    tag = image or f"deckz-labs-{digest}"
     result = subprocess.run(
         ["docker", "build", "--quiet", "--tag", tag, "--file", dockerfile, context],
         capture_output=True,

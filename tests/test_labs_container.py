@@ -1,6 +1,7 @@
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from pytest import raises
 
@@ -106,4 +107,32 @@ def test_a_kernel_death_and_a_failure_reported_twice_read_once() -> None:
         "  [3] the kernel died: ran the notebook again from the start, as a "
         "trainee would after Colab restarts it",
         "  [2] code cell raised ValueError: x",
+    ]
+
+
+def test_a_prebuilt_image_with_its_dockerfile_is_built_under_its_name(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    published = _config(
+        tmp_path,
+        {
+            "image": "ghcr.io/example/env:abc",
+            "customizations": {"deckz": {"dockerfile": "Dockerfile"}},
+        },
+    )
+    calls = []
+
+    def run(command: list[Any], **_: Any) -> subprocess.CompletedProcess[str]:
+        calls.append([str(part) for part in command])
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", run)
+
+    container = dev_container(published, "labs")
+
+    assert container.image == "ghcr.io/example/env:abc"
+    assert calls[0][:5] == ["docker", "build", "--quiet", "--tag", container.image]
+    assert calls[0][-3:-1] == [
+        "--file",
+        str(published / ".devcontainer" / "Dockerfile"),
     ]

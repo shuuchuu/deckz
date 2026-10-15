@@ -1019,7 +1019,10 @@ The main commands:
   published repository's dev container
   (`paths.labs_published_dir`/`.devcontainer/devcontainer.json`, built
   with Docker): what a Run all does in GitHub Codespaces, and in Colab for
-  a notebook that needs no GPU. The container is thrown away after each
+  a notebook that needs no GPU. A prebuilt `image` is pulled, unless
+  `customizations.deckz.dockerfile` names the Dockerfile it's built from:
+  that one is then built locally under the image's name, so a change is
+  checked before the image is published. The container is thrown away after each
   notebook, and nothing is mounted into it. When the kernel dies (a setup
   cell that kills it for Colab to restart it on what it installed), the
   notebook runs once more from the start, as a trainee would run it again.
