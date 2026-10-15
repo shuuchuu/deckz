@@ -34,6 +34,8 @@ def test_deck_page(client: TestClient, workspace: Path) -> None:
     assert f'data-events="{DECK}/evenements?lang=fr"' in page.text
     assert 'class="deck-item current" data-path="client/abc"' in page.text
     assert 'href="?lang=en"' in page.text
+    # The PDF and the editor share the page by a sash.
+    assert 'data-side="split"' in page.text
 
 
 def test_only_decks_of_the_workspace(client: TestClient, workspace: Path) -> None:

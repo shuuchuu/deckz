@@ -404,7 +404,9 @@ without the folders they all share; Modifications; Publication; Avec l'agent), t
 page above a panel of tabs (Problèmes; a deck's Construction, opening by itself
 when a build fails; Tâches, where a job started from a dialog goes on, the dialog
 closing on the response's `job-started` event), the agent on the right, all resizable
-and hidden by Ctrl+B / Ctrl+J / Ctrl+Alt+B (kept per browser), and a status bar.
+and hidden by Ctrl+B / Ctrl+J / Ctrl+Alt+B (kept per browser), and a status bar. On
+a deck page the PDF and the editor share the page by a ratio (`--split`), side by
+side or, when narrow, one above the other.
 Mind class names: pdf.js's stylesheet and pages use `.page`, `.sidebar`, and the deck
 page has `.deck`, `.waiting` (`[hidden]` wins over any of them).
 `studioz.watches` runs one `deckz run --watch` per workspace (the workspace's

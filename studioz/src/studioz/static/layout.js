@@ -1,7 +1,7 @@
 // A workspace's pages laid out like VS Code (`workspace_base.html`): the
 // activity bar picks the sidebar's view (clicking the one shown hides the
 // sidebar), the panel below the page shows one tab, the sashes resize the
-// sidebar, the agent and the panel, Ctrl+B, Ctrl+Alt+B and Ctrl+J show or
+// sidebar, the agent, the panel, and the PDF against the editor, Ctrl+B, Ctrl+Alt+B and Ctrl+J show or
 // hide them, and the badges and the status bar repeat what the panels count.
 // What the person chose is kept per browser; the page's inline script
 // applies it before the first paint.
@@ -140,8 +140,46 @@ function setSize(side, pixels) {
   return clamped;
 }
 
+// The PDF and the editor share their space by a ratio, the PDF's: it holds
+// when the sidebars or the window change, side by side or one above the other.
+const SPLIT = [0.15, 0.85];
+
+function splitSash(sash) {
+  const shared = sash.parentElement;
+  sash.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    sash.setPointerCapture(event.pointerId);
+    const column = getComputedStyle(shared).flexDirection === "column";
+    body.classList.add("resizing", column ? "resizing-height" : "resizing-width");
+    const box = shared.getBoundingClientRect();
+    let ratio = null;
+    const move = (moved) => {
+      const share = column
+        ? (moved.clientY - box.top) / box.height
+        : (moved.clientX - box.left) / box.width;
+      ratio = Math.round(Math.min(Math.max(share, SPLIT[0]), SPLIT[1]) * 1000) / 1000;
+      body.style.setProperty("--split", String(ratio));
+    };
+    sash.addEventListener("pointermove", move);
+    sash.addEventListener("lostpointercapture", () => {
+      sash.removeEventListener("pointermove", move);
+      body.classList.remove("resizing", "resizing-height", "resizing-width");
+      if (ratio !== null) store("split", String(ratio));
+    }, { once: true });
+  });
+  sash.addEventListener("dblclick", () => {
+    body.style.removeProperty("--split");
+    store("split", "");
+  });
+}
+
 for (const sash of document.querySelectorAll(".sash")) {
   const side = sash.dataset.side;
+  if (side === "split") {
+    splitSash(sash);
+    continue;
+  }
   const resized = { sidebar, agent, panel }[side];
   const dimension = side === "panel" ? "height" : "width";
   sash.addEventListener("pointerdown", (event) => {

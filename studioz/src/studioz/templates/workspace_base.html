@@ -22,6 +22,8 @@
       const pixels = Number(stored(`${side}-${size}`));
       if (pixels) document.body.style.setProperty(`--${side}-${size}`, `${pixels}px`);
     }
+    const split = Number(stored("split"));
+    if (split) document.body.style.setProperty("--split", String(split));
   } catch {}
 </script>
 <div class="workspace">

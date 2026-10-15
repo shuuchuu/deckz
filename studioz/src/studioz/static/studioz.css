@@ -91,7 +91,7 @@ tr.closed td { color: var(--muted); }
 @media (max-width: 700px) {
   .deck-body { flex-direction: column; }
   .viewer-area { min-height: 60vh; }
-  .editor-pane { min-height: 60vh; border-left: 0; border-top: 1px solid var(--line); }
+  .editor-pane { min-height: 60vh; border-top: 1px solid var(--line); }
   .workspaces th:nth-child(n+3):nth-child(-n+6), .workspaces td:nth-child(n+3):nth-child(-n+6) { display: none; }
 }
 .files { margin: 0.2rem 0 0.6rem; padding-left: 1.2rem; }
@@ -123,7 +123,8 @@ tr.closed td { color: var(--muted); }
 @container (max-width: 760px) {
   .deck-body { flex-direction: column; }
   .viewer-area, .editor-pane { min-height: 0; }
-  .editor-pane { border-left: 0; border-top: 1px solid var(--line); }
+  .sash[data-side="split"] { cursor: row-resize; background-size: 100% 1px; }
+  .sash[data-side="split"]:hover, .sash[data-side="split"]:active { background-size: 100% 3px; }
 }
 .toolbar { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; align-items: center; padding: 0.3rem 0.8rem; border-bottom: 1px solid var(--line); background: var(--panel); }
 .deck-path { font-weight: 600; flex: 1 1 8rem; }
@@ -136,7 +137,11 @@ tr.closed td { color: var(--muted); }
 .errors p { margin: 0 0 0.3rem; }
 .errors pre { margin: 0; }
 .deck-body { display: flex; flex: 1; min-height: 0; }
-.viewer-area { position: relative; flex: 1; min-width: 0; background: #525659; }
+/* The PDF and the editor share the page by `--split`, the PDF's share (the
+   split's sash, `layout.js`); the PDF alone takes it all. */
+.viewer-area { position: relative; flex: var(--split) 1 0; min-width: 0; background: #525659; }
+.sash[data-side="split"] { flex: 0 0 5px; }
+.deck-body:has(> .editor-pane[hidden]) > .sash[data-side="split"] { display: none; }
 /* pdf.js requires an absolutely positioned container. */
 .viewer-container { position: absolute; inset: 0; overflow: auto; }
 .viewer-container .page { cursor: pointer; }
@@ -178,7 +183,7 @@ tr.closed td { color: var(--muted); }
 }
 
 /* The source editor, beside the PDF. */
-.editor-pane { display: flex; flex-direction: column; flex: 1; min-width: 0; border-left: 1px solid var(--line); background: var(--panel); }
+.editor-pane { display: flex; flex-direction: column; flex: calc(1 - var(--split)) 1 0; min-width: 0; background: var(--panel); }
 .editor-pane[hidden] { display: none; }
 .editor-bar { display: flex; gap: 0.6rem; align-items: center; padding: 0.3rem 0.6rem; border-bottom: 1px solid var(--line); }
 .editor-file { font-family: var(--mono); font-size: 0.85em; flex: 0 1 auto; }
@@ -371,7 +376,7 @@ button.link:hover { text-decoration: underline; }
    `layout.js`): activity bar, sidebar, sash, the page, sash, agent; then the
    status bar. Each column is placed explicitly, so that one hidden leaves its
    place empty (and zero wide) instead of shifting the others. */
-body.shell { display: flex; flex-direction: column; height: 100vh; overflow: hidden; --sidebar-width: 18rem; --agent-width: 24rem; --panel-height: 15rem; }
+body.shell { display: flex; flex-direction: column; height: 100vh; overflow: hidden; --sidebar-width: 18rem; --agent-width: 24rem; --panel-height: 15rem; --split: 0.5; }
 .shell .topbar { align-items: center; padding: 0.3rem 0.8rem; }
 .crumb-sep { color: var(--muted); margin: 0 -0.5rem; }
 .workspace {
@@ -436,6 +441,13 @@ body.shell { display: flex; flex-direction: column; height: 100vh; overflow: hid
 .sash { cursor: col-resize; touch-action: none; background: linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat; }
 .sash:hover, .sash:active { background-image: linear-gradient(var(--accent), var(--accent)); background-size: 3px 100%; }
 .sash[data-side="panel"] { cursor: row-resize; background-size: 100% 1px; }
+/* Easier to catch than the line shows: a wider grab area, over the neighbours. */
+.sash { position: relative; z-index: 1; }
+.sash::after { content: ""; position: absolute; inset: 0 -3px; }
+.sash[data-side="panel"]::after { inset: -3px 0; }
+@container (max-width: 760px) {
+  .sash[data-side="split"]::after { inset: -3px 0; }
+}
 .sash[data-side="panel"]:hover, .sash[data-side="panel"]:active { background-size: 100% 3px; }
 .resizing { cursor: col-resize; user-select: none; }
 .resizing-height { cursor: row-resize; }

@@ -8,8 +8,8 @@
 (workflows: increments 1 to 5 under "Phase 4"), done overnight on 2026-10-11
 while the user slept, not yet tried by them; then "Rien à porter…" on the
 translation backlog (2026-10-11, after phase 4); then the VS Code layout's
-increments 1 and 2 (2026-10-15, under "The VS Code layout"). **Next:** that layout's
-increments 3 and 4, then phase 5 (long jobs), which needs planning first: GPU runs
+increments 1 to 3 (2026-10-15, under "The VS Code layout"). **Next:** that layout's
+increment 4 (the command palette), then phase 5 (long jobs), which needs planning first: GPU runs
 cost money. `git log origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed;
 nothing is released since 31.3.3. Push and release are the user's call.
@@ -1187,6 +1187,17 @@ jour" with the panel left open, a handout build started from Construire (the dia
 closed, Tâches showing its log), the filter, the sash. **Left:** the before/after
 view and the agent's own errors could use the panel too; no maximise button; the
 Tâches log isn't kept scrolled to its end as it grows.
+
+**Increment 3: done** (2026-10-15): the PDF and the editor share the page by a
+sash, as a ratio (`--split`, the PDF's share, between 15 % and 85 %), so that it
+holds when the sidebars, the panel or the window change, side by side or one above
+the other (the container query of increment 1 flips the sash's direction too);
+double-click for half and half; kept per browser and applied before the first
+paint. Every sash's grab area is now 3 px wider on each side than its line: the
+first try at dragging the 5 px line missed it. Tried on `studioz-dev` (Chrome):
+side by side to 29 %, stacked (sidebars widened), the reset, the sash gone with the
+editor. **Left:** one ratio for both directions; no way to put the editor on the
+left, nor to stack them by choice when wide.
 
 ### Starting phase 5
 
