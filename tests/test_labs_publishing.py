@@ -202,3 +202,31 @@ def test_publish_refuses_a_notebook_among_the_published_files(tmp_path: Path) ->
 
     with raises(LabPublishRefusedError, match=r"stray\.ipynb"):
         _publish_with_files(work)
+
+
+def test_publish_sends_the_files_to_their_own_remote(tmp_path: Path) -> None:
+    _remote, work = _make_repos(tmp_path)
+    files_remote = tmp_path / "files.git"
+    _git(tmp_path, "init", "--bare", "-b", "main", str(files_remote))
+    _git(work, "remote", "add", "codespace", str(files_remote))
+    _commit_published_files(work, {".devcontainer/devcontainer.json": "{}\n"})
+
+    def publish_both() -> bool:
+        return publish(
+            work,
+            work / "labs" / "notebooks",
+            published_dir=work / "labs" / "published",
+            id_metadata_key="shuuchuu.id",
+            id_pattern=ID_PATTERN,
+            remote="labs",
+            branch="main",
+            files_remote="codespace",
+        )
+
+    assert publish_both() is True
+
+    notebooks = _git(work, "ls-tree", "-r", "--name-only", "labs/main").split()
+    files = _git(work, "ls-tree", "-r", "--name-only", "codespace/main").split()
+    assert notebooks == ["topic-demo-fr.ipynb"]
+    assert files == [".devcontainer/devcontainer.json"]
+    assert publish_both() is False

@@ -51,7 +51,10 @@ def check(
     dev = (
         dev_container(
             settings.paths.labs_published_dir,
-            repository_name(settings.paths.git_dir, settings.labs.publish_remote),
+            repository_name(
+                settings.paths.git_dir,
+                settings.labs.published_files_remote or settings.labs.publish_remote,
+            ),
         )
         if container
         else None

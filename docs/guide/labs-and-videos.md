@@ -30,8 +30,9 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   beyond the translation.
 - Never put a token or password in a notebook: the `lab-secrets` check refuses it,
   and so does publishing. Read secrets from the environment.
-- `deckz labs publish` publishes the committed notebooks, plus the files committed
-  under `labs/published/` (the published repository's README, its `.devcontainer/`).
+- `deckz labs publish` publishes the committed notebooks, and the files committed
+  under `labs/published/` (with them, or to a repository of their own, such as the
+  one a Codespace opens: `labs.published_files_remote`).
   Only maintainers do it: `deckz status` says when committed files differ from the
   published ones.
 

@@ -7,9 +7,10 @@ from . import app
 def publish(*, break_published_links: bool = False, workdir: Path = Path()) -> None:
     """Replace the labs remote's branch with one commit of HEAD's lab notebooks.
 
-    The commit also holds the files committed under `labs/published/`
-    (`paths.labs_published_dir`), at the same paths: the published
-    repository's README, its `.devcontainer/` for Codespaces.
+    The files committed under `labs/published/` (`paths.labs_published_dir`)
+    are published too, at the same paths: in the same commit, or, when
+    `labs.published_files_remote` is set, in a commit of their own that
+    replaces that remote's branch (e.g. the repository a Codespace opens).
 
     Refuses to publish if either directory has uncommitted changes, a
     committed notebook has no valid or unique ID (run `deckz labs ids`
@@ -34,11 +35,9 @@ def publish(*, break_published_links: bool = False, workdir: Path = Path()) -> N
         id_pattern=settings.labs.id_pattern,
         remote=settings.labs.publish_remote,
         branch=settings.labs.publish_branch,
+        files_remote=settings.labs.published_files_remote,
+        files_branch=settings.labs.published_files_branch,
         break_published_links=break_published_links,
         not_secrets=settings.labs.not_secrets,
     )
-    print(
-        "Published."
-        if published
-        else f"{settings.labs.publish_remote} is already up to date."
-    )
+    print("Published." if published else "Already up to date.")

@@ -140,6 +140,13 @@ class LabsSettings(BaseModel):
     """Git remote `deckz labs publish` force-pushes the published notebooks to."""
     publish_branch: str = "main"
     """Branch of `publish_remote` that `deckz labs publish` replaces."""
+    published_files_remote: str | None = None
+    """Git remote `deckz labs publish` force-pushes the files of \
+    `paths.labs_published_dir` to, in a commit of their own (e.g. the \
+    repository a Codespace opens, which holds no notebook); unset, they go \
+    next to the notebooks, to `publish_remote`."""
+    published_files_branch: str = "main"
+    """Branch of `published_files_remote` that `deckz labs publish` replaces."""
     solution_heading: str = "Solution"
     """Markdown heading text (case-insensitive) marking a notebook's collapsed \
     answer cells, kept collapsed by `deckz labs normalize` and the \

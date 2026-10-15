@@ -174,6 +174,59 @@ def _tree(git_dir: Path, entries: dict[str, str]) -> str:
         return _git(git_dir, "write-tree", env=env)
 
 
+def _fetched_tip(git_dir: Path, remote: str, branch: str) -> str:
+    # A non-raising fetch: the branch may not exist yet (first publish), which
+    # fails the fetch but is not an error -- a never-published branch has no
+    # tip either way.
+    subprocess.run(
+        ["git", "-C", str(git_dir), "fetch", "--quiet", remote, branch],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return subprocess.run(
+        [
+            "git",
+            "-C",
+            str(git_dir),
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            f"{remote}/{branch}",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+
+
+def _is_tree(git_dir: Path, tip: str, tree: str) -> bool:
+    # The tip is already one parentless commit of this tree.
+    return bool(tip) and (
+        _git(git_dir, "rev-parse", f"{tip}^{{tree}}") == tree
+        and _git(git_dir, "rev-list", "--count", tip) == "1"
+    )
+
+
+def _replace(
+    git_dir: Path, tree: str, *, remote: str, branch: str, tip: str, message: str
+) -> None:
+    commit = _git(git_dir, "commit-tree", tree, "-m", message)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(git_dir),
+            "push",
+            f"--force-with-lease={branch}:{tip}",
+            remote,
+            f"{commit}:refs/heads/{branch}",
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+
 def publish(
     git_dir: Path,
     notebooks_dir: Path,
@@ -183,17 +236,21 @@ def publish(
     id_pattern: str,
     remote: str,
     branch: str,
+    files_remote: str | None = None,
+    files_branch: str = "main",
     break_published_links: bool = False,
     not_secrets: Iterable[str] = (),
 ) -> bool:
     """Replace `remote`'s `branch` with one commit of HEAD's lab notebooks.
 
-    The commit also holds the files committed under `published_dir`, at the
-    same paths.
+    The files committed under `published_dir` go into the same commit, at
+    the same paths, or, given a `files_remote`, into a commit of their own
+    that replaces its `files_branch` (e.g. a repository a Codespace opens,
+    holding no notebook).
 
     Returns:
-        True if a new commit was pushed, False if the remote was already up \
-        to date.
+        True if a new commit was pushed, False if the remotes were already \
+        up to date.
 
     Raises:
         LabPublishRefusedError: If the notebooks directory or \
@@ -210,15 +267,7 @@ def publish(
         if _git(git_dir, "status", "--porcelain", "--", rel):
             msg = f"{rel} has uncommitted changes"
             raise LabPublishRefusedError(msg)
-    # A non-raising fetch: the branch may not exist yet (first publish), which
-    # fails the fetch but is not an error -- the rev-parse below treats a
-    # never-published branch the same way either way.
-    subprocess.run(
-        ["git", "-C", str(git_dir), "fetch", "--quiet", remote, branch],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    tip = _fetched_tip(git_dir, remote, branch)
     published = _published_notebooks(
         git_dir,
         notebooks_dir,
@@ -226,53 +275,45 @@ def publish(
         id_pattern=id_pattern,
         not_secrets=not_secrets,
     )
-    tree = _tree(
-        git_dir,
-        {
-            **_published_files(git_dir, published_dir),
-            **{
-                f"{lab_id}.ipynb": f"100644 blob {sha}"
-                for lab_id, sha in published.items()
-            },
-        },
-    )
-    remote_ref = f"{remote}/{branch}"
-    remote_sha = subprocess.run(
-        ["git", "-C", str(git_dir), "rev-parse", "--verify", "--quiet", remote_ref],
-        capture_output=True,
-        text=True,
-        check=False,
-    ).stdout.strip()
-    previous: set[str] = set()
-    if remote_sha:
-        if (
-            _git(git_dir, "rev-parse", f"{remote_sha}^{{tree}}") == tree
-            and _git(git_dir, "rev-list", "--count", remote_sha) == "1"
-        ):
-            return False
-        # Only the notebooks' names are links handed out.
-        previous = {
-            name
-            for name in _git(git_dir, "ls-tree", "--name-only", remote_sha).splitlines()
-            if name.endswith(".ipynb")
-        }
-    names = {f"{lab_id}.ipynb" for lab_id in published}
-    if (removed := sorted(previous - names)) and not break_published_links:
+    files = _published_files(git_dir, published_dir)
+    notebooks = {
+        f"{lab_id}.ipynb": f"100644 blob {sha}" for lab_id, sha in published.items()
+    }
+    tree = _tree(git_dir, notebooks if files_remote else {**files, **notebooks})
+    # Only the notebooks' names are links handed out.
+    previous = {
+        name
+        for name in (
+            _git(git_dir, "ls-tree", "--name-only", tip).splitlines() if tip else []
+        )
+        if name.endswith(".ipynb")
+    }
+    if (removed := sorted(previous - notebooks.keys())) and not break_published_links:
         msg = "would break these published links: " + ", ".join(removed)
         raise LabPublishRefusedError(msg)
     today = datetime.now(tz=UTC).date().isoformat()
-    commit = _git(git_dir, "commit-tree", tree, "-m", f"Labs ({today})")
-    subprocess.run(
-        [
-            "git",
-            "-C",
-            str(git_dir),
-            "push",
-            f"--force-with-lease={branch}:{remote_sha}",
-            remote,
-            f"{commit}:refs/heads/{branch}",
-        ],
-        check=True,
-        capture_output=True,
-    )
-    return True
+    pushed = False
+    if not _is_tree(git_dir, tip, tree):
+        _replace(
+            git_dir,
+            tree,
+            remote=remote,
+            branch=branch,
+            tip=tip,
+            message=f"Labs ({today})",
+        )
+        pushed = True
+    if files_remote:
+        files_tip = _fetched_tip(git_dir, files_remote, files_branch)
+        files_tree = _tree(git_dir, files)
+        if not _is_tree(git_dir, files_tip, files_tree):
+            _replace(
+                git_dir,
+                files_tree,
+                remote=files_remote,
+                branch=files_branch,
+                tip=files_tip,
+                message=f"Published files ({today})",
+            )
+            pushed = True
+    return pushed

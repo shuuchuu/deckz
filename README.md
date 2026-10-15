@@ -260,9 +260,12 @@ typst_ignore_system_fonts: true
   `paths.labs_notebooks_dir`, set like any other path under `paths:`.
   `deckz labs publish` also publishes the files committed under
   `paths.labs_published_dir` (default `{git_dir}/labs/published`), at the
-  same paths: the published repository's README, a `.devcontainer/` that
-  opens the notebooks in GitHub Codespaces (which `deckz labs check
-  --container` runs them in).
+  same paths: next to the notebooks, or, when `labs.published_files_remote`
+  is set, as a commit of their own that replaces that remote's
+  `labs.published_files_branch` (default `main`). That's how a repository
+  with only a README and a `.devcontainer/` gets a GitHub Codespace for the
+  notebooks without holding them; `deckz labs check --container` runs
+  notebooks in that dev container, in that repository's workspace.
 - `videos`: settings for the `deckz videos` commands, e.g.:
 
   ```yaml
@@ -1033,7 +1036,8 @@ The main commands:
   notebooks.
 - `deckz labs publish [--break-published-links]`: replace the labs
   remote's branch with one commit of HEAD's lab notebooks, named by ID,
-  plus the files committed under `paths.labs_published_dir`.
+  and publish the files committed under `paths.labs_published_dir` (with
+  them, or to `labs.published_files_remote`).
 - `deckz labs gpu up|queue|run|status|fetch|report|down` (extra:
   `deckz[gpu]`): run notebooks on a rented GPU machine the way Colab runs
   them -- Colab's runtime image, `labs.gpu.cpus` CPUs per run, peak RAM

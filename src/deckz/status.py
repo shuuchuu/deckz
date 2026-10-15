@@ -177,6 +177,49 @@ def translation_section(
     return StatusSection("Translation", backlog, _capped(items))
 
 
+def _uncommitted_lab_items(
+    settings: "GlobalSettings", uncommitted: set[str]
+) -> list[StatusItem]:
+    # The notebooks and published files a publish would refuse.
+    git_dir = settings.paths.git_dir
+    items = []
+    for directory, noun, where in (
+        (settings.paths.labs_notebooks_dir, "notebook", ""),
+        (settings.paths.labs_published_dir, "published file", " in {}"),
+    ):
+        rel = directory.relative_to(git_dir).as_posix()
+        if pending := sorted(p for p in uncommitted if p.startswith(rel + "/")):
+            items.append(
+                StatusItem(
+                    f"{_count(len(pending), noun)} with uncommitted changes"
+                    + where.format(rel),
+                    "commit them before publishing",
+                )
+            )
+    return items
+
+
+def _files_remote_tree(settings: "GlobalSettings", *, fetch: bool) -> dict[str, str]:
+    # The files published to `labs.published_files_remote`, by path.
+    labs = settings.labs
+    git_dir = settings.paths.git_dir
+    assert labs.published_files_remote is not None
+    if fetch:
+        _git(
+            git_dir,
+            "fetch",
+            "--quiet",
+            labs.published_files_remote,
+            labs.published_files_branch,
+        )
+    ref = f"{labs.published_files_remote}/{labs.published_files_branch}"
+    files = {}
+    for line in (_git(git_dir, "ls-tree", "-r", ref) or "").splitlines():
+        info, name = line.split("\t", 1)
+        files[name] = info
+    return files
+
+
 def _published_files_items(
     committed: dict[str, str], published: dict[str, str], published_rel: str
 ) -> list[StatusItem]:
@@ -214,25 +257,9 @@ def labs_section(
     if not notebooks_dir.is_dir():
         return StatusSection("Labs", "no lab notebooks")
     labs = settings.labs
-    notebooks_rel = notebooks_dir.relative_to(git_dir).as_posix()
-    items = []
-    if pending := sorted(p for p in uncommitted if p.startswith(notebooks_rel + "/")):
-        items.append(
-            StatusItem(
-                f"{_count(len(pending), 'notebook')} with uncommitted changes",
-                "commit them before publishing",
-            )
-        )
     published_dir = settings.paths.labs_published_dir
     published_rel = published_dir.relative_to(git_dir).as_posix()
-    if pending := sorted(p for p in uncommitted if p.startswith(published_rel + "/")):
-        items.append(
-            StatusItem(
-                f"{_count(len(pending), 'published file')} with uncommitted "
-                f"changes in {published_rel}",
-                "commit them before publishing",
-            )
-        )
+    items = _uncommitted_lab_items(settings, uncommitted)
     if fetch:
         _git(git_dir, "fetch", "--quiet", labs.publish_remote, labs.publish_branch)
     ref = f"{labs.publish_remote}/{labs.publish_branch}"
@@ -260,6 +287,8 @@ def labs_section(
             published[name.removesuffix(".ipynb")] = info.split()[2]
         else:
             published_files[name] = info
+    if labs.published_files_remote:
+        published_files = _files_remote_tree(settings, fetch=fetch)
     differ = sorted(lab for lab, sha in committed.items() if published.get(lab) != sha)
     items += _published_files_items(files, published_files, published_rel)
     if differ:
