@@ -972,7 +972,7 @@ dev = [
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-cov", specifier = ">=6" },
     { name = "pytest-xdist", specifier = ">=3" },
-    { name = "ruff", specifier = ">=0.11" },
+    { name = "ruff", specifier = ">=0.16" },
     { name = "studioz", editable = "studioz" },
     { name = "ty", specifier = ">=0.0.33" },
     { name = "types-appdirs", specifier = ">=1,<2" },
