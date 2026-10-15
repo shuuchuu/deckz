@@ -172,7 +172,8 @@ def test_the_pages_offer_the_workflows(studio: TestClient) -> None:
     assert "Relire la formation (QA)…</button>" in page
     assert "/espaces/demo/workflows/nouvelle-formation/formulaire" in page
     deck = studio.get("/espaces/demo/formations/client/abc").text
-    assert "Avec l'agent…" in deck
+    # The sidebar's "Avec l'agent" view, about the deck on screen.
+    assert '"formation": "client/abc"' in deck
     listed = studio.post(
         "/espaces/demo/workflows", data={"formation": "client/abc"}, headers=ORIGIN
     ).text
@@ -181,11 +182,9 @@ def test_the_pages_offer_the_workflows(studio: TestClient) -> None:
     assert '"formation": "client/abc"' in listed
 
 
-def test_a_deck_without_workflows_has_no_button(
-    repository: Path, workspace: Path
-) -> None:
+def test_a_deck_without_workflows_has_none(repository: Path, workspace: Path) -> None:
     client = TestClient(create_app(repository), base_url="http://localhost:8421")
-    assert "Avec l'agent…" not in client.get("/espaces/demo/formations/client/abc").text
+    assert "aucun workflow" in client.get("/espaces/demo/formations/client/abc").text
     assert "aucun workflow" in client.get("/espaces/demo").text
 
 

@@ -1,5 +1,7 @@
 // The agent panel (`_agent.html`): the conversation, followed through
 // server-sent events (`/agent/evenements`), and the message box.
+import { showAgent } from "/static/layout.js";
+
 const panel = document.getElementById("agent");
 
 if (panel) {
@@ -11,7 +13,6 @@ if (panel) {
   const status = document.getElementById("agent-status");
   const login = document.getElementById("agent-login");
   const fresh = document.getElementById("agent-new");
-  const fold = document.getElementById("agent-fold");
   const slot = document.getElementById("agent-question");
   const undo = document.getElementById("agent-undo");
   const usage = document.getElementById("agent-usage");
@@ -170,7 +171,7 @@ if (panel) {
     const response = await fetch(`${base}/demander`, { method: "POST", body });
     if (response.ok) {
       button.closest("dialog")?.close();
-      setFolded(false);
+      showAgent(true);
       return;
     }
     button.disabled = false;
@@ -188,27 +189,18 @@ if (panel) {
   // A workflow started from its dialog (`_workflow.html`).
   document.body.addEventListener("agent-started", (event) => {
     event.target.closest?.("dialog")?.close();
-    setFolded(false);
+    showAgent(true);
     log.scrollTop = log.scrollHeight;
   });
 
   // The editor's "Demander à l'agent": a message started about a passage.
   document.addEventListener("agent-prefill", (event) => {
-    setFolded(false);
+    showAgent(true);
     message.value = event.detail.text + message.value;
     message.focus();
     message.setSelectionRange(event.detail.text.length, event.detail.text.length);
   });
 
-  const folded = () => document.body.classList.contains("agent-folded");
-  function setFolded(value) {
-    document.body.classList.toggle("agent-folded", value);
-    fold.setAttribute("aria-expanded", String(!value));
-    fold.textContent = value ? "⇤" : "⇥";
-    try { localStorage.setItem("studioz-agent-folded", value ? "1" : ""); } catch {}
-  }
-  try { setFolded(localStorage.getItem("studioz-agent-folded") === "1"); } catch {}
   // A workflow started from the home page opens its workspace with `?agent`.
-  if (new URLSearchParams(location.search).has("agent")) setFolded(false);
-  fold.addEventListener("click", () => setFolded(!folded()));
+  if (new URLSearchParams(location.search).has("agent")) showAgent(true);
 }

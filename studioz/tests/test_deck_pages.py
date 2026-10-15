@@ -32,7 +32,7 @@ def test_deck_page(client: TestClient, workspace: Path) -> None:
 
     assert page.status_code == 200
     assert f'data-events="{DECK}/evenements?lang=fr"' in page.text
-    assert 'class="current"><a href="/espaces/demo/formations/client/abc"' in page.text
+    assert 'class="deck current" data-path="client/abc"' in page.text
     assert 'href="?lang=en"' in page.text
 
 

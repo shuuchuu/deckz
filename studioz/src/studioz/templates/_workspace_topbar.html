@@ -1,9 +1,10 @@
-{% set worktree = workspace.worktree %}
+<span class="crumb-sep">›</span>
 <a class="workspace-name" href="/espaces/{{ workspace.name }}">{{ workspace.name }}</a>
-<span class="branch" title="{{ worktree.path }}">{{ worktree.branch }}</span>
 <span class="topbar-actions">
-  <span id="jobs-badge" hx-get="/espaces/{{ workspace.name }}/taches/resume" hx-trigger="load, every 3s, jobs-changed from:body" hx-swap="innerHTML"></span>
-  <button type="button" class="secondary" data-dialog="#action-dialog" data-url="/espaces/{{ workspace.name }}/publier/formulaire"
-          title="Publier les TP ou les vidéos pour les stagiaires">Publier…</button>
+  <span class="layout-toggles">
+    <button type="button" class="icon" data-toggle="sidebar" title="Afficher ou masquer la barre latérale (Ctrl+B)" aria-label="Barre latérale">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="1"/><path class="fill" d="M3 4h6v16H3z"/></svg></button>
+    <button type="button" class="icon" data-toggle="agent" title="Afficher ou masquer l'agent (Ctrl+Alt+B)" aria-label="Agent">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="1"/><path class="fill" d="M14 4h7v16h-7z"/></svg></button>
+  </span>
 </span>
-<dialog id="action-dialog" class="commit-dialog" aria-label="Action"></dialog>

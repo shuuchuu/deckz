@@ -398,6 +398,12 @@ worktree`'s worktrees (studioz's own state goes in each workspace's
 `.run/studioz/`), and `studioz.local_only` refuses requests not naming a local host,
 and changes not coming from studioz's own pages (DNS rebinding, cross-site
 requests): every route that changes something is a POST.
+A workspace's pages share VS Code's layout (`workspace_base.html`, `static/layout.js`):
+an activity bar choosing the sidebar's one view (Formations, a tree of the decks
+without the folders they all share; Modifications; Problèmes; Publication; Avec
+l'agent), the page, the agent on the right, both sidebars resizable and hidden by
+Ctrl+B / Ctrl+Alt+B (kept per browser), and a status bar. Mind class names: pdf.js's
+stylesheet and pages use `.page`, `.sidebar`, and the deck page has `.waiting`.
 `studioz.watches` runs one `deckz run --watch` per workspace (the workspace's
 own deckz, every option spelled out) for the deck page in front of the person,
 and reads its state from the log (`deckz.pipelines.watch`'s messages: keep them
@@ -408,7 +414,7 @@ what the build recorded, never compiling in studioz's process) in the editor
 beside it (`static/editor.js`, CodeMirror), which saves through
 `studioz.sources`: only content and deck files, and never over a version of
 the file the editor didn't read.
-`studioz.problems` fills the navigator's Problems panel: the workspace's own
+`studioz.problems` fills the sidebar's Problems view: the workspace's own
 `deckz status --json --no-decks`, run again in the background whenever the
 workspace's files changed (`git status`), plus the deck on screen's build
 failure and the frames its build recorded as shrunk; each problem naming a
@@ -463,10 +469,10 @@ conversation like a message; a file given goes into `.run/studioz/fichiers/`. Th
 home page offers those of the main checkout's `HEAD` (read through git,
 `declared_at`), each opening a new workspace from it where the agent starts. A
 workflow with `report: true` has the agent write its findings as a Markdown task
-list in `.run/studioz/rapports/`, which the navigator's Rapports panel shows as a
+list in `.run/studioz/rapports/`, which the sidebar's Rapports panel shows as a
 checklist, `then` sending the ticked ones to a follow-up skill. `studioz.backlog`
 runs the workspace's `deckz i18n stale --json` again when its HEAD moves, for the
-navigator's "À traduire" panel, each file with "Traduire avec l'agent" and "Rien à
+sidebar's "À traduire" panel, each file with "Traduire avec l'agent" and "Rien à
 porter…" (the workspace's `deckz i18n mark-synced`: an empty commit whose
 `Lang-synced: <path>` trailer settles the pair, which the agent's hook refuses like a
 commit); the Commit dialog presets the `Lang-sync` answer of a commit porting only

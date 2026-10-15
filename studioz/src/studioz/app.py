@@ -186,6 +186,7 @@ def _markdown(text: str) -> Markup:
 templates.env.filters["ago"] = _ago
 templates.env.filters["markdown"] = _markdown
 templates.env.filters["workflow_text"] = workflows.text
+templates.env.filters["deck_tree"] = workspaces.deck_tree
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -1073,6 +1074,27 @@ def upload_deck(request: Request, studio: StudioDep, name: str, deck: str) -> Re
     return _started(request, found)
 
 
+def _publication(studio: Studio, name: str) -> dict[str, Any]:
+    """What the publish dialog and the Publication panel show.
+
+    Returns:
+        Their templates' context.
+    """
+    found = studio.workspace(name)
+    path = found.worktree.path
+    report = studio.statuses.report(path)
+    groups = {group.key: group for group in report.result or ()}
+    up = sync.upstream(studio.main)
+    return {
+        "workspace": found,
+        "report": report,
+        "pending": {what: groups.get(what) for what in actions.PUBLISHABLE},
+        "publishable": actions.PUBLISHABLE,
+        "ahead": len(sync.state(path, up).ahead) if up else 0,
+        "upstream": up,
+    }
+
+
 @router.post("/espaces/{name}/publier/formulaire", response_class=HTMLResponse)
 def publish_form(request: Request, studio: StudioDep, name: str) -> Response:
     """What's not published, and what publishing does.
@@ -1080,21 +1102,18 @@ def publish_form(request: Request, studio: StudioDep, name: str) -> Response:
     Returns:
         The publish dialog's content.
     """
-    found = studio.workspace(name)
-    path = found.worktree.path
-    report = studio.statuses.report(path)
-    groups = {group.key: group for group in report.result or ()}
-    up = sync.upstream(studio.main)
-    return _render(
-        request,
-        "_publish.html",
-        workspace=found,
-        report=report,
-        pending={what: groups.get(what) for what in actions.PUBLISHABLE},
-        publishable=actions.PUBLISHABLE,
-        ahead=len(sync.state(path, up).ahead) if up else 0,
-        upstream=up,
-    )
+    return _render(request, "_publish.html", **_publication(studio, name))
+
+
+@router.get("/espaces/{name}/publication", response_class=HTMLResponse)
+def publication_panel(request: Request, studio: StudioDep, name: str) -> Response:
+    """The sidebar's Publication panel: what the labs and videos wait for.
+
+    Returns:
+        The panel, which reloads itself while `deckz status` runs, and on \
+        a `workspace-changed` event; its buttons open the publish dialog.
+    """
+    return _render(request, "_publication.html", **_publication(studio, name))
 
 
 @router.post("/espaces/{name}/publier", response_class=HTMLResponse)

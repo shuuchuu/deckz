@@ -1,0 +1,29 @@
+{#- The sidebar's Publication view: what the labs and the videos wait for.
+    Publishing goes through the publish dialog, which says what it does. -#}
+{% set waiting = pending.values() | select | map(attribute="problems") | map("length") | sum %}
+<section class="publication" id="publication" hx-get="/espaces/{{ workspace.name }}/publication" hx-swap="outerHTML"
+         hx-trigger="workspace-changed from:body{% if report.running or not (report.checked or report.error) %}, every 2s{% endif %}">
+  <h2>Publication <span class="count">{{ waiting }}</span>
+    {% if report.running %}<span class="checking">vérification…</span>{% endif %}</h2>
+  <p class="hint">Les liens des TP et les QR codes des vidéos imprimés dans les PDF mènent à ce qui est publié.</p>
+  {% if ahead %}
+  <p class="error">{{ ahead }} commit{{ "s" if ahead > 1 }} pas encore sur {{ upstream.name }} : synchronisez avant de publier.</p>
+  {% endif %}
+  {% for what, (name, does) in publishable.items() %}
+  {% set group = pending[what] %}
+  <section class="publishable" data-what="{{ what }}">
+    <h3>{{ name[0] | upper }}{{ name[1:] }}
+      {% if group %}<span class="state" data-state="pending">à publier</span>
+      {% elif report.checked %}<span class="state">à jour</span>{% endif %}</h3>
+    {% if group %}
+    <ul>{% for problem in group.problems %}<li>{{ problem.text }}</li>{% endfor %}</ul>
+    {% elif not report.checked %}
+    <p class="hint">Vérification de l'espace…</p>
+    {% endif %}
+    <button type="button" class="small{% if not group %} secondary{% endif %}" data-dialog="#action-dialog"
+            data-url="/espaces/{{ workspace.name }}/publier/formulaire"
+            title="{{ does }}">Publier {{ name }}…</button>
+  </section>
+  {% endfor %}
+  {% if report.error %}<p class="error">La vérification a échoué : {{ report.error }}</p>{% endif %}
+</section>

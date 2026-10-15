@@ -1,0 +1,51 @@
+{#- A workspace's pages, laid out like VS Code: an activity bar choosing the
+    sidebar's view, the page's own content, the agent on the right, and a
+    status bar. layout.js keeps the sidebar's view, both sidebars' widths and
+    whether they show, per browser. -#}
+{% extends "base.html" %}
+{% block body_class %}shell{% endblock %}
+{% block head %}
+<script type="module" src="/static/layout.js"></script>
+<script type="module" src="/static/agent.js"></script>
+{% block page_head %}{% endblock %}
+{% endblock %}
+{% block topbar %}{% include "_workspace_topbar.html" %}{% endblock %}
+{% block body %}
+{# Before the layout shows: no flash of the default one. #}
+<script>
+  try {
+    const stored = (key) => localStorage.getItem(`studioz-${key}`);
+    document.body.classList.toggle("sidebar-hidden", stored("sidebar-hidden") === "1");
+    document.body.classList.toggle("agent-folded", stored("agent-folded") === "1");
+    for (const side of ["sidebar", "agent"]) {
+      const width = Number(stored(`${side}-width`));
+      if (width) document.body.style.setProperty(`--${side}-width`, `${width}px`);
+    }
+  } catch {}
+</script>
+<div class="workspace">
+  {% include "_sidebar.html" %}
+  <div class="sash" data-side="sidebar" title="Glisser pour élargir, double-cliquer pour la largeur d'origine"></div>
+  {% block main %}{% endblock %}
+  <div class="sash" data-side="agent" title="Glisser pour élargir, double-cliquer pour la largeur d'origine"></div>
+  {% include "_agent.html" %}
+</div>
+<footer class="statusbar">
+  {% set worktree = workspace.worktree %}
+  <button type="button" class="status-item" id="status-branch" data-show-view="modifications"
+          title="{{ worktree.path }} : les modifications et la synchronisation">
+    <span class="branch">⎇ {{ worktree.branch }}</span><span class="sync-counts" id="status-sync"></span></button>
+  <button type="button" class="status-item" id="status-problems" data-show-view="problemes"
+          title="Les problèmes de l'espace">⚠ <span class="count">…</span></button>
+  {% block status %}{% endblock %}
+  <span class="status-right">
+    {% block status_right %}{% endblock %}
+    <span id="jobs-badge" hx-get="/espaces/{{ workspace.name }}/taches/resume" hx-trigger="load, every 3s, jobs-changed from:body" hx-swap="innerHTML"></span>
+    <button type="button" class="status-item" id="status-agent" data-toggle="agent"
+            title="Afficher ou masquer l'agent (Ctrl+Alt+B)">Agent</button>
+  </span>
+</footer>
+<dialog id="action-dialog" class="commit-dialog" aria-label="Action"></dialog>
+<dialog id="commit-dialog" class="commit-dialog" aria-label="Committer"></dialog>
+<dialog id="sync-dialog" class="commit-dialog" aria-label="Synchroniser"></dialog>
+{% endblock %}

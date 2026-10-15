@@ -1,6 +1,7 @@
 {% set base = "/espaces/" ~ workspace.name ~ "/synchronisation" %}
 <section class="sync" id="sync" hx-get="{{ base }}{% if deck %}?formation={{ deck | urlencode }}{% endif %}" hx-swap="outerHTML"
-         hx-trigger="workspace-changed from:body, every 30s">
+         hx-trigger="workspace-changed from:body, every 30s"
+         {% if state is not none %}data-ahead="{{ state.ahead | length }}" data-behind="{{ state.behind }}"{% endif %}>
   <h2>Synchronisation</h2>
   {% if state is none %}
   <p class="empty">La copie principale du dépôt n'a pas de branche amont : rien avec quoi synchroniser.</p>

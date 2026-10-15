@@ -1,19 +1,13 @@
-{% extends "base.html" %}
+{% extends "workspace_base.html" %}
 {% block title %}{{ workspace.name }}{% endblock %}
-{% block head %}<script type="module" src="/static/agent.js"></script>{% endblock %}
-{% block topbar %}{% include "_workspace_topbar.html" %}{% endblock %}
-{% block body %}
-<div class="workspace">
-  {% include "_navigator.html" %}
-  <main class="preview">
-    <p class="empty">Choisissez une formation à gauche, écrivez à l'agent, ou commencez un workflow.</p>
-    <section class="workflows-section">
-      <h2>Avec l'agent</h2>
-      {% set deck = "" %}
-      {% include "_workflow_list.html" %}
-    </section>
-    <p class="hint">Dossier de l'espace : <code>{{ workspace.worktree.path }}</code></p>
-  </main>
-  {% include "_agent.html" %}
-</div>
+{% block main %}
+<main class="preview">
+  <p class="empty">Choisissez une formation dans la barre latérale, écrivez à l'agent, ou commencez un workflow.</p>
+  <section class="workflows-section">
+    <h2>Avec l'agent</h2>
+    {% set deck = "" %}
+    {% include "_workflow_list.html" %}
+  </section>
+  <p class="hint">Dossier de l'espace : <code>{{ workspace.worktree.path }}</code></p>
+</main>
 {% endblock %}

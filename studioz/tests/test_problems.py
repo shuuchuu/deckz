@@ -178,3 +178,37 @@ def test_panel_with_the_deck_s_shrunk_frames(
     assert 'data-line="2"' in page
     assert 'data-page="3"' in page
     assert "workspace-changed from:body" in page
+
+
+def test_publication_panel(tmp_path: Path, repository: Path, workspace: Path) -> None:
+    script = tmp_path / "fake_status.py"
+    script.write_text(
+        _FAKE_STATUS.replace(
+            '{"key": "translation"',
+            '{"key": "labs", "title": "Labs", "summary": "", "items": [\n'
+            '        {"text": "2 notebooks not as published", "fix": ""}]},\n'
+            '    {"key": "translation"',
+        ),
+        encoding="utf8",
+    )
+    runs = tmp_path / "runs.txt"
+    statuses = Statuses(
+        "main", lambda _, since: [sys.executable, str(script), str(runs), str(since)]
+    )
+    client = TestClient(
+        create_app(repository, statuses=statuses), base_url="http://localhost:8421"
+    )
+    # Generous: the whole suite runs in parallel.
+    deadline = monotonic() + 30
+    while "every 2s" in (text := client.get("/espaces/demo/publication").text):
+        assert monotonic() < deadline, "timed out"
+        sleep(0.05)
+
+    assert '<span class="count">1</span>' in text
+    labs, videos = text.split('data-what="labs"')[1].split('data-what="videos"')
+    assert "à publier" in labs
+    assert "2 notebooks not as published" in labs
+    assert "à jour" in videos
+    # Publishing goes through the dialog, never from the panel itself.
+    assert 'data-url="/espaces/demo/publier/formulaire"' in text
+    assert 'hx-post="/espaces/demo/publier"' not in text

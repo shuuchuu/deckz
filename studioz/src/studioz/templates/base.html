@@ -9,7 +9,7 @@
   <script src="/static/dialogs.js" defer></script>
   {% block head %}{% endblock %}
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
   <header class="topbar">
     <a class="brand" href="/">studioz</a>
     <span class="repository">{{ repository }}</span>

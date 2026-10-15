@@ -204,6 +204,76 @@ def decks(path: Path) -> list[str]:
     return found
 
 
+@dataclass(frozen=True)
+class DeckFolder:
+    """A folder of the sidebar's deck tree.
+
+    Attributes:
+        name: What the tree shows: several folders when each held only the \
+            next one (`orsys/INTRA`), as VS Code's compact folders.
+        path: Its path relative to the workspace (`decks/orsys/INTRA`).
+        folders: Its subfolders holding decks.
+        decks: Its decks, each its name and its path relative to the workspace.
+    """
+
+    name: str
+    path: str
+    folders: tuple["DeckFolder", ...]
+    decks: tuple[tuple[str, str], ...]
+
+
+@dataclass
+class _Node:
+    children: dict[str, "_Node"]
+    deck: bool = False
+
+
+def deck_tree(decks: list[str]) -> DeckFolder:
+    """The decks as a tree, for the sidebar.
+
+    The folders every deck shares (`decks/`) are left out: the tree starts
+    where they part. A deck holding other decks is both a deck and a folder.
+
+    Returns:
+        The tree's root, whose `path` is the folders left out ("" for none).
+    """
+    root = _Node({})
+    for deck in decks:
+        node = root
+        for part in deck.split("/"):
+            node = node.children.setdefault(part, _Node({}))
+        node.deck = True
+    shared = []
+    while len(root.children) == 1 and not root.deck:
+        [(name, child)] = root.children.items()
+        if child.deck:
+            break
+        shared.append(name)
+        root = child
+    return _folder("", "/".join(shared), root)
+
+
+def _folder(name: str, path: str, node: _Node) -> DeckFolder:
+    folders = []
+    decks = []
+    for child_name, child in sorted(node.children.items()):
+        child_path = f"{path}/{child_name}" if path else child_name
+        if child.deck:
+            decks.append((child_name, child_path))
+        if not child.children:
+            continue
+        label = child_name
+        while len(child.children) == 1 and not child.deck:
+            [(next_name, next_child)] = child.children.items()
+            if next_child.deck:
+                break
+            label = f"{label}/{next_name}"
+            child_path = f"{child_path}/{next_name}"
+            child = next_child
+        folders.append(_folder(label, child_path, child))
+    return DeckFolder(name, path, tuple(folders), tuple(decks))
+
+
 def deck_dir(path: Path, deck: str) -> Path | None:
     """The workspace's deck directory `deck`, if that's one.
 

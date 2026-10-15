@@ -1,14 +1,16 @@
 # studioz plan: a UI for operating a deckz repo, agents included
 
-## Where things stand, and how to resume (2026-10-11)
+## Where things stand, and how to resume (2026-10-15)
 
 **Done:** phases 0, 1 and 2 (workspaces without agents: increments 1 to 8 under
 "Phase 2"), and phase 3 (the agent in a workspace: increments 1 to 5 under
 "Phase 3"), which the user then tried on real work, satisfied; and phase 4
 (workflows: increments 1 to 5 under "Phase 4"), done overnight on 2026-10-11
 while the user slept, not yet tried by them; then "Rien à porter…" on the
-translation backlog (2026-10-11, after phase 4). **Next:** phase 5 (long
-jobs), which needs planning first: GPU runs cost money. `git log origin/main..main` in
+translation backlog (2026-10-11, after phase 4); then the VS Code layout's
+increment 1 (2026-10-15, under "The VS Code layout"). **Next:** that layout's
+increments 2 to 4, then phase 5 (long jobs), which needs planning first: GPU runs
+cost money. `git log origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed;
 nothing is released since 31.3.3. Push and release are the user's call.
 
@@ -24,7 +26,7 @@ architecture):
 | `watches.py` | one `deckz run --watch` per workspace for the deck on screen; `environment()`/`workspace_environment()` for every command run in a workspace |
 | `sources.py` | what the editor may read and save (never over a version it didn't read, keeping line endings) |
 | `background.py` | commands rerun when a workspace's files change (`deckz status`, `deckz show affected`); `git status` parsing |
-| `problems.py`, `changes.py` | the navigator's Problems and Changes panels; `changes.LangPairs` caches deckz's fr/en pairs |
+| `problems.py`, `changes.py` | the sidebar's Problems and Changes panels; `changes.LangPairs` caches deckz's fr/en pairs |
 | `baselines.py`, `comparison.py` | handouts as of the last commit, frame-by-frame before/after |
 | `commits.py`, `sync.py` | the Commit and Synchronisation dialogs |
 | `jobs.py`, `actions.py` | the job queue; build, upload, publish |
@@ -32,7 +34,7 @@ architecture):
 | `checkpoints.py` | the workspace's files before and after each agent turn, and undoing the last one |
 | `asks.py` | what the dialogs ask the agent (prompts), and the proposed commit message |
 | `workflows.py` | the workflows a workspace's `deckz.yml` declares (`studioz.workflows`), their forms' prompts and files |
-| `static/` | `deck.js` (pdf.js viewer, comparison), `editor.js` (CodeMirror), `dialogs.js` (dialogs opened from reloading panels), `agent.js` (the agent panel), vendored JS (`uv run doit vendor`) |
+| `static/` | `deck.js` (pdf.js viewer, comparison), `editor.js` (CodeMirror), `dialogs.js` (dialogs opened from reloading panels), `agent.js` (the agent panel), `layout.js` (the VS Code layout: activity bar, sidebars, sashes, status bar), vendored JS (`uv run doit vendor`) |
 
 Tests: `studioz/tests/`, against temporary repositories, a fake `deckz` (a script
 in the workspace's `.venv/bin/`), a local bare remote and a fake Agent SDK client
@@ -48,11 +50,11 @@ yielding the SDK's own message objects; nothing in them touches the network.
 - Try it on slides: from the worktree, `uv run --quiet studioz --workdir
   ../slides --port 8431 --no-browser`, then <http://localhost:8431/>. The dev
   workspace is `studioz-dev` (`../slides--studioz-dev`, branch `ws/studioz-dev`,
-  recreated clean at `ae4ef519` on 2026-10-10 after the user's own trial had
-  closed the first one: create it again from the home page if it's gone); the
-  Fortinet deck
-  (`orsys/INTRA/2026-10-fortinet`) is the usual test deck. Leave it clean: a scratch
-  commit comes back off with `git reset --soft ae4ef519 && git reset -q` (or the new
+  recreated clean at `3fbcc34e` on 2026-10-15, the previous one gone: create it
+  again from the home page if it's gone); the Fortinet deck
+  (`decks/orsys/INTRA/2026-10-fortinet` since slides moved its decks under `decks/`)
+  is the usual test deck. Leave it clean: a scratch
+  commit comes back off with `git reset --soft 3fbcc34e && git reset -q` (or the new
   base after an update), and files are restored from a copy taken first. Restart
   the server after changing Python code: the templates are read fresh, the modules
   not, so a page may call what the running code lacks.
@@ -65,7 +67,7 @@ yielding the SDK's own message objects; nothing in them touches the network.
   publish to trainees, slides' origin or Google Drive. The tests cover them with
   fakes; on slides, stop at the confirmation.
 - The browser (Claude in Chrome) needs Claude Code started with `claude --chrome`.
-  The navigator's panels reload themselves, so an element found then clicked a
+  The sidebar's panels reload themselves, so an element found then clicked a
   second later may have moved: click from a script (`javascript_tool`) once the
   page has settled. Typing into CodeMirror goes through its Markdown mode (Enter
   continues a list): to change a file's content, write it on disk, the editor
@@ -1100,6 +1102,62 @@ commit (empty, its trailer), the panel then empty, `deckz i18n stale` and
 refused; the commit then taken off and the baselines put back. Then, at the
 user's request, slides' entry closed for real on its main (`4aa7e1be`) and
 `sync-langs` taught the command (`25d74f24`), neither pushed.
+
+### The VS Code layout (2026-10-15)
+
+The user, trying studioz: too many panels side by side (navigator, PDF, editor,
+agent), and responsive bugs (the editor's file path, wrapped at every character, grew
+into a tall column once the agent was open). Asked for a pass towards VS Code's
+layout; agreed plan, each a usable increment:
+
+1. **The shell**: done (below).
+2. **A bottom panel** (Ctrl+J) with tabs: Problèmes (out of the sidebar, where its
+   text and fixes get the width), Construction (the build failure and its log
+   lines, instead of the red banner pushing the PDF down), Tâches (the jobs' logs,
+   now a dialog behind the status bar's item). It opens by itself on a build
+   failure.
+3. **Editor groups**: the PDF and the editor resizable against each other (a sash),
+   the split already flipping to one above the other when narrow.
+4. **A command palette** (Ctrl+Maj+P: build, upload, commit, sync, the workflows)
+   and a quick "open deck" (Ctrl+P), which would also slim the deck's toolbar.
+
+The agent stays on the right, as VS Code's chat does: the user agreed, Ctrl+B
+hiding the left sidebar being enough room.
+
+**Increment 1: done** (2026-10-15): the shell. A workspace's pages
+(`workspace_base.html`, `layout.js`) are an activity bar choosing the sidebar's one
+view (Formations, Modifications with sync and À traduire, Problèmes, Publication,
+Avec l'agent with the workflows and Rapports), each icon's badge the count its panel
+shows; the page; the agent on the right; resizable sashes (double-click: default
+width), Ctrl+B and Ctrl+Alt+B (also the title bar's two toggles), all kept per
+browser and applied by an inline script before the first paint; and a status bar
+(branch with ↓/↑ from the Synchronisation panel, problem count, the build state,
+page, jobs, the agent's state) whose items open their view. Along the way, from the
+user during the trial:
+- the deck and file paths are one line, their folder shortened first (an ellipsis),
+  the name whole; the editor's "Enregistré"/"Enregistrer" became VS Code's dot,
+  shown while the file has unsaved changes (a click or Ctrl+S saves);
+- Formations is a tree (`workspaces.deck_tree`, nested `<details>`): the folders
+  every deck shares (slides' `decks/`) left out and shown beside the title, a folder
+  holding only one folder merged with it (`orsys/INTRA`, VS Code's compact folders),
+  the current deck's folders open, the ones opened kept per browser, the filter
+  opening the folders of the decks it matches. Automatic rather than a setting:
+  nothing to configure, and it follows a reorganisation;
+- Publication replaces the title bar's "Publier…": the labs' and videos' state from
+  `deckz status` (à publier, with what; à jour), each button opening the existing
+  publish dialog, which stays the confirmation (one click in a sidebar is too easy
+  for what reaches trainees).
+The PDF and the editor go one above the other when the page is narrower than 760 px
+(a container query). The dialogs moved out of the sidebar into the page. Two
+class collisions found: the home page's `.page` (`max-width: 72rem`, padding) also
+styled pdf.js's pages, capping wide pages at 1152 px while their text layer kept
+the right width (a horizontal scrollbar with the sidebars hidden): now `.home`;
+pdf.js's stylesheet styles `.sidebar`, hence `.primary-sidebar`. Tried on
+`studioz-dev` in Chrome (1920 px wide, and narrow by widening both sidebars:
+stacked editor, one-line path), stopping at the publish dialog. **Left:** a deck's
+labs waiting to be published show in both Problèmes and Publication; the deck tree
+has no keyboard navigation; the workspace page's own workflows list now duplicates
+the Avec l'agent view.
 
 ### Starting phase 5
 

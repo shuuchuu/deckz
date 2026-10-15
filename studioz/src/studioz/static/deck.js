@@ -44,14 +44,19 @@ eventBus.on("pagesinit", () => {
   viewer.currentScaleValue = "page-width";
 });
 eventBus.on("pagechanging", showPageNumber);
-// The window's size, and the editor opening or closing. The page clicked
-// to open the editor stays in view.
+// The window's size, the editor opening or closing, a sidebar shown, hidden
+// or dragged (once it rests: redrawing every page at each step is slow). The
+// page clicked to open the editor stays in view.
 let clicked = null;
+let resized = null;
 new ResizeObserver(() => {
-  if (!viewer.pagesCount) return;
-  viewer.currentScaleValue = "page-width";
-  if (clicked) viewer.scrollPageIntoView({ pageNumber: clicked });
-  clicked = null;
+  clearTimeout(resized);
+  resized = setTimeout(() => {
+    if (!viewer.pagesCount) return;
+    viewer.currentScaleValue = "page-width";
+    if (clicked) viewer.scrollPageIntoView({ pageNumber: clicked });
+    clicked = null;
+  }, 80);
 }).observe(container);
 
 // Each page's frame in the PDF shown: {page, title, file, line}.

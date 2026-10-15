@@ -46,8 +46,6 @@ const jinjaTags = ViewPlugin.define(
 );
 
 const STATUS = {
-  saved: "Enregistré",
-  modified: "Modifié",
   saving: "Enregistrement…",
   conflict: "Modifié ailleurs",
   failed: "Échec de l'enregistrement",
@@ -102,7 +100,7 @@ export class SourceEditor {
     const element = this.element("editor-status");
     element.dataset.status = status ?? "";
     element.textContent = STATUS[status] ?? "";
-    this.element("editor-save").disabled = status !== "modified";
+    this.element("editor-save").hidden = status !== "modified";
   }
 
   state(file, text) {
@@ -156,12 +154,26 @@ export class SourceEditor {
       this.version = version;
       this.saved = text;
       this.view.setState(this.state(file, text));
-      this.element("editor-file").textContent = file;
+      this.showPath(file);
       this.setStatus("saved");
       this.pane.hidden = false;
     }
     this.say(null);
     this.goTo(line);
+  }
+
+  // The file's path, its folder shortened first when the bar is narrow.
+  showPath(file) {
+    const crumb = this.element("editor-file");
+    const cut = file.lastIndexOf("/") + 1;
+    const folder = document.createElement("span");
+    folder.className = "crumb-dir";
+    folder.textContent = file.slice(0, cut);
+    const name = document.createElement("span");
+    name.className = "crumb-name";
+    name.textContent = file.slice(cut);
+    crumb.replaceChildren(...(cut ? [folder] : []), name);
+    crumb.title = file;
   }
 
   goTo(line) {

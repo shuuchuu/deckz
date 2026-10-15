@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
+from studioz.workspaces import DeckFolder, deck_tree
 
 ORIGIN = {"Origin": "http://localhost:8421"}
 
@@ -114,3 +115,34 @@ def test_size_ignores_hard_links(tmp_path: Path) -> None:
     (tmp_path / "linked.so").hardlink_to(cached)
 
     assert 100_000 <= size(tmp_path) < 200_000
+
+
+def test_deck_tree() -> None:
+    tree = deck_tree(
+        [
+            "decks/eni/cv3",
+            "decks/orsys/INTRA/2026-10-fortinet",
+            "decks/orsys/INTRA/2026-11-euronext",
+            "decks/solo",
+            "decks/solo/inner/sub",
+        ]
+    )
+
+    # The folder every deck shares is left out; single folders are merged.
+    assert tree.path == "decks"
+    assert tree.decks == (("solo", "decks/solo"),)
+    eni, orsys, solo = tree.folders
+    assert eni == DeckFolder("eni", "decks/eni", (), (("cv3", "decks/eni/cv3"),))
+    assert (orsys.name, orsys.path) == ("orsys/INTRA", "decks/orsys/INTRA")
+    assert [name for name, _ in orsys.decks] == ["2026-10-fortinet", "2026-11-euronext"]
+    # A deck holding decks is a folder too.
+    assert (solo.name, solo.path) == ("solo", "decks/solo")
+    assert solo.folders == (
+        DeckFolder("inner", "decks/solo/inner", (), (("sub", "decks/solo/inner/sub"),)),
+    )
+
+
+def test_deck_tree_of_one_deck() -> None:
+    tree = deck_tree(["client/abc"])
+
+    assert tree == DeckFolder("", "client", (), (("abc", "client/abc"),))
