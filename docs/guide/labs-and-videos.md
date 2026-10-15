@@ -10,7 +10,9 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   notebooks in one JSON style so that changes stay readable (`lab-format` checks it).
 - `deckz labs dump <notebook>` prints a compact view, cells numbered.
 - `deckz labs check <notebook>` runs it the way Colab would (`--python <interpreter>`
-  for a virtual environment with the lab's libraries).
+  for a virtual environment with the lab's libraries). It skips shell commands other
+  than data fetches: `--container` runs everything, for real, in the Codespace the
+  published repository opens (`labs/published/.devcontainer/`, needs Docker).
 - A hands-on notebook stores no outputs (trainees would see the answers); a demo
   stores those of a full run in its own language: run it, then `deckz labs outputs
   <executed copy> <notebook>`.
@@ -28,8 +30,10 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   beyond the translation.
 - Never put a token or password in a notebook: the `lab-secrets` check refuses it,
   and so does publishing. Read secrets from the environment.
-- `deckz labs publish` publishes the committed notebooks. Only maintainers do it:
-  `deckz status` says when committed notebooks differ from the published ones.
+- `deckz labs publish` publishes the committed notebooks, plus the files committed
+  under `labs/published/` (the published repository's README, its `.devcontainer/`).
+  Only maintainers do it: `deckz status` says when committed files differ from the
+  published ones.
 
 ## Videos
 

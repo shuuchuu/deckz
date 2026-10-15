@@ -131,3 +131,74 @@ def test_publish_refuses_a_notebook_holding_a_token(tmp_path: Path) -> None:
 
     with raises(LabPublishRefusedError, match="looks like a credential"):
         _publish(work)
+
+
+def _publish_with_files(work: Path, *, break_published_links: bool = False) -> bool:
+    return publish(
+        work,
+        work / "labs" / "notebooks",
+        published_dir=work / "labs" / "published",
+        id_metadata_key="shuuchuu.id",
+        id_pattern=ID_PATTERN,
+        remote="labs",
+        branch="main",
+        break_published_links=break_published_links,
+    )
+
+
+def _commit_published_files(work: Path, files: dict[str, str]) -> None:
+    for name, text in files.items():
+        path = work / "labs" / "published" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+    _git(work, "add", "-A")
+    _git(work, "commit", "-m", "Add published files")
+
+
+def test_publish_adds_the_published_files_at_their_paths(tmp_path: Path) -> None:
+    _remote, work = _make_repos(tmp_path)
+    _commit_published_files(
+        work, {"README.md": "# Labs\n", ".devcontainer/devcontainer.json": "{}\n"}
+    )
+
+    assert _publish_with_files(work) is True
+
+    names = _git(work, "ls-tree", "-r", "--name-only", "labs/main").split()
+    assert names == [
+        ".devcontainer/devcontainer.json",
+        "README.md",
+        "topic-demo-fr.ipynb",
+    ]
+    readme = _git(work, "show", "labs/main:README.md")
+    assert readme == "# Labs\n"
+    assert _publish_with_files(work) is False
+
+
+def test_publish_drops_a_published_file_freely(tmp_path: Path) -> None:
+    _remote, work = _make_repos(tmp_path)
+    _commit_published_files(work, {"README.md": "# Labs\n"})
+    _publish_with_files(work)
+    _git(work, "rm", "-q", "labs/published/README.md")
+    _git(work, "commit", "-m", "Drop the README")
+
+    assert _publish_with_files(work) is True
+
+    names = _git(work, "ls-tree", "-r", "--name-only", "labs/main").split()
+    assert names == ["topic-demo-fr.ipynb"]
+
+
+def test_publish_refuses_uncommitted_published_files(tmp_path: Path) -> None:
+    _remote, work = _make_repos(tmp_path)
+    _commit_published_files(work, {"README.md": "# Labs\n"})
+    (work / "labs" / "published" / "README.md").write_text("# Changed\n")
+
+    with raises(LabPublishRefusedError, match="labs/published"):
+        _publish_with_files(work)
+
+
+def test_publish_refuses_a_notebook_among_the_published_files(tmp_path: Path) -> None:
+    _remote, work = _make_repos(tmp_path)
+    _commit_published_files(work, {"stray.ipynb": "{}"})
+
+    with raises(LabPublishRefusedError, match=r"stray\.ipynb"):
+        _publish_with_files(work)

@@ -177,6 +177,27 @@ def translation_section(
     return StatusSection("Translation", backlog, _capped(items))
 
 
+def _published_files_items(
+    committed: dict[str, str], published: dict[str, str], published_rel: str
+) -> list[StatusItem]:
+    # The files of labs/published/ that differ from the published ones.
+    differ = sorted(
+        path
+        for path in committed.keys() | published.keys()
+        if committed.get(path) != published.get(path)
+    )
+    if not differ:
+        return []
+    shown = ", ".join(differ[:8]) + (", ..." if len(differ) > 8 else "")
+    return [
+        StatusItem(
+            f"{_count(len(differ), 'file')} of {published_rel} not as published: "
+            f"{shown}",
+            "`deckz labs publish`, once they're reviewed",
+        )
+    ]
+
+
 def labs_section(
     settings: "GlobalSettings", uncommitted: set[str], *, fetch: bool
 ) -> StatusSection:
@@ -186,7 +207,7 @@ def labs_section(
         Its section.
     """
     from .exceptions import LabPublishRefusedError
-    from .labs.publishing import _published_notebooks
+    from .labs.publishing import _published_files, _published_notebooks
 
     git_dir = settings.paths.git_dir
     notebooks_dir = settings.paths.labs_notebooks_dir
@@ -199,6 +220,16 @@ def labs_section(
         items.append(
             StatusItem(
                 f"{_count(len(pending), 'notebook')} with uncommitted changes",
+                "commit them before publishing",
+            )
+        )
+    published_dir = settings.paths.labs_published_dir
+    published_rel = published_dir.relative_to(git_dir).as_posix()
+    if pending := sorted(p for p in uncommitted if p.startswith(published_rel + "/")):
+        items.append(
+            StatusItem(
+                f"{_count(len(pending), 'published file')} with uncommitted "
+                f"changes in {published_rel}",
                 "commit them before publishing",
             )
         )
@@ -217,14 +248,20 @@ def labs_section(
             id_pattern=labs.id_pattern,
             not_secrets=labs.not_secrets,
         )
+        files = _published_files(git_dir, published_dir)
     except LabPublishRefusedError as error:
         items.append(StatusItem(f"not publishable: {error}"))
         return StatusSection("Labs", "", _capped(items))
     published = {}
+    published_files = {}
     for line in (_git(git_dir, "ls-tree", "-r", remote) or "").splitlines():
         info, name = line.split("\t", 1)
-        published[name.removesuffix(".ipynb")] = info.split()[2]
+        if "/" not in name and name.endswith(".ipynb"):
+            published[name.removesuffix(".ipynb")] = info.split()[2]
+        else:
+            published_files[name] = info
     differ = sorted(lab for lab, sha in committed.items() if published.get(lab) != sha)
+    items += _published_files_items(files, published_files, published_rel)
     if differ:
         shown = ", ".join(differ[:8]) + (", ..." if len(differ) > 8 else "")
         items.append(

@@ -51,6 +51,7 @@ class GlobalPaths(BaseModel):
     assets_dir: _Path = cast("Path", "{git_dir}/assets")
     content_dir: _Path = cast("Path", "{git_dir}/content")
     labs_notebooks_dir: _Path = cast("Path", "{git_dir}/labs/notebooks")
+    labs_published_dir: _Path = cast("Path", "{git_dir}/labs/published")
     labs_gpu_dir: _Path = cast("Path", "{git_dir}/.run/gpu")
     scenes_dir: _Path = cast("Path", "{git_dir}/figures/scenes")
     videos_dir: _Path = cast("Path", "{assets_dir}/videos")

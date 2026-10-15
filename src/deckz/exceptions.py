@@ -65,6 +65,10 @@ class LabIdConflictError(DeckzError):
     """`deckz labs ids` found a duplicate or already-taken notebook ID."""
 
 
+class LabContainerError(DeckzError):
+    """`deckz labs check --container` can't build or start the dev container."""
+
+
 class LabPublishRefusedError(DeckzError):
     """`deckz labs publish` refuses to publish.
 

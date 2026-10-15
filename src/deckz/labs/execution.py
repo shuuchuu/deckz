@@ -13,10 +13,13 @@ import sys
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .inspecting import roles
 from .notebook import cell_source
+
+if TYPE_CHECKING:
+    from .container import Container
 
 EXEC_TIMEOUT = 300
 
@@ -258,11 +261,15 @@ def check_notebook(
     python: str = sys.executable,
     smoke: bool = False,
     timeout: int = EXEC_TIMEOUT,
+    container: "Container | None" = None,
+    name: str | None = None,
 ) -> Iterator[str]:
     """Structural checks plus an execution report for one notebook.
 
     Structural checks: a `heading` section not collapsed in Colab, an empty
-    one, and a stored error output.
+    one, and a stored error output. The execution runs with `python` and
+    this module's runner, or, given a `container`, for real in it, as
+    `name` (default: the file's name; see `labs.container`).
 
     Yields:
         One report line per problem or execution result.
@@ -287,4 +294,16 @@ def check_notebook(
                 yield f"  [{i}] stored error output: {out.get('ename')}"
     if "solution-heading" not in labels:
         yield f"  no {heading} section at all"
-    yield from run_notebook(notebook, labels, python, smoke=smoke, timeout=timeout)
+    if container is None:
+        yield from run_notebook(notebook, labels, python, smoke=smoke, timeout=timeout)
+        return
+    from .container import run_in_container
+
+    yield from run_in_container(
+        notebook,
+        labels,
+        name or path.name,
+        container,
+        smoke=smoke,
+        timeout=timeout,
+    )

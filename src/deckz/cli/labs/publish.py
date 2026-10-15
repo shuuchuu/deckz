@@ -7,8 +7,12 @@ from . import app
 def publish(*, break_published_links: bool = False, workdir: Path = Path()) -> None:
     """Replace the labs remote's branch with one commit of HEAD's lab notebooks.
 
-    Refuses to publish if the notebooks directory has uncommitted changes,
-    a committed notebook has no valid or unique ID (run `deckz labs ids`
+    The commit also holds the files committed under `labs/published/`
+    (`paths.labs_published_dir`), at the same paths: the published
+    repository's README, its `.devcontainer/` for Codespaces.
+
+    Refuses to publish if either directory has uncommitted changes, a
+    committed notebook has no valid or unique ID (run `deckz labs ids`
     first) or holds what looks like a credential (see the `lab-secrets`
     check), or doing so would drop an already-published notebook's name.
 
@@ -25,6 +29,7 @@ def publish(*, break_published_links: bool = False, workdir: Path = Path()) -> N
     published = publish_labs(
         settings.paths.git_dir,
         settings.paths.labs_notebooks_dir,
+        published_dir=settings.paths.labs_published_dir,
         id_metadata_key=settings.labs.id_metadata_key,
         id_pattern=settings.labs.id_pattern,
         remote=settings.labs.publish_remote,

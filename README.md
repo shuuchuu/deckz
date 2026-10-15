@@ -258,6 +258,11 @@ typst_ignore_system_fonts: true
 
   The notebooks directory itself (default `{git_dir}/labs/notebooks`) is
   `paths.labs_notebooks_dir`, set like any other path under `paths:`.
+  `deckz labs publish` also publishes the files committed under
+  `paths.labs_published_dir` (default `{git_dir}/labs/published`), at the
+  same paths: the published repository's README, a `.devcontainer/` that
+  opens the notebooks in GitHub Codespaces (which `deckz labs check
+  --container` runs them in).
 - `videos`: settings for the `deckz videos` commands, e.g.:
 
   ```yaml
@@ -1005,17 +1010,25 @@ The main commands:
   (charts and line art); `--no-recompress` disables this and needs no
   extra dependency, unlike the default, which needs Pillow
   (`deckz[labs]`) only when an image actually needs recompressing.
-- `deckz labs check [--smoke] [--python INTERPRETER] [--timeout SECONDS]
-  NOTEBOOKS...`: structural checks (uncollapsed/empty solution sections,
-  stored error outputs) plus an execution of every code cell, in a
-  throwaway directory, reporting which cells raise.
+- `deckz labs check [--smoke] [--python INTERPRETER] [--container]
+  [--timeout SECONDS] NOTEBOOKS...`: structural checks (uncollapsed/empty
+  solution sections, stored error outputs) plus an execution of every code
+  cell, in a throwaway directory, reporting which cells raise. Shell
+  commands other than data fetches are skipped (a lab may `pip install` or
+  `git push`); `--container` runs everything, with a real kernel, in the
+  published repository's dev container
+  (`paths.labs_published_dir`/`.devcontainer/devcontainer.json`, built
+  with Docker): what a Run all does in GitHub Codespaces, and in Colab for
+  a notebook that needs no GPU. The container is thrown away after each
+  notebook, and nothing is mounted into it.
 - `deckz labs compare [LAB_DIRS...]`: structural differences between
   fr/en notebook pairs beyond what a translation changes.
 - `deckz labs missing`: every notebook present in only one language.
 - `deckz labs dump NOTEBOOKS...`: a compact, readable view of one or more
   notebooks.
 - `deckz labs publish [--break-published-links]`: replace the labs
-  remote's branch with one commit of HEAD's lab notebooks, named by ID.
+  remote's branch with one commit of HEAD's lab notebooks, named by ID,
+  plus the files committed under `paths.labs_published_dir`.
 - `deckz labs gpu up|queue|run|status|fetch|report|down` (extra:
   `deckz[gpu]`): run notebooks on a rented GPU machine the way Colab runs
   them -- Colab's runtime image, `labs.gpu.cpus` CPUs per run, peak RAM
