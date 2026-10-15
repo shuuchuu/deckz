@@ -103,6 +103,9 @@ document.addEventListener("click", (event) => {
     const tab = item.dataset.showPanel;
     showPanel(!(panelShown() && currentTab === tab), tab);
   }
+  // The palette's commands show a tab, whatever is shown already.
+  const opened = event.target.closest("[data-open-panel]");
+  if (opened) showPanel(true, opened.dataset.openPanel);
   const toggle = event.target.closest("[data-toggle]");
   if (toggle) TOGGLES[toggle.dataset.toggle]?.();
 });

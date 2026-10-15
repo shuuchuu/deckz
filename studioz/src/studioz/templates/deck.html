@@ -14,7 +14,7 @@
     <span class="crumb deck-path" title="{{ deck }}">{% if folder %}<span class="crumb-dir">{{ folder }}/</span>{% endif %}<span class="crumb-name">{{ name }}</span></span>
     <span class="langs">
       {% for code in ("fr", "en") %}
-      <a href="?lang={{ code }}{% if view == 'changes' %}&vue=modifications{% endif %}"{% if code == lang %} class="current" aria-current="true"{% endif %}>{{ code }}</a>
+      <a data-lang="{{ code }}" href="?lang={{ code }}{% if view == 'changes' %}&vue=modifications{% endif %}"{% if code == lang %} class="current" aria-current="true"{% endif %}>{{ code }}</a>
       {% endfor %}
     </span>
     <span class="views">

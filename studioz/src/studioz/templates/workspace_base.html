@@ -7,6 +7,7 @@
 {% block head %}
 <script type="module" src="/static/layout.js"></script>
 <script type="module" src="/static/agent.js"></script>
+<script type="module" src="/static/palette.js"></script>
 {% block page_head %}{% endblock %}
 {% endblock %}
 {% block topbar %}{% include "_workspace_topbar.html" %}{% endblock %}
@@ -71,4 +72,11 @@
 <dialog id="action-dialog" class="commit-dialog" aria-label="Action"></dialog>
 <dialog id="commit-dialog" class="commit-dialog" aria-label="Committer"></dialog>
 <dialog id="sync-dialog" class="commit-dialog" aria-label="Synchroniser"></dialog>
+<dialog id="palette" class="palette" aria-label="Rechercher une formation ou une commande">
+  <input type="text" id="palette-input" autocomplete="off" spellcheck="false"
+         aria-controls="palette-list" placeholder="Une formation, ou « > » puis une commande">
+  <ul id="palette-list" role="listbox"></ul>
+  <p class="palette-hint">↑↓ pour choisir, Entrée pour ouvrir, Échap pour fermer · Ctrl+P : les formations · Ctrl+Maj+P ou F1 : les commandes</p>
+</dialog>
+{% include "_commands.html" %}
 {% endblock %}

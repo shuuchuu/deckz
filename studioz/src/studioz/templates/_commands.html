@@ -1,0 +1,39 @@
+{#- The command palette's commands (`palette.js`): each a hidden button
+    carrying what the page's own buttons carry (`data-dialog`, `data-toggle`,
+    `data-show-view`, `data-open-panel`), so that running one is clicking it;
+    `data-click` clicks another element of the page instead, `data-focus`
+    focuses one. Its text is the command's name, `data-keys` its shortcut. -#}
+{% set base = "/espaces/" ~ workspace.name %}
+{% set deck = deck or "" %}
+<div id="commands" hidden>
+  {% if deck %}
+  <button type="button" data-dialog="#action-dialog" data-url="{{ base }}/formations/{{ deck }}/construire/formulaire">Formation : construire les PDF…</button>
+  <button type="button" data-dialog="#action-dialog" data-url="{{ base }}/formations/{{ deck }}/envoyer/formulaire">Formation : envoyer les PDF sur Google Drive…</button>
+  <button type="button" data-click='.views button[data-view="slides"]'>Formation : voir les diapositives</button>
+  <button type="button" data-click='.views button[data-view="changes"]'>Formation : voir l'avant/après</button>
+  {% for code in ("fr", "en") if code != lang %}
+  <button type="button" data-click='.langs a[data-lang="{{ code }}"]'>Formation : passer en {{ code }}</button>
+  {% endfor %}
+  {% endif %}
+  <button type="button" data-dialog="#commit-dialog" data-url="{{ base }}/commit/formulaire" data-include="#commit-form"
+          data-values='{{ {"formation": deck, "lang": lang or "fr"} | tojson }}'>Modifications : committer…</button>
+  <button type="button" data-dialog="#sync-dialog" data-url="{{ base }}/synchronisation/formulaire"
+          data-values='{{ {"formation": deck} | tojson }}'>Modifications : synchroniser…</button>
+  <button type="button" data-dialog="#action-dialog" data-url="{{ base }}/publier/formulaire">Publication : publier les TP ou les vidéos…</button>
+  {% for workflow in declared.workflows %}
+  <button type="button" data-dialog="#action-dialog" data-url="{{ base }}/workflows/{{ workflow.key }}/formulaire"
+          data-values='{{ {"formation": deck if workflow.scope == "deck" else ""} | tojson }}'>Workflow : {{ workflow.title }}…</button>
+  {% endfor %}
+  <button type="button" data-focus="#agent-message">Agent : écrire à l'agent</button>
+  <button type="button" data-toggle="sidebar" data-keys="Ctrl+B">Affichage : barre latérale</button>
+  <button type="button" data-toggle="panel" data-keys="Ctrl+J">Affichage : panneau</button>
+  <button type="button" data-toggle="agent" data-keys="Ctrl+Alt+B">Affichage : agent</button>
+  <button type="button" data-show-view="formations">Affichage : Formations</button>
+  <button type="button" data-show-view="modifications">Affichage : Modifications</button>
+  <button type="button" data-show-view="publication">Affichage : Publication</button>
+  <button type="button" data-show-view="agent">Affichage : Avec l'agent</button>
+  <button type="button" data-open-panel="problemes">Affichage : Problèmes</button>
+  {% if deck %}<button type="button" data-open-panel="construction">Affichage : Construction</button>{% endif %}
+  <button type="button" data-open-panel="taches">Affichage : Tâches</button>
+  <button type="button" data-click=".brand">Aller à l'accueil : les espaces de travail</button>
+</div>

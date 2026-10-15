@@ -8,8 +8,8 @@
 (workflows: increments 1 to 5 under "Phase 4"), done overnight on 2026-10-11
 while the user slept, not yet tried by them; then "Rien à porter…" on the
 translation backlog (2026-10-11, after phase 4); then the VS Code layout's
-increments 1 to 3 (2026-10-15, under "The VS Code layout"). **Next:** that layout's
-increment 4 (the command palette), then phase 5 (long jobs), which needs planning first: GPU runs
+increments 1 to 4 (2026-10-15, under "The VS Code layout"). **Next:** phase 5 (long
+jobs), which needs planning first: GPU runs
 cost money. `git log origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed;
 nothing is released since 31.3.3. Push and release are the user's call.
@@ -1198,6 +1198,30 @@ first try at dragging the 5 px line missed it. Tried on `studioz-dev` (Chrome):
 side by side to 29 %, stacked (sidebars widened), the reset, the sash gone with the
 editor. **Left:** one ratio for both directions; no way to put the editor on the
 left, nor to stack them by choice when wide.
+
+**Increment 4: done** (2026-10-15): the palette, as VS Code's (`palette.js`).
+Ctrl+P, or the title bar's "Rechercher…", lists the decks (from the sidebar's tree,
+without the folders they all share); ">" first, Ctrl+Maj+P or F1 lists the commands:
+build, upload, the before/after view, the other language, commit, sync, publish,
+each declared workflow, writing to the agent, every view and tab, home. Matching
+ignores case and accents and takes a substring first, then the letters in order
+("eurnxt" finds `2025-11-euronext`). A command is a hidden button
+(`_commands.html`) carrying what the page's own buttons carry (`data-dialog`,
+`data-toggle`, `data-show-view`, the new `data-open-panel`, which shows a tab
+whatever is shown); running it clicks it, so no action is written twice;
+`data-click` clicks another element, `data-focus` focuses one. Chrome leaves
+Ctrl+P (print) and F1 to the page. The deck toolbar's buttons stay, the palette
+being for who knows it. Found: since increment 3, with the editor closed, the PDF
+took only half the width (a flex grow factor under 1 takes only that share of the
+free space; increment 3's check ran stacked, where it doesn't show); and the
+language links' `href` become absolute once the view switches (`deck.js`), so
+commands find them by `data-lang`. Tried on `studioz-dev` (Chrome): Ctrl+P, Ctrl+Maj+P,
+F1, building's dialog, the QA workflow's form (closed, not started), Problèmes,
+the agent's box focused, avant/après, the switch to English, opening another deck.
+Switching to English for the first time stalled the tab's script runner 45 s while
+its first English build ran, then all was well: not looked into. **Left:**
+Firefox keeps Ctrl+Maj+P (private window), so there it's F1 or ">"; no recent decks
+or files first; content files aren't in Ctrl+P.
 
 ### Starting phase 5
 

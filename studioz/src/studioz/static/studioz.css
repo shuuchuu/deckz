@@ -142,6 +142,8 @@ tr.closed td { color: var(--muted); }
 .viewer-area { position: relative; flex: var(--split) 1 0; min-width: 0; background: #525659; }
 .sash[data-side="split"] { flex: 0 0 5px; }
 .deck-body:has(> .editor-pane[hidden]) > .sash[data-side="split"] { display: none; }
+/* Alone, the PDF takes it all: a grow factor under 1 would only take that share. */
+.deck-body:has(> .editor-pane[hidden]) > .viewer-area { flex: 1 1 0; }
 /* pdf.js requires an absolutely positioned container. */
 .viewer-container { position: absolute; inset: 0; overflow: auto; }
 .viewer-container .page { cursor: pointer; }
@@ -535,3 +537,24 @@ button.status-item:hover { background: rgb(255 255 255 / 0.15); }
 .bottom-panel a.problem:hover { text-decoration: underline; }
 .build-output .errors p { margin: 0; }
 .build-output a.problem { color: inherit; }
+
+/* The palette (`palette.js`), at the top as VS Code's, and the title bar's search. */
+.command-center { display: inline-flex; align-items: center; gap: 0.5rem; margin: 0 auto; width: min(32rem, 40vw); padding: 0.15rem 0.6rem; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--muted); font-size: 0.85em; text-align: left; overflow: hidden; white-space: nowrap; }
+.command-center:hover { color: var(--text); border-color: var(--muted); }
+.command-center svg { flex: none; width: 14px; height: 14px; fill: none; stroke: currentcolor; stroke-width: 2; }
+.command-center kbd { margin-left: auto; font: inherit; font-size: 0.9em; opacity: 0.8; }
+.shell .topbar-actions { margin-left: 0; }
+.palette { width: min(40rem, calc(100vw - 2rem)); margin: 3rem auto auto; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); box-shadow: 0 8px 24px rgb(0 0 0 / 0.35); }
+.palette::backdrop { background: transparent; }
+.palette input { width: 100%; padding: 0.5rem 0.7rem; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; font-size: 0.95rem; outline: none; }
+.palette ul { list-style: none; margin: 0; padding: 0.25rem 0; max-height: min(24rem, 60vh); overflow-y: auto; }
+.palette li { display: flex; gap: 1rem; align-items: baseline; padding: 0.25rem 0.7rem; cursor: pointer; font-size: 0.9rem; }
+.palette li[aria-selected="true"] { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.palette li.empty { cursor: default; color: var(--muted); }
+.palette-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.palette-detail { color: var(--muted); font-size: 0.8em; white-space: nowrap; }
+.palette-hint { margin: 0; padding: 0.3rem 0.7rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.75rem; }
+@media (max-width: 700px) {
+  .command-center { width: auto; }
+  .command-center kbd { display: none; }
+}

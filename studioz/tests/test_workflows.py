@@ -570,3 +570,23 @@ def test_a_report_then_its_follow_up(
 def test_no_reports_no_panel(studio: TestClient) -> None:
     assert "<h2>Rapports" not in studio.get("/espaces/demo/rapports").text
     assert 'hx-get="/espaces/demo/rapports"' in studio.get("/espaces/demo").text
+
+
+def test_the_palette_s_commands(studio: TestClient) -> None:
+    deck = studio.get("/espaces/demo/formations/client/abc").text
+    commands = deck.split('<div id="commands" hidden>')[1].split("</div>")[0]
+
+    # Each command is a button the page's own handlers know.
+    assert (
+        'data-url="/espaces/demo/formations/client/abc/construire/formulaire"'
+        in commands
+    )
+    assert "Formation : passer en en" in commands
+    assert 'data-open-panel="construction"' in commands
+    assert "Workflow : Relire la formation (QA)…" in commands
+    assert '"formation": "client/abc"' in commands
+    page = studio.get("/espaces/demo").text
+    workspace = page.split('<div id="commands" hidden>')[1].split("</div>")[0]
+    assert "Formation :" not in workspace
+    assert "Workflow : Nouvelle formation…" in workspace
+    assert 'id="palette"' in page
