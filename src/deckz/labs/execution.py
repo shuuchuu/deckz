@@ -196,9 +196,20 @@ def report_lines(stderr: str, returncode: int) -> Iterator[str]:
         for line in stderr.split("\n")
         if line.startswith(EVENT)
     ]
-    failures = [event for event in events if event[0] != "skipped-shell"]
+    markers = {"skipped-shell", "kernel-died"}
+    # A failure reported again by a rerun (`labs.container`) is reported once.
+    failures = list(
+        dict.fromkeys(tuple(event) for event in events if event[0] not in markers)
+    )
     for _, cmd in (event for event in events if event[0] == "skipped-shell"):
         yield f"  shell command not run (not a data fetch): {cmd[:120]}"
+    for _, i, rerun in (event for event in events if event[0] == "kernel-died"):
+        yield (
+            f"  [{i}] the kernel died: ran the notebook again from the start, as a "
+            "trainee would after Colab restarts it"
+            if rerun
+            else f"  [{i}] the kernel died again"
+        )
     if returncode:
         # Killed (out of memory: -9) or crashed: the cells after the last event
         # never ran.

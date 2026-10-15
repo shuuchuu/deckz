@@ -37,12 +37,20 @@ import json, pathlib, sys
 
 import nbformat
 from nbclient import NotebookClient
+from nbclient.exceptions import DeadKernelError
 
 EVENT = "\x1eQA "
 NOTEBOOK = __NOTEBOOK__
 ROLES = __ROLES__
 OFFSET = __OFFSET__
 NAME = __NAME__
+
+
+running = [-1]
+
+
+def started(cell, cell_index):
+    running[0] = cell_index
 
 
 def executed(cell, cell_index, execute_reply):
@@ -57,15 +65,26 @@ def executed(cell, cell_index, execute_reply):
 
 path = pathlib.Path(NAME)
 path.write_text(json.dumps(NOTEBOOK))
-nb = nbformat.read(path, as_version=4)
-NotebookClient(
-    nb,
-    timeout=None,
-    allow_errors=True,
-    kernel_name="python3",
-    resources={"metadata": {"path": str(pathlib.Path.cwd())}},
-    on_cell_executed=executed,
-).execute()
+# A setup cell may kill its kernel on purpose, for Colab to restart it on a project
+# it just installed ("run this cell twice"): the trainee then runs the notebook again,
+# with the files the first run left. So does this, once.
+for attempt in range(2):
+    nb = nbformat.read(path, as_version=4)
+    client = NotebookClient(
+        nb,
+        timeout=None,
+        allow_errors=True,
+        kernel_name="python3",
+        resources={"metadata": {"path": str(pathlib.Path.cwd())}},
+        on_cell_execute=started,
+        on_cell_executed=executed,
+    )
+    try:
+        client.execute()
+        break
+    except DeadKernelError:
+        event = ["kernel-died", running[0] - OFFSET, attempt == 0]
+        print(EVENT + json.dumps(event), file=sys.__stderr__, flush=True)
 """
 
 # Prepended as a code cell for `--smoke`: every Lightning Trainer capped to one short

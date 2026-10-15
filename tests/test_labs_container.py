@@ -88,3 +88,22 @@ def test_repository_name_is_the_remote_urls_last_part(tmp_path: Path) -> None:
 
     assert repository_name(tmp_path, "labs") == "labs"
     assert repository_name(tmp_path, "missing") == "missing"
+
+
+def test_a_kernel_death_and_a_failure_reported_twice_read_once() -> None:
+    from deckz.labs.execution import EVENT, report_lines
+
+    events = [
+        [2, "code", "ValueError: x"],
+        ["kernel-died", 3, True],
+        [2, "code", "ValueError: x"],
+    ]
+    stderr = "".join(EVENT + json.dumps(event) + "\n" for event in events)
+
+    lines = list(report_lines(stderr, 0))
+
+    assert lines == [
+        "  [3] the kernel died: ran the notebook again from the start, as a "
+        "trainee would after Colab restarts it",
+        "  [2] code cell raised ValueError: x",
+    ]

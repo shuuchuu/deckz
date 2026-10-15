@@ -1020,7 +1020,9 @@ The main commands:
   (`paths.labs_published_dir`/`.devcontainer/devcontainer.json`, built
   with Docker): what a Run all does in GitHub Codespaces, and in Colab for
   a notebook that needs no GPU. The container is thrown away after each
-  notebook, and nothing is mounted into it.
+  notebook, and nothing is mounted into it. When the kernel dies (a setup
+  cell that kills it for Colab to restart it on what it installed), the
+  notebook runs once more from the start, as a trainee would run it again.
 - `deckz labs compare [LAB_DIRS...]`: structural differences between
   fr/en notebook pairs beyond what a translation changes.
 - `deckz labs missing`: every notebook present in only one language.
