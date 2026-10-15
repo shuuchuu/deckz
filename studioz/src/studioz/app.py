@@ -922,12 +922,12 @@ def jobs_badge(request: Request, studio: StudioDep, name: str) -> Response:
     )
 
 
-@router.post("/espaces/{name}/taches", response_class=HTMLResponse)
+@router.get("/espaces/{name}/taches", response_class=HTMLResponse)
 def jobs_list(request: Request, studio: StudioDep, name: str) -> Response:
     """The workspace's jobs, the latest one's log shown.
 
     Returns:
-        The jobs dialog's content.
+        The panel's Tâches tab, which reloads itself when a job starts.
     """
     found = studio.workspace(name)
     return _render(
@@ -967,13 +967,17 @@ def job_stop(request: Request, studio: StudioDep, name: str, job_id: int) -> Res
 
 
 def _started(request: Request, found: workspaces.Workspace) -> Response:
-    """The jobs dialog, the job just started first, its log shown.
+    """The job just started, its log shown, in the dialog that started it.
 
     Returns:
-        The response, telling the top bar's summary.
+        The response, whose events (once in the page) close the dialog for \
+        the panel's Tâches tab and reload what shows the jobs.
     """
-    response = jobs_list(request, _studio(request), found.name)
-    response.headers["HX-Trigger"] = "jobs-changed"
+    job = _studio(request).jobs.jobs(found.worktree.path)[0]
+    response = _render(request, "_job_started.html", workspace=found, job=job)
+    response.headers["HX-Trigger-After-Settle"] = json.dumps(
+        {"jobs-changed": None, "job-started": None}
+    )
     return response
 
 

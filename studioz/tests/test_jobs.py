@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 from time import monotonic, sleep
@@ -147,7 +148,11 @@ def test_build_a_deck_every_option_spelled_out(
         headers=ORIGIN,
     )
 
-    assert response.headers["HX-Trigger"] == "jobs-changed"
+    # The page closes the dialog for the panel's Tâches tab.
+    assert json.loads(response.headers["HX-Trigger-After-Settle"]) == {
+        "jobs-changed": None,
+        "job-started": None,
+    }
     job = _job(client, response.text)
     assert job.state is JobState.DONE
     assert job.title == "Construire client/abc (fr, en : support, version à imprimer)"
@@ -161,7 +166,7 @@ def test_build_a_deck_every_option_spelled_out(
     ) in job.log
     badge = client.get("/espaces/demo/taches/resume").text
     assert "Dernière tâche terminée" in badge
-    listed = client.post("/espaces/demo/taches", headers=ORIGIN).text
+    listed = client.get("/espaces/demo/taches").text
     assert "--print --no-part-handouts" in listed
 
 

@@ -1,0 +1,10 @@
+{#- What a dialog shows once its job started: studioz's pages close it at once
+    for the panel's Tâches tab (`layout.js`). -#}
+<div class="commit-form" data-job-started>
+  <header>
+    <h2>Tâche lancée</h2>
+    <button type="button" class="secondary" onclick="this.closest('dialog').close()">Fermer</button>
+  </header>
+  <p class="hint">Elle se poursuit dans le panneau, onglet Tâches (Ctrl+J).</p>
+  {% with open = true %}{% include "_job.html" %}{% endwith %}
+</div>

@@ -4,6 +4,7 @@
 // "Avant/après" view shows the frames changed since the last commit
 // (`_comparison.html`), each page drawn by pdf.js once in view.
 import { SourceEditor } from "/static/editor.js";
+import { showPanel } from "/static/layout.js";
 import * as pdfjsLib from "/static/vendor/pdfjs/pdf.min.mjs";
 
 globalThis.pdfjsLib = pdfjsLib;
@@ -20,12 +21,22 @@ const LABELS = {
   disconnected: "Connexion perdue, nouvelle tentative…",
 };
 
+// The panel's Construction tab says it in a sentence.
+const SUMMARIES = {
+  building: "La formation se construit avec vos dernières modifications…",
+  built: "La formation est construite et à jour.",
+  failed: "La dernière construction a échoué ; le PDF affiché est celui d'avant.",
+  stopped: "La construction s'est arrêtée.",
+  disconnected: "La connexion à la construction est perdue ; nouvelle tentative…",
+};
+
 const deck = document.getElementById("deck");
 const container = document.getElementById("viewer-container");
 const build = document.getElementById("build");
 const errors = document.getElementById("errors");
 const errorMessage = document.getElementById("error-message");
-const errorDetails = document.getElementById("error-details");
+const summary = document.getElementById("build-summary");
+const failedDot = document.getElementById("build-dot");
 const errorLines = document.getElementById("error-lines");
 const waiting = document.getElementById("waiting");
 const pageNumber = document.getElementById("page-number");
@@ -169,15 +180,31 @@ document.addEventListener("click", (event) => {
 });
 
 function setState(state, lines = []) {
-  if (state !== build.dataset.state && (state === "built" || state === "failed")) {
+  const previous = build.dataset.state;
+  if (state !== previous && (state === "built" || state === "failed")) {
     document.body.dispatchEvent(new Event("workspace-changed"));
   }
   build.dataset.state = state;
   build.textContent = LABELS[state] ?? state;
-  errors.hidden = state !== "failed";
-  errorMessage.textContent = lines[0] ?? "";
-  errorDetails.hidden = lines.length < 2;
+  summary.textContent = SUMMARIES[state] ?? state;
+  errors.hidden = failedDot.hidden = state !== "failed";
+  // deckz names the file and line first: a link to them, as in Problems.
+  const located = /^([^\s:]+):(\d+):/.exec(lines[0] ?? "");
+  if (located) {
+    const link = Object.assign(document.createElement("a"), {
+      href: "#",
+      className: "problem",
+      textContent: lines[0],
+    });
+    Object.assign(link.dataset, { file: located[1], line: located[2] });
+    errorMessage.replaceChildren(link);
+  } else {
+    errorMessage.textContent = lines[0] ?? "";
+  }
+  errorLines.hidden = lines.length < 2;
   errorLines.textContent = lines.slice(1).join("\n");
+  // A build failing shows why, as VS Code shows a task's output.
+  if (state === "failed" && previous !== "failed") showPanel(true, "construction");
 }
 
 const source = new EventSource(deck.dataset.events);

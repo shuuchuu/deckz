@@ -1,7 +1,7 @@
 {#- A workspace's pages, laid out like VS Code: an activity bar choosing the
-    sidebar's view, the page's own content, the agent on the right, and a
-    status bar. layout.js keeps the sidebar's view, both sidebars' widths and
-    whether they show, per browser. -#}
+    sidebar's view, the page's own content above a panel of tabs, the agent on
+    the right, and a status bar. layout.js keeps the sidebar's view, the
+    panel's tab, their sizes and whether they show, per browser. -#}
 {% extends "base.html" %}
 {% block body_class %}shell{% endblock %}
 {% block head %}
@@ -17,9 +17,10 @@
     const stored = (key) => localStorage.getItem(`studioz-${key}`);
     document.body.classList.toggle("sidebar-hidden", stored("sidebar-hidden") === "1");
     document.body.classList.toggle("agent-folded", stored("agent-folded") === "1");
-    for (const side of ["sidebar", "agent"]) {
-      const width = Number(stored(`${side}-width`));
-      if (width) document.body.style.setProperty(`--${side}-width`, `${width}px`);
+    document.body.classList.toggle("panel-hidden", stored("panel-shown") !== "1");
+    for (const [side, size] of [["sidebar", "width"], ["agent", "width"], ["panel", "height"]]) {
+      const pixels = Number(stored(`${side}-${size}`));
+      if (pixels) document.body.style.setProperty(`--${side}-${size}`, `${pixels}px`);
     }
   } catch {}
 </script>
@@ -27,6 +28,26 @@
   {% include "_sidebar.html" %}
   <div class="sash" data-side="sidebar" title="Glisser pour élargir, double-cliquer pour la largeur d'origine"></div>
   {% block main %}{% endblock %}
+  <div class="sash" data-side="panel" title="Glisser pour agrandir, double-cliquer pour la hauteur d'origine"></div>
+  <section class="bottom-panel" id="panel" aria-label="Panneau">
+    <header class="panel-bar">
+      <span role="tablist">
+        <button type="button" role="tab" data-panel-tab="problemes">Problèmes <span class="badge" data-badge-of="#problems"></span></button>
+        {% block panel_tabs %}{% endblock %}
+        <button type="button" role="tab" data-panel-tab="taches">Tâches <span class="badge" data-badge-of="#jobs"></span></button>
+      </span>
+      <button type="button" class="icon" data-toggle="panel" title="Masquer le panneau (Ctrl+J)" aria-label="Masquer le panneau">✕</button>
+    </header>
+    <div class="panel-view" data-panel-view="problemes" role="tabpanel">
+      <section class="problems" id="problems" hx-swap="outerHTML" hx-trigger="load"
+               hx-get="/espaces/{{ workspace.name }}/problemes{% if deck %}?formation={{ deck }}&lang={{ lang }}{% endif %}">
+      </section>
+    </div>
+    {% block panel_views %}{% endblock %}
+    <div class="panel-view" data-panel-view="taches" role="tabpanel" hidden>
+      <section class="jobs" id="jobs" hx-get="/espaces/{{ workspace.name }}/taches" hx-trigger="load" hx-swap="outerHTML"></section>
+    </div>
+  </section>
   <div class="sash" data-side="agent" title="Glisser pour élargir, double-cliquer pour la largeur d'origine"></div>
   {% include "_agent.html" %}
 </div>
@@ -35,8 +56,8 @@
   <button type="button" class="status-item" id="status-branch" data-show-view="modifications"
           title="{{ worktree.path }} : les modifications et la synchronisation">
     <span class="branch">⎇ {{ worktree.branch }}</span><span class="sync-counts" id="status-sync"></span></button>
-  <button type="button" class="status-item" id="status-problems" data-show-view="problemes"
-          title="Les problèmes de l'espace">⚠ <span class="count">…</span></button>
+  <button type="button" class="status-item" id="status-problems" data-show-panel="problemes"
+          title="Les problèmes de l'espace (Ctrl+J : le panneau)">⚠ <span class="count">…</span></button>
   {% block status %}{% endblock %}
   <span class="status-right">
     {% block status_right %}{% endblock %}

@@ -32,7 +32,7 @@ def test_deck_page(client: TestClient, workspace: Path) -> None:
 
     assert page.status_code == 200
     assert f'data-events="{DECK}/evenements?lang=fr"' in page.text
-    assert 'class="deck current" data-path="client/abc"' in page.text
+    assert 'class="deck-item current" data-path="client/abc"' in page.text
     assert 'href="?lang=en"' in page.text
 
 
@@ -108,3 +108,17 @@ def test_errors_name_files_relative_to_the_workspace(workspace: Path) -> None:
         "state": "failed",
         "errors": ["content/x.md:3: oops"],
     }
+
+
+def test_the_panel_s_tabs(client: TestClient, workspace: Path) -> None:
+    deck = client.get(DECK).text
+    workspace_page = client.get("/espaces/demo").text
+
+    for page in (deck, workspace_page):
+        assert 'data-panel-tab="problemes"' in page
+        assert 'data-panel-tab="taches"' in page
+        assert 'hx-get="/espaces/demo/taches"' in page
+    # A deck's build has its own tab, where its errors show.
+    assert 'data-panel-tab="construction"' in deck
+    assert 'id="error-lines"' in deck
+    assert 'data-panel-tab="construction"' not in workspace_page

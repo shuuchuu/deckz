@@ -1,11 +1,10 @@
-<div class="commit-form jobs">
-  <header>
-    <h2>Tâches de l'espace</h2>
-    <button type="button" class="secondary" onclick="this.closest('dialog').close()">Fermer</button>
-  </header>
+{#- The panel's Tâches tab: the workspace's jobs, the latest one's log shown;
+    each running job reloads itself (`_job.html`). -#}
+<section class="jobs" id="jobs" hx-get="/espaces/{{ workspace.name }}/taches" hx-trigger="jobs-changed from:body" hx-swap="outerHTML">
+  <span class="count" hidden>{{ jobs | rejectattr("finished") | list | length }}</span>
   {% for job in jobs %}
   {% with open = loop.first %}{% include "_job.html" %}{% endwith %}
   {% else %}
   <p class="empty">Aucune tâche depuis le démarrage de studioz. Construire ou envoyer une formation, publier les TP ou les vidéos en lance une.</p>
   {% endfor %}
-</div>
+</section>

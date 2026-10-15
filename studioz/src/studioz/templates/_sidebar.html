@@ -10,7 +10,7 @@
   </details></li>
   {% endfor %}
   {% for name, path in folder.decks %}
-  <li class="deck{% if path == deck %} current{% endif %}" data-path="{{ path }}"><a href="{{ base }}/{{ path }}" title="{{ path }}">{{ name }}</a></li>
+  <li class="deck-item{% if path == deck %} current{% endif %}" data-path="{{ path }}"><a href="{{ base }}/{{ path }}" title="{{ path }}">{{ name }}</a></li>
   {% endfor %}
 {%- endmacro %}
 <nav class="activity-bar" aria-label="Vues">
@@ -22,11 +22,6 @@
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-6 3-11 7"/></svg>
     <span class="visually-hidden">Modifications</span>
     <span class="badge" data-badge-of="#changes"></span>
-  </button>
-  <button type="button" data-view="problemes" title="Problèmes">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20Z"/><path d="M12 10v4M12 17v.5"/></svg>
-    <span class="visually-hidden">Problèmes</span>
-    <span class="badge" data-badge-of="#problems"></span>
   </button>
   <button type="button" data-view="publication" title="Publication des TP et des vidéos">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg>
@@ -60,12 +55,6 @@
     </section>
     <section class="backlog" id="backlog" hx-swap="outerHTML" hx-trigger="load"
              hx-get="/espaces/{{ workspace.name }}/traductions{% if deck %}?formation={{ deck | urlencode }}{% endif %}"></section>
-  </section>
-  <section class="view" data-view="problemes" aria-label="Problèmes" hidden>
-    <section class="problems" id="problems" hx-swap="outerHTML" hx-trigger="load"
-             hx-get="/espaces/{{ workspace.name }}/problemes{% if deck %}?formation={{ deck }}&lang={{ lang }}{% endif %}">
-      <h2>Problèmes</h2>
-    </section>
   </section>
   <section class="view" data-view="publication" aria-label="Publication" hidden>
     <section class="publication" id="publication" hx-swap="outerHTML" hx-trigger="load"

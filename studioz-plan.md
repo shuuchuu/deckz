@@ -8,8 +8,8 @@
 (workflows: increments 1 to 5 under "Phase 4"), done overnight on 2026-10-11
 while the user slept, not yet tried by them; then "Rien à porter…" on the
 translation backlog (2026-10-11, after phase 4); then the VS Code layout's
-increment 1 (2026-10-15, under "The VS Code layout"). **Next:** that layout's
-increments 2 to 4, then phase 5 (long jobs), which needs planning first: GPU runs
+increments 1 and 2 (2026-10-15, under "The VS Code layout"). **Next:** that layout's
+increments 3 and 4, then phase 5 (long jobs), which needs planning first: GPU runs
 cost money. `git log origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed;
 nothing is released since 31.3.3. Push and release are the user's call.
@@ -26,7 +26,7 @@ architecture):
 | `watches.py` | one `deckz run --watch` per workspace for the deck on screen; `environment()`/`workspace_environment()` for every command run in a workspace |
 | `sources.py` | what the editor may read and save (never over a version it didn't read, keeping line endings) |
 | `background.py` | commands rerun when a workspace's files change (`deckz status`, `deckz show affected`); `git status` parsing |
-| `problems.py`, `changes.py` | the sidebar's Problems and Changes panels; `changes.LangPairs` caches deckz's fr/en pairs |
+| `problems.py`, `changes.py` | the panel's Problèmes tab and the sidebar's Changes panel; `changes.LangPairs` caches deckz's fr/en pairs |
 | `baselines.py`, `comparison.py` | handouts as of the last commit, frame-by-frame before/after |
 | `commits.py`, `sync.py` | the Commit and Synchronisation dialogs |
 | `jobs.py`, `actions.py` | the job queue; build, upload, publish |
@@ -34,7 +34,7 @@ architecture):
 | `checkpoints.py` | the workspace's files before and after each agent turn, and undoing the last one |
 | `asks.py` | what the dialogs ask the agent (prompts), and the proposed commit message |
 | `workflows.py` | the workflows a workspace's `deckz.yml` declares (`studioz.workflows`), their forms' prompts and files |
-| `static/` | `deck.js` (pdf.js viewer, comparison), `editor.js` (CodeMirror), `dialogs.js` (dialogs opened from reloading panels), `agent.js` (the agent panel), `layout.js` (the VS Code layout: activity bar, sidebars, sashes, status bar), vendored JS (`uv run doit vendor`) |
+| `static/` | `deck.js` (pdf.js viewer, comparison), `editor.js` (CodeMirror), `dialogs.js` (dialogs opened from reloading panels), `agent.js` (the agent panel), `layout.js` (the VS Code layout: activity bar, sidebars, bottom panel, sashes, status bar), vendored JS (`uv run doit vendor`) |
 
 Tests: `studioz/tests/`, against temporary repositories, a fake `deckz` (a script
 in the workspace's `.venv/bin/`), a local bare remote and a fake Agent SDK client
@@ -104,7 +104,10 @@ Found along the way, not done (each increment's "Left" has the rest):
   for an ordinary reason (`grep` finding nothing, exit 1) shows as "Refusé ou en
   échec".
 - `test_interrupt_does_not_wait_for_running_compilations` (above) failed a
-  second time during phase 3, in the pre-commit hook; it passes alone.
+  second time during phase 3, in the pre-commit hook; it passes alone. On
+  2026-10-15 it failed again in the hook, with `test_cli_typst.py::
+  test_ctrl_c_stops_the_build_at_once` (its build not stopped within 20 s): both
+  passed alone and on the next run.
 - A limit pause doesn't survive a studioz restart (a pending question now
   does); no warning before a long task when a usage window is nearly full.
 - slides' workflows are committed in the workspace `studioz-workflows`
@@ -1133,7 +1136,9 @@ width), Ctrl+B and Ctrl+Alt+B (also the title bar's two toggles), all kept per
 browser and applied by an inline script before the first paint; and a status bar
 (branch with ↓/↑ from the Synchronisation panel, problem count, the build state,
 page, jobs, the agent's state) whose items open their view. Along the way, from the
-user during the trial:
+user during the trial (and, found in increment 2, a bug: a text substitution had
+put the deck tree's script inside `showSidebar`, so its filter and remembered folders
+worked only after the sidebar was toggled; the trial never typed in the filter):
 - the deck and file paths are one line, their folder shortened first (an ellipsis),
   the name whole; the editor's "Enregistré"/"Enregistrer" became VS Code's dot,
   shown while the file has unsaved changes (a click or Ctrl+S saves);
@@ -1158,6 +1163,30 @@ stacked editor, one-line path), stopping at the publish dialog. **Left:** a deck
 labs waiting to be published show in both Problèmes and Publication; the deck tree
 has no keyboard navigation; the workspace page's own workflows list now duplicates
 the Avec l'agent view.
+
+**Increment 2: done** (2026-10-15): the bottom panel, under the page only (the
+sidebars run the whole height, as in VS Code), shown by Ctrl+J, the title bar's
+middle toggle or a status bar item (which toggles its own tab), resizable, its tab,
+height and visibility kept per browser, hidden at first. Tabs: **Problèmes** (out
+of the sidebar, its fixes beside each problem), **Construction** on a deck page (the
+build's state in a sentence and deckz's error lines instead of the red banner; the
+`file:line` deckz names first is a link to the editor; a red dot on the tab; the
+panel opens on it when a build fails, as VS Code shows a failing task's output), and
+**Tâches** (the jobs' list and logs, the dialog the status bar opened before gone).
+A job started from a dialog (build, upload, publish) answers with
+`HX-Trigger-After-Settle: jobs-changed, job-started`: the page closes the dialog
+showing it and opens Tâches; after settling, and found by its content, since the
+form that sent the request is no longer in the page by then. `GET /taches` is now
+the tab's content. Found: the deck tree's `li.deck` took the deck page's `.deck`
+(`display: flex`) over `hidden`, so the filter hid nothing on deck pages: now
+`li.deck-item`, and `[hidden]` wins over any class (`!important`), this being the
+third collision. Tried on `studioz-dev` (Chrome): Ctrl+J (Chrome lets the page have
+it), a broken Jinja tag written in a content file (a copy kept, then put back)
+opening Construction, its link opening the editor on line 28, the build back to "À
+jour" with the panel left open, a handout build started from Construire (the dialog
+closed, Tâches showing its log), the filter, the sash. **Left:** the before/after
+view and the agent's own errors could use the panel too; no maximise button; the
+Tâches log isn't kept scrolled to its end as it grows.
 
 ### Starting phase 5
 

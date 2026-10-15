@@ -31,11 +31,6 @@
               title="Envoyer les PDF de la formation sur Google Drive">Envoyer…</button>
     </span>
   </div>
-  <div class="errors" id="errors" hidden>
-    <p>La construction a échoué (le dernier PDF construit reste affiché) :</p>
-    <p><code id="error-message"></code></p>
-    <details id="error-details" hidden><summary>Détails</summary><pre id="error-lines"></pre></details>
-  </div>
   <div class="deck-body">
     <div class="viewer-area">
       <div class="viewer-container" id="viewer-container" title="Cliquer sur une diapositive pour ouvrir sa source">
@@ -65,8 +60,21 @@
   </div>
 </main>
 {% endblock %}
+{% block panel_tabs %}
+<button type="button" role="tab" data-panel-tab="construction">Construction <span class="failed-dot" id="build-dot" hidden title="La dernière construction a échoué">●</span></button>
+{% endblock %}
+{% block panel_views %}
+<div class="panel-view build-output" data-panel-view="construction" role="tabpanel" hidden>
+  <p class="build-summary" id="build-summary">Connexion à la construction de la formation…</p>
+  <div class="errors" id="errors" hidden>
+    <p><code id="error-message"></code></p>
+    <pre id="error-lines" hidden></pre>
+  </div>
+</div>
+{% endblock %}
 {% block status %}
-<span class="status-item build" id="build" data-state="building">Connexion…</span>
+<button type="button" class="status-item build" id="build" data-state="building" data-show-panel="construction"
+        title="La construction de la formation, qui suit vos modifications">Connexion…</button>
 {% endblock %}
 {% block status_right %}
 <span class="status-item page-number" id="page-number"></span>
