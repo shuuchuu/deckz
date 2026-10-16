@@ -3,7 +3,9 @@
 Every notebook deckz writes (`Notebook.save()`, `deckz labs fmt`) uses one
 canonical JSON style: indent 1, sorted keys, every cell's `source` as a list
 of lines (nbformat's own convention), so a notebook's JSON is readable as is
-and a one-cell edit stays a one-cell diff.
+and a one-cell edit stays a one-cell diff. A Python kernel's notebook also
+gets `metadata.language_info`, which Colab leaves out of some notebooks and
+without which ruff skips them.
 
 Use `Notebook` from a throwaway script, with `PYTHONPATH` set so `deckz` is
 importable (or `uv run python` in deckz's own virtualenv):
@@ -133,9 +135,18 @@ def canonical_dump(notebook: dict[str, Any]) -> str:
         {**cell, "source": cell_source(cell).splitlines(keepends=True)}
         for cell in notebook.get("cells", [])
     ]
+    metadata = notebook.get("metadata", {})
+    kernelspec = metadata.get("kernelspec", {})
+    if "language_info" not in metadata and (
+        kernelspec.get("language") == "python"
+        or str(kernelspec.get("name", "")).startswith("python")
+    ):
+        # Ruff only formats and lints a notebook whose language_info says Python:
+        # without it, `ruff format --check` passes it silently.
+        metadata = {**metadata, "language_info": {"name": "python"}}
     return (
         json.dumps(
-            {**notebook, "cells": cells},
+            {**notebook, "cells": cells, "metadata": metadata},
             indent=1,
             sort_keys=True,
             ensure_ascii=False,
