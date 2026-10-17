@@ -1373,6 +1373,19 @@ job stopped while deckz is still importing logs a Python traceback (deckz's Ctrl
 several tabs of one workspace each show the toast; a crash (not a stop) leaves a step's
 process running until its next log line finds the pipe closed.
 
+Tried again in real Chrome (2026-10-17), on the Fortinet deck: the bell's
+"Notifications du bureau…" opened Chrome's permission prompt, and once allowed the
+button left the center. A build that ended while the tab was in the background gave a
+real desktop notification (Chrome fired its `show` event; the user saw it, "informative").
+The toasts and the center look right: a success hid itself after 8 s, a failure (a
+broken Jinja tag, put back) stayed with deckz's error line. studioz stopped with Ctrl-C
+during the deck's full build (fr and en): the job came back "interrompue" with a
+toast, no `deckz` left, and Relancer built it again. **Found and fixed:** the Tâches
+tab's count of running jobs stayed at 1 after the job ended, since only the job's own
+section reloads then; its last reload now fires `jobs-changed`, which reloads the tab.
+The extension can't put its tab in the background (no `visibilitychange`): the user
+clicked another tab for the desktop notification's trial.
+
 ### Then, with the colleague
 
 The acceptance test the operability plan already plans, extended: the colleague does a

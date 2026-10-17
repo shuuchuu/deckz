@@ -966,10 +966,14 @@ def job_view(request: Request, studio: StudioDep, name: str, job_id: int) -> Res
     """A job and its log, which reloads itself until the job ends.
 
     Returns:
-        The job's section.
+        The job's section; once it ended, with the event reloading the \
+        Tâches tab, whose count of the jobs running it changed.
     """
     found, job = _job_or_404(studio, name, job_id)
-    return _render(request, "_job.html", workspace=found, job=job, open=True)
+    response = _render(request, "_job.html", workspace=found, job=job, open=True)
+    if job.finished:
+        response.headers["HX-Trigger-After-Settle"] = "jobs-changed"
+    return response
 
 
 @router.post("/espaces/{name}/taches/{job_id}/arreter", response_class=HTMLResponse)

@@ -168,6 +168,10 @@ def test_build_a_deck_every_option_spelled_out(
     assert "Dernière tâche terminée" in badge
     listed = client.get("/espaces/demo/taches").text
     assert "--print --no-part-handouts" in listed
+    # The job's last reload has the tab, and its count of jobs running, reload.
+    ended = client.get(f"/espaces/demo/taches/{job.id}")
+    assert ended.headers["HX-Trigger-After-Settle"] == "jobs-changed"
+    assert '<span class="count" hidden>0</span>' in listed
 
 
 def test_build_needs_a_language_and_a_document(
