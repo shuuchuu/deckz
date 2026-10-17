@@ -8,6 +8,7 @@
 <script type="module" src="/static/layout.js"></script>
 <script type="module" src="/static/agent.js"></script>
 <script type="module" src="/static/palette.js"></script>
+<script type="module" src="/static/notifications.js"></script>
 {% block page_head %}{% endblock %}
 {% endblock %}
 {% block topbar %}{% include "_workspace_topbar.html" %}{% endblock %}
@@ -67,8 +68,26 @@
     <span id="jobs-badge" hx-get="/espaces/{{ workspace.name }}/taches/resume" hx-trigger="load, every 3s, jobs-changed from:body" hx-swap="innerHTML"></span>
     <button type="button" class="status-item" id="status-agent" data-toggle="agent"
             title="Afficher ou masquer l'agent (Ctrl+Alt+B)">Agent</button>
+    <button type="button" class="status-item" id="status-bell" aria-expanded="false" aria-controls="notification-center"
+            title="Notifications" aria-label="Notifications">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5a4 4 0 0 0-4 4v3L2.5 11h11L12 8.5v-3a4 4 0 0 0-4-4ZM6.3 12.5a1.8 1.8 0 0 0 3.4 0"/></svg>
+      <span class="unread" hidden></span>
+    </button>
   </span>
 </footer>
+{#- VS Code's notifications (`notifications.js`): toasts at the bottom right,
+    the bell's center keeping the last ones. -#}
+<section class="notification-center" id="notification-center" aria-label="Notifications" hidden>
+  <header>
+    <h2>Notifications</h2>
+    <button type="button" class="icon" data-notifications="desktop" hidden>Notifications du bureau…</button>
+    <button type="button" class="icon" data-notifications="clear" title="Tout effacer">Tout effacer</button>
+    <button type="button" class="icon" data-notifications="close" title="Fermer" aria-label="Fermer">✕</button>
+  </header>
+  <ol class="notification-list"></ol>
+  <p class="empty">Aucune notification.</p>
+</section>
+<ol class="toasts" id="toasts" aria-live="polite"></ol>
 <dialog id="action-dialog" class="commit-dialog" aria-label="Action"></dialog>
 <dialog id="commit-dialog" class="commit-dialog" aria-label="Committer"></dialog>
 <dialog id="sync-dialog" class="commit-dialog" aria-label="Synchroniser"></dialog>

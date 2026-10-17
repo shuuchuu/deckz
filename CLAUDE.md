@@ -450,9 +450,14 @@ check --staged` with a temporary `GIT_INDEX_FILE` holding the commit, and
 never forced. The dialogs open through `static/dialogs.js`, so that a panel
 reloading under its button doesn't drop the answer.
 `studioz.jobs` runs the long commands a person starts (`studioz.actions`: a
-deck's full build, `deckz upload` after showing `deckz upload --dry-run`,
-`deckz labs|videos publish`), each workspace's one after the other, their
-logs shown from the top bar; deckz's own refusals still decide.
+deck's or every deck's full build, `deckz upload` after showing `deckz upload
+--dry-run`, `deckz labs|videos publish`), each workspace's one after the other,
+their logs in the panel's Tâches tab; deckz's own refusals still decide. Jobs are
+kept in the workspace's `.run/studioz/jobs/`, so they outlive studioz (those it
+stopped or a crash left running are "interrompues"); a build runs again as is, an
+upload or a publication reopens its dialog. `static/notifications.js` notifies each
+job's end as VS Code does (a toast, the status bar's bell, a desktop notification
+when the page is hidden), from the status bar's jobs item.
 `studioz.agent` backs the agent panel beside every workspace and deck page:
 one Claude Code conversation per workspace through the Agent SDK, logged in as
 the person (never an API key: studioz removes `ANTHROPIC_API_KEY`), in the

@@ -275,6 +275,7 @@ dialog a.change { font-family: var(--mono); font-size: 0.9em; overflow-wrap: any
 .job[data-state="running"] .job-state { color: var(--accent); }
 .job[data-state="done"] .job-state { color: #2e7d32; }
 .job[data-state="failed"] .job-state, .job[data-state="stopped"] .job-state { color: var(--danger); }
+.job[data-state="interrupted"] .job-state { color: #b26a00; }
 .job-log { max-height: 45vh; overflow: auto; font-size: 0.78em; margin: 0.4rem 0 0; background: var(--bg); padding: 0.4rem; border-radius: 4px; }
 .choices { border: 1px solid var(--line); border-radius: 4px; display: flex; flex-wrap: wrap; gap: 0.3rem 1.2rem; }
 .choices legend { font-weight: 600; font-size: 0.9em; }
@@ -528,7 +529,8 @@ button.status-item:hover { background: rgb(255 255 255 / 0.15); }
 .build-output .errors { max-height: none; border-radius: 4px; }
 .build-output .errors pre { margin-top: 0.4rem; font-size: 0.8em; }
 .jobs .job + .job { margin-top: 0.4rem; }
-.jobs .job-log { max-height: none; }
+/* The log scrolls itself, so that it can follow its end (notifications.js). */
+.jobs .job-log { max-height: max(6rem, calc(min(var(--panel-height), 60vh) - 6rem)); }
 @media (max-width: 700px) {
   .bottom-panel { min-height: 40vh; border-top: 1px solid var(--line); }
 }
@@ -558,3 +560,39 @@ button.status-item:hover { background: rgb(255 255 255 / 0.15); }
   .command-center { width: auto; }
   .command-center kbd { display: none; }
 }
+
+/* A view's title with its actions on the right, as VS Code's. */
+.view-title { display: flex; align-items: center; gap: 0.4rem; }
+.view-title > span:first-child { flex: 1; min-width: 0; }
+.view-action { display: grid; padding: 0.15rem; border: 0; background: transparent; color: var(--muted); }
+.view-action:hover { color: var(--text); background: color-mix(in srgb, var(--muted) 18%, transparent); }
+.view-action svg { width: 14px; height: 14px; fill: currentcolor; }
+
+/* Notifications: toasts at the bottom right, above the status bar, and the
+   bell's center in their place. */
+#status-bell svg { width: 14px; height: 14px; fill: none; stroke: currentcolor; stroke-width: 1.4; stroke-linejoin: round; }
+#status-bell .unread { min-width: 1rem; padding: 0 0.25rem; border-radius: 999px; background: var(--bg); color: var(--accent); font-size: 0.65rem; line-height: 1rem; text-align: center; font-weight: 700; }
+.toasts, .notification-center { position: fixed; right: 0.8rem; bottom: 2.3rem; z-index: 20; width: min(26rem, calc(100vw - 1.6rem)); }
+.toasts { display: flex; flex-direction: column; gap: 0.4rem; margin: 0; padding: 0; list-style: none; }
+.notification-center { display: flex; flex-direction: column; max-height: 60vh; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 24px rgb(0 0 0 / 0.18); }
+.notification-center[hidden] { display: none; }
+.notification-center header { display: flex; align-items: center; gap: 0.3rem; padding: 0.3rem 0.4rem 0.3rem 0.7rem; border-bottom: 1px solid var(--line); }
+.notification-center header h2 { margin: 0 auto 0 0; }
+.notification-center header .icon { border-color: transparent; background: transparent; color: var(--muted); font-size: 0.8rem; }
+.notification-center header .icon:hover { color: var(--text); }
+.notification-list { margin: 0; padding: 0; list-style: none; overflow: auto; }
+.notification-center .empty { margin: 0; padding: 0.8rem; color: var(--muted); font-size: 0.85rem; }
+.notification-center .notification + .notification { border-top: 1px solid var(--line); }
+.notification { display: grid; grid-template-columns: auto 1fr auto; gap: 0.2rem 0.6rem; align-items: start; padding: 0.55rem 0.7rem; font-size: 0.85rem; }
+.toasts .notification { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 24px rgb(0 0 0 / 0.18); }
+.notification-icon { width: 1.2rem; height: 1.2rem; border-radius: 999px; display: grid; place-items: center; font-size: 0.75rem; font-weight: 700; color: #fff; background: var(--muted); }
+.notification[data-state="done"] .notification-icon { background: #2e7d32; }
+.notification[data-state="failed"] .notification-icon { background: var(--danger); }
+.notification[data-state="interrupted"] .notification-icon { background: #b26a00; }
+.notification-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; overflow-wrap: anywhere; }
+.notification-text code { font-size: 0.8em; color: var(--muted); }
+.notification-text time { font-size: 0.75rem; color: var(--muted); }
+.notification-actions { grid-column: 2 / -1; display: flex; gap: 0.4rem; }
+.notification-actions button { padding: 0.1rem 0.6rem; font-size: 0.8rem; }
+.notification-close { grid-column: 3; grid-row: 1; border-color: transparent; background: transparent; color: var(--muted); }
+.toasts .notification-actions { grid-column: 2 / 3; }

@@ -50,16 +50,22 @@ def _deckz(workspace: Path) -> str:
 
 
 def build_steps(
-    workspace: Path, kinds: frozenset[str], langs: list[Lang]
+    workspace: Path,
+    kinds: frozenset[str],
+    langs: list[Lang],
+    *,
+    every_deck: bool = False,
 ) -> list[list[str]]:
-    """`deckz run` of a deck, every output named, on or off.
+    """`deckz run` of a deck, or `deckz run decks`, every output named, on or off.
 
     Returns:
-        The job's one step, to run in the deck's directory.
+        The job's one step, to run in the deck's directory (the workspace \
+        for every deck).
     """
+    command = ["run", "decks"] if every_deck else ["run"]
     options = [f"--{kind}" if kind in kinds else f"--no-{kind}" for kind in KINDS]
     # `--sync` removes only what this build made obsolete (see `deckz run`).
-    return [[_deckz(workspace), "run", *options, "--sync", "--lang", *langs]]
+    return [[_deckz(workspace), *command, *options, "--sync", "--lang", *langs]]
 
 
 def build_title(deck: str, kinds: frozenset[str], langs: list[Lang]) -> str:

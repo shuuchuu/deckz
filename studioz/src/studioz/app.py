@@ -906,19 +906,32 @@ def sync_abort(
 
 @router.get("/espaces/{name}/taches/resume", response_class=HTMLResponse)
 def jobs_badge(request: Request, studio: StudioDep, name: str) -> Response:
-    """The top bar's summary of the workspace's jobs.
+    """The status bar's summary of the workspace's jobs.
 
     Returns:
-        How many run or wait, else how the last one ended.
+        How many run or wait, else how the last one ended; with the last \
+        ones ended, which the page notifies once each (`notifications.js`).
     """
     found = studio.workspace(name)
     jobs = studio.jobs.jobs(found.worktree.path)
+    ended = [
+        {
+            "id": job.id,
+            "ended": job.ended.timestamp() * 1000,
+            "state": job.state.name.lower(),
+            "title": job.title,
+            "detail": job.failure,
+        }
+        for job in jobs
+        if job.finished and job.ended
+    ][:10]
     return _render(
         request,
         "_jobs_badge.html",
         workspace=found,
         active=[job for job in jobs if not job.finished],
         last=next((job for job in jobs if job.finished), None),
+        ended=ended,
     )
 
 
@@ -966,6 +979,24 @@ def job_stop(request: Request, studio: StudioDep, name: str, job_id: int) -> Res
     return _render(request, "_job.html", workspace=found, job=job, open=True)
 
 
+@router.post("/espaces/{name}/taches/{job_id}/relancer", response_class=HTMLResponse)
+def job_rerun(request: Request, studio: StudioDep, name: str, job_id: int) -> Response:
+    """Run a finished build again, as it ran.
+
+    Returns:
+        The Tâches tab, the new job first.
+
+    Raises:
+        HTTPException: 409 for a job that must be started from its dialog.
+    """
+    found, _ = _job_or_404(studio, name, job_id)
+    if studio.jobs.rerun(found.worktree.path, job_id) is None:
+        raise HTTPException(409, "Cette tâche se relance depuis sa fenêtre")
+    response = jobs_list(request, studio, name)
+    response.headers["HX-Trigger-After-Settle"] = "jobs-changed"
+    return response
+
+
 def _started(request: Request, found: workspaces.Workspace) -> Response:
     """The job just started, its log shown, in the dialog that started it.
 
@@ -1001,6 +1032,61 @@ def build_form(request: Request, studio: StudioDep, name: str, deck: str) -> Res
         chosen=actions.DEFAULT_KINDS,
         langs=("fr", "en"),
     )
+
+
+@router.post("/espaces/{name}/construire/formulaire", response_class=HTMLResponse)
+def build_all_form(request: Request, studio: StudioDep, name: str) -> Response:
+    """What a build of every deck produces, each output to choose.
+
+    Returns:
+        The build dialog's content, for every deck.
+    """
+    return _render(
+        request,
+        "_build.html",
+        workspace=studio.workspace(name),
+        deck="",
+        kinds=actions.KINDS,
+        chosen=actions.DEFAULT_KINDS,
+        langs=("fr",),
+    )
+
+
+@router.post("/espaces/{name}/construire", response_class=HTMLResponse)
+def build_all(
+    request: Request,
+    studio: StudioDep,
+    name: str,
+    kind: Annotated[list[str] | None, Form()] = None,
+    lang: Annotated[list[Lang] | None, Form()] = None,
+) -> Response:
+    """Start a job building every deck's outputs chosen (`deckz run decks`).
+
+    Returns:
+        The job, or the form again with what's missing.
+    """
+    found = studio.workspace(name)
+    kinds = frozenset(k for k in kind or () if k in actions.KINDS)
+    langs = [code for code in LANGS if code in (lang or ())]
+    if not langs or not kinds & {"handout", "presentation", "print", "html"}:
+        return _render(
+            request,
+            "_build.html",
+            workspace=found,
+            deck="",
+            kinds=actions.KINDS,
+            chosen=kinds,
+            langs=langs,
+            error="Choisissez au moins une langue et un document à produire.",
+        )
+    path = found.worktree.path
+    studio.jobs.submit(
+        path,
+        actions.build_title("toutes les formations", kinds, langs),
+        actions.build_steps(path, kinds, langs, every_deck=True),
+        rerun=True,
+    )
+    return _started(request, found)
 
 
 @router.post(
@@ -1039,6 +1125,7 @@ def build_deck(
         actions.build_title(deck, kinds, langs),
         actions.build_steps(path, kinds, langs),
         directory,
+        rerun=True,
     )
     return _started(request, found)
 
@@ -1074,6 +1161,7 @@ def upload_deck(request: Request, studio: StudioDep, name: str, deck: str) -> Re
         f"Envoyer les PDF de {deck} sur Google Drive",
         actions.upload_steps(path),
         directory,
+        form=f"/espaces/{name}/formations/{deck}/envoyer/formulaire",
     )
     return _started(request, found)
 
@@ -1138,7 +1226,12 @@ def publish(
         steps = actions.publish_steps(path, what)
     except ValueError as error:
         raise HTTPException(422, str(error)) from None
-    studio.jobs.submit(path, f"Publier {actions.PUBLISHABLE[what][0]}", steps)
+    studio.jobs.submit(
+        path,
+        f"Publier {actions.PUBLISHABLE[what][0]}",
+        steps,
+        form=f"/espaces/{name}/publier/formulaire",
+    )
     return _started(request, found)
 
 

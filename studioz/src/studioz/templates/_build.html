@@ -1,7 +1,8 @@
-<form class="commit-form" hx-post="/espaces/{{ workspace.name }}/formations/{{ deck }}/construire"
+{#- The build dialog, of a deck or, without one, of every deck (`deckz run decks`). -#}
+<form class="commit-form" hx-post="/espaces/{{ workspace.name }}{% if deck %}/formations/{{ deck }}{% endif %}/construire"
       hx-target="#action-dialog" hx-swap="innerHTML">
   <header>
-    <h2>Construire {{ deck }}</h2>
+    <h2>{% if deck %}Construire {{ deck }}{% else %}Construire toutes les formations{% endif %}</h2>
     <button type="button" class="secondary" onclick="this.closest('dialog').close()">Fermer</button>
   </header>
   <fieldset class="choices">
@@ -16,9 +17,16 @@
     <label><input type="checkbox" name="lang" value="{{ code }}"{% if code in langs %} checked{% endif %}> {{ code }}</label>
     {% endfor %}
   </fieldset>
+  {% if deck %}
   <p class="hint">Les PDF arrivent dans le dossier <code>pdf/</code> de la formation (<code>pdf/en/</code> en anglais) ;
     ceux qu'aucune construction de la formation ne produit plus sont supprimés. La construction tourne en tâche de fond :
     vous pouvez continuer à travailler.</p>
+  {% else %}
+  <p class="hint">Chaque formation de l'espace, l'une après l'autre : cela peut prendre longtemps, et une notification
+    dit quand c'est fini. Les PDF arrivent dans le dossier <code>pdf/</code> de chaque formation ; ceux qu'aucune
+    construction ne produit plus sont supprimés. En anglais, la première formation à laquelle il manque une
+    traduction arrête tout, avant toute compilation.</p>
+  {% endif %}
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   <footer><button type="submit">Construire</button></footer>
 </form>

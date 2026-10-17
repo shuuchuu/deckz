@@ -37,7 +37,13 @@
 <aside class="primary-sidebar" id="sidebar">
   <section class="view" data-view="formations" aria-label="Formations">
     {% set tree = decks | deck_tree %}
-    <h2>Formations{% if tree.path %} <span class="tree-root" title="Le dossier de toutes les formations">{{ tree.path }}/</span>{% endif %}</h2>
+    <h2 class="view-title">
+      <span>Formations{% if tree.path %} <span class="tree-root" title="Le dossier de toutes les formations">{{ tree.path }}/</span>{% endif %}</span>
+      <button type="button" class="view-action" data-dialog="#action-dialog" data-url="/espaces/{{ workspace.name }}/construire/formulaire"
+              title="Construire toutes les formations…" aria-label="Construire toutes les formations…">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5Z"/></svg>
+      </button>
+    </h2>
     <input class="filter" id="deck-filter" type="search" placeholder="Filtrer…" aria-label="Filtrer les formations">
     <ul class="decks tree">
       {{ deck_items(tree, deck, "/espaces/" ~ workspace.name ~ "/formations") }}

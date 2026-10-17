@@ -15,6 +15,7 @@
   <button type="button" data-click='.langs a[data-lang="{{ code }}"]'>Formation : passer en {{ code }}</button>
   {% endfor %}
   {% endif %}
+  <button type="button" data-dialog="#action-dialog" data-url="{{ base }}/construire/formulaire">Formations : construire toutes les formations…</button>
   <button type="button" data-dialog="#commit-dialog" data-url="{{ base }}/commit/formulaire" data-include="#commit-form"
           data-values='{{ {"formation": deck, "lang": lang or "fr"} | tojson }}'>Modifications : committer…</button>
   <button type="button" data-dialog="#sync-dialog" data-url="{{ base }}/synchronisation/formulaire"
@@ -35,5 +36,6 @@
   <button type="button" data-open-panel="problemes">Affichage : Problèmes</button>
   {% if deck %}<button type="button" data-open-panel="construction">Affichage : Construction</button>{% endif %}
   <button type="button" data-open-panel="taches">Affichage : Tâches</button>
+  <button type="button" data-click="#status-bell">Affichage : notifications</button>
   <button type="button" data-click=".brand">Aller à l'accueil : les espaces de travail</button>
 </div>

@@ -9,10 +9,11 @@
 while the user slept, not yet tried by them; then "Rien à porter…" on the
 translation backlog (2026-10-11, after phase 4); then the VS Code layout's
 increments 1 to 4 (2026-10-15, under "The VS Code layout"). All of it is pushed and
-released (deckz 31.3.4). **Next:** phase 5 (long jobs), planned on 2026-10-17 (under
-"Phase 5"), from its increment 1; its GPU increments rent machines that cost money:
-never start one without the user saying so. The worktree `../deckz-studioz` is behind
-`main`: `git merge --ff-only main` there first. `git log origin/main..main` in
+released (deckz 31.3.4). Phase 5 (long jobs) was planned on 2026-10-17 (under
+"Phase 5"); its increment 1 (notifications, jobs kept across restarts, every deck's
+build) is done. **Next:** phase 5's increment 2 (videos). Its GPU increments rent
+machines that cost money: never start one without the user saying so. `git log
+origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed. Push and
 release are the user's call.
 
@@ -31,12 +32,12 @@ architecture):
 | `problems.py`, `changes.py` | the panel's Problèmes tab and the sidebar's Changes panel; `changes.LangPairs` caches deckz's fr/en pairs |
 | `baselines.py`, `comparison.py` | handouts as of the last commit, frame-by-frame before/after |
 | `commits.py`, `sync.py` | the Commit and Synchronisation dialogs |
-| `jobs.py`, `actions.py` | the job queue; build, upload, publish |
+| `jobs.py`, `actions.py` | the job queue, kept in each workspace's `.run/studioz/jobs/`; build (a deck, every deck), upload, publish |
 | `agent.py` | each workspace's agent conversation (Agent SDK): options, the git refusal hook, questions, the transcript |
 | `checkpoints.py` | the workspace's files before and after each agent turn, and undoing the last one |
 | `asks.py` | what the dialogs ask the agent (prompts), and the proposed commit message |
 | `workflows.py` | the workflows a workspace's `deckz.yml` declares (`studioz.workflows`), their forms' prompts and files |
-| `static/` | `deck.js` (pdf.js viewer, comparison), `editor.js` (CodeMirror), `dialogs.js` (dialogs opened from reloading panels), `agent.js` (the agent panel), `layout.js` (the VS Code layout: activity bar, sidebars, bottom panel, sashes, status bar), vendored JS (`uv run doit vendor`) |
+| `static/` | `deck.js` (pdf.js viewer, comparison), `editor.js` (CodeMirror), `dialogs.js` (dialogs opened from reloading panels), `agent.js` (the agent panel), `layout.js` (the VS Code layout: activity bar, sidebars, bottom panel, sashes, status bar), `notifications.js` (jobs' ends: toasts, the bell, desktop notifications), vendored JS (`uv run doit vendor`) |
 
 Tests: `studioz/tests/`, against temporary repositories, a fake `deckz` (a script
 in the workspace's `.venv/bin/`), a local bare remote and a fake Agent SDK client
@@ -93,9 +94,7 @@ Found along the way, not done (each increment's "Left" has the rest):
   returns before the process exits; it now waits.)
 - deckz's messages are in English in a French UI; the lab checks read every notebook
   again each (6 of `deckz status`'s 10 s on slides).
-- The Commit dialog's draft is lost when the page changes; jobs don't survive a
-  studioz restart, and their end isn't notified beyond the status bar (phase 5's
-  increment 1 plans both).
+- The Commit dialog's draft is lost when the page changes.
 - The untracked `.claude/` in `../deckz` is the frontend plugin's install: the
   user's, kept, never committed.
 - slides depends on studioz (editable): a new studioz dependency makes slides'
@@ -1333,6 +1332,46 @@ Each increment is usable on its own:
    The tests run against a fake deckz. On slides, a real pass happens only once the
    user says so: the shortest demo, in short mode, with its estimate shown to them
    first.
+
+**Increment 1: done** (2026-10-17). Jobs are kept in their workspace's
+`.run/studioz/jobs/` (`<id>.json`, the record; `<id>.log`, appended line by line), the
+last 30 per workspace, loaded the first time studioz looks at a workspace, their
+numbers following on. When studioz stops, it stops its jobs (as before), now kept as
+"interrompues" (`JobState.INTERRUPTED`), and so are those a crash left running or
+queued. Relancer comes in two kinds: a build carries `rerun` and runs again as is
+(`POST …/taches/{id}/relancer`; VS Code's "Relancer la tâche"); an upload or a
+publication carries `form`, the dialog that starts it, and "Relancer…" opens that
+dialog again, since what it sends may have changed since it was confirmed.
+Notifications (`notifications.js`) come from the status bar's jobs item, which already
+reloads every 3 s: its `data-ended` lists the last jobs ended (state, title, and for a
+failure its last log line without deckz's time and level). Each is notified once per
+browser (kept per workspace in `localStorage`; on a first visit, what ended before
+isn't news):
+- a toast at the bottom right whose "Voir le journal" opens Tâches; a success hides
+  after 8 s (not while hovered), a failure stays until closed;
+- the bell at the status bar's right end, with its unread count, opening the center
+  (the last 20, "Tout effacer", Escape or a click outside closes it); opening it reads
+  them and clears the toasts;
+- a desktop notification when the page is hidden, once allowed from the center's
+  "Notifications du bureau…" (a browser asks only after a click).
+
+"Construire toutes les formations…" is the Formations view's title action (VS Code's
+icons on a view's title) and a palette command: the build dialog without a deck, French
+only by default (English stops at the first deck missing a translation), as `deckz run
+decks`, every output spelled out, run in the workspace. Along the way, the Tâches log
+now scrolls itself and follows its end as it grows, unless the person scrolled up in it
+(the VS Code layout's increment 2 left that). Tried on `studioz-dev` with headless Chromium
+(Playwright from deckz's `.venv`; the Chrome extension wasn't connected): the Fortinet
+deck's handout build (toast, bell, hidden after 8 s); the same build failing on a broken
+Jinja tag (copy kept, put back), whose toast stayed with deckz's error and whose desktop
+notification went out while the page was hidden (a stubbed `Notification`); every
+deck's build started (`deckz run decks --handout --no-presentation … --lang fr`), then
+stopped (its toast); then studioz stopped with Ctrl-C during that build, started again:
+the job "interrompue", no `deckz` left running, Relancer running it again. **Left:**
+a toast covers the agent's send button while shown (as VS Code's cover the editor); a
+job stopped while deckz is still importing logs a Python traceback (deckz's Ctrl-C);
+several tabs of one workspace each show the toast; a crash (not a stop) leaves a step's
+process running until its next log line finds the pipe closed.
 
 ### Then, with the colleague
 

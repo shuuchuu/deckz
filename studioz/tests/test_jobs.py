@@ -229,3 +229,146 @@ def test_jobs_refused_from_another_site(fake_deckz: Path, client: TestClient) ->
     )
     assert response.status_code == 403
     assert not client.app.state.studio.jobs._jobs  # ty: ignore[unresolved-attribute]
+
+
+def test_jobs_outlive_studioz(tmp_path: Path) -> None:
+    jobs = Jobs()
+    done = jobs.submit(tmp_path, "done", [_python("print('kept')")], rerun=True)
+    _wait(done)
+    long = jobs.submit(
+        tmp_path,
+        "long",
+        [_python("import time; print('started', flush=True); time.sleep(30)")],
+    )
+    queued = jobs.submit(tmp_path, "queued", [_python("print('never')")])
+    deadline = monotonic() + 10
+    while "started" not in long.log:
+        assert monotonic() < deadline
+        sleep(0.02)
+
+    jobs.stop_all()  # studioz ends
+    _wait(long)
+
+    again = Jobs()
+    found = {job.title: job for job in again.jobs(tmp_path)}
+    assert found["done"].state is JobState.DONE
+    assert found["done"].rerun
+    assert list(found["done"].log) == list(done.log)
+    assert found["long"].state is JobState.INTERRUPTED
+    assert "started" in found["long"].log
+    assert found["queued"].state is JobState.INTERRUPTED
+    # The next job's number follows theirs.
+    assert again.submit(tmp_path, "next", [_python("pass")]).id == queued.id + 1
+
+
+def test_a_job_a_crash_left_running_is_interrupted(tmp_path: Path) -> None:
+    jobs = Jobs()
+    job = jobs.submit(tmp_path, "crashed", [_python("pass")])
+    _wait(job)
+    record = tmp_path / ".run" / "studioz" / "jobs" / f"{job.id}.json"
+    kept = json.loads(record.read_text(encoding="utf8"))
+    record.write_text(
+        json.dumps({**kept, "state": "RUNNING", "ended": None}), encoding="utf8"
+    )
+    (record.parent / "broken.json").write_text("{", encoding="utf8")
+
+    [found] = Jobs().jobs(tmp_path)
+
+    assert found.state is JobState.INTERRUPTED
+    assert found.ended is not None
+    assert json.loads(record.read_text(encoding="utf8"))["state"] == "INTERRUPTED"
+
+
+def test_only_the_last_jobs_are_kept(tmp_path: Path) -> None:
+    jobs = Jobs()
+    for i in range(32):
+        _wait(jobs.submit(tmp_path, f"job {i}", [_python("pass")]))
+    kept = jobs.jobs(tmp_path)
+    assert len(kept) == 30
+    assert kept[-1].title == "job 2"
+    store = tmp_path / ".run" / "studioz" / "jobs"
+    assert len(list(store.glob("*.json"))) == 30
+    assert not (store / "1.log").exists()
+
+
+def test_rerun_only_what_may_run_again(tmp_path: Path) -> None:
+    jobs = Jobs()
+    build = jobs.submit(tmp_path, "build", [_python("print('built')")], rerun=True)
+    upload = jobs.submit(tmp_path, "upload", [_python("pass")], form="/dialog")
+    _wait(upload)
+
+    again = jobs.rerun(tmp_path, build.id)
+
+    assert again is not None
+    assert again.steps == build.steps
+    _wait(again)
+    assert "built" in again.log
+    assert jobs.rerun(tmp_path, upload.id) is None
+
+
+def test_build_every_deck(fake_deckz: Path, client: TestClient) -> None:
+    form = client.post("/espaces/demo/construire/formulaire", headers=ORIGIN).text
+    assert "Construire toutes les formations" in form
+    assert 'value="fr" checked' in form
+    assert 'value="en">' in form
+
+    response = client.post(
+        "/espaces/demo/construire",
+        data={"kind": ["handout"], "lang": ["fr"]},
+        headers=ORIGIN,
+    )
+
+    job = _job(client, response.text)
+    assert job.title == "Construire toutes les formations (fr : support)"
+    assert job.rerun
+    assert (
+        "deckz run decks --handout --no-presentation --no-print "
+        "--no-part-handouts --no-html --sync --lang fr in repo--demo"
+    ) in job.log
+    listed = client.get("/espaces/demo/taches").text
+    assert f"/taches/{job.id}/relancer" in listed
+
+    rerun = client.post(f"/espaces/demo/taches/{job.id}/relancer", headers=ORIGIN)
+    assert rerun.status_code == 200
+    assert rerun.headers["HX-Trigger-After-Settle"] == "jobs-changed"
+    _wait(client.app.state.studio.jobs._jobs[-1])  # ty: ignore[unresolved-attribute]
+
+
+def test_an_upload_starts_again_from_its_dialog(
+    fake_deckz: Path, client: TestClient
+) -> None:
+    job = _job(client, client.post(f"{DECK}/envoyer", headers=ORIGIN).text)
+    job.state = JobState.INTERRUPTED
+
+    listed = client.get("/espaces/demo/taches").text
+
+    assert f'data-url="{DECK}/envoyer/formulaire">Relancer…' in listed
+    assert "Interrompue par l'arrêt de studioz" in listed
+    refused = client.post(f"/espaces/demo/taches/{job.id}/relancer", headers=ORIGIN)
+    assert refused.status_code == 409
+
+
+def test_the_status_bar_says_which_jobs_ended(
+    fake_deckz: Path, client: TestClient
+) -> None:
+    response = client.post(
+        f"{DECK}/construire",
+        data={"kind": ["handout"], "lang": ["fr"]},
+        headers=ORIGIN,
+    )
+    job = _job(client, response.text)
+    job.log.extend(
+        ["12:00:00 ERROR    content/a.md:3: unknown variable", "(code de sortie 1)"]
+    )
+    job.state = JobState.FAILED
+
+    badge = client.get("/espaces/demo/taches/resume").text
+
+    [ended] = json.loads(
+        badge.split('data-ended="')[1].split('"')[0].replace("&#34;", '"')
+    )
+    assert ended["id"] == job.id
+    assert ended["state"] == "failed"
+    assert ended["detail"] == "content/a.md:3: unknown variable"
+    assert job.ended is not None
+    assert ended["ended"] == job.ended.timestamp() * 1000

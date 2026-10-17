@@ -5,6 +5,6 @@
   {% for job in jobs %}
   {% with open = loop.first %}{% include "_job.html" %}{% endwith %}
   {% else %}
-  <p class="empty">Aucune tâche depuis le démarrage de studioz. Construire ou envoyer une formation, publier les TP ou les vidéos en lance une.</p>
+  <p class="empty">Aucune tâche. Construire ou envoyer une formation, publier les TP ou les vidéos en lance une.</p>
   {% endfor %}
 </section>
