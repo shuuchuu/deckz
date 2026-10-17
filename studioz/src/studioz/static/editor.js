@@ -24,6 +24,7 @@ import {
   lineNumbers,
   markdown,
   MatchDecorator,
+  python,
   searchKeymap,
   syntaxHighlighting,
   ViewPlugin,
@@ -44,6 +45,13 @@ const jinjaTags = ViewPlugin.define(
   }),
   { decorations: (plugin) => plugin.decorations },
 );
+
+// Content files are Markdown, deck files YAML, video scenes Python.
+function language(file) {
+  if (file.endsWith(".yml")) return yaml();
+  if (file.endsWith(".py")) return python();
+  return [markdown(), jinjaTags];
+}
 
 const STATUS = {
   saving: "Enregistrement…",
@@ -119,7 +127,7 @@ export class SourceEditor {
         highlightActiveLine(),
         highlightSelectionMatches(),
         EditorView.lineWrapping,
-        file.endsWith(".yml") ? yaml() : [markdown(), jinjaTags],
+        language(file),
         keymap.of([
           { key: "Mod-s", run: () => (this.save(), true) },
           ...closeBracketsKeymap,

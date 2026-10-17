@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import Any
 
@@ -40,9 +41,35 @@ def test_list_prints_a_line_per_render(
     main(("videos", "list"))
 
     out = capsys.readouterr().out
-    assert "nn/demo.mp4" in out
-    assert "Demo" in out
-    assert out.startswith("-\t")
+    assert out == "-\tnn/demo.mp4\tDemo\tmissing\n"
+
+
+def test_list_json_gives_each_render_its_state_and_scene(
+    tmp_path: Path, capsys: Any, monkeypatch: Any
+) -> None:
+    init_repository(str(tmp_path))
+    _write(tmp_path / "figures" / "scenes" / "nn" / "demo.py", _SCENE_SOURCE)
+    monkeypatch.chdir(tmp_path)
+
+    main(("videos", "list", "--json"))
+
+    assert json.loads(capsys.readouterr().out) == {
+        "published_quality": "h",
+        "renders": [
+            {
+                "video": "nn/demo",
+                "scene": "Demo",
+                "module": "figures/scenes/nn/demo.py",
+                "line": 5,
+                "sources": ["figures/scenes/nn/demo.py"],
+                "language": None,
+                "file": "assets/videos/nn/demo.mp4",
+                "poster": "assets/videos/nn/demo.png",
+                "quality": None,
+                "state": "missing",
+            }
+        ],
+    }
 
 
 def test_render_exits_2_for_an_unknown_scene(tmp_path: Path, monkeypatch: Any) -> None:

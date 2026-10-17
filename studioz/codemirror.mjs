@@ -8,6 +8,7 @@ export {
   indentWithTab,
 } from "@codemirror/commands";
 export { markdown } from "@codemirror/lang-markdown";
+export { python } from "@codemirror/lang-python";
 export { yaml } from "@codemirror/lang-yaml";
 export {
   bracketMatching,

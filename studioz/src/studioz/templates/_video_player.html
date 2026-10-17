@@ -1,0 +1,68 @@
+{#- A video's render, or (`view` "changes") its render as of the last commit
+    beside the current one, with its renders' state and the buttons rendering
+    it; reloads when the workspace changes and when a job starts or ends. A
+    video kept as it is (`hx-preserve`, its id naming its version) goes on
+    playing. -#}
+{% set base = "/espaces/" ~ workspace.name %}
+{% set renderable = scene.renders | selectattr("state", "in", ["missing", "stale"]) | list %}
+{%- macro player(file, v, poster=None) -%}
+<video id="video-{{ v }}" hx-preserve controls preload="metadata" src="{{ base }}/rendus/{{ file }}?v={{ v }}"
+       {%- if poster %} poster="{{ base }}/rendus/{{ poster }}?v={{ v }}"{% endif %}></video>
+{%- endmacro %}
+<section class="video-player" id="video-player" data-view="{{ view }}" data-module="{{ scene.module }}" data-line="{{ scene.line }}"
+         hx-get="{{ base }}/videos/{{ scene.video }}/lecteur?lang={{ lang }}{% if view == 'changes' %}&vue=avant-apres{% endif %}"
+         hx-trigger="workspace-changed from:body, jobs-changed from:body" hx-swap="outerHTML">
+  <header class="video-bar">
+    <span class="video-states">
+      {% for r in scene.renders %}
+      <span class="video-state" data-state="{{ r.state }}" title="{{ r.file }}">{% if r.language %}{{ r.language }} : {% endif %}{{ states[r.state] }}{% if r.quality %} ({{ r.quality }}){% endif %}</span>
+      {% endfor %}
+    </span>
+    <span class="deck-actions">
+      <button type="button" class="secondary" data-render="draft" hx-post="{{ base }}/videos/{{ scene.video }}/rendre"
+              {% if not renderable %}disabled title="Les rendus suivent déjà la scène : un brouillon remplacerait le rendu actuel sans rien montrer de nouveau"
+              {% else %}title="Rendre la scène en {{ draft_quality }} (480p15), en quelques minutes, pour voir ce qu'elle donne ; remplace le rendu actuel"{% endif %}>Brouillon</button>
+      <button type="button" class="secondary" data-render="final" hx-post="{{ base }}/videos/{{ scene.video }}/rendre" hx-vals='{"final": "true"}'
+              {% if scene.state == "fresh" %}disabled title="Les rendus sont à jour, à la qualité publiée"
+              {% else %}title="Rendre la scène à la qualité publiée ({{ published_quality }}) : plus long qu'un brouillon, nécessaire pour publier"{% endif %}>Rendu final ({{ published_quality }})</button>
+    </span>
+  </header>
+  {% if not scene.languages %}
+  <p class="hint">Sans texte à l'écran : un seul rendu pour toutes les langues.</p>
+  {% endif %}
+  {% if view == "render" %}
+  {% if render.state == "stale" %}
+  <p class="video-note">La scène a changé depuis ce rendu : « Brouillon » montre ce qu'elle donne maintenant.</p>
+  {% elif render.state == "draft" %}
+  <p class="video-note">Un brouillon ({{ render.quality }}) : deckz refuse de publier la vidéo tant qu'elle n'est pas rendue en {{ published_quality }} (« Rendu final »).</p>
+  {% endif %}
+  {% if rendered %}
+  {{ player(render.file, version, render.poster) }}
+  {% else %}
+  <p class="empty">Jamais rendue : « Brouillon » la rend en quelques minutes.</p>
+  {% endif %}
+  {% elif unchanged %}
+  <p class="video-note">La scène n'a pas changé depuis le dernier commit : son rendu est celui du commit.</p>
+  {% if rendered %}{{ player(render.file, version, render.poster) }}{% endif %}
+  {% else %}
+  <div class="video-sides">
+    <figure>
+      <figcaption>Avant <span class="hint">(dernier commit)</span></figcaption>
+      {% if before %}
+      {{ player(before, "avant-" ~ before_version) }}
+      {% else %}
+      <p class="absent">studioz n'a pas le rendu du dernier commit : il garde celui d'une scène qu'il voit inchangée depuis le commit, et rendue.</p>
+      {% endif %}
+    </figure>
+    <figure>
+      <figcaption>Après <span class="hint">(la scène telle qu'elle est)</span></figcaption>
+      {% if rendered and render.state in ("draft", "fresh") %}
+      {#- No poster (its last frame): the before has none. #}
+      {{ player(render.file, version) }}
+      {% else %}
+      <p class="absent">Pas encore rendue telle qu'elle est : « Brouillon ».</p>
+      {% endif %}
+    </figure>
+  </div>
+  {% endif %}
+</section>

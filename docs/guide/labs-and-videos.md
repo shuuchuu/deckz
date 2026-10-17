@@ -44,6 +44,7 @@ Videos are Manim scenes, rendered apart from deck builds (a render takes minutes
 
 - `deckz videos render` renders those out of date (`--quality l` for quick drafts
   while working on a scene);
-- `deckz videos list` shows each one's state;
+- `deckz videos list` shows each one's state (never rendered, stale, a draft, or
+  fresh), `--json` for a script;
 - `deckz videos publish` publishes the renders (maintainers). A published video's
   address is printed in handouts: never rename or remove its scene.

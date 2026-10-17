@@ -10,8 +10,9 @@ while the user slept, not yet tried by them; then "Rien à porter…" on the
 translation backlog (2026-10-11, after phase 4); then the VS Code layout's
 increments 1 to 4 (2026-10-15, under "The VS Code layout"). All of it is pushed and
 released (deckz 31.3.4). Phase 5 (long jobs) was planned on 2026-10-17 (under
-"Phase 5"); its increment 1 (notifications, jobs kept across restarts, every deck's
-build) is done. **Next:** phase 5's increment 2 (videos). Its GPU increments rent
+"Phase 5"); its increments 1 (notifications, jobs kept across restarts, every deck's
+build) and 2 (videos) are done. **Next:** phase 5's increment 3 (labs previewed). Its
+GPU increments rent
 machines that cost money: never start one without the user saying so. `git log
 origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed. Push and
@@ -33,11 +34,12 @@ architecture):
 | `baselines.py`, `comparison.py` | handouts as of the last commit, frame-by-frame before/after |
 | `commits.py`, `sync.py` | the Commit and Synchronisation dialogs |
 | `jobs.py`, `actions.py` | the job queue, kept in each workspace's `.run/studioz/jobs/`; build (a deck, every deck), upload, publish |
+| `videos.py` | the Vidéos view and a scene's page: `deckz videos list --json`, the renders of the last commit kept (hard links) for the before/after, the render jobs |
 | `agent.py` | each workspace's agent conversation (Agent SDK): options, the git refusal hook, questions, the transcript |
 | `checkpoints.py` | the workspace's files before and after each agent turn, and undoing the last one |
 | `asks.py` | what the dialogs ask the agent (prompts), and the proposed commit message |
 | `workflows.py` | the workflows a workspace's `deckz.yml` declares (`studioz.workflows`), their forms' prompts and files |
-| `static/` | `deck.js` (pdf.js viewer, comparison), `editor.js` (CodeMirror), `dialogs.js` (dialogs opened from reloading panels), `agent.js` (the agent panel), `layout.js` (the VS Code layout: activity bar, sidebars, bottom panel, sashes, status bar), `notifications.js` (jobs' ends: toasts, the bell, desktop notifications), vendored JS (`uv run doit vendor`) |
+| `static/` | `deck.js` (pdf.js viewer, comparison), `video.js` (a scene's page: before/after played together), `editor.js` (CodeMirror: Markdown, YAML, Python), `dialogs.js` (dialogs opened from reloading panels), `agent.js` (the agent panel), `layout.js` (the VS Code layout: activity bar, sidebars, bottom panel, sashes, status bar), `notifications.js` (jobs' ends: toasts, the bell, desktop notifications), vendored JS (`uv run doit vendor`) |
 
 Tests: `studioz/tests/`, against temporary repositories, a fake `deckz` (a script
 in the workspace's `.venv/bin/`), a local bare remote and a fake Agent SDK client
@@ -1385,6 +1387,47 @@ tab's count of running jobs stayed at 1 after the job ended, since only the job'
 section reloads then; its last reload now fires `jobs-changed`, which reloads the tab.
 The extension can't put its tab in the background (no `visibilitychange`): the user
 clicked another tab for the desktop notification's trial.
+
+**Increment 2: done** (2026-10-17). In deckz: `deckz videos list` gains each render's
+state as a last column (`missing`, `stale`, `draft`, `fresh`: `deckz.videos.state`,
+which `out_of_date` now uses) and `--json` (the scene's module, its `class` line, the
+sources its stamp covers, each render's language, file, poster, quality and state);
+`deckz status` names each draft with the command rendering it at the published
+quality, instead of counting them, so the Publication view names them; and a render
+is moved into place (`utils.copy_file_if_changed`), never written over. In studioz
+(`studioz.videos`):
+- a Vidéos view in the activity bar: each scene by folder, its most pressing state
+  (jamais rendue, à rendre, brouillon, à jour), the count of those not up to date;
+- a scene's page (`/espaces/<name>/videos/<video>`): its render in a `<video>` (fr/en,
+  one render for a scene without text), its module in the editor at its `class` line
+  (CodeMirror gains Python; `studioz.sources` lets it edit `.py` under the scenes'
+  directory only), "Brouillon" (`--quality l`, enabled only when a render is missing
+  or stale: on an up-to-date render it would only replace a better one) and "Rendu
+  final" (at `videos.published_quality`), each a job; both in the palette;
+- "Avant/après": the render as of the last commit beside the current one, played,
+  paused and seeked together. Renders aren't committed, so studioz keeps the last
+  commit's: whenever it lists the videos, a render up to date with sources unchanged
+  since the commit is the commit's, hard-linked under `.run/studioz/videos/<key>/`, the
+  key naming the sources' blobs at `HEAD` (a commit leaving the scene alone keeps it).
+  The link costs no space and survives the next render since deckz now replaces the
+  file rather than writing into it. The files are served from the videos' directory
+  and that one only (`/espaces/<name>/rendus/…`, with range requests).
+
+studioz's `deckz status` runs again when a render's stamp or quality changes too (git
+ignores renders): without it, the Publication view kept a draft that had since been
+rendered final. Tried on `studioz-dev` in Chrome (the workspace's deckz pointed at the
+worktree, the renders and scenes copied first and put back after, byte for byte):
+gradient-descent's dot made bigger, the view and the page followed ("à rendre", the
+editor reloading), "Brouillon" rendered it in 7 s (a 9 s scene), the before/after
+showed both, played together; "Rendu final" (h, from the palette) took 24 s; the
+Publication view named the draft 29 s after the click, and dropped it after the final
+render. causal-mask in English, the view switched without reloading. The six other
+kept renders became hard links (the first listing had copied 98 MB). **Left:** the
+before has no poster (the poster is written over by ffmpeg, so not linked): both sides
+show their first frame; a scene's page isn't in Ctrl+P; renders made while studioz
+never saw the scene unchanged have no before (the page says so); `deckz videos render`
+of a long scene in a job can't be told apart from a stuck one (Manim's progress isn't
+in its log).
 
 ### Then, with the colleague
 

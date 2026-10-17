@@ -12,13 +12,13 @@ from concurrent.futures import ThreadPoolExecutor
 from importlib.util import find_spec
 from os import cpu_count, environ, pathsep
 from pathlib import Path
-from shutil import copyfile
 from subprocess import run
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
 from ..exceptions import MissingExtraError
 from ..stamps import digest, write_stamp
+from ..utils import copy_file_if_changed
 from .scenes import DEFAULT_LANGUAGE, Render
 
 if TYPE_CHECKING:
@@ -87,8 +87,10 @@ def render_one(render: Render, quality: str, scenes_dir: Path) -> str | None:
         rendered = next(Path(media_dir).rglob(f"{video.stem}.mp4"), None)
         if completed.returncode != 0 or rendered is None:
             return f"{label}: {completed.stderr.strip()[-2000:]}"
-        video.parent.mkdir(parents=True, exist_ok=True)
-        copyfile(rendered, video)
+        # Moved into place, never written over: a page playing it never gets
+        # half a video, and a hard link to the previous render (studioz keeps
+        # the last commit's so) keeps it.
+        copy_file_if_changed(rendered, video)
     poster = run(
         [
             "ffmpeg",

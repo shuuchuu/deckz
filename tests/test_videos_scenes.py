@@ -7,7 +7,14 @@ from pytest import raises
 from deckz.configuring.settings import GlobalPaths, GlobalSettings
 from deckz.exceptions import VideoSceneError
 from deckz.stamps import digest, write_stamp
-from deckz.videos.scenes import out_of_date, quality, renders, scenes, video_file
+from deckz.videos.scenes import (
+    out_of_date,
+    quality,
+    renders,
+    scenes,
+    state,
+    video_file,
+)
 
 
 def _settings(git_dir: Path) -> GlobalSettings:
@@ -252,3 +259,21 @@ def test_out_of_date_true_when_an_imported_helper_changed(tmp_path: Path) -> Non
     assert not out_of_date(render, "h")
     lesson.write_text("TITLE = 2\n", encoding="utf8")
     assert out_of_date(render, "h")
+
+
+def test_state_tells_what_a_render_needs(tmp_path: Path) -> None:
+    init_repository(str(tmp_path))
+    module = tmp_path / "figures" / "scenes" / "nn" / "demo.py"
+    _write(module, _SIMPLE_SCENE)
+    settings = _settings(tmp_path)
+    scene = scenes(settings)[0]
+    render = renders(settings.paths.videos_dir, scene)[0]
+
+    assert scene.line == 5
+    assert state(render, "h") == "missing"
+    _rendered(render.file, "l")
+    write_stamp(render.file, digest(scene.sources()))
+    assert state(render, "h") == "draft"
+    assert state(render, "l") == "fresh"
+    module.write_text(_SIMPLE_SCENE + "# Changed.\n", encoding="utf8")
+    assert state(render, "l") == "stale"

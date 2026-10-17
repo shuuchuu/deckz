@@ -7,7 +7,15 @@ from pytest import fixture
 
 from deckz.cli import main
 from deckz.configuring.settings import GlobalSettings
-from deckz.status import changed_paths, decks_section, status, translation_section
+from deckz.stamps import digest, write_stamp
+from deckz.status import (
+    changed_paths,
+    decks_section,
+    status,
+    translation_section,
+    videos_section,
+)
+from deckz.videos import renders, scenes
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -100,6 +108,34 @@ def test_status_without_labs_nor_videos(repo: Path) -> None:
     ]
     _, sections = status(_settings(repo), checks=False, decks=False)
     assert [section.key for section in sections] == ["translation", "labs", "videos"]
+
+
+def test_videos_names_each_draft(repo: Path) -> None:
+    module = repo / "figures" / "scenes" / "nn" / "demo.py"
+    module.parent.mkdir(parents=True)
+    module.write_text(
+        "from deckz.videos import register_scene\n\n\n"
+        "@register_scene\nclass Demo:\n    pass\n",
+        encoding="utf8",
+    )
+    settings = _settings(repo)
+    scene = scenes(settings)[0]
+    render = renders(settings.paths.videos_dir, scene)[0]
+    render.file.parent.mkdir(parents=True)
+    render.file.write_bytes(b"video")
+    render.file.with_suffix(".png").write_bytes(b"poster")
+    render.file.with_suffix(".quality").write_text("l", encoding="utf8")
+    write_stamp(render.file, digest(scene.sources()))
+
+    section = videos_section(settings, fetch=False)
+
+    assert [(item.text, item.fix) for item in section.items] == [
+        (
+            "assets/videos/nn/demo.mp4 is a draft (l), not at the published "
+            "quality (h)",
+            "`deckz videos render nn/demo` renders it at the published quality",
+        )
+    ]
 
 
 def test_status_command_prints_every_section(repo: Path, capsys: Any) -> None:

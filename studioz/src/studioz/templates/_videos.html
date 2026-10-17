@@ -1,0 +1,32 @@
+{#- The sidebar's Vidéos view: each scene, its renders' state (`deckz videos
+    list`), a link to its page. Reloads when the workspace changes, and when a
+    job starts or ends (a render). -#}
+{% set waiting = listing.videos | rejectattr("state", "equalto", "fresh") | list | length %}
+<section class="videos" id="videos" hx-swap="outerHTML" hx-trigger="workspace-changed from:body, jobs-changed from:body"
+         hx-get="/espaces/{{ workspace.name }}/videos{% if current %}?video={{ current | urlencode }}{% endif %}">
+  <h2 class="view-title"><span>Vidéos <span class="count" title="Les vidéos jamais rendues, à rendre ou en brouillon">{{ waiting }}</span></span></h2>
+  {% if listing.error %}
+  <p class="error">deckz n'a pas pu lister les vidéos : {{ listing.error }}</p>
+  {% elif not listing.videos %}
+  <p class="empty">Aucune scène Manim dans cet espace.</p>
+  {% else %}
+  <ul class="tree videos-list">
+    {% for folder, group in listing.folders().items() %}
+    <li><details class="folder" open>
+      <summary title="{{ folder }}">{{ folder or "." }}</summary>
+      <ul>
+        {% for scene in group %}
+        <li class="video-item{% if scene.video == current %} current{% endif %}">
+          <a href="/espaces/{{ workspace.name }}/videos/{{ scene.video }}"
+             title="{{ scene.scene }} : {% for r in scene.renders %}{{ r.language or 'toutes les langues' }} {{ states[r.state] }}{{ ' (' ~ r.quality ~ ')' if r.quality }}{{ ', ' if not loop.last }}{% endfor %}">
+            <span class="video-name">{{ scene.video.rpartition("/")[2] }}</span>
+            <span class="video-state" data-state="{{ scene.state }}">{{ states[scene.state] }}</span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </details></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>

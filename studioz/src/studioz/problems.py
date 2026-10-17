@@ -26,7 +26,7 @@ from deckz.exceptions import DeckzError
 from deckz.models import Lang
 
 from . import sources
-from .background import Report, Runs, git
+from .background import Report, Runs, fingerprint, git
 from .watches import Snapshot, State
 
 # `deckz status`'s sections shown, by key. Its built decks not matching their
@@ -110,16 +110,40 @@ def _groups(workspace: Path, sections: list[dict]) -> tuple[Group, ...]:
     return tuple(groups)
 
 
-class Statuses(Runs[tuple[Group, ...]]):
-    """Each workspace's `deckz status`, run again when its files change."""
+def renders(workspace: Path, videos_dir: Path) -> tuple[str, ...]:
+    """What the videos' renders look like, cheaply: git ignores them.
 
-    def __init__(self, base: str | None, command=status_command) -> None:
+    Returns:
+        Each render's stamp and quality file, with its time and size.
+    """
+    root = workspace / videos_dir
+    found = []
+    for path in sorted(root.rglob("*")) if root.is_dir() else ():
+        if path.suffix in {".stamp", ".quality"}:
+            stat = path.stat()
+            found.append(f"{path.relative_to(root)}\0{stat.st_mtime_ns}")
+    return tuple(found)
+
+
+class Statuses(Runs[tuple[Group, ...]]):
+    """Each workspace's `deckz status`, run again when its files change.
+
+    Its renders included: whether a video is a draft depends on them.
+    """
+
+    def __init__(
+        self,
+        base: str | None,
+        command=status_command,
+        videos_dir: Path | None = None,
+    ) -> None:
         """Prepare the runs.
 
         Args:
             base: What workspaces' changes are counted from (their merge \
                 base with it): the branch they sync with.
             command: `status_command`, which tests replace.
+            videos_dir: The renders' directory, relative to a workspace.
         """
 
         def run(workspace: Path) -> list[str]:
@@ -127,7 +151,12 @@ class Statuses(Runs[tuple[Group, ...]]):
             return command(workspace, since)
 
         super().__init__(
-            run, lambda workspace, out: _groups(workspace, json.loads(out)["sections"])
+            run,
+            lambda workspace, out: _groups(workspace, json.loads(out)["sections"]),
+            lambda workspace: (
+                *fingerprint(workspace),
+                *(renders(workspace, videos_dir) if videos_dir else ()),
+            ),
         )
 
 

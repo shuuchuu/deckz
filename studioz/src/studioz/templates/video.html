@@ -1,0 +1,50 @@
+{#- A video's page: its render (the player reloads itself after a render),
+    or its render as of the last commit beside it, and its scene's module in
+    the editor beside them (`video.js`). -#}
+{% extends "workspace_base.html" %}
+{% block title %}{{ video }} · {{ workspace.name }}{% endblock %}
+{% block page_head %}
+<script type="module" src="/static/video.js"></script>
+{% endblock %}
+{% block main %}
+<main class="deck video-page" id="video-page" data-files="/espaces/{{ workspace.name }}/fichiers">
+  <div class="toolbar">
+    {% set folder, _, short = video.rpartition("/") %}
+    <span class="crumb deck-path" title="{{ video }}">{% if folder %}<span class="crumb-dir">{{ folder }}/</span>{% endif %}<span class="crumb-name">{{ short }}</span></span>
+    <span class="langs">
+      {% for code in ("fr", "en") %}
+      <a data-lang="{{ code }}" href="?lang={{ code }}{% if view == 'changes' %}&vue=avant-apres{% endif %}"{% if code == lang %} class="current" aria-current="true"{% endif %}>{{ code }}</a>
+      {% endfor %}
+    </span>
+    <span class="views">
+      <button type="button" data-view="render" aria-pressed="{{ 'true' if view == 'render' else 'false' }}">Rendu</button>
+      <button type="button" data-view="changes" aria-pressed="{{ 'true' if view == 'changes' else 'false' }}"
+              title="Le rendu du dernier commit à côté du rendu actuel">Avant/après</button>
+    </span>
+  </div>
+  <div class="deck-body">
+    <div class="viewer-area video-area">
+      <section class="video-player" id="video-player" hx-swap="outerHTML" hx-trigger="load"
+               hx-get="/espaces/{{ workspace.name }}/videos/{{ video }}/lecteur?lang={{ lang }}{% if view == 'changes' %}&vue=avant-apres{% endif %}">
+        <p class="empty">Lecture de la scène… (deckz liste les vidéos en moins d'une seconde)</p>
+      </section>
+      <p class="notice" id="notice" role="status"></p>
+    </div>
+    <div class="sash" data-side="split" title="Glisser pour partager autrement, double-cliquer pour moitié-moitié"></div>
+    <section class="editor-pane" id="editor-pane" hidden>
+      <div class="editor-bar">
+        <span class="crumb editor-file" id="editor-file"></span>
+        <button type="button" class="editor-dirty" id="editor-save" hidden
+                title="Modifications non enregistrées : cliquer pour enregistrer (Ctrl+S)" aria-label="Enregistrer">●</button>
+        <span class="editor-status" id="editor-status"></span>
+        <span class="editor-actions">
+          <button type="button" class="secondary" id="editor-ask" title="Écrire à l'agent à propos de ce passage">Demander à l'agent</button>
+          <button type="button" id="editor-close" class="secondary icon" title="Fermer le fichier" aria-label="Fermer le fichier">✕</button>
+        </span>
+      </div>
+      <p class="editor-message" id="editor-message" hidden></p>
+      <div class="editor" id="editor"></div>
+    </section>
+  </div>
+</main>
+{% endblock %}

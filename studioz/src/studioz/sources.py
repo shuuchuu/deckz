@@ -1,7 +1,8 @@
 """The source files a person edits in a workspace, from studioz's editor.
 
-Only the repository's material: content and deck files (`EDITABLE`), never
-a hidden directory's (`.git`, builds), and a save never overwrites what
+Only the repository's material: content and deck files (`EDITABLE`), and the
+videos' scenes (`SCENES_EDITABLE`, under the scenes' directory), never a
+hidden directory's (`.git`, builds), and a save never overwrites what
 changed on disk since the editor read it (another editor, the agent): each
 read gives the file's version, and a save names the version it replaces.
 """
@@ -12,6 +13,7 @@ from shutil import copymode
 from tempfile import NamedTemporaryFile
 
 EDITABLE = frozenset({".md", ".yml"})
+SCENES_EDITABLE = frozenset({".py"})
 
 
 class ChangedOnDiskError(Exception):
@@ -23,20 +25,27 @@ class ChangedOnDiskError(Exception):
         """The file's version now."""
 
 
-def source(workspace: Path, file: str) -> Path | None:
+def source(workspace: Path, file: str, scenes: Path | None = None) -> Path | None:
     """The workspace's file `file`, if it's one studioz edits.
+
+    Args:
+        workspace: The workspace.
+        file: The file, relative to it.
+        scenes: The videos' scenes directory, relative to the workspace.
 
     Returns:
         Its path, None unless `file` is a relative path within the \
         workspace, through no hidden directory, to an existing file whose \
-        suffix is `EDITABLE`.
+        suffix is `EDITABLE` (or `SCENES_EDITABLE`, under `scenes`).
     """
     relative = Path(file)
     parts = relative.parts
     if not parts or relative.is_absolute() or any(p.startswith(".") for p in parts):
         return None
     path = workspace / relative
-    if path.suffix not in EDITABLE or not path.is_file():
+    scene = scenes is not None and relative.is_relative_to(scenes)
+    editable = EDITABLE | SCENES_EDITABLE if scene else EDITABLE
+    if path.suffix not in editable or not path.is_file():
         return None
     if not path.resolve().is_relative_to(workspace.resolve()):
         return None

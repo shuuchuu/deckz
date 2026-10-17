@@ -46,6 +46,7 @@ from . import (
     problems,
     sources,
     sync,
+    videos,
     workflows,
     workspaces,
 )
@@ -105,7 +106,9 @@ class Studio:
 
     def source(self, name: str, file: str) -> Path:
         found = self.workspace(name)
-        path = sources.source(found.worktree.path, file)
+        paths = self.settings.paths
+        scenes = paths.scenes_dir.relative_to(paths.git_dir)
+        path = sources.source(found.worktree.path, file, scenes)
         if path is None:
             raise HTTPException(404, f"Pas de fichier modifiable « {file} »")
         return path
@@ -1239,6 +1242,168 @@ def publish(
     return _started(request, found)
 
 
+def _videos(studio: Studio, name: str) -> tuple[workspaces.Workspace, videos.Listing]:
+    """The workspace's videos, the renders of its last commit kept on the way.
+
+    Returns:
+        The workspace and its videos.
+    """
+    found = studio.workspace(name)
+    listed = videos.listing(found.worktree.path)
+    videos.keep_baselines(found.worktree.path, listed)
+    return found, listed
+
+
+@router.get("/espaces/{name}/videos", response_class=HTMLResponse)
+def videos_panel(
+    request: Request, studio: StudioDep, name: str, video: str = ""
+) -> Response:
+    """The sidebar's Vidéos view: each scene and where its renders stand.
+
+    Returns:
+        The view's list, which reloads when the workspace changes or a job \
+        starts or ends.
+    """
+    found, listed = _videos(studio, name)
+    return _render(
+        request,
+        "_videos.html",
+        workspace=found,
+        listing=listed,
+        current=video,
+        states=videos.STATES,
+    )
+
+
+def _video(
+    studio: Studio, name: str, video: str
+) -> tuple[workspaces.Workspace, videos.Listing, videos.Video]:
+    found, listed = _videos(studio, name)
+    scene = listed.find(video)
+    if scene is None:
+        detail = listed.error or f"Pas de vidéo « {video} » dans « {name} »"
+        raise HTTPException(404, detail)
+    return found, listed, scene
+
+
+@router.get("/espaces/{name}/rendus/{file:path}")
+def video_file(studio: StudioDep, name: str, file: str) -> Response:
+    """A render or its poster, or a render as of the last commit.
+
+    Returns:
+        The file.
+
+    Raises:
+        HTTPException: 404 for anything else.
+    """
+    found = studio.workspace(name)
+    paths = studio.settings.paths
+    path = videos.served(
+        found.worktree.path, file, paths.videos_dir.relative_to(paths.git_dir)
+    )
+    if path is None:
+        raise HTTPException(404, f"Pas de rendu « {file} »")
+    return FileResponse(path, headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/espaces/{name}/videos/{video:path}/lecteur", response_class=HTMLResponse)
+def video_player(
+    request: Request,
+    studio: StudioDep,
+    name: str,
+    video: str,
+    lang: Lang = "fr",
+    vue: str | None = None,
+) -> Response:
+    """The scene's render, or its render as of the last commit beside it.
+
+    Returns:
+        The player, with the scene's state and its render buttons, which \
+        reloads when the workspace changes or a job starts or ends.
+    """
+    found, listed, scene = _video(studio, name, video)
+    path = found.worktree.path
+    render = scene.render(lang)
+    rendered = path / render.file
+    before = videos.baseline(path, scene, render)
+    return _render(
+        request,
+        "_video_player.html",
+        workspace=found,
+        scene=scene,
+        render=render,
+        lang=lang,
+        view="changes" if vue == "avant-apres" else "render",
+        states=videos.STATES,
+        published_quality=listed.published_quality,
+        draft_quality=videos.DRAFT_QUALITY,
+        rendered=rendered.is_file(),
+        version=rendered.stat().st_mtime_ns if rendered.is_file() else 0,
+        before=before.relative_to(path).as_posix() if before else None,
+        before_version=before.stat().st_mtime_ns if before else 0,
+        unchanged=videos.unchanged(path, scene),
+    )
+
+
+@router.post("/espaces/{name}/videos/{video:path}/rendre", response_class=HTMLResponse)
+def render_video(
+    studio: StudioDep, name: str, video: str, final: Annotated[bool, Form()] = False
+) -> Response:
+    """Start a job rendering the scene, a draft or at the published quality.
+
+    Returns:
+        No content, with the events opening the panel's Tâches tab.
+    """
+    found, listed, scene = _video(studio, name, video)
+    path = found.worktree.path
+    quality = listed.published_quality if final else videos.DRAFT_QUALITY
+    title = (
+        f"Rendu final de la vidéo {scene.video} ({quality})"
+        if final
+        else f"Brouillon de la vidéo {scene.video} ({quality})"
+    )
+    studio.jobs.submit(
+        path, title, videos.render_steps(path, scene.video, quality), rerun=True
+    )
+    return Response(
+        headers={
+            "HX-Trigger-After-Settle": json.dumps(
+                {"jobs-changed": None, "job-started": None}
+            ),
+            "HX-Reswap": "none",
+        }
+    )
+
+
+@router.get("/espaces/{name}/videos/{video:path}", response_class=HTMLResponse)
+def video_page(
+    request: Request,
+    studio: StudioDep,
+    name: str,
+    video: str,
+    lang: Lang = "fr",
+    vue: str | None = None,
+) -> Response:
+    """A scene's page: its render, and its module in the editor beside it.
+
+    Returns:
+        The page; the player (`video_player`) loads itself, deckz's listing \
+        taking under a second.
+    """
+    found = studio.workspace(name)
+    workspaces.mark_used(found.worktree.path)
+    return _render(
+        request,
+        "video.html",
+        workspace=found,
+        decks=workspaces.decks(found.worktree.path),
+        video=video,
+        lang=lang,
+        view="changes" if vue == "avant-apres" else "render",
+        declared=workflows.declared(found.worktree.path),
+    )
+
+
 def _agent_entry(entry: agent.Entry) -> str:
     return templates.get_template("_agent_entry.html").render(entry=entry)
 
@@ -1983,11 +2148,17 @@ def create_app(
         The application.
     """
     main = main_checkout(repository)
+    settings = GlobalSettings.from_yaml(main)
+    paths = settings.paths
     studio = Studio(
         main,
-        GlobalSettings.from_yaml(main),
+        settings,
         watches or Watches(),
-        statuses or problems.Statuses(workspaces.base_branch(main)),
+        statuses
+        or problems.Statuses(
+            workspaces.base_branch(main),
+            videos_dir=paths.videos_dir.relative_to(paths.git_dir),
+        ),
         affected or changes.Affected(),
         baselines or Baselines(),
         changes.LangPairs(),

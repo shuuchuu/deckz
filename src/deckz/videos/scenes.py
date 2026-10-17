@@ -13,7 +13,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, overload
+from typing import TYPE_CHECKING, Literal, overload
 
 from ..exceptions import VideoSceneError
 from ..models import Lang
@@ -42,6 +42,8 @@ class Scene:
     import_root: Path | None = None
     """The directory the module's absolute imports resolve against \
     (`scenes_dir`'s parent, see `rendering.render_one`), for `sources`."""
+    line: int = 1
+    """The line of its `class` statement in `module`."""
 
     def sources(self) -> tuple[Path, ...]:
         """The files its renders are made from, which their stamps cover.
@@ -146,6 +148,7 @@ def scenes(settings: "GlobalSettings") -> list[Scene]:
                         path.as_posix(),
                         languages,
                         scenes_dir.parent,
+                        node.lineno,
                     )
                 )
     return found
@@ -206,6 +209,25 @@ def quality(file: Path) -> str | None:
     return stamp.read_text(encoding="utf8").strip() if stamp.is_file() else None
 
 
+def state(render: Render, wanted: str) -> Literal["missing", "stale", "draft", "fresh"]:
+    """Where `render` stands, `wanted` being the quality it's published at.
+
+    Returns:
+        `missing` if it was never rendered, `stale` if it or its poster \
+        doesn't match its scene's sources anymore, `draft` if it does but \
+        at another quality than `wanted`, else `fresh`.
+    """
+    file = render.file
+    if not file.is_file():
+        return "missing"
+    sources = render.scene.sources()
+    if not file.with_suffix(".png").is_file() or not is_fresh(
+        file, digest(sources), sources
+    ):
+        return "stale"
+    return "fresh" if quality(file) == wanted else "draft"
+
+
 def out_of_date(render: Render, wanted: str) -> bool:
     """Whether `render` must be (re-)rendered at quality `wanted`.
 
@@ -213,10 +235,4 @@ def out_of_date(render: Render, wanted: str) -> bool:
         True if it or its poster is missing, if its stamp (`deckz.stamps`) \
         doesn't match its scene's sources, or if it's at another quality.
     """
-    file = render.file
-    sources = render.scene.sources()
-    return (
-        not file.with_suffix(".png").is_file()
-        or not is_fresh(file, digest(sources), sources)
-        or quality(file) != wanted
-    )
+    return state(render, wanted) != "fresh"

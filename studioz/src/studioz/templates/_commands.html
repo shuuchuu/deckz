@@ -5,6 +5,7 @@
     focuses one. Its text is the command's name, `data-keys` its shortcut. -#}
 {% set base = "/espaces/" ~ workspace.name %}
 {% set deck = deck or "" %}
+{% set video = video or "" %}
 <div id="commands" hidden>
   {% if deck %}
   <button type="button" data-dialog="#action-dialog" data-url="{{ base }}/formations/{{ deck }}/construire/formulaire">Formation : construire les PDF…</button>
@@ -13,6 +14,15 @@
   <button type="button" data-click='.views button[data-view="changes"]'>Formation : voir l'avant/après</button>
   {% for code in ("fr", "en") if code != lang %}
   <button type="button" data-click='.langs a[data-lang="{{ code }}"]'>Formation : passer en {{ code }}</button>
+  {% endfor %}
+  {% endif %}
+  {% if video %}
+  <button type="button" data-click='[data-render="draft"]'>Vidéo : rendre un brouillon</button>
+  <button type="button" data-click='[data-render="final"]'>Vidéo : rendu final</button>
+  <button type="button" data-click='.views button[data-view="render"]'>Vidéo : voir le rendu</button>
+  <button type="button" data-click='.views button[data-view="changes"]'>Vidéo : voir l'avant/après</button>
+  {% for code in ("fr", "en") if code != lang %}
+  <button type="button" data-click='.langs a[data-lang="{{ code }}"]'>Vidéo : passer en {{ code }}</button>
   {% endfor %}
   {% endif %}
   <button type="button" data-dialog="#action-dialog" data-url="{{ base }}/construire/formulaire">Formations : construire toutes les formations…</button>
@@ -30,6 +40,7 @@
   <button type="button" data-toggle="panel" data-keys="Ctrl+J">Affichage : panneau</button>
   <button type="button" data-toggle="agent" data-keys="Ctrl+Alt+B">Affichage : agent</button>
   <button type="button" data-show-view="formations">Affichage : Formations</button>
+  <button type="button" data-show-view="videos">Affichage : Vidéos</button>
   <button type="button" data-show-view="modifications">Affichage : Modifications</button>
   <button type="button" data-show-view="publication">Affichage : Publication</button>
   <button type="button" data-show-view="agent">Affichage : Avec l'agent</button>

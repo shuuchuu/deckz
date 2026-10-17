@@ -331,18 +331,17 @@ def videos_section(settings: "GlobalSettings", *, fetch: bool) -> StatusSection:
                 "`deckz videos render` (decks using them fail to build)",
             )
         )
-    drafts = [
-        r
+    # Named, each: `deckz videos publish` refuses them.
+    items += [
+        StatusItem(
+            f"{r.file.relative_to(git_dir)} is a draft ({quality(r.file)}), "
+            f"not at the published quality ({videos.published_quality})",
+            f"`deckz videos render {r.scene.video}` renders it at the published "
+            "quality",
+        )
         for r in found
         if r.file.is_file() and quality(r.file) != videos.published_quality
     ]
-    if drafts:
-        items.append(
-            StatusItem(
-                f"{_count(len(drafts), 'video')} rendered as drafts",
-                "`deckz videos render` renders them at the published quality",
-            )
-        )
     ref = f"{videos.publish_remote}/{videos.publish_branch}"
     commit = (
         fetch_published(git_dir, videos.publish_remote, videos.publish_branch)

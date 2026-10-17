@@ -458,6 +458,14 @@ stopped or a crash left running are "interrompues"); a build runs again as is, a
 upload or a publication reopens its dialog. `static/notifications.js` notifies each
 job's end as VS Code does (a toast, the status bar's bell, a desktop notification
 when the page is hidden), from the status bar's jobs item.
+`studioz.videos` backs the Vidéos view and a scene's page (`static/video.js`):
+the workspace's `deckz videos list --json`, its render in a `<video>` beside its
+module in the editor (`studioz.sources` edits `.py` under the scenes' directory
+only), "Brouillon" and "Rendu final" as jobs, and the before/after: renders
+aren't committed, so the last commit's are hard links studioz keeps under
+`.run/studioz/videos/`, which survive the next render because deckz moves a
+render into place rather than writing into it (keep it so). `deckz status`
+runs again when a render's stamp or quality changes (`problems.renders`).
 `studioz.agent` backs the agent panel beside every workspace and deck page:
 one Claude Code conversation per workspace through the Agent SDK, logged in as
 the person (never an API key: studioz removes `ANTHROPIC_API_KEY`), in the

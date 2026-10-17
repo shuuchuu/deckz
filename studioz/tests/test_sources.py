@@ -35,6 +35,19 @@ def test_only_the_material_is_editable(workspace: Path) -> None:
         assert source(workspace, file) is None, file
 
 
+def test_python_only_in_the_videos_scenes(workspace: Path) -> None:
+    scene = workspace / "figures" / "scenes" / "nn" / "demo.py"
+    scene.parent.mkdir(parents=True)
+    scene.write_text("class Demo: ...\n", encoding="utf8")
+    (workspace / "dodo.py").write_text("x", encoding="utf8")
+    scenes = Path("figures/scenes")
+
+    assert source(workspace, "figures/scenes/nn/demo.py", scenes) == scene
+    assert source(workspace, "figures/scenes/nn/demo.py") is None
+    assert source(workspace, "dodo.py", scenes) is None
+    assert source(workspace, "figures/scenes/../../dodo.py", scenes) is None
+
+
 def test_a_save_names_the_version_it_replaces(workspace: Path) -> None:
     hello = _content(workspace)
     text, version = read(hello)

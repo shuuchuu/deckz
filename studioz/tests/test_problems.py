@@ -99,6 +99,32 @@ def test_status_runs_again_only_after_a_change(tmp_path: Path, workspace: Path) 
     assert len(runs.read_text().split()) == 2
 
 
+def test_status_runs_again_after_a_render(
+    tmp_path: Path, workspace: Path, repository: Path
+) -> None:
+    # Git ignores renders, whose quality decides whether a video is a draft.
+    (repository / ".git" / "info" / "exclude").write_text("/assets/\n", "utf8")
+    script = tmp_path / "fake_status.py"
+    script.write_text(_FAKE_STATUS, encoding="utf8")
+    runs = tmp_path / "runs.txt"
+    statuses = Statuses(
+        None,
+        lambda _, since: [sys.executable, str(script), str(runs), str(since)],
+        videos_dir=Path("assets/videos"),
+    )
+    _finished(statuses, workspace)
+    render = workspace / "assets" / "videos" / "nn" / "demo.mp4"
+    render.parent.mkdir(parents=True)
+    render.write_bytes(b"video")
+
+    _finished(statuses, workspace)
+    assert len(runs.read_text().split()) == 1
+
+    render.with_suffix(".quality").write_text("l", encoding="utf8")
+    _finished(statuses, workspace)
+    assert len(runs.read_text().split()) == 2
+
+
 def test_a_failed_status_says_why(workspace: Path) -> None:
     statuses = Statuses(
         None, lambda *_: [sys.executable, "-c", "raise SystemExit('boom')"]
