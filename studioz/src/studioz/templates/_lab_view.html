@@ -19,7 +19,10 @@
       {% if notebook.language != lang %}<span class="lab-state" data-state="missing">affiché en {{ notebook.language }}</span>{% endif %}
     </span>
     <span class="deck-actions">
-      <button type="button" class="secondary" hx-post="{{ base }}/ouvrir?lang={{ notebook.language }}" hx-target="#notice" hx-swap="innerHTML"
+      <button type="button" class="secondary" data-action="gpu" data-dialog="#action-dialog" data-url="/espaces/{{ workspace.name }}/gpu/formulaire"
+              data-values='{{ {"tp": notebook.name} | tojson }}'
+              title="L'exécuter, dans ses deux langues, sur une machine GPU louée pour l'occasion : le coût est indiqué avant">Exécuter sur GPU…</button>
+      <button type="button" class="secondary" data-action="ouvrir" hx-post="{{ base }}/ouvrir?lang={{ notebook.language }}" hx-target="#notice" hx-swap="innerHTML"
               title="L'ouvrir avec l'application du système pour les notebooks (Jupyter, VS Code…) : le modifier là, puis `deckz labs fmt`">Ouvrir dans mon éditeur</button>
     </span>
   </header>

@@ -1,0 +1,20 @@
+{#- The status bar's item while a machine bills (VS Code's remote indicator):
+    its GPU, the time and the cost so far; a click opens the machines'
+    dialog, with "Arrêter la machine". Nothing while none is rented. -#}
+{% for machine in found.machines %}
+{% set hours = machine.hours(now) %}
+{% set cost = machine.cost(now) %}
+<button type="button" class="status-item gpu-badge" data-dialog="#action-dialog"
+        data-url="/espaces/{{ workspace.name }}/gpu/machines"
+        title="Machine GPU {{ machine.name }} louée{% if machine.rented_at %} depuis {{ machine.rented_at.astimezone().strftime('%H:%M') }}{% endif %} : elle est facturée jusqu'à sa destruction">
+  GPU {{ machine.gpu }}{% if hours is not none %} · {{ hours | hours }}{% endif %}{% if cost is not none %} · {{ cost | dollars }}{% endif %}</button>
+{% else %}
+{% if found.error %}
+<button type="button" class="status-item gpu-badge" data-state="error" data-dialog="#action-dialog"
+        data-url="/espaces/{{ workspace.name }}/gpu/machines"
+        title="deckz n'a pas pu lire les machines GPU de l'espace : {{ found.error }}">GPU ?</button>
+{% elif renting %}
+<button type="button" class="status-item gpu-badge" data-state="renting" data-show-panel="taches"
+        title="Une exécution sur GPU loue sa machine">GPU : location…</button>
+{% endif %}
+{% endfor %}

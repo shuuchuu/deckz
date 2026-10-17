@@ -15,6 +15,7 @@ def status(
     watch: bool = False,
     interval: int = 120,
     plain: bool = False,
+    offline: bool = False,
     machine: str | None = None,
     workdir: Path = Path(),
 ) -> None:
@@ -34,13 +35,22 @@ def status(
             GPU, dollars per hour, when it was rented in ISO 8601: it bills
             since) and per notebook (name, state, exit code, seconds), for a
             script or an agent, instead of a table
+        offline: Only what this checkout keeps of its machines (their
+            `state.json`): no call to the backend, nothing fetched, no
+            notebook; each machine's state is `rented`, its price the
+            offer's when it was rented (empty for a machine rented before
+            deckz kept it). For something polling often, like studioz
         machine: Show only this machine, instead of every one rented
         workdir: Path to move into before running the command
+
+    Raises:
+        GpuRunError: For --offline with --watch.
 
     """
     from time import sleep
 
     from ....configuring.settings import GlobalSettings
+    from ....exceptions import GpuRunError
     from ....labs.gpu import GpuRun, machines
 
     settings = GlobalSettings.from_yaml(workdir)
@@ -50,6 +60,13 @@ def status(
     ]
     if not runs:
         print("machine\tnone" if plain else "No machine rented.")
+        return
+    if offline:
+        if watch:
+            msg = "--offline reads what this checkout keeps, once: drop --watch"
+            raise GpuRunError(msg)
+        for gpu_run in runs:
+            _print_offline(gpu_run, plain=plain)
         return
     # Polls in a row a machine couldn't be reached, given up on at _MAX_MISSES.
     misses = dict.fromkeys(range(len(runs)), 0)
@@ -71,6 +88,23 @@ def status(
 _MAX_MISSES = 3
 """Polls in a row a machine may be unreachable (a network outage, the backend's \
 API not answering) before --watch stops following it."""
+
+
+def _print_offline(gpu_run: "GpuRun", *, plain: bool) -> None:
+    state = gpu_run.state()
+    if state is None:  # Destroyed since it was listed.
+        return
+    price = "" if state.price is None else f"{state.price:.3f}"
+    rented_at = state.rented_at or ""
+    if plain:
+        print(f"machine\t{gpu_run.machine}\trented\t{state.gpu}\t{price}\t{rented_at}")
+        return
+    details = [state.gpu]
+    if price:
+        details.append(f"${price}/h")
+    if rented_at:
+        details.append(f"rented at {rented_at}")
+    print(f"{gpu_run.machine}: {', '.join(details)} (not asked to the backend)")
 
 
 def _poll(gpu_run: "GpuRun", *, plain: bool) -> bool | None:

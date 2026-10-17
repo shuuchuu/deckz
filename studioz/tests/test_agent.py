@@ -167,6 +167,21 @@ def test_the_hook_refuses_commits() -> None:
         output = decision(command)["hookSpecificOutput"]
         assert "« Rien à porter… »" in output["permissionDecisionReason"]
     assert decision("deckz i18n stale --plain") == {}
+    for command in (
+        "deckz labs gpu up",
+        "uv run deckz labs gpu run --timeout 600",
+        ".venv/bin/deckz --verbose labs gpu pass labs/notebooks/a/demo-fr.ipynb",
+        "deckz labs gpu pass a.ipynb --dry-run; deckz labs gpu pass a.ipynb",
+    ):
+        output = decision(command)["hookSpecificOutput"]
+        assert "« Exécuter sur GPU… »" in output["permissionDecisionReason"]
+    for command in (
+        "deckz labs gpu pass a.ipynb --dry-run --json",
+        "deckz labs gpu status --plain",
+        "deckz labs gpu down",
+        "deckz labs gpu report",
+    ):
+        assert decision(command) == {}
 
 
 def test_other_permission_requests_are_denied() -> None:

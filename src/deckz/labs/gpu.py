@@ -284,6 +284,8 @@ class GpuState:
     port: int | None = None
     rented_at: str | None = None
     """When it was rented (ISO 8601, with its offset): it bills since."""
+    price: float | None = None
+    """Dollars per hour, the offer's when it was rented."""
 
 
 @dataclass(frozen=True)
@@ -523,7 +525,10 @@ class VastBackend:
                     created = {}
                 if created.get("success"):
                     return GpuState(
-                        id=created["new_contract"], gpu=offer.gpu, machine=offer.machine
+                        id=created["new_contract"],
+                        gpu=offer.gpu,
+                        machine=offer.machine,
+                        price=offer.price,
                     )
                 _logger.info("Offer %s not rented: %s", offer.id, out.strip()[:200])
         msg = f"no offer rented among {', '.join(gpus)}"
@@ -1296,9 +1301,11 @@ def report(path: Path, *, slowest: int = 5) -> RunReport:
     maxrss = path.with_name(path.name + ".maxrss")
     shell = path.with_name(path.name + ".shell")
     code = [(i, c) for i, c in enumerate(nb["cells"]) if c["cell_type"] == "code"]
+    # A cell tagged `raises-exception` (Jupyter's convention) raises on purpose.
     errors = tuple(
         CellError(i, out.get("ename", ""), out.get("evalue", "")[:200])
         for i, cell in code
+        if "raises-exception" not in cell.get("metadata", {}).get("tags", [])
         for out in cell.get("outputs", [])
         if out.get("output_type") == "error"
     )

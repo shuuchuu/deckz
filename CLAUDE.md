@@ -476,12 +476,24 @@ nbconvert nor nbdime). The page holding the notebook is served sandboxed, its sc
 studioz's own (`notebooks.frame_headers`): outputs carry the notebook's HTML, and
 nothing in it may reach studioz's routes. A notebook isn't edited in studioz (it's
 JSON): "Ouvrir dans mon éditeur" opens it with the system's application.
+`studioz.gpu` runs GPU passes: "Exécuter sur GPU…" (a notebook's page, or the
+notebooks ticked in the TP view) opens a modal from the workspace's `deckz labs gpu
+pass --dry-run --json` (the GPU, its price, the estimate, the ceiling), its button
+naming the cost and the focus on Annuler (Enter in a field only estimates again);
+the pass is a job of its own lane (`Job.lane`: it doesn't hold the builds back),
+every option spelled out, given 300 s to destroy its machine when stopped before
+being killed. The status bar shows each machine billing from `deckz labs gpu status
+--plain --offline` (run again only when a machine's `state.json` changes), so a
+machine a crash left rented shows too; "Arrêter la machine" stops the pass running
+it, asked first, else runs `deckz labs gpu down`. A pass that wrote outputs links
+its notification to the notebook's before/after (`Job.link`).
 `studioz.agent` backs the agent panel beside every workspace and deck page:
 one Claude Code conversation per workspace through the Agent SDK, logged in as
 the person (never an API key: studioz removes `ANTHROPIC_API_KEY`), in the
 workspace with the repository's project settings, `auto` permissions in the
 sandbox, and a `PreToolUse` hook refusing the `git` commands that commit, push
-or move a branch (the person commits from studioz); a question it asks
+or move a branch (the person commits from studioz), and `deckz labs gpu up|run|pass`
+but a dry run (a pass starts from its modal, which gives the cost); a question it asks
 (`AskUserQuestion`) is a form in the panel: a `PreToolUse` hook defers it, so
 the turn ends on it and it waits in `.run/studioz/agent/question.json`, across
 restarts, until the answers resume the session, where Claude Code runs the call

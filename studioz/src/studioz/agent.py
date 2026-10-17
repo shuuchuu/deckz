@@ -11,10 +11,12 @@ settings only (its `CLAUDE.md`, skills and hooks; not the person's own
 `~/.claude` setup, nor auto memory), `auto` permissions inside Claude Code's
 command sandbox, and the workspace's own deckz and caches (plan, "Finding 2").
 It never commits, pushes nor moves the branch: a `PreToolUse` hook refuses
-it, the person commits from studioz. A tool call the permission rules would
-ask about is refused with a message, never shown to the person. A question
-the agent asks (`AskUserQuestion`, as slides' skills do) is shown as a form,
-and the turn waits for the answer (`can_use_tool`).
+it, the person commits from studioz; nor rents a GPU machine (`deckz labs gpu
+up|run|pass`): the person starts a pass from its modal, which gives the cost.
+A tool call the permission rules would ask about is refused with a message,
+never shown to the person. A question the agent asks (`AskUserQuestion`, as
+slides' skills do) is shown as a form, and the turn waits for the answer
+(`can_use_tool`).
 
 Claude's usage limits are the account's (the person's other uses of Claude
 count too): the panel shows the five-hour and seven-day windows as Claude Code
@@ -132,6 +134,26 @@ _CHANGING = {
 # deckz's own command making a commit (an empty one): the person makes it from
 # the "À traduire" panel.
 _MARK_SYNCED = re.compile(r"\bdeckz\b[^;&|\n]*\si18n\s+mark-synced\b")
+
+# deckz's commands renting a GPU machine, or running on one: it bills, so the
+# person starts a pass from studioz's modal, which gives the cost first. A
+# dry run rents nothing. (studioz's rule, not deckz's: in a terminal, sessions
+# run passes on purpose.)
+_GPU = re.compile(
+    r"\bdeckz\b[^;&|\n]*\slabs\s+gpu\s+(?P<verb>up|run|pass)\b(?P<rest>[^;&|\n]*)"
+)
+
+
+def refused_gpu(command: str) -> str | None:
+    """Whether `command` rents a GPU machine or runs on one.
+
+    Returns:
+        The `deckz labs gpu` subcommand refused, None if it may run.
+    """
+    for found in _GPU.finditer(command):
+        if not (found["verb"] == "pass" and "--dry-run" in found["rest"].split()):
+            return found["verb"]
+    return None
 
 
 def refused_git(command: str) -> str | None:
@@ -495,6 +517,14 @@ async def _refuse_git(  # ruff: ignore[unused-async]
             f"`git {verb}` est refusé dans studioz : la personne committe, "
             "synchronise et change de branche elle-même. Laisse les "
             "modifications dans l'espace et dis-lui ce que tu as fait."
+        )
+    elif (gpu_verb := refused_gpu(command)) is not None:
+        reason = (
+            f"`deckz labs gpu {gpu_verb}` est refusé dans studioz : une machine GPU "
+            "est facturée. Dis à la personne quels notebooks exécuter, et "
+            "pourquoi : elle lance l'exécution depuis la page du notebook ou la "
+            "vue TP (« Exécuter sur GPU… »), qui en donne le coût. `deckz labs "
+            "gpu pass … --dry-run` l'estime sans rien louer."
         )
     elif _MARK_SYNCED.search(command):
         reason = (

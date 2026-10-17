@@ -65,6 +65,15 @@ function item(notification, { toast }) {
   log.dataset.openPanel = "taches";
   log.textContent = "Voir le journal";
   actions.append(log);
+  // What the job made, to see: a notebook's before/after.
+  if (notification.link) {
+    const [label, url] = notification.link;
+    const link = document.createElement("a");
+    link.className = "button";
+    link.href = url;
+    link.textContent = label;
+    actions.prepend(link);
+  }
   li.append(icon, text, actions);
   if (toast) {
     const close = document.createElement("button");
@@ -99,7 +108,8 @@ function showDesktop(notification) {
   });
   shown.addEventListener("click", () => {
     window.focus();
-    document.querySelector('[data-open-panel="taches"]')?.click();
+    if (notification.link) location.href = notification.link[1];
+    else document.querySelector('[data-open-panel="taches"]')?.click();
   });
 }
 

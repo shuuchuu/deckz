@@ -312,4 +312,24 @@ document.addEventListener("input", (event) => {
 });
 document.body.addEventListener("htmx:afterSettle", filterLabs);
 
+// The notebooks ticked for a GPU pass, kept across the TP list's reloads.
+const picked = new Set();
+function showPicked() {
+  for (const box of document.querySelectorAll("input.lab-pick")) box.checked = picked.has(box.value);
+  const run = document.getElementById("labs-gpu");
+  if (!run) return;
+  run.disabled = !picked.size;
+  run.title = picked.size
+    ? `Exécuter sur GPU ${picked.size} notebook${picked.size > 1 ? "s" : ""} coché${picked.size > 1 ? "s" : ""}…`
+    : "Cochez des notebooks pour les exécuter sur GPU";
+}
+document.addEventListener("change", (event) => {
+  const box = event.target.closest("input.lab-pick");
+  if (!box) return;
+  if (box.checked) picked.add(box.value);
+  else picked.delete(box.value);
+  showPicked();
+});
+document.body.addEventListener("htmx:afterSettle", showPicked);
+
 render();

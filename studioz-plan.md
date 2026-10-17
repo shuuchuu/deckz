@@ -11,9 +11,10 @@ translation backlog (2026-10-11, after phase 4); then the VS Code layout's
 increments 1 to 4 (2026-10-15, under "The VS Code layout"). All of it is pushed and
 released (deckz 31.3.4). Phase 5 (long jobs) was planned on 2026-10-17 (under
 "Phase 5"); its increments 1 (notifications, jobs kept across restarts, every deck's
-build), 2 (videos), 3 (labs previewed) and 4 (`deckz labs gpu pass`) are done.
-**Next:** phase 5's increment 5 (GPU passes from studioz). Its GPU increments rent
-machines that cost money: never start one without the user saying so. `git log
+build), 2 (videos), 3 (labs previewed), 4 (`deckz labs gpu pass`) and 5 (GPU passes
+from studioz) are done: phase 5 is done. **Next:** "Then, with the colleague" (below
+phase 5), and the open items. A GPU pass rents a machine that costs money: never
+start one without the user saying so. `git log
 origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed. Push and
 release are the user's call.
@@ -35,6 +36,7 @@ architecture):
 | `commits.py`, `sync.py` | the Commit and Synchronisation dialogs |
 | `jobs.py`, `actions.py` | the job queue, kept in each workspace's `.run/studioz/jobs/`; build (a deck, every deck), upload, publish |
 | `videos.py` | the Vidéos view and a scene's page: `deckz videos list --json`, the renders of the last commit kept (hard links) for the before/after, the render jobs |
+| `gpu.py` | GPU passes: the modal's estimate (`deckz labs gpu pass --dry-run --json`), the pass's and `down`'s job steps, the machines billing (`status --plain --offline`, cached by their `state.json`) |
 | `labs.py`, `notebooks.py` | the TP view and a notebook's page (`deckz labs list --json`, cached while the notebook files are the same); a notebook rendered as Colab shows it, and compared cell by cell, in a sandboxed frame |
 | `agent.py` | each workspace's agent conversation (Agent SDK): options, the git refusal hook, questions, the transcript |
 | `checkpoints.py` | the workspace's files before and after each agent turn, and undoing the last one |
@@ -1528,6 +1530,65 @@ machine rented. **Left:** a real pass, once the user says so (increment 5's tria
 the pass doesn't survive its own crash (`kill -9`): the machine stays rented, as
 `status` shows (increment 5 finds it); the agent's refusal of `deckz labs gpu up|run|
 pass` is increment 5's.
+
+**Increment 5: done** (2026-10-18). In studioz (`studioz.gpu`):
+- "Exécuter sur GPU…" on a notebook's page (both its languages) and as the TP view's
+  title action (the notebooks ticked, kept across the list's reloads), and in the
+  palette: a modal as VS Code's, from the workspace's `deckz labs gpu pass --dry-run
+  --json`: the notebooks (each to untick, its last run time), full or short run,
+  "enregistrer les sorties" (on by default for a full run of demos only, as deckz
+  allows), the ceiling (twice the estimate rounded up to the half hour, at least 1 h,
+  else deckz's 4 h), the GPU and its price, the estimate and the cost at the ceiling,
+  that the machine is destroyed whatever happens; its button "Louer une RTX A4000 et
+  exécuter (≈ 0,04 $)", the focus on Annuler, Enter in a field only estimating
+  again; deckz's refusals said in it (a short run without `SHORT_RUN`, a pass
+  already running);
+- the pass a job of its own lane (`Job.lane`, kept with the job): a build doesn't
+  wait an hour behind it, nor it behind a build; every option spelled out; stopped,
+  it gets 300 s to destroy its machine before being killed (5 s otherwise), outside
+  the request; its "Relancer…" reopens the modal on its notebooks;
+- the status bar's item while a machine bills ("GPU RTX A4000 · 37 min · 0,08 $",
+  orange like VS Code's remote indicator), from `deckz labs gpu status --plain
+  --offline`, run again only when a machine's `state.json` changes, so a machine a
+  crash left rented shows after a restart; a click opens the machines' dialog:
+  "Arrêter la machine" stops the pass running it, asked first (its runs in progress
+  are lost), else runs `deckz labs gpu down` at once; the job's own "Arrêter…" goes
+  through the same question;
+- the notification of a pass that wrote outputs carries "Voir l'avant/après" (the
+  toast, the bell's center, and a click on the desktop one), as does the job in
+  Tâches (`Job.link`);
+- the agent's hook refuses `deckz labs gpu up|run|pass` but a dry run, saying the
+  person starts it from "Exécuter sur GPU…".
+
+In deckz: `status --offline` (what the checkout keeps, no call to Vast.ai), and
+`GpuState.price` (the offer's, kept at the rental). Found by the real pass and fixed:
+a run whose cells raised still exited 0 (the notebook carries on past them), so
+`--write-outputs` wrote its broken outputs into the demo; such a run (an error output
+in a cell not tagged `raises-exception`, or a failing `!` command) now fails the pass
+and is never written back (no committed demo of slides holds an error output).
+
+Tried on `studioz-dev` in Chrome (its deckz pointed at the worktree): the modal (2.8 s
+to open, the dry run included), unticking a language, short mode refused for the
+mlflow demo (no `SHORT_RUN`), Enter in the ceiling, the TP view's ticks kept across a
+reload, a `state.json` written by hand for the status bar item and its dialog. Then,
+the user agreeing, one real pass: mlflow-registry-deployment's French demo, full, a
+1 h ceiling, estimated 15 min and $0.03 at $0.134/h. The $0.134 offer was taken
+between the estimate and the rental, so deckz rented the next ($0.191/h, Estonia);
+booting took 15 min (pulling Colab's image), the run 358 s; destroyed after 22.5 min,
+about $0.07. The status bar item showed while it billed and went with the machine;
+the job "terminée", its notification's "Voir l'avant/après" opened the notebook's
+before/after. The run itself was broken (cell 13's `!landscape-classifier` exited 1
+after 14 s, then four cells raised: the repository's demo or its DagsHub hook, not
+studioz), which found the bug above; the notebook was put back. The hook's `uv run`
+re-locked the workspace (it predates slides' `310928d8`) and reinstalled deckz, putting
+`deckz.pth` back on `../deckz`; `uv.lock` was put back. **Left:** the estimate's price
+is the offer's at that moment, and the setup allowance (10 min) was short by 5: the
+modal could say the next offer may cost more, or deckz take a `--max-price`; the
+mlflow demo's run fails at `!landscape-classifier` (slides' to look into: its notes
+in `../slides--studioz-dev/.run/gpu/main/notes.md`); a GPU hook's `uv run` in a
+workspace re-syncs its venv (a workspace's deckz pointed elsewhere for a trial goes
+back to `../deckz`); a pass stopped while renting has no machine in the dialog (its
+job's "Arrêter…" still stops it).
 
 ### Then, with the colleague
 

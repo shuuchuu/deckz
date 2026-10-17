@@ -29,7 +29,11 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   on Ctrl-C. The machine runs Colab's own image, so what runs there runs on
   Colab. The steps also exist one by one (`up`, `queue`, `run`, `status --watch`,
   `fetch`, `down`: see the README), for a machine kept between passes, which
-  bills until `down`.
+  bills until `down`; `deckz labs gpu status --offline` lists the machines this
+  checkout has rented without asking Vast.ai. In studioz, "Exécuter sur GPU…" (a
+  notebook's page, or the notebooks ticked in the TP view) runs the same pass after
+  a confirmation giving the GPU, the estimate and the ceiling; studioz's agent
+  can't start one.
 - Writing a notebook for Colab: its runtime is Python 3.13 (pin a project the
   notebook installs accordingly), and the image sets `UV_CONSTRAINT` and
   `UV_SYSTEM_PYTHON`, so `!uv pip install --system <packages>` (or `!pip install`)

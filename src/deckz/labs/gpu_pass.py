@@ -129,7 +129,19 @@ class PassResult:
 
     @property
     def failed(self) -> list[RunReport]:
-        return [run for run in self.reports if run.exit_code != 0]
+        """The runs that failed: never written back.
+
+        Those that didn't exit 0, and those where a cell raised or a shell
+        command failed: a notebook carries on past them, and exits 0.
+
+        Returns:
+            Their reports.
+        """
+        return [
+            run
+            for run in self.reports
+            if run.exit_code != 0 or run.errors or run.shell_failures
+        ]
 
 
 def _relative(path: Path, root: Path) -> str:
@@ -302,7 +314,8 @@ def run(
         max_hours: The ceiling: past it, from the rental on, the machine is \
             destroyed, whatever still runs.
         write_outputs: Write each run's outputs back into its notebook, \
-            when it exited 0 (`deckz labs outputs`), once the machine is gone.
+            when it didn't fail (`PassResult.failed`: a cell raising fails
+            it too; `deckz labs outputs`), once the machine is gone.
         gpus: GPUs to rent instead of `labs.gpu.gpus`.
         interval: Seconds between two polls of the queue.
         report: Prints each run's report as it's noted, and what's held, not \
@@ -407,9 +420,13 @@ def _write_back(
 ) -> None:
     from .outputs import write_outputs
 
+    failed = result.failed
     for run_report in result.reports:
         notebook = names.get(run_report.path.name)
-        if notebook is None or run_report.exit_code != 0:
+        if notebook is None:
+            continue
+        if run_report in failed:
+            report(f"kept {notebook} as it was: its run failed")
             continue
         write_outputs(
             gpu_run.directory / "out" / run_report.path.name,

@@ -5,6 +5,7 @@ from . import app
 
 if TYPE_CHECKING:
     from ....labs import gpu_pass
+    from ....labs.gpu import RunReport
 
 
 @app.command(name="pass")
@@ -40,8 +41,9 @@ def pass_(
         max_hours: The ceiling: the machine is destroyed this long after it
             was rented, whatever still runs
         write_outputs: Write each run's outputs back into its notebook
-            when it exited 0, as `deckz labs outputs` does (overwrites
-            them; full runs of demos only)
+            when it exited 0 with no cell raising (but those tagged
+            `raises-exception`) nor shell command failing, as `deckz labs
+            outputs` does (overwrites them; full runs of demos only)
         dry_run: Rent nothing: print the offer it would rent now, each
             notebook's last run time (from the machines' notes) and the
             estimated cost
@@ -56,7 +58,8 @@ def pass_(
         workdir: Path to move into before running the command
 
     Raises:
-        GpuRunError: When a run failed or didn't finish.
+        GpuRunError: When a run failed (a cell raised included) or didn't
+            finish.
 
     """
     import json as json_module
@@ -90,7 +93,7 @@ def pass_(
         gpus=gpu or (),
         interval=interval,
     )
-    problems = [f"{r.path.name} exited {r.exit_code}" for r in result.failed]
+    problems = [_failure(run) for run in result.failed]
     problems += [f"{name} didn't finish" for name in result.unfinished]
     if problems:
         ceiling = (
@@ -98,6 +101,16 @@ def pass_(
         )
         msg = f"{'; '.join(problems)}{ceiling}: see `deckz labs gpu report`"
         raise GpuRunError(msg)
+
+
+def _failure(run: "RunReport") -> str:
+    if run.exit_code != 0:
+        return f"{run.path.name} exited {run.exit_code}"
+    cells = sorted(
+        {e.index for e in run.errors} | {s.index for s in run.shell_failures}
+    )
+    listed = ", ".join(f"[{index}]" for index in cells)
+    return f"{run.path.name}: cell(s) {listed} raised or ran a failing command"
 
 
 def _print_plan(planned: "gpu_pass.PassPlan") -> None:

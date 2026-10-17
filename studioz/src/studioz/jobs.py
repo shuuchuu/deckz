@@ -2,10 +2,12 @@
 
 A deck's full build, an upload, a publication: each is a job, its commands
 (the workspace's own deckz, every option spelled out) run one after the
-other, stopping at the first that fails. A workspace runs one job at a time,
-in the order they were started (they write the same outputs); workspaces run
-theirs side by side, deckz limiting the compilations machine-wide. A job's
-log is kept to show, and a job can be stopped.
+other, stopping at the first that fails. A workspace runs one job at a time
+in each lane, in the order they were started (a lane's jobs write the same
+outputs); workspaces run theirs side by side, deckz limiting the compilations
+machine-wide. A GPU pass has a lane of its own: it lasts an hour and writes
+only notebooks, and the builds needn't wait for it. A job's log is kept to
+show, and a job can be stopped.
 
 Each job's record and log are kept in its workspace's `.run/studioz/jobs/`
 (the last `_KEPT`), so that they outlive studioz: stopping studioz stops its
@@ -33,6 +35,9 @@ from .watches import workspace_environment
 
 _LOG_LINES = 2000
 _STOP_GRACE = 5.0
+_STOP_GRACES = {"gpu": 300.0}
+"""A lane's grace, when longer: a GPU pass stopped destroys its machine first \
+(`deckz labs gpu pass`), and killed meanwhile it would leave it billing."""
 _KEPT = 30
 """The jobs kept per workspace, the most recent."""
 # deckz's log lines end with where they were logged, alone on its line when
@@ -40,6 +45,15 @@ _KEPT = 30
 _LOCATION = re.compile(r"(?:^|\s{2,})[\w.-]+\.py:\d+$")
 # And start with when and how loud: noise in a notification.
 _LEVEL = re.compile(r"^\d\d:\d\d:\d\d\s+(?:CRITICAL|ERROR|WARNING|INFO|DEBUG)\s+")
+
+
+def tidy(line: str) -> str:
+    """A deckz log line without when, how loud nor where it was logged.
+
+    Returns:
+        Its message.
+    """
+    return _LEVEL.sub("", _LOCATION.sub("", line.rstrip()).rstrip())
 
 
 class JobState(Enum):
@@ -72,6 +86,10 @@ class Job:
     process: subprocess.Popen[str] | None = None
     stopping: bool = False
     interrupted: bool = False
+    lane: str = ""
+    """Jobs of one lane run one after the other; lanes side by side."""
+    link: tuple[str, str] | None = None
+    """What to see once it ended (a label, a URL): a notebook's before/after."""
 
     @property
     def finished(self) -> bool:
@@ -100,6 +118,8 @@ class Job:
             "started": when(self.started),
             "ended": when(self.ended),
             "state": self.state.name,
+            "lane": self.lane,
+            "link": self.link,
         }
 
 
@@ -134,6 +154,8 @@ def _load(workspace: Path) -> list[Job]:
                 JobState[record["state"]],
                 _when(record.get("started")),
                 _when(record.get("ended")),
+                lane=str(record.get("lane") or ""),
+                link=tuple(record["link"]) if record.get("link") else None,
             )
         except (OSError, ValueError, KeyError, TypeError):
             continue
@@ -207,8 +229,10 @@ class Jobs:
         *,
         rerun: bool = False,
         form: str | None = None,
+        lane: str = "",
+        link: tuple[str, str] | None = None,
     ) -> Job:
-        """Queue a job, started at once if its workspace runs none.
+        """Queue a job, started at once if its workspace's lane runs none.
 
         Args:
             workspace: The workspace it works on.
@@ -217,6 +241,8 @@ class Jobs:
             cwd: Where they run; the workspace by default.
             rerun: Whether it may run again as is, without a confirmation.
             form: The dialog starting it again, when it needs one.
+            lane: Its lane: `gpu` for a GPU pass, else the builds' one.
+            link: What to see once it ended (a label, a URL).
 
         Returns:
             The job.
@@ -231,6 +257,8 @@ class Jobs:
                 cwd or workspace,
                 rerun,
                 form,
+                lane=lane,
+                link=link,
             )
             self._jobs.append(job)
             # The oldest finished ones go, records and logs.
@@ -238,7 +266,7 @@ class Jobs:
                 self._jobs.remove(old)
                 _forget(old)
         _save(job)
-        self._start_next(workspace)
+        self._start_next(workspace, lane)
         return job
 
     def rerun(self, workspace: Path, job_id: int) -> Job | None:
@@ -250,7 +278,15 @@ class Jobs:
         job = self.get(workspace, job_id)
         if job is None or not job.finished or not job.rerun:
             return None
-        return self.submit(workspace, job.title, job.steps, job.cwd, rerun=True)
+        return self.submit(
+            workspace,
+            job.title,
+            job.steps,
+            job.cwd,
+            rerun=True,
+            lane=job.lane,
+            link=job.link,
+        )
 
     def jobs(self, workspace: Path) -> list[Job]:
         """The workspace's jobs.
@@ -265,11 +301,11 @@ class Jobs:
         with self._lock:
             return next((j for j in self._known(workspace) if j.id == job_id), None)
 
-    def _start_next(self, workspace: Path) -> None:
+    def _start_next(self, workspace: Path, lane: str) -> None:
         with self._lock:
             if self._closed:
                 return
-            mine = self._known(workspace)
+            mine = [job for job in self._known(workspace) if job.lane == lane]
             if any(job.state is JobState.RUNNING for job in mine):
                 return
             job = next((j for j in mine if j.state is JobState.QUEUED), None)
@@ -296,7 +332,7 @@ class Jobs:
             job.state = state
             job.ended = datetime.now(UTC)
         _save(job)
-        self._start_next(job.workspace)
+        self._start_next(job.workspace, job.lane)
 
     def _run_step(self, job: Job, step: tuple[str, ...]) -> int:
         prefix = f"{job.workspace}/"
@@ -341,8 +377,14 @@ class Jobs:
                 _save(job)
                 return
             process = job.process
-        if process is not None:
-            _terminate(process)
+        if process is None:
+            return
+        grace = _STOP_GRACES.get(job.lane, _STOP_GRACE)
+        if grace > _STOP_GRACE:
+            # Not in the request: the job's own reloads show it end.
+            Thread(target=_terminate, args=(process, grace), daemon=True).start()
+        else:
+            _terminate(process, grace)
 
     def stop_all(self) -> None:
         """Stop every job as studioz ends: they're kept as interrupted."""
@@ -355,17 +397,21 @@ class Jobs:
                     job.state = JobState.INTERRUPTED
                     job.ended = datetime.now(UTC)
                     _save(job)
-            processes = [job.process for job in running if job.process]
-        for process in processes:
-            _terminate(process)
+            processes = [
+                (job.process, _STOP_GRACES.get(job.lane, _STOP_GRACE))
+                for job in running
+                if job.process
+            ]
+        for process, grace in processes:
+            _terminate(process, grace)
 
 
-def _terminate(process: subprocess.Popen[str]) -> None:
+def _terminate(process: subprocess.Popen[str], grace: float) -> None:
     """Stop a step and what it started (deckz's Typst workers), gently first."""
     if process.poll() is not None:
         return
     os.killpg(process.pid, signal.SIGINT)
     try:
-        process.wait(_STOP_GRACE)
+        process.wait(grace)
     except subprocess.TimeoutExpired:
         os.killpg(process.pid, signal.SIGKILL)

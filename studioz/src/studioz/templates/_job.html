@@ -4,18 +4,33 @@
     <span class="job-state">{{ job.state.value }}</span>
     <span class="job-title">{{ job.title }}</span>
     <span class="hint">{{ (job.ended or job.started or job.created) | ago }}</span>
-    {% if not job.finished %}
+    {% if not job.finished and job.lane == "gpu" %}
+    {#- A GPU pass is stopped from the machines' dialog, which asks first while
+        it runs (its runs in progress would be lost); a machine's destruction
+        isn't stopped. -#}
+    {% if job.steps[0][1:4] == ("labs", "gpu", "pass") %}
+    {% if job.state.name == "QUEUED" %}
+    <button type="button" class="secondary" hx-post="/espaces/{{ workspace.name }}/taches/{{ job.id }}/arreter"
+            hx-target="#job-{{ job.id }}" hx-swap="outerHTML">Annuler</button>
+    {% else %}
+    <button type="button" class="secondary" data-dialog="#action-dialog" data-url="/espaces/{{ workspace.name }}/gpu/arreter">Arrêter…</button>
+    {% endif %}
+    {% endif %}
+    {% elif not job.finished %}
     <button type="button" class="secondary" hx-post="/espaces/{{ workspace.name }}/taches/{{ job.id }}/arreter"
             hx-target="#job-{{ job.id }}" hx-swap="outerHTML">Arrêter</button>
     {% elif job.rerun %}
     <button type="button" class="secondary" hx-post="/espaces/{{ workspace.name }}/taches/{{ job.id }}/relancer"
             hx-target="#jobs" hx-swap="outerHTML">Relancer</button>
-    {% elif job.form and job.state.name != "DONE" %}
+    {% elif job.form and (job.state.name != "DONE" or job.lane == "gpu") %}
     <button type="button" class="secondary" data-dialog="#action-dialog" data-url="{{ job.form }}">Relancer…</button>
     {% endif %}
   </header>
   {% if job.state.name == "INTERRUPTED" %}
   <p class="hint">Interrompue par l'arrêt de studioz.</p>
+  {% endif %}
+  {% if job.finished and job.link %}
+  <p><a href="{{ job.link[1] }}">{{ job.link[0] }}</a></p>
   {% endif %}
   {% if open %}
   <pre class="job-log">{% for line in job.log %}{{ line }}

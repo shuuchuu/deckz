@@ -265,6 +265,29 @@ def test_jobs_outlive_studioz(tmp_path: Path) -> None:
     assert again.submit(tmp_path, "next", [_python("pass")]).id == queued.id + 1
 
 
+def test_lanes_run_side_by_side_and_are_kept(tmp_path: Path) -> None:
+    jobs = Jobs()
+    sleeping = _python("import time; time.sleep(30)")
+    build = jobs.submit(tmp_path, "build", [sleeping])
+    link = ("Voir l'avant/après", "/espaces/demo/tp/a/demo?vue=avant-apres")
+    gpu = jobs.submit(
+        tmp_path, "pass", [_python("print('ran')")], lane="gpu", link=link
+    )
+    after = jobs.submit(tmp_path, "pass 2", [sleeping], lane="gpu")
+
+    # The build's lane doesn't hold the GPU's back; the GPU lane's own jobs wait.
+    _wait(gpu)
+    assert build.state is JobState.RUNNING
+    jobs.stop(tmp_path, build.id)
+    jobs.stop(tmp_path, after.id)
+    _wait(after)
+
+    found = {job.title: job for job in Jobs().jobs(tmp_path)}
+    assert found["pass"].lane == "gpu"
+    assert found["pass"].link == link
+    assert found["build"].lane == ""
+
+
 def test_a_job_a_crash_left_running_is_interrupted(tmp_path: Path) -> None:
     jobs = Jobs()
     job = jobs.submit(tmp_path, "crashed", [_python("pass")])

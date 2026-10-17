@@ -1,0 +1,75 @@
+{#- The modal confirming a GPU pass, as VS Code confirms what costs money: the
+    offer and the estimate (deckz's dry run), the ceiling, that the machine is
+    destroyed at the end, and a button naming the GPU and the cost. The focus
+    is on Annuler, and Enter in a field only estimates again: renting takes
+    a click on the button. Any change sends the form again, its button
+    disabled meanwhile. -#}
+{% set base = "/espaces/" ~ workspace.name ~ "/gpu" %}
+<form class="commit-form gpu-form" id="gpu-form" hx-post="{{ base }}/formulaire" hx-trigger="change, submit"
+      hx-target="#action-dialog" hx-swap="innerHTML" hx-disabled-elt="#gpu-rent" hx-indicator="#gpu-estimating">
+  <header>
+    <h2>Exécuter sur GPU</h2>
+    <button type="button" class="secondary" onclick="this.closest('dialog').close()">Fermer</button>
+  </header>
+  <p>Une machine est louée pour ces notebooks, qui y sont exécutés, puis <strong>détruite à la fin, quoi qu'il arrive</strong> :
+    exécutions terminées ou échouées, plafond atteint, « Arrêter la machine ». Elle est facturée de sa location à sa destruction.</p>
+  {% if not choice.candidates %}
+  <p class="empty">Aucun notebook choisi : cochez-en dans la vue TP, ou ouvrez un notebook.</p>
+  {% else %}
+  <fieldset class="gpu-notebooks">
+    <legend>Notebooks</legend>
+    {% for notebook in choice.candidates %}
+    {% set seconds = last.get(notebook.file) %}
+    <label><input type="checkbox" name="carnet" value="{{ notebook.file }}"{% if notebook in choice.notebooks %} checked{% endif %}>
+      {{ notebook.name }} <small>{{ notebook.language }}</small>
+      <span class="hint">{% if notebook not in choice.notebooks %}{% elif seconds is none %}jamais exécuté ainsi{% else %}dernière exécution : {{ (seconds / 3600) | hours }}{% endif %}</span></label>
+    <input type="hidden" name="candidat" value="{{ notebook.file }}">
+    {% endfor %}
+  </fieldset>
+  <fieldset class="gpu-mode">
+    <legend>Exécution</legend>
+    <label><input type="radio" name="mode" value="complet"{% if not choice.short %} checked{% endif %}> complète</label>
+    <label title="SHORT_RUN = True : le notebook vérifie qu'il s'exécute, sur peu de données"><input type="radio" name="mode" value="court"{% if choice.short %} checked{% endif %}> courte (vérifier qu'il s'exécute)</label>
+    <label{% if not choice.outputs_possible %} class="disabled"{% endif %}><input type="checkbox" name="sorties" value="1"
+      {%- if choice.write_outputs %} checked{% endif %}{% if not choice.outputs_possible %} disabled{% endif %}>
+      enregistrer les sorties dans les notebooks</label>
+    {% if choice.outputs_possible %}<input type="hidden" name="sorties_vu" value="1">{% endif %}
+    <span class="hint">{% if choice.outputs_possible %}Les sorties d'une exécution réussie remplacent celles du notebook (à voir dans l'avant/après, puis à committer).
+      {%- elif choice.short %}Une exécution courte ne garde pas ses sorties.
+      {%- else %}Seules les démos gardent leurs sorties : un TP n'en enregistre pas.{% endif %}</span>
+  </fieldset>
+  <label class="gpu-ceiling">Plafond
+    <input type="number" name="plafond" value="{{ '%g' | format(ceiling) }}" min="0.25" max="24" step="0.25"> h
+    <input type="hidden" name="plafond_auto" value="{{ '%g' | format(auto_ceiling) }}">
+    <span class="hint">Passé ce délai depuis la location, deckz arrête tout et détruit la machine.</span>
+  </label>
+  <section class="gpu-offer" aria-live="polite">
+    <p class="hint" id="gpu-estimating">Estimation en cours…</p>
+    {% if busy %}
+    <p class="error">Une exécution sur GPU est déjà en cours dans cet espace : celle-ci attendrait sa fin. Arrêtez-la d'abord, ou attendez.</p>
+    {% elif plan.error %}
+    <p class="error">deckz refuse cette exécution : {{ plan.error }}</p>
+    {% elif not choice.notebooks %}
+    <p class="empty">Cochez au moins un notebook.</p>
+    {% elif plan.gpu is none %}
+    <p class="error">Aucune machine n'est proposée en ce moment pour les GPU de <code>labs.gpu.gpus</code> : réessayez plus tard.</p>
+    {% else %}
+    {% set estimate = plan.cost(plan.estimated_hours) %}
+    <dl>
+      <dt>Machine</dt><dd>{{ plan.gpu }}, {{ plan.price | dollars }}/h{% if plan.location %} <span class="hint">({{ plan.location }})</span>{% endif %} <span class="hint">: l'offre la moins chère maintenant</span></dd>
+      <dt>Durée estimée</dt><dd>{% if plan.estimated_hours is none %}inconnue : un notebook n'a jamais été exécuté ainsi{% else %}{{ plan.estimated_hours | hours }}, soit ≈ {{ estimate | dollars }} <span class="hint">({{ plan.setup_minutes }} min de location et de démarrage comprises)</span>{% endif %}</dd>
+      <dt>Au plus</dt><dd>{{ plan.cost(ceiling) | dollars }} <span class="hint">({{ ceiling | hours }} au prix actuel)</span></dd>
+    </dl>
+    {% endif %}
+  </section>
+  {% endif %}
+  <footer class="modal-buttons">
+    <button type="button" class="secondary" autofocus onclick="this.closest('dialog').close()">Annuler</button>
+    {% if choice.notebooks and plan.gpu and not plan.error and not busy %}
+    {% set estimate = plan.cost(plan.estimated_hours) %}
+    <button type="button" id="gpu-rent" hx-post="{{ base }}/lancer" hx-include="#gpu-form"
+            hx-target="#action-dialog" hx-swap="innerHTML">Louer une {{ plan.gpu }} et exécuter
+      ({% if estimate is not none %}≈ {{ estimate | dollars }}{% else %}au plus {{ plan.cost(ceiling) | dollars }}{% endif %})</button>
+    {% endif %}
+  </footer>
+</form>

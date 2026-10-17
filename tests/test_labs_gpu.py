@@ -133,6 +133,7 @@ def test_up_rents_boots_and_records_the_ssh_address(repo: Path) -> None:
         "203.0.113.5",
         40100,
     )
+    assert state.price == approx(0.16)  # The offer's: it bills at that rate.
     create = runner.commands("vastai")[1]
     assert create[create.index("--image") + 1] == _settings(repo).labs.gpu.image
 
@@ -706,12 +707,20 @@ def test_cli_status_watch_gives_up_on_a_machine_unreachable_three_times(
 class PassRunner(FakeRunner):
     """A machine whose queue runs each notebook sent: rsync fetches its run."""
 
-    def __init__(self, out: Path, *, exit_code: int = 0, finishes: bool = True) -> None:
+    def __init__(
+        self,
+        out: Path,
+        *,
+        exit_code: int = 0,
+        finishes: bool = True,
+        cells: list[dict[str, Any]] | None = None,
+    ) -> None:
         super().__init__()
         self.instances = [_running()]
         self.out = out
         self.exit_code = exit_code
         self.finishes = finishes
+        self.cells = cells
         self.sent: list[str] = []
 
     def __call__(
@@ -736,7 +745,8 @@ class PassRunner(FakeRunner):
                         {"output_type": "stream", "name": "stdout", "text": ["1\n"]}
                     ],
                 }
-                executed = {"cells": [cell], "metadata": {}, "nbformat": 4}
+                cells = self.cells or [cell]
+                executed = {"cells": cells, "metadata": {}, "nbformat": 4}
                 (self.out / name).write_text(json.dumps(executed))
                 (self.out / f"{name}.done").write_text(f"{self.exit_code} 120\n")
         return super().__call__(args, **kwargs)
@@ -805,6 +815,33 @@ def test_pass_keeps_a_failed_runs_notebook_as_it_was(repo: Path) -> None:
     assert result.written == []
     assert notebook.read_text() == before
     assert len(_destroyed(runner)) == 1
+
+
+def _raising(tags: list[str]) -> dict[str, Any]:
+    error = {"output_type": "error", "ename": "ValueError", "evalue": "empty"}
+    return {
+        "cell_type": "code",
+        "source": ["max([])"],
+        "metadata": {"tags": tags},
+        "execution_count": 1,
+        "outputs": [error],
+    }
+
+
+def test_pass_keeps_a_notebook_whose_cell_raised_as_it_was(repo: Path) -> None:
+    # The notebook carries on past a cell that raised, and exits 0.
+    out = repo / ".run" / "gpu" / "main" / "out"
+    runner = PassRunner(out, cells=[_raising([]), _raising(["raises-exception"])])
+    notebook = _demo(repo)
+    before = notebook.read_text()
+
+    _, result, lines = _pass(repo, runner, notebooks=[notebook], write_outputs=True)
+
+    assert [r.exit_code for r in result.failed] == [0]
+    assert [e.index for e in result.failed[0].errors] == [0]  # Not the tagged one.
+    assert result.written == []
+    assert notebook.read_text() == before
+    assert f"kept {notebook} as it was: its run failed" in lines
 
 
 def test_pass_destroys_the_machine_at_its_ceiling(repo: Path) -> None:
@@ -949,4 +986,29 @@ def test_cli_status_plain_gives_the_price_and_rental_time(
 
     assert capsys.readouterr().out == (
         "machine\tmain\tloading\tTesla T4\t0.160\t2026-10-17T10:00:00+02:00\n"
+    )
+
+
+def test_cli_status_offline_reads_the_state_without_the_backend(
+    repo: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    for name, price in (("main", 0.16), ("old", None)):
+        machine_dir = repo / ".run" / "gpu" / name
+        machine_dir.mkdir(parents=True)
+        state: dict[str, object] = {"id": 1, "gpu": "Tesla T4", "machine": 2}
+        if price is not None:
+            state |= {"price": price, "rented_at": "2026-10-17T10:00:00+02:00"}
+        (machine_dir / "state.json").write_text(json.dumps(state))
+
+    def unreachable(self: GpuRun) -> GpuStatus:
+        raise AssertionError
+
+    monkeypatch.setattr(GpuRun, "status", unreachable)
+    monkeypatch.chdir(repo)
+
+    main(("labs", "gpu", "status", "--plain", "--offline"))
+
+    assert capsys.readouterr().out == (
+        "machine\tmain\trented\tTesla T4\t0.160\t2026-10-17T10:00:00+02:00\n"
+        "machine\told\trented\tTesla T4\t\t\n"
     )

@@ -29,12 +29,14 @@
   {% if notebook %}
   <button type="button" data-click='.views button[data-view="render"]'>TP : voir le notebook</button>
   <button type="button" data-click='.views button[data-view="changes"]'>TP : voir l'avant/après</button>
-  <button type="button" data-click='.lab-bar .deck-actions button'>TP : ouvrir dans mon éditeur</button>
+  <button type="button" data-click='.lab-bar button[data-action="ouvrir"]'>TP : ouvrir dans mon éditeur</button>
+  <button type="button" data-click='.lab-bar button[data-action="gpu"]'>TP : exécuter sur GPU…</button>
   {% for code in ("fr", "en") if code != lang %}
   <button type="button" data-click='.langs a[data-lang="{{ code }}"]'>TP : passer en {{ code }}</button>
   {% endfor %}
   {% endif %}
   <button type="button" data-dialog="#action-dialog" data-url="{{ base }}/construire/formulaire">Formations : construire toutes les formations…</button>
+  <button type="button" data-dialog="#action-dialog" data-url="{{ base }}/gpu/machines">GPU : machines louées, arrêter la machine…</button>
   <button type="button" data-dialog="#commit-dialog" data-url="{{ base }}/commit/formulaire" data-include="#commit-form"
           data-values='{{ {"formation": deck, "lang": lang or "fr"} | tojson }}'>Modifications : committer…</button>
   <button type="button" data-dialog="#sync-dialog" data-url="{{ base }}/synchronisation/formulaire"

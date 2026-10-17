@@ -15,7 +15,7 @@ from time import monotonic
 from typing import Annotated, Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, FastAPI, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
@@ -44,6 +44,7 @@ from . import (
     background,
     changes,
     commits,
+    gpu,
     labs,
     notebooks,
     problems,
@@ -189,7 +190,20 @@ def _markdown(text: str) -> Markup:
     return Markup(_MARKDOWN.render(text))
 
 
+def _dollars(amount: float) -> str:
+    return f"{amount:.2f} $".replace(".", ",")
+
+
+def _hours(hours: float) -> str:
+    minutes = round(hours * 60)
+    if minutes < 60:
+        return f"{minutes} min"
+    return f"{minutes // 60} h {minutes % 60:02d}"
+
+
 templates.env.filters["ago"] = _ago
+templates.env.filters["dollars"] = _dollars
+templates.env.filters["hours"] = _hours
 templates.env.filters["markdown"] = _markdown
 templates.env.filters["workflow_text"] = workflows.text
 templates.env.filters["deck_tree"] = workspaces.deck_tree
@@ -934,6 +948,7 @@ def jobs_badge(request: Request, studio: StudioDep, name: str) -> Response:
             "state": job.state.name.lower(),
             "title": job.title,
             "detail": job.failure,
+            "link": job.link,
         }
         for job in jobs
         if job.finished and job.ended
@@ -1566,6 +1581,270 @@ def lab_page(
         kinds=labs.KINDS,
         declared=workflows.declared(found.worktree.path),
     )
+
+
+Files = Annotated[list[str] | None, Form()]
+
+
+@dataclass(frozen=True)
+class _PassChoice:
+    """What the GPU modal asks, as the person left it."""
+
+    candidates: tuple[labs.Notebook, ...]
+    """The notebooks it was opened with, each to tick."""
+    notebooks: tuple[labs.Notebook, ...]
+    """Those ticked."""
+    short: bool
+    write_outputs: bool
+    outputs_possible: bool
+    """A full run of demos only: deckz refuses outputs otherwise."""
+    ceiling: float | None
+    """The person's, None for the one offered."""
+
+
+def _pass_choice(
+    listing: labs.Listing,
+    candidates: list[str] | None,
+    carnet: list[str] | None,
+    mode: str,
+    sorties: str | None,
+    sorties_vu: str | None,
+    plafond: float | None,
+    plafond_auto: float | None,
+) -> _PassChoice:
+    """The modal's choices, from its fields: unknown notebooks left out.
+
+    Returns:
+        Them, outputs on by default for a full run of demos.
+    """
+    by_file = {notebook.file: notebook for notebook in listing.notebooks}
+    offered = [by_file[file] for file in candidates or () if file in by_file]
+    chosen = [by_file[file] for file in carnet or () if file in by_file]
+    if candidates is None:
+        offered = chosen
+    else:
+        chosen = [notebook for notebook in offered if notebook in chosen]
+    short = mode == "court"
+    possible = bool(chosen) and not short and all(n.kind == "demo" for n in chosen)
+    # Outputs default to on when possible: what a full run of demos is for.
+    write_outputs = possible and (sorties is not None or sorties_vu is None)
+    ceiling = plafond if plafond and plafond > 0 and plafond != plafond_auto else None
+    return _PassChoice(
+        tuple(offered), tuple(chosen), short, write_outputs, possible, ceiling
+    )
+
+
+@router.post("/espaces/{name}/gpu/formulaire", response_class=HTMLResponse)
+def gpu_form(
+    request: Request,
+    studio: StudioDep,
+    name: str,
+    tp: Files = None,
+    candidat: Files = None,
+    carnet: Files = None,
+    rouvrir: Annotated[list[str] | None, Query(alias="carnet")] = None,
+    mode: Annotated[str, Form()] = "complet",
+    sorties: Annotated[str | None, Form()] = None,
+    sorties_vu: Annotated[str | None, Form()] = None,
+    plafond: Annotated[float | None, Form()] = None,
+    plafond_auto: Annotated[float | None, Form()] = None,
+) -> Response:
+    """The modal confirming a GPU pass: the offer, the estimate, the ceiling.
+
+    Opened with lab notebooks' names (`tp`: every language of each), or
+    their files (`carnet` in the URL, when a pass is started again); then
+    sent again as the person changes it (`candidat`, the notebooks offered;
+    `carnet`, those ticked), deckz's dry run each time.
+
+    Returns:
+        The modal's content, its button naming the GPU and the cost.
+    """
+    found = studio.workspace(name)
+    path = found.worktree.path
+    listing = labs.listing(path)
+    if candidat is None:  # Opened: every notebook named, ticked.
+        candidat = [*(rouvrir or ())]
+        for name in tp or ():
+            candidat += [n.file for n in listing.notebooks if n.name == name]
+        carnet = candidat
+    choice = _pass_choice(
+        listing, candidat, carnet, mode, sorties, sorties_vu, plafond, plafond_auto
+    )
+    planned = (
+        gpu.plan(
+            path,
+            [n.file for n in choice.notebooks],
+            short=choice.short,
+            write_outputs=choice.write_outputs,
+        )
+        if choice.notebooks
+        else gpu.Plan()
+    )
+    busy = next((job for job in _gpu_jobs(studio, path) if _is_pass(job)), None)
+    return _render(
+        request,
+        "_gpu.html",
+        workspace=found,
+        listing=listing,
+        choice=choice,
+        plan=planned,
+        last={n.file: n.last_seconds for n in planned.notebooks},
+        ceiling=planned.ceiling(choice.ceiling),
+        auto_ceiling=planned.ceiling(None),
+        busy=busy,
+        kinds=labs.KINDS,
+    )
+
+
+def _gpu_jobs(studio: Studio, path: Path) -> list[Job]:
+    return [
+        job for job in studio.jobs.jobs(path) if job.lane == "gpu" and not job.finished
+    ]
+
+
+def _is_pass(job: Job) -> bool:
+    return job.steps[0][1:4] == ("labs", "gpu", "pass")
+
+
+@router.post("/espaces/{name}/gpu/lancer", response_class=HTMLResponse)
+def gpu_start(
+    request: Request,
+    studio: StudioDep,
+    name: str,
+    carnet: Files = None,
+    mode: Annotated[str, Form()] = "complet",
+    sorties: Annotated[str | None, Form()] = None,
+    sorties_vu: Annotated[str | None, Form()] = None,
+    plafond: Annotated[float | None, Form()] = None,
+) -> Response:
+    """Start the GPU pass the modal confirmed, as a job of the GPU lane.
+
+    Returns:
+        The job.
+
+    Raises:
+        HTTPException: 422 without a notebook or a ceiling.
+    """
+    found = studio.workspace(name)
+    path = found.worktree.path
+    choice = _pass_choice(
+        labs.listing(path), None, carnet, mode, sorties, sorties_vu, plafond, None
+    )
+    if not choice.notebooks or choice.ceiling is None:
+        raise HTTPException(422, "Choisissez au moins un notebook, et un plafond")
+    files = [notebook.file for notebook in choice.notebooks]
+    shown = sorted({notebook.name for notebook in choice.notebooks})
+    first = choice.notebooks[0]
+    link = (
+        (
+            "Voir l'avant/après",
+            f"/espaces/{name}/tp/{first.name}?lang={first.language}&vue=avant-apres",
+        )
+        if choice.write_outputs
+        else None
+    )
+    studio.jobs.submit(
+        path,
+        f"Exécuter sur GPU {', '.join(shown)}"
+        f" ({'courte' if choice.short else 'complète'}"
+        f"{', sorties enregistrées' if choice.write_outputs else ''})",
+        gpu.pass_steps(
+            path,
+            files,
+            short=choice.short,
+            write_outputs=choice.write_outputs,
+            max_hours=choice.ceiling,
+        ),
+        form=f"/espaces/{name}/gpu/formulaire?"
+        + "&".join(f"carnet={quote(file)}" for file in files),
+        lane="gpu",
+        link=link,
+    )
+    return _started(request, found)
+
+
+@router.get("/espaces/{name}/gpu/resume", response_class=HTMLResponse)
+def gpu_badge(request: Request, studio: StudioDep, name: str) -> Response:
+    """The status bar's item while a machine bills, like VS Code's remote one.
+
+    Returns:
+        Each machine's GPU, time and cost so far; nothing without one.
+    """
+    found = studio.workspace(name)
+    path = found.worktree.path
+    return _render(
+        request,
+        "_gpu_badge.html",
+        workspace=found,
+        found=gpu.machines(path),
+        renting=any(_is_pass(job) for job in _gpu_jobs(studio, path)),
+        now=datetime.now(UTC),
+    )
+
+
+def _gpu_machines(
+    request: Request, studio: Studio, name: str, **context: Any
+) -> Response:
+    found = studio.workspace(name)
+    path = found.worktree.path
+    running = next((job for job in _gpu_jobs(studio, path) if _is_pass(job)), None)
+    return _render(
+        request,
+        "_gpu_machines.html",
+        workspace=found,
+        found=gpu.machines(path),
+        running=running,
+        now=datetime.now(UTC),
+        **context,
+    )
+
+
+@router.post("/espaces/{name}/gpu/machines", response_class=HTMLResponse)
+def gpu_machines(request: Request, studio: StudioDep, name: str) -> Response:
+    """The machines billing, the pass running one, and "Arrêter la machine".
+
+    Returns:
+        The dialog's content.
+    """
+    return _gpu_machines(request, studio, name)
+
+
+@router.post("/espaces/{name}/gpu/arreter", response_class=HTMLResponse)
+def gpu_stop(
+    request: Request,
+    studio: StudioDep,
+    name: str,
+    machine: Annotated[str, Form()] = gpu.MACHINE,
+    confirme: Annotated[str | None, Form()] = None,
+) -> Response:
+    """Stop a machine: the pass running it if any, else `deckz labs gpu down`.
+
+    A pass stopped destroys its machine itself; its runs in progress are
+    lost, so that is asked first. A machine no pass runs (a crash left it,
+    a terminal rented it) is destroyed at once.
+
+    Returns:
+        The question, the dialog once the pass was told to stop, or the \
+        job destroying the machine.
+    """
+    found = studio.workspace(name)
+    path = found.worktree.path
+    running = next((job for job in _gpu_jobs(studio, path) if _is_pass(job)), None)
+    if running is not None:
+        if confirme is None:
+            return _gpu_machines(request, studio, name, asking=True)
+        studio.jobs.stop(path, running.id)
+        response = _gpu_machines(request, studio, name, stopping=True)
+        response.headers["HX-Trigger-After-Settle"] = "jobs-changed"
+        return response
+    studio.jobs.submit(
+        path,
+        f"Arrêter la machine GPU {machine}",
+        gpu.down_steps(path, machine),
+        rerun=True,
+        lane="gpu",
+    )
+    return _started(request, found)
 
 
 def _agent_entry(entry: agent.Entry) -> str:

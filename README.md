@@ -1089,12 +1089,16 @@ The main commands:
   `--max-hours` from the rental (default 4), on Ctrl-C and on SIGTERM. It
   refuses a machine already rented (`--machine`) and, before renting, a
   notebook it couldn't run. `--write-outputs` (off by default: it
-  overwrites) writes each demo's outputs back when its full run exited 0.
+  overwrites) writes each demo's outputs back when its full run exited 0
+  with no cell raising (but those tagged `raises-exception`) and no shell
+  command failing; such a run fails the pass.
   `--dry-run` rents nothing: the offer it would rent now, each notebook's
   last successful run time from the machines' `notes.md` (the main
   checkout's too, from a worktree), the estimated time and cost (ten
   minutes added for booting) and the ceiling's. `status --plain` gives each
-  machine's GPU, price per hour and rental time.
+  machine's GPU, price per hour and rental time; `status --offline` reads
+  only what this checkout keeps of its machines (no call to Vast.ai, nothing
+  fetched), for something polling often, like studioz's status bar.
 - `deckz videos render [SCENE] [--quality] [--force]` (extra: `deckz[videos]`,
   Manim, plus `ffmpeg`): render every `@register_scene` class under
   `videos.scenes_dir` that's missing, stale, or at another quality than

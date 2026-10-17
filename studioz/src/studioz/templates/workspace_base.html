@@ -65,6 +65,7 @@
   {% block status %}{% endblock %}
   <span class="status-right">
     {% block status_right %}{% endblock %}
+    <span id="gpu-badge" hx-get="/espaces/{{ workspace.name }}/gpu/resume" hx-trigger="load, every 5s, jobs-changed from:body" hx-swap="innerHTML"></span>
     <span id="jobs-badge" hx-get="/espaces/{{ workspace.name }}/taches/resume" hx-trigger="load, every 3s, jobs-changed from:body" hx-swap="innerHTML"></span>
     <button type="button" class="status-item" id="status-agent" data-toggle="agent"
             title="Afficher ou masquer l'agent (Ctrl+Alt+B)">Agent</button>

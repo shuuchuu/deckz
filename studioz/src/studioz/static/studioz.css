@@ -651,3 +651,31 @@ button.status-item:hover { background: rgb(255 255 255 / 0.15); }
   .lab-item .lab-kind.changed::after { color: #e0a96d; }
 }
 .lab-item .lab-kind small { color: var(--muted); }
+
+/* GPU passes: the modal confirming one (VS Code's modal: the primary button
+   names the action and its cost, the focus on Annuler), the machines' dialog,
+   and the status bar's item while a machine bills, set apart as VS Code sets
+   its remote indicator. */
+.gpu-form fieldset { display: flex; flex-direction: column; gap: 0.2rem; margin: 0; padding: 0.3rem 0.6rem 0.5rem; border: 1px solid var(--line); border-radius: 4px; }
+.gpu-form legend { font-weight: 600; font-size: 0.9em; }
+.gpu-form label { display: flex; gap: 0.4rem; align-items: baseline; flex-wrap: wrap; }
+.gpu-form label.disabled { color: var(--muted); }
+.gpu-form .hint { font-size: 0.85em; }
+.gpu-ceiling input { width: 5rem; }
+.gpu-offer { min-height: 4.5rem; }
+.gpu-offer dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.8rem; margin: 0; }
+.gpu-offer dt { font-weight: 600; }
+.gpu-offer dd { margin: 0; }
+#gpu-estimating { display: none; }
+#gpu-estimating.htmx-request { display: block; }
+.commit-form footer.modal-buttons { justify-content: flex-end; }
+.gpu-machine, .gpu-pass { display: flex; flex-direction: column; gap: 0.4rem; border-top: 1px solid var(--line); padding-top: 0.5rem; }
+.gpu-machine h3, .gpu-pass h3 { margin: 0; font-size: 0.95em; }
+.gpu-pass .job-log { max-height: 10rem; margin: 0; }
+.statusbar .gpu-badge { background: #8a4b08; color: #fff; font-weight: 700; }
+.statusbar .gpu-badge[data-state="renting"], .statusbar .gpu-badge[data-state="error"] { background: transparent; color: inherit; }
+.statusbar button.gpu-badge:hover { background: #a65c0c; }
+.notification-actions .button { padding: 0.1rem 0.6rem; font-size: 0.8rem; text-decoration: none; }
+.lab-item .lab-pick { margin: 0 0 0 0.3rem; width: 0.8rem; height: 0.8rem; vertical-align: middle; }
+.view-action:disabled { opacity: 0.4; cursor: default; }
+.view-action:disabled:hover { background: transparent; color: var(--muted); }

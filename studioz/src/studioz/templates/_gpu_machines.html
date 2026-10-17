@@ -1,0 +1,62 @@
+{#- The machines the workspace keeps as rented, the pass running (whose
+    machine may still be renting), and "Arrêter la machine": while a pass
+    runs, it stops the pass (deckz then destroys the machine), asked first
+    since its runs in progress would be lost; otherwise `deckz labs gpu
+    down`, at once. -#}
+{% set base = "/espaces/" ~ workspace.name ~ "/gpu" %}
+<div class="commit-form gpu-machines">
+  <header>
+    <h2>Machines GPU</h2>
+    <button type="button" class="secondary" onclick="this.closest('dialog').close()">Fermer</button>
+  </header>
+  {% if found.error %}
+  <p class="error">deckz n'a pas pu lire les machines de l'espace : {{ found.error }}</p>
+  {% elif not found.machines and not stopping %}
+  <p class="empty">Aucune machine louée{% if running %} pour l'instant (location en cours){% endif %} : rien n'est facturé.</p>
+  {% endif %}
+  {% for machine in found.machines %}
+  {% set hours = machine.hours(now) %}
+  {% set cost = machine.cost(now) %}
+  <section class="gpu-machine">
+    <h3>{{ machine.gpu }} <small>{{ machine.name }}</small></h3>
+    <p>{% if machine.rented_at %}Louée à {{ machine.rented_at.astimezone().strftime('%H:%M') }}, il y a {{ hours | hours }}{% else %}Louée{% endif %}
+      {%- if machine.price is not none %}, {{ machine.price | dollars }}/h{% endif %}
+      {%- if cost is not none %} : ≈ {{ cost | dollars }} jusqu'ici{% endif %}.
+      Elle est facturée jusqu'à sa destruction.</p>
+    {% if not running %}
+    <p class="hint">Aucune exécution de studioz ne l'utilise : studioz s'est arrêté pendant l'exécution, ou elle a été louée depuis un terminal.</p>
+    <footer class="modal-buttons">
+      <button type="button" hx-post="{{ base }}/arreter" hx-vals='{{ {"machine": machine.name} | tojson }}'
+              hx-target="#action-dialog" hx-swap="innerHTML">Arrêter la machine</button>
+    </footer>
+    {% endif %}
+  </section>
+  {% endfor %}
+  {% if stopping %}
+  <section class="gpu-pass">
+    <p class="hint">Arrêt demandé : deckz arrête l'exécution, puis détruit la machine (quelques secondes ; le journal dans Tâches).</p>
+    <footer class="modal-buttons">
+      <button type="button" class="secondary" data-open-panel="taches" onclick="this.closest('dialog').close()">Voir le journal</button>
+    </footer>
+  </section>
+  {% elif running %}
+  <section class="gpu-pass">
+    <h3>{{ running.title }}</h3>
+    <pre class="job-log">{% for line in (running.log | list)[-8:] %}{{ line }}
+{% endfor %}</pre>
+    {% if asking %}
+    <p class="error">Les exécutions en cours seront perdues ; les notebooks déjà terminés gardent leur rapport. La machine est ensuite détruite.</p>
+    <footer class="modal-buttons">
+      <button type="button" class="secondary" autofocus hx-post="{{ base }}/machines" hx-target="#action-dialog" hx-swap="innerHTML">Annuler</button>
+      <button type="button" class="danger" hx-post="{{ base }}/arreter" hx-vals='{"confirme": "1"}'
+              hx-target="#action-dialog" hx-swap="innerHTML">Arrêter l'exécution et la machine</button>
+    </footer>
+    {% else %}
+    <footer class="modal-buttons">
+      <button type="button" class="secondary" data-open-panel="taches" onclick="this.closest('dialog').close()">Voir le journal</button>
+      <button type="button" hx-post="{{ base }}/arreter" hx-target="#action-dialog" hx-swap="innerHTML">Arrêter la machine…</button>
+    </footer>
+    {% endif %}
+  </section>
+  {% endif %}
+</div>
