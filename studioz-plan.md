@@ -1,6 +1,6 @@
 # studioz plan: a UI for operating a deckz repo, agents included
 
-## Where things stand, and how to resume (2026-10-15)
+## Where things stand, and how to resume (2026-10-17)
 
 **Done:** phases 0, 1 and 2 (workspaces without agents: increments 1 to 8 under
 "Phase 2"), and phase 3 (the agent in a workspace: increments 1 to 5 under
@@ -8,11 +8,13 @@
 (workflows: increments 1 to 5 under "Phase 4"), done overnight on 2026-10-11
 while the user slept, not yet tried by them; then "Rien à porter…" on the
 translation backlog (2026-10-11, after phase 4); then the VS Code layout's
-increments 1 to 4 (2026-10-15, under "The VS Code layout"). **Next:** phase 5 (long
-jobs), which needs planning first: GPU runs
-cost money. `git log origin/main..main` in
-`../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed;
-nothing is released since 31.3.3. Push and release are the user's call.
+increments 1 to 4 (2026-10-15, under "The VS Code layout"). All of it is pushed and
+released (deckz 31.3.4). **Next:** phase 5 (long jobs), planned on 2026-10-17 (under
+"Phase 5"), from its increment 1; its GPU increments rent machines that cost money:
+never start one without the user saying so. The worktree `../deckz-studioz` is behind
+`main`: `git merge --ff-only main` there first. `git log origin/main..main` in
+`../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed. Push and
+release are the user's call.
 
 ### Code map
 
@@ -92,7 +94,8 @@ Found along the way, not done (each increment's "Left" has the rest):
 - deckz's messages are in English in a French UI; the lab checks read every notebook
   again each (6 of `deckz status`'s 10 s on slides).
 - The Commit dialog's draft is lost when the page changes; jobs don't survive a
-  studioz restart, and their end isn't notified beyond the top bar's colour.
+  studioz restart, and their end isn't notified beyond the status bar (phase 5's
+  increment 1 plans both).
 - The untracked `.claude/` in `../deckz` is the frontend plugin's install: the
   user's, kept, never committed.
 - slides depends on studioz (editable): a new studioz dependency makes slides'
@@ -110,9 +113,6 @@ Found along the way, not done (each increment's "Left" has the rest):
   passed alone and on the next run.
 - A limit pause doesn't survive a studioz restart (a pending question now
   does); no warning before a long task when a usage window is nearly full.
-- slides' workflows are committed in the workspace `studioz-workflows`
-  (`7bd8a6f9`, `ce4b0a69`), not synced: the user syncs them from studioz once
-  this deckz is pushed (the QA's `report`/`then` need it).
 
 ### Starting phase 4
 
@@ -1223,17 +1223,116 @@ its first English build ran, then all was well: not looked into. **Left:**
 Firefox keeps Ctrl+Maj+P (private window), so there it's F1 or ">"; no recent decks
 or files first; content files aren't in Ctrl+P.
 
-### Starting phase 5
-
-Not planned in detail yet. Read "Previews" (labs, videos rows), "Agent
-configuration" (the job queue) and phase 2's increment 8 (`studioz.jobs`).
-GPU runs (`deckz labs gpu`) rent a machine and cost money: never start one
-without the user saying so, and ask how they want it confirmed in the UI.
-
-### Phase 5: long jobs and the remaining previews
+### Phase 5: long jobs and the remaining previews (planned 2026-10-17)
 
 Labs on GPU (notebook previews and diffs), Manim drafts and full renders, `deckz run
-decks`, through the queue, with notifications when they end.
+decks`, through the queue, with notifications when they end. Read "Previews" (the
+labs and videos rows), "Agent configuration" (the job queue) and phase 2's increment
+8 (`studioz.jobs`, `studioz.actions`) first.
+
+**What deckz offers today.** A GPU pass takes six commands: `deckz labs gpu up`,
+`queue <notebooks>` (`--short` for a `SHORT_RUN`), `run`, `status --watch` (which
+fetches and notes each finished run), `fetch`, and `down`. After those, each demo
+needs its own `deckz labs outputs <executed> <notebook>` to keep its outputs. `up`
+rents the cheapest offer of `labs.gpu.gpus` on Vast.ai and logs its price per hour,
+and the machine bills until `down`. Nothing estimates a pass's cost beforehand, and
+nothing destroys the machine if the session running the pass dies.
+Videos: `deckz videos list` shows each scene's state, and `deckz videos render
+[scene] --quality l…k` renders it. A draft (`l`) replaces the scene's render file,
+and `deckz videos publish` refuses a render that isn't at `videos.published_quality`,
+so a draft can't be published by mistake; publishing that scene needs a full render
+again.
+
+**Confirming what costs money.** VS Code asks before a costly or irreversible action
+with a modal dialog (`showWarningMessage` with `modal: true`): a message, a detail,
+and a primary button that names the action, beside Cancel. studioz does the same
+(agreed with the user, 2026-10-17). "Exécuter sur GPU…" opens a modal that gives:
+- the notebooks;
+- the GPU and its current price per hour (from deckz's dry run, increment 4);
+- the estimated duration, when earlier runs of these notebooks give one;
+- the ceiling after which deckz stops the pass;
+- that the machine is destroyed at the end.
+
+Its button names the action and the estimate ("Louer une T4 et exécuter (≈ 0,40
+$)"). The focus is on Annuler, so Enter rents nothing, and there is no "ne plus
+demander" box. Two other VS Code habits go with the modal:
+- a status bar item, like VS Code's remote indicator, shown while a machine bills,
+  with the GPU, the time and the cost so far; a click opens the pass's log with
+  "Arrêter la machine";
+- a notification when the pass ends.
+
+The agent can't start a pass: studioz's agent hook refuses `deckz labs gpu up|run|
+pass`, as it refuses commits. When the agent thinks a pass would help, it says so,
+and the person starts it from the modal. This refusal belongs to studioz, not to
+deckz's `bash_denial`, because terminal sessions run passes on purpose.
+
+Each increment is usable on its own:
+
+1. **Notifications, and jobs that outlive a restart.** The notifications work as VS
+   Code's do:
+   - a toast at the bottom right when a job ends (done, failed with its last error
+     line, or stopped), whose "Voir le journal" opens Tâches;
+   - the status bar's bell, keeping the last ones;
+   - a desktop notification (the Notification API, permission asked on first use)
+     when the tab is hidden.
+
+   Each job's record and log go to `.run/studioz/jobs/`. After a restart, the
+   finished jobs are still listed, and a job that was running shows as
+   "interrompue", with "Relancer". `deckz run decks` (every deck of the workspace,
+   every output spelled out) becomes a job, started from the palette and from the
+   Formations view's title.
+2. **Videos.**
+   - A Vidéos view in the activity bar, from `deckz videos list` (à jour, à rendre,
+     jamais rendue).
+   - A scene's page: its last render in a `<video>`, and its source (the scene's
+     module) in the editor beside it.
+   - "Brouillon" (`--quality l`, a job of a few minutes) and "Rendu final" (at
+     `videos.published_quality`), each a job that notifies when it ends.
+   - Before/after: the render at the last commit beside the new one.
+   - The Publication view names the scenes that are only drafts, since deckz will
+     refuse to publish them.
+3. **Labs previewed.**
+   - A TP view listing the labs and each notebook's kind and language (if no deckz
+     command lists them, add `--json` to one).
+   - A notebook's page showing it rendered as Colab shows it, outputs included
+     (nbconvert's HTML). It isn't edited in CodeMirror (it's JSON): the agent or
+     "Ouvrir dans mon éditeur" edits it.
+   - Before/after since the last commit, cell by cell with outputs (nbdime, or what
+     `deckz.labs.comparison` already does; check first).
+   - The labs' problems already in Problèmes link to the notebook's page.
+
+   nbconvert or nbdime would be a new studioz dependency: re-lock slides along with
+   it (see "Open items").
+4. **One command for a GPU pass, in deckz.** By the operability guidelines, six
+   commands to remember make a missing command. `deckz labs gpu pass <notebooks>`
+   (name to settle) does `up`, `queue`, `run`, the following, the fetching and the
+   noting, and then always `down`: on success, on failure, and on SIGINT or SIGTERM
+   (what studioz's Arrêter and its own shutdown send). Its options:
+   - `--max-hours`, the ceiling: past it, the run is killed and the machine
+     destroyed;
+   - `--write-outputs`, off by default since it overwrites: writes each demo's
+     outputs back into its notebook when its run exited 0, as `labs outputs` does;
+   - `--dry-run --json`: the offer it would rent now (GPU, $/h), the notebooks, and
+     each one's last known run time (from the machines' `notes.md`), for the
+     modal's estimate.
+
+   `deckz labs gpu status --plain` also gains each machine's price and start time,
+   for the status bar item. A person in a terminal gets the same safety. It needs
+   its docs page, its place in `--help`, and tests with the fake backend.
+5. **GPU passes from studioz.**
+   - "Exécuter sur GPU…" on a demo's page and on a selection in the TP view (full or
+     short run), opening the modal above.
+   - The pass runs as a job, `--write-outputs` and the ceiling spelled out.
+   - The status bar item shows while a machine bills. After a restart, studioz finds
+     the machine again through `deckz labs gpu status`, even one a crash left
+     running.
+   - "Arrêter la machine" runs `deckz labs gpu down`, and asks first only while a run
+     is in progress, which would be lost.
+   - The notification at the end opens the notebook's before/after.
+
+   The tests run against a fake deckz. On slides, a real pass happens only once the
+   user says so: the shortest demo, in short mode, with its estimate shown to them
+   first.
 
 ### Then, with the colleague
 
