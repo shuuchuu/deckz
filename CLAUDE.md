@@ -443,7 +443,9 @@ title and compares their rendered pages for the "Avant/après" view.
 disk (the index is reset, then exactly those are staged), git's hooks run
 by the workspace's own deckz (its `.venv/bin` first on the `PATH`), and the
 `Lang-sync` rule asked beforehand from deckz's `i18n_stale.one_sided` with
-the pairs `changes.LangPairs` keeps per workspace (about a second to find).
+the pairs `changes.LangPairs` keeps per workspace (about a second to find). Its draft
+(message, files chosen, `Lang-sync` answer) is kept in `.run/studioz/commit-draft.json`
+as the person writes it, and an opening dialog starts from it.
 `studioz.sync` backs the Synchronisation dialog: fetch and rebase onto the
 main checkout's upstream branch (a conflict fixed in the editor, then
 continued, or aborted), the commits checked as they'd be pushed (`deckz

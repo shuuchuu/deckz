@@ -283,3 +283,36 @@ def test_commit_refused_from_another_site(
     )
     assert response.status_code == 403
     assert changes(workspace)
+
+
+def test_the_draft_outlives_the_page(committer: TestClient, workspace: Path) -> None:
+    _write(workspace, "client/abc/notes.txt", "changed\n")
+    _write(workspace, "README.md")
+    draft = {
+        "listed": ["client/abc/notes.txt", "README.md"],
+        "path": ["client/abc/notes.txt"],
+        "message": "Update the notes",
+    }
+    # As the person writes it.
+    response = committer.post(
+        "/espaces/demo/commit/brouillon", data=draft, headers=ORIGIN
+    )
+    assert response.status_code == 204
+
+    # Another page opens the dialog afresh: the draft is back, and a file
+    # changed since is chosen as usual.
+    _write(workspace, "new.md")
+    again = TestClient(create_app(workspace), base_url="http://localhost:8421")
+    page = again.post(FORM, data={"formation": "client/abc"}, headers=ORIGIN).text
+    assert ">Update the notes</textarea>" in page
+    assert 'name="path" value="client/abc/notes.txt" checked' in page
+    assert 'name="path" value="README.md">' in page
+    assert 'name="path" value="new.md" checked' in page
+
+    # Committed, the message starts over, there too.
+    committer.post(
+        COMMIT, data={**draft, "listed": [*draft["listed"], "new.md"]}, headers=ORIGIN
+    )
+    page = again.post(FORM, data={"formation": "client/abc"}, headers=ORIGIN).text
+    assert "></textarea>" in page
+    assert 'name="path" value="README.md">' in page

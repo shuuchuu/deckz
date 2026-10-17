@@ -13,7 +13,7 @@ released (deckz 31.3.4). Phase 5 (long jobs) was planned on 2026-10-17 (under
 "Phase 5"); its increments 1 (notifications, jobs kept across restarts, every deck's
 build), 2 (videos), 3 (labs previewed), 4 (`deckz labs gpu pass`) and 5 (GPU passes
 from studioz) are done: phase 5 is done. Then the memory guard "Risks" promised
-(2026-10-18, under "Machine load"), and the `jinja-syntax` check ("Open items").
+(2026-10-18, under "Machine load"), the `jinja-syntax` check and the Commit dialog's kept draft ("Open items").
 **Next:** "Then, with the colleague" (below phase
 5), and the open items. A GPU pass rents a machine that costs money: never
 start one without the user saying so. `git log
@@ -110,7 +110,14 @@ Found along the way, not done (each increment's "Left" has the rest):
   returns before the process exits; it now waits.)
 - deckz's messages are in English in a French UI; the lab checks read every notebook
   again each (6 of `deckz status`'s 10 s on slides).
-- The Commit dialog's draft is lost when the page changes.
+- ~~The Commit dialog's draft is lost when the page changes.~~ Done 2026-10-18: the
+  dialog keeps its draft (message, files chosen, the `Lang-sync` answer and reason)
+  in the workspace's `.run/studioz/commit-draft.json` as the person types (half a
+  second after), ticks a file or the proposed message arrives; a dialog opened afresh,
+  on any page, after a restart or in another tab, starts from it (a file changed
+  since chosen by default, as before); a commit clears the message, Fermer keeps it.
+  Tried in Chrome on `studioz-dev`: a message typed on the Fortinet deck's page came
+  back on the workspace page, and a file unticked stayed so across a reload.
 - The untracked `.claude/` in `../deckz` is the frontend plugin's install: the
   user's, kept, never committed.
 - slides depends on studioz (editable): a new studioz dependency makes slides'

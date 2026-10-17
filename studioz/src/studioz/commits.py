@@ -9,8 +9,13 @@ names its fix.
 
 The `Lang-sync` rule is deckz's (`deckz.analyzing.i18n_stale.one_sided`):
 studioz asks before the hook does, and writes the trailer the person chose.
+
+The dialog's draft (the message, the files chosen, the `Lang-sync` answer) is
+kept in the workspace's `.run/studioz/commit-draft.json` as the person writes
+it, so that it survives the page changing, studioz restarting, another tab.
 """
 
+import json
 import subprocess
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass
@@ -24,6 +29,33 @@ from .watches import workspace_environment
 _TIMEOUT = 900
 LANG_SYNC_CHOICES = ("pending", "only")
 """The ways out the commit-msg hook offers, but porting the change."""
+
+
+def _draft_file(workspace: Path) -> Path:
+    return workspace / ".run" / "studioz" / "commit-draft.json"
+
+
+def keep_draft(workspace: Path, fields: dict[str, object]) -> None:
+    """Keep the dialog's fields, as the person left them."""
+    path = _draft_file(workspace)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(fields, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass  # The draft is a convenience: the dialog still has it.
+
+
+def kept_draft(workspace: Path) -> dict[str, object] | None:
+    """The dialog's fields as last kept.
+
+    Returns:
+        Them, None if there's none (or it can't be read).
+    """
+    try:
+        found = json.loads(_draft_file(workspace).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return found if isinstance(found, dict) else None
 
 
 @dataclass(frozen=True)

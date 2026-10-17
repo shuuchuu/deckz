@@ -1,6 +1,9 @@
 {% set base = "/espaces/" ~ workspace.name %}
 <form id="commit-form" class="commit-form" hx-post="{{ base }}/commit" hx-target="#commit-dialog"
       hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
+  {#- The draft, kept as the person writes it (`commits.keep_draft`). -#}
+  <span hidden hx-post="{{ base }}/commit/brouillon" hx-include="#commit-form" hx-swap="none"
+        hx-trigger="input from:#commit-form delay:500ms, change from:#commit-form"></span>
   <input type="hidden" name="formation" value="{{ draft.deck or '' }}">
   <input type="hidden" name="lang" value="{{ draft.lang }}">
   <header>

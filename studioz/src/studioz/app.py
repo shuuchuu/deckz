@@ -623,6 +623,45 @@ class Draft:
             if change.path in self.paths or (shown and change.path not in self.listed)
         }
 
+    @property
+    def opening(self) -> bool:
+        """Whether the dialog is being opened: none of its fields posted."""
+        return not (self.listed or self.paths or self.message)
+
+    def kept(self) -> dict[str, object]:
+        return {
+            "listed": sorted(self.listed),
+            "paths": sorted(self.paths),
+            "message": self.message,
+            "lang_sync": self.lang_sync,
+            "reason": self.reason,
+        }
+
+    def resumed(self, workspace: Path) -> "Draft":
+        """This one, or, opening the dialog, the workspace's kept draft.
+
+        Returns:
+            The draft to show: the deck and language this one's.
+        """
+        found = commits.kept_draft(workspace) if self.opening else None
+        if not found:
+            return self
+
+        def files(key: str) -> frozenset[str]:
+            value = found.get(key)
+            return (
+                frozenset(map(str, value)) if isinstance(value, list) else frozenset()
+            )
+
+        return replace(
+            self,
+            listed=files("listed"),
+            paths=files("paths"),
+            message=str(found.get("message") or ""),
+            lang_sync=str(found.get("lang_sync") or ""),
+            reason=str(found.get("reason") or ""),
+        )
+
 
 def _draft(
     listed: Annotated[list[str] | None, Form()] = None,
@@ -687,12 +726,23 @@ def _commit_dialog(
 def commit_form(
     request: Request, studio: StudioDep, name: str, draft: DraftDep
 ) -> Response:
-    """The commit dialog, with the fields posted kept.
+    """The commit dialog, with the fields posted kept, else the draft kept.
 
     Returns:
         Its content, the files changed now listed.
     """
-    return _commit_dialog(request, studio, studio.workspace(name), draft)
+    found = studio.workspace(name)
+    path = found.worktree.path
+    if not draft.opening:
+        commits.keep_draft(path, draft.kept())
+    return _commit_dialog(request, studio, found, draft.resumed(path))
+
+
+@router.post("/espaces/{name}/commit/brouillon", status_code=204)
+def commit_keep_draft(studio: StudioDep, name: str, draft: DraftDep) -> None:
+    """Keep the dialog's fields as the person writes them."""
+    if not draft.opening:
+        commits.keep_draft(studio.workspace(name).worktree.path, draft.kept())
 
 
 @router.post("/espaces/{name}/commit/proposer", response_class=HTMLResponse)
@@ -721,6 +771,8 @@ async def commit_draft(
         except Exception as failure:
             # Whatever Claude Code says (a limit, no network): the person writes it.
             error = f"Pas de proposition : {str(failure)[:200]}"
+        else:
+            commits.keep_draft(path, replace(draft, message=message).kept())
     return _render(
         request,
         "_commit_message.html",
@@ -763,6 +815,7 @@ def commit(request: Request, studio: StudioDep, name: str, draft: DraftDep) -> R
     _keep_baseline(studio, path, draft)
     # What the person left out stays out; the message starts over.
     fresh = Draft(draft.listed, draft.paths, "", "", "", draft.deck, draft.lang)
+    commits.keep_draft(path, fresh.kept())
     response = _commit_dialog(request, studio, found, fresh, committed=result)
     response.headers["HX-Trigger"] = "workspace-changed, comparison-refresh"
     return response
