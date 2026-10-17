@@ -21,9 +21,15 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   stores those of a full run in its own language: run it, then `deckz labs outputs
   <executed copy> <notebook>`.
 - A demo that needs a GPU (or Colab's exact libraries) runs on a rented machine:
-  `deckz labs gpu up`, `queue <notebooks>`, `run`, `status --watch`, `fetch`, then
-  `down`, which stops the billing (see the README for each step's options). The
-  machine runs Colab's own image, so what runs there runs on Colab.
+  `deckz labs gpu pass <notebooks> --dry-run` says what it would cost now (the GPU
+  and its price, each notebook's last run time, the estimate and the ceiling);
+  `deckz labs gpu pass <notebooks> --write-outputs` then rents the machine, runs
+  them, prints each run's report, writes the demos' outputs back, and destroys
+  the machine, always: when done, on failure, past `--max-hours` (4 by default),
+  on Ctrl-C. The machine runs Colab's own image, so what runs there runs on
+  Colab. The steps also exist one by one (`up`, `queue`, `run`, `status --watch`,
+  `fetch`, `down`: see the README), for a machine kept between passes, which
+  bills until `down`.
 - Writing a notebook for Colab: its runtime is Python 3.13 (pin a project the
   notebook installs accordingly), and the image sets `UV_CONSTRAINT` and
   `UV_SYSTEM_PYTHON`, so `!uv pip install --system <packages>` (or `!pip install`)

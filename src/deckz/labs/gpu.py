@@ -282,6 +282,8 @@ class GpuState:
     machine: int
     host: str | None = None
     port: int | None = None
+    rented_at: str | None = None
+    """When it was rented (ISO 8601, with its offset): it bills since."""
 
 
 @dataclass(frozen=True)
@@ -298,6 +300,8 @@ class GpuStatus:
     instance: InstanceInfo | None
     queue: tuple[QueueEntry, ...] = ()
     machine: str = DEFAULT_MACHINE
+    rented_at: str | None = None
+    """When it was rented (`GpuState.rented_at`): it bills since."""
 
 
 @dataclass(frozen=True)
@@ -394,6 +398,10 @@ class RunReport:
 class GpuBackend(Protocol):
     """Rents, describes and destroys a GPU machine with SSH access."""
 
+    def cheapest(self, gpus: Sequence[str], avoid: Collection[int]) -> Offer | None:
+        """The offer `rent` would rent now, or None if there's none."""
+        ...
+
     def rent(self, gpus: Sequence[str], avoid: Collection[int]) -> GpuState:
         """Rent the cheapest offer of the first of `gpus` on offer.
 
@@ -458,6 +466,17 @@ class VastBackend:
             )
             for offer in found
         ]
+
+    def cheapest(self, gpus: Sequence[str], avoid: Collection[int]) -> Offer | None:
+        """The cheapest offer of the first of `gpus` on offer, as `rent` picks it.
+
+        Returns:
+            The offer, or None if none of `gpus` is on offer.
+        """
+        for gpu in gpus:
+            if found := self.offers(gpu, avoid):
+                return found[0]
+        return None
 
     def rent(self, gpus: Sequence[str], avoid: Collection[int]) -> GpuState:
         """Rent the cheapest offer of the first of `gpus` on offer.
@@ -692,6 +711,9 @@ class GpuRun:
                 state = self._backend.rent(
                     tuple(gpus) or self._gpu.gpus, self._avoided()
                 )
+                state.rented_at = (
+                    datetime.now().astimezone().isoformat(timespec="seconds")
+                )
                 self._save(state)
             info = self._boot(state)
             if info is not None:
@@ -720,6 +742,14 @@ class GpuRun:
             _logger.info("Snapshotting %s", ", ".join(self._gpu.fresh_dirs))
             self._ssh(SNAPSHOT.replace("@FRESH@", self._fresh_dirs()))
         return gpu
+
+    def cheapest(self, gpus: Sequence[str] = ()) -> Offer | None:
+        """The offer `up` would rent now, machines that failed to boot avoided.
+
+        Returns:
+            The offer, None if none of the GPUs is on offer.
+        """
+        return self._backend.cheapest(tuple(gpus) or self._gpu.gpus, self._avoided())
 
     def _fresh_dirs(self) -> str:
         return " ".join(quote(path.rstrip("/")) for path in self._gpu.fresh_dirs)
@@ -815,6 +845,38 @@ class GpuRun:
             queued.append(name)
         return queued, held
 
+    def check(self, notebooks: Sequence[Path], *, short: bool = False) -> None:
+        """Refuse what `queue` would refuse, without sending anything.
+
+        So a pass refuses a notebook before renting a machine for it.
+
+        Raises:
+            GpuRunError: As `queue` would.
+        """
+        for notebook in notebooks:
+            nb = json.loads(notebook.read_text(encoding="utf-8"))
+            needs = run_needs(nb, self._gpu.metadata_key)
+            if needs.hook is not None and needs.hook not in self._gpu.hooks:
+                msg = f"{notebook}: hook {needs.hook!r} is not in labs.gpu.hooks"
+                raise GpuRunError(msg)
+            self._stage(notebook, nb, needs, short)
+
+    def queued_name(self, notebook: Path, *, short: bool = False) -> str:
+        """The name `queue` sends a notebook under, after its path.
+
+        Returns:
+            `<topic>__<lab>__<file>.<full|short>.ipynb`.
+        """
+        root = self._settings.paths.labs_notebooks_dir.resolve()
+        resolved = notebook.resolve()
+        parts = (
+            resolved.relative_to(root).parts
+            if resolved.is_relative_to(root)
+            else (resolved.name,)
+        )
+        name = "__".join(parts).removesuffix(".ipynb")
+        return name + (".short.ipynb" if short else ".full.ipynb")
+
     def _stage(
         self, notebook: Path, nb: dict[str, Any], needs: RunNeeds, short: bool
     ) -> "_Staged":
@@ -841,17 +903,8 @@ class GpuRun:
             lines = ", ".join(f'`{variable} = ""`' for variable in unfilled)
             msg = f"{notebook}: expected exactly one line {lines}"
             raise GpuRunError(msg)
-        root = self._settings.paths.labs_notebooks_dir.resolve()
-        resolved = notebook.resolve()
-        parts = (
-            resolved.relative_to(root).parts
-            if resolved.is_relative_to(root)
-            else (resolved.name,)
-        )
-        name = "__".join(parts).removesuffix(".ipynb")
-        name += ".short.ipynb" if short else ".full.ipynb"
         return _Staged(
-            name=name,
+            name=self.queued_name(notebook, short=short),
             text=json.dumps(nb, ensure_ascii=False, indent=1),
             secrets=tuple(sorted(needs.secrets.values())),
         )
@@ -1043,7 +1096,9 @@ class GpuRun:
             return GpuStatus(instance=None, machine=self.machine)
         info = self._backend.info(state.id)
         if info is None or info.status != "running" or state.host is None:
-            return GpuStatus(instance=info, machine=self.machine)
+            return GpuStatus(
+                instance=info, machine=self.machine, rented_at=state.rented_at
+            )
         entries = []
         for line in self._ssh(_STATUS).splitlines():
             name, entry_state, done = [*line.split("\t"), "", ""][:3]
@@ -1056,7 +1111,12 @@ class GpuRun:
                     seconds=int(seconds) if seconds is not None else None,
                 )
             )
-        return GpuStatus(instance=info, queue=tuple(entries), machine=self.machine)
+        return GpuStatus(
+            instance=info,
+            queue=tuple(entries),
+            machine=self.machine,
+            rented_at=state.rented_at,
+        )
 
     def fetch(self) -> Path:
         """Copy what changed in the machine's executed notebooks to `out/`.

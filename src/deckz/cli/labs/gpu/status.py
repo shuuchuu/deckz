@@ -30,9 +30,10 @@ def status(
         watch: Keep polling, fetching and noting finished runs until the
             queues are done
         interval: Seconds between two polls under --watch
-        plain: One tab-separated line per machine (`machine`, name, state)
-            and per notebook (name, state, exit code, seconds), for a script
-            or an agent, instead of a table
+        plain: One tab-separated line per machine (`machine`, name, state,
+            GPU, dollars per hour, when it was rented in ISO 8601: it bills
+            since) and per notebook (name, state, exit code, seconds), for a
+            script or an agent, instead of a table
         machine: Show only this machine, instead of every one rented
         workdir: Path to move into before running the command
 
@@ -98,7 +99,10 @@ def _poll_reachable(
     instance = current.instance
     if plain:
         state = instance.status if instance else "none"
-        print(f"machine\t{current.machine}\t{state}")
+        gpu = instance.gpu if instance else ""
+        price = f"{instance.price:.3f}" if instance else ""
+        rented_at = current.rented_at or ""
+        print(f"machine\t{current.machine}\t{state}\t{gpu}\t{price}\t{rented_at}")
         for entry in current.queue:
             code = "" if entry.exit_code is None else entry.exit_code
             seconds = "" if entry.seconds is None else entry.seconds

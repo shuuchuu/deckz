@@ -11,8 +11,8 @@ translation backlog (2026-10-11, after phase 4); then the VS Code layout's
 increments 1 to 4 (2026-10-15, under "The VS Code layout"). All of it is pushed and
 released (deckz 31.3.4). Phase 5 (long jobs) was planned on 2026-10-17 (under
 "Phase 5"); its increments 1 (notifications, jobs kept across restarts, every deck's
-build), 2 (videos) and 3 (labs previewed) are done. **Next:** phase 5's increment 4
-(one command for a GPU pass, in deckz). Its GPU increments rent
+build), 2 (videos), 3 (labs previewed) and 4 (`deckz labs gpu pass`) are done.
+**Next:** phase 5's increment 5 (GPU passes from studioz). Its GPU increments rent
 machines that cost money: never start one without the user saying so. `git log
 origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed. Push and
@@ -1484,6 +1484,50 @@ time out on the frame's URL opened on its own (its sandbox; inside studioz's pag
 work); a markdown cell's changes show as source, not rendered; code lines aren't
 marked word by word; the frame's height is its own (it scrolls inside the page);
 notebook pages aren't in Ctrl+P (nor scenes').
+
+**Increment 4: done** (2026-10-17). `deckz labs gpu pass NOTEBOOKS... [--short]
+[--max-hours 4] [--write-outputs] [--dry-run [--json]] [--gpu] [--machine]`
+(`deckz.labs.gpu_pass`):
+- it rents the cheapest offer, queues and runs the notebooks, follows the queue
+  every `--interval` (60 s), fetching, noting each finished run in `notes.md` and
+  printing its report, runs the hooks, then destroys the machine, always: done, a
+  run failed, the machine unreachable three polls in a row or stopped, past
+  `--max-hours` counted from the rental (also each run's timeout), Ctrl-C, and
+  SIGTERM (a handler raising `GpuPassStoppedError`, so the `finally` runs). Signals
+  are blocked while it destroys the machine, so a second Ctrl-C can't leave it
+  billing; a failed destruction names `deckz labs gpu down --machine …`;
+- before renting anything, it refuses a machine already rented (the pass would
+  destroy it), a missing notebook, `--write-outputs` with `--short` or on a hands-on
+  notebook (`lab-outputs`), and whatever `queue` would refuse (`GpuRun.check`: no
+  `SHORT_RUN` line, an unset variable, an unknown hook);
+- `--write-outputs` (off by default: it overwrites) writes each run's outputs back
+  once the machine is gone, for the runs that exited 0, as `deckz labs outputs` does;
+- `--dry-run` rents nothing: the offer `up` would rent now (`GpuBackend.cheapest`),
+  each notebook's last successful run time from the machines' `notes.md`, the main
+  checkout's included from a worktree (a studioz workspace has none of its own),
+  the estimate (`SETUP_MINUTES`, ten, added for renting and booting: a guess, not a
+  measure) and the ceiling's cost; `--json` for studioz's modal (increment 5);
+- `status --plain` gains each machine's GPU, price per hour and rental time
+  (`GpuState.rented_at`, kept in `state.json` from now on), and the table its time
+  and cost so far.
+
+Progress goes to the log, the runs' reports to stdout; it exits 1 when a run failed
+or didn't finish. Docs: the README's command list and the guide, which now leads with
+`pass` (the steps one by one stay, for a machine kept between passes). Tests: the fake
+runner, its machine "running" each notebook sent and rsync fetching a run of it: a
+whole pass with outputs written back, a failed run left as it was, the ceiling (a fake
+clock), Ctrl-C and a real SIGTERM, the refusals (nothing rented), the notes' last
+successful run, the dry run's JSON, `status --plain`.
+
+Tried on slides (from `studioz-dev`, its deckz pointed at the worktree, put back
+after): the dry run of mlflow-registry-deployment's two demos found their runs in the
+main checkout's notes (287 and 285 s) and today's cheapest offer, an RTX A4000 at
+$0.134/h (no T4 on offer): 0.33 h, $0.04 estimated, $0.54 at the 4 h ceiling. The
+refusals, on real notebooks; a missing notebook raised a traceback, now refused. No
+machine rented. **Left:** a real pass, once the user says so (increment 5's trial);
+the pass doesn't survive its own crash (`kill -9`): the machine stays rented, as
+`status` shows (increment 5 finds it); the agent's refusal of `deckz labs gpu up|run|
+pass` is increment 5's.
 
 ### Then, with the colleague
 

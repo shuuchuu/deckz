@@ -312,10 +312,20 @@ def print_gpu_status(status: "GpuStatus") -> None:
     if instance is None:
         console.print(f"Machine {status.machine}: not rented.")
         return
+    since = ""
+    if status.rented_at:
+        from datetime import datetime
+
+        rented = datetime.fromisoformat(status.rented_at)
+        hours = (datetime.now(rented.tzinfo) - rented).total_seconds() / 3600
+        since = (
+            f", rented at {rented:%H:%M} ({hours:.1f} h,"
+            f" ${hours * instance.price:.2f} so far)"
+        )
     console.print(
         f"Machine {status.machine}: [bold]{instance.status}[/bold],"
         f" {instance.gpu or '?'},"
-        f" ${instance.price:.3f}/h"
+        f" ${instance.price:.3f}/h{since}"
         + (f" ({instance.message})" if instance.message else "")
     )
     if not status.queue:

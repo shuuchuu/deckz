@@ -1083,6 +1083,18 @@ The main commands:
   without it act on every one. Each machine's state and files live in
   `.run/gpu/<name>/` (`paths.labs_gpu_dir`). Then `deckz labs outputs`
   writes a demo's outputs back.
+- `deckz labs gpu pass NOTEBOOKS... [--short] [--max-hours] [--write-outputs]
+  [--dry-run [--json]]`: all of the above in one command, which always
+  destroys its machine: once the runs are done, when one fails, past
+  `--max-hours` from the rental (default 4), on Ctrl-C and on SIGTERM. It
+  refuses a machine already rented (`--machine`) and, before renting, a
+  notebook it couldn't run. `--write-outputs` (off by default: it
+  overwrites) writes each demo's outputs back when its full run exited 0.
+  `--dry-run` rents nothing: the offer it would rent now, each notebook's
+  last successful run time from the machines' `notes.md` (the main
+  checkout's too, from a worktree), the estimated time and cost (ten
+  minutes added for booting) and the ceiling's. `status --plain` gives each
+  machine's GPU, price per hour and rental time.
 - `deckz videos render [SCENE] [--quality] [--force]` (extra: `deckz[videos]`,
   Manim, plus `ffmpeg`): render every `@register_scene` class under
   `videos.scenes_dir` that's missing, stale, or at another quality than

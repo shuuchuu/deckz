@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from pygit2 import init_repository
-from pytest import CaptureFixture, MonkeyPatch, fixture, raises
+from pytest import CaptureFixture, MonkeyPatch, approx, fixture, raises
 
 from deckz.cli import main
 from deckz.configuring.settings import (
@@ -18,12 +18,14 @@ from deckz.configuring.settings import (
     LabsSettings,
 )
 from deckz.exceptions import GpuRunError, MissingExtraError
+from deckz.labs import gpu_pass
 from deckz.labs.gpu import (
     IDLE_CPUS,
     QUEUE,
     GpuRun,
     GpuStatus,
     InstanceInfo,
+    Offer,
     QueueEntry,
     VastBackend,
     format_report,
@@ -696,3 +698,255 @@ def test_cli_status_watch_gives_up_on_a_machine_unreachable_three_times(
     _watched(repo, monkeypatch, [GpuRunError("ssh failed")] * 3)
 
     assert "main: unreachable 3 times, given up" in capsys.readouterr().out
+
+
+# -- deckz labs gpu pass -------------------------------------------------------
+
+
+class PassRunner(FakeRunner):
+    """A machine whose queue runs each notebook sent: rsync fetches its run."""
+
+    def __init__(self, out: Path, *, exit_code: int = 0, finishes: bool = True) -> None:
+        super().__init__()
+        self.instances = [_running()]
+        self.out = out
+        self.exit_code = exit_code
+        self.finishes = finishes
+        self.sent: list[str] = []
+
+    def __call__(
+        self, args: list[str], **kwargs: Any
+    ) -> subprocess.CompletedProcess[str]:
+        if args[0] == "scp" and args[-1].endswith(":/work/in/"):
+            self.sent += [Path(source).name for source in args[-2:-1]]
+        state = "done" if self.finishes else "running"
+        self.ssh_output = "".join(
+            f"{name}\t{state}\t{f'{self.exit_code} 120' if self.finishes else ''}\n"
+            for name in self.sent
+        )
+        if args[0] == "rsync" and self.finishes:
+            self.out.mkdir(parents=True, exist_ok=True)
+            for name in self.sent:
+                cell = {
+                    "cell_type": "code",
+                    "source": ["print(1)"],
+                    "metadata": {},
+                    "execution_count": 1,
+                    "outputs": [
+                        {"output_type": "stream", "name": "stdout", "text": ["1\n"]}
+                    ],
+                }
+                executed = {"cells": [cell], "metadata": {}, "nbformat": 4}
+                (self.out / name).write_text(json.dumps(executed))
+                (self.out / f"{name}.done").write_text(f"{self.exit_code} 120\n")
+        return super().__call__(args, **kwargs)
+
+
+def _demo(repo: Path, name: str = "demo-fr.ipynb") -> Path:
+    notebook = repo / "labs" / "notebooks" / "nn" / "cnn" / name
+    notebook.parent.mkdir(parents=True, exist_ok=True)
+    cell = {"cell_type": "code", "source": ["print(1)"], "metadata": {}, "outputs": []}
+    notebook.write_text(json.dumps({"cells": [cell], "metadata": {}, "nbformat": 4}))
+    return notebook
+
+
+def _pass(repo: Path, runner: FakeRunner, **kwargs: Any) -> Any:
+    gpu_run = _gpu_run(repo, runner)
+    lines: list[str] = []
+    kwargs.setdefault("max_hours", 1.0)
+    result = gpu_pass.run(
+        gpu_run,
+        _settings(repo),
+        kwargs.pop("notebooks", None) or [_demo(repo)],
+        interval=60,
+        report=lines.append,
+        sleep=kwargs.pop("sleep", _no_sleep),
+        **kwargs,
+    )
+    return gpu_run, result, lines
+
+
+def _destroyed(runner: FakeRunner) -> list[list[str]]:
+    return [call for call in runner.commands("vastai") if call[1] == "destroy"]
+
+
+def test_pass_runs_notes_destroys_and_writes_the_outputs_back(repo: Path) -> None:
+    runner = PassRunner(repo / ".run" / "gpu" / "main" / "out")
+    notebook = _demo(repo)
+
+    gpu_run, result, lines = _pass(
+        repo, runner, notebooks=[notebook], write_outputs=True, clock=lambda: 0.0
+    )
+
+    assert _destroyed(runner) == [["vastai", "destroy", "instance", "100", "-y"]]
+    assert gpu_run.state() is None
+    assert [r.path.name for r in result.reports] == ["nn__cnn__demo-fr.full.ipynb"]
+    assert (result.unfinished, result.ceiling_reached) == ([], False)
+    assert "#### nn__cnn__demo-fr.full.ipynb: exit 0, 120 s" in "\n".join(lines)
+    assert (
+        "#### nn__cnn__demo-fr.full.ipynb"
+        in (gpu_run.directory / "notes.md").read_text()
+    )
+    assert result.written == [notebook]
+    written = json.loads(notebook.read_text())
+    assert written["cells"][0]["outputs"][0]["text"] == ["1\n"]
+    queue = (gpu_run.directory / "scripts" / "queue.sh.new").read_text()
+    assert "timeout 3600" in queue  # The ceiling, as each run's timeout.
+
+
+def test_pass_keeps_a_failed_runs_notebook_as_it_was(repo: Path) -> None:
+    runner = PassRunner(repo / ".run" / "gpu" / "main" / "out", exit_code=1)
+    notebook = _demo(repo)
+    before = notebook.read_text()
+
+    _, result, _ = _pass(repo, runner, notebooks=[notebook], write_outputs=True)
+
+    assert [r.exit_code for r in result.failed] == [1]
+    assert result.written == []
+    assert notebook.read_text() == before
+    assert len(_destroyed(runner)) == 1
+
+
+def test_pass_destroys_the_machine_at_its_ceiling(repo: Path) -> None:
+    runner = PassRunner(repo / ".run" / "gpu" / "main" / "out", finishes=False)
+    now = [0.0]
+
+    def sleep(seconds: float) -> None:
+        now[0] += seconds
+
+    gpu_run = _gpu_run(repo, runner)
+    result = gpu_pass.run(
+        gpu_run,
+        _settings(repo),
+        [_demo(repo)],
+        max_hours=0.5,
+        report=lambda _: None,
+        clock=lambda: now[0],
+        sleep=sleep,
+    )
+
+    assert result.ceiling_reached
+    assert result.unfinished == ["nn__cnn__demo-fr.full.ipynb"]
+    assert now[0] == 1800
+    assert len(_destroyed(runner)) == 1
+
+
+def test_pass_destroys_the_machine_on_ctrl_c_and_sigterm(repo: Path) -> None:
+    for stop, expected in (
+        (KeyboardInterrupt, KeyboardInterrupt),
+        (None, gpu_pass.GpuPassStoppedError),
+    ):
+        runner = PassRunner(repo / ".run" / "gpu" / "main" / "out", finishes=False)
+
+        def sleep(_: float, stop: Any = stop) -> None:
+            if stop is None:
+                os.kill(os.getpid(), signal.SIGTERM)
+                time.sleep(1)  # The handler raises meanwhile.
+            else:
+                raise stop
+
+        with raises(expected):
+            _pass(repo, runner, sleep=sleep)
+
+        assert len(_destroyed(runner)) == 1, expected
+    assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
+
+
+def test_pass_refuses_before_renting_anything(repo: Path) -> None:
+    runner = FakeRunner()
+    hands_on = _demo(repo, "hands-on-fr.ipynb")
+    refused = [
+        ({"notebooks": [_demo(repo)], "short": True, "write_outputs": True}, "--short"),
+        ({"notebooks": [hands_on], "write_outputs": True}, "hands-on"),
+        ({"notebooks": [_demo(repo)], "short": True}, "SHORT_RUN"),
+        ({"notebooks": [repo / "missing-fr.ipynb"]}, "no such notebook"),
+    ]
+    for kwargs, reason in refused:
+        with raises(GpuRunError, match=reason):
+            _pass(repo, runner, **kwargs)
+
+    rented = _gpu_run(repo, runner)
+    rented.directory.mkdir(parents=True)
+    (rented.directory / "state.json").write_text(
+        json.dumps({"id": 1, "gpu": "T4", "machine": 2})
+    )
+    with raises(GpuRunError, match="already rented"):
+        _pass(repo, runner)
+    assert runner.calls == []
+
+
+def test_last_runs_keeps_each_notebooks_last_success(tmp_path: Path) -> None:
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "notes.md").write_text(
+        "\nNoted 2026-10-01 10:00 CEST:\n#### x.full.ipynb: exit 0, 300 s, peak RAM"
+        "\n\nNoted 2026-10-02 10:00 CEST:\n#### x.full.ipynb: exit 1, 20 s, peak RAM"
+        "\n#### y.short.ipynb: exit 0, 40 s, peak RAM\n"
+    )
+    (tmp_path / "b").mkdir()
+    (tmp_path / "b" / "notes.md").write_text(
+        "\nNoted 2026-10-03 09:00 CEST:\n#### x.full.ipynb: exit 0, 280 s, peak RAM\n"
+    )
+
+    assert gpu_pass.last_runs([tmp_path]) == {"x.full.ipynb": 280, "y.short.ipynb": 40}
+
+
+def test_cli_pass_dry_run_json_estimates_from_the_notes(
+    repo: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    notebook = _demo(repo)
+    other = _demo(repo, "demo-en.ipynb")
+    notes = repo / ".run" / "gpu" / "old" / "notes.md"
+    notes.parent.mkdir(parents=True)
+    notes.write_text(
+        "\nNoted 2026-10-01 10:00 CEST:\n"
+        "#### nn__cnn__demo-fr.full.ipynb: exit 0, 1200 s, peak RAM 1.0 GiB\n"
+        "#### nn__cnn__demo-en.full.ipynb: exit 0, 600 s, peak RAM 1.0 GiB\n"
+    )
+    monkeypatch.setattr(
+        GpuRun, "cheapest", lambda self, gpus=(): Offer(7, "Tesla T4", 42, 0.2, "FR")
+    )
+    monkeypatch.chdir(repo)
+
+    main(("labs", "gpu", "pass", str(notebook), str(other), "--dry-run", "--json"))
+
+    planned = json.loads(capsys.readouterr().out)
+    assert planned["gpu"] == "Tesla T4"
+    assert planned["price_per_hour"] == approx(0.2)
+    assert planned["ceiling_cost"] == approx(0.8)
+    assert planned["estimated_hours"] == approx(40 / 60)  # 10 min to boot, 30 to run.
+    assert planned["estimated_cost"] == approx(0.2 * 40 / 60)
+    # In `notebook_paths`' order.
+    assert [n["last_seconds"] for n in planned["notebooks"]] == [600, 1200]
+    assert planned["notebooks"][1]["notebook"] == "labs/notebooks/nn/cnn/demo-fr.ipynb"
+
+
+def test_cli_status_plain_gives_the_price_and_rental_time(
+    repo: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    machine_dir = repo / ".run" / "gpu" / "main"
+    machine_dir.mkdir(parents=True)
+    (machine_dir / "state.json").write_text(
+        json.dumps(
+            {
+                "id": 1,
+                "gpu": "T4",
+                "machine": 2,
+                "rented_at": "2026-10-17T10:00:00+02:00",
+            }
+        )
+    )
+    monkeypatch.setattr(
+        GpuRun,
+        "status",
+        lambda self: GpuStatus(
+            instance=InstanceInfo(status="loading", gpu="Tesla T4", price=0.16),
+            rented_at=self.state().rented_at,
+        ),
+    )
+    monkeypatch.chdir(repo)
+
+    main(("labs", "gpu", "status", "--plain"))
+
+    assert capsys.readouterr().out == (
+        "machine\tmain\tloading\tTesla T4\t0.160\t2026-10-17T10:00:00+02:00\n"
+    )
