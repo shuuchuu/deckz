@@ -4,7 +4,7 @@ authors = [
   {name = "NyxAether", email = "contact.nyxhemera@gmail.com"},
 ]
 dependencies = [
-  "deckz == 31.3.3",
+  "deckz == 31.3.4",
   # Exact: it bundles the Claude Code the agent runs, whose behaviour studioz
   # relies on (`can_use_tool` needing a `PreToolUse` hook, how an interrupted
   # turn ends); a new version is tried before it's pinned.
@@ -22,7 +22,7 @@ license = "Apache-2.0"
 name = "studioz"
 readme = "README.md"
 requires-python = ">= 3.12"
-version = "31.3.3"
+version = "31.3.4"
 
 [project.scripts]
 studioz = "studioz.cli:main"

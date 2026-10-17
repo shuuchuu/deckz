@@ -4,4 +4,4 @@ See `studioz-plan.md` at the root of the deckz repository for what it is for
 and how it's built.
 """
 
-__version__ = "31.3.3"
+__version__ = "31.3.4"
