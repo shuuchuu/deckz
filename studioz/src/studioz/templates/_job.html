@@ -29,11 +29,17 @@
   {% if job.state.name == "INTERRUPTED" %}
   <p class="hint">Interrompue par l'arrêt de studioz.</p>
   {% endif %}
+  {% if job.state.name == "QUEUED" and job.held %}
+  <p class="job-held">En attente de mémoire : {{ job.held[0] | gib }} disponibles, elle attend d'en avoir {{ job.held[1] | gib }}
+    (d'autres constructions, rendus ou agents en cours ?). Elle démarre d'elle-même dès qu'il y en a assez.
+    <button type="button" class="secondary" hx-post="/espaces/{{ workspace.name }}/taches/{{ job.id }}/forcer"
+            hx-target="#job-{{ job.id }}" hx-swap="outerHTML">Lancer quand même</button></p>
+  {% endif %}
   {% if job.finished and job.link %}
   <p><a href="{{ job.link[1] }}">{{ job.link[0] }}</a></p>
   {% endif %}
   {% if open %}
   <pre class="job-log">{% for line in job.log %}{{ line }}
-{% else %}{% if job.state.name == "QUEUED" %}En attente de la tâche en cours de cet espace…{% endif %}{% endfor %}</pre>
+{% else %}{% if job.state.name == "QUEUED" and not job.held %}En attente de la tâche en cours de cet espace…{% endif %}{% endfor %}</pre>
   {% endif %}
 </section>

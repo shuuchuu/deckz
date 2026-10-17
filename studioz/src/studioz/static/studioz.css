@@ -679,3 +679,9 @@ button.status-item:hover { background: rgb(255 255 255 / 0.15); }
 .lab-item .lab-pick { margin: 0 0 0 0.3rem; width: 0.8rem; height: 0.8rem; vertical-align: middle; }
 .view-action:disabled { opacity: 0.4; cursor: default; }
 .view-action:disabled:hover { background: transparent; color: var(--muted); }
+
+/* The memory item, and a job waiting for memory. */
+.statusbar .memory-badge { font-variant-numeric: tabular-nums; }
+.statusbar .memory-badge[data-state="short"] { background: #8a4b08; color: #fff; font-weight: 700; }
+.job-held { margin: 0.3rem 0; color: var(--muted); }
+.job-held button { margin-left: 0.4rem; }

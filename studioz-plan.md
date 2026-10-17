@@ -12,8 +12,9 @@ increments 1 to 4 (2026-10-15, under "The VS Code layout"). All of it is pushed 
 released (deckz 31.3.4). Phase 5 (long jobs) was planned on 2026-10-17 (under
 "Phase 5"); its increments 1 (notifications, jobs kept across restarts, every deck's
 build), 2 (videos), 3 (labs previewed), 4 (`deckz labs gpu pass`) and 5 (GPU passes
-from studioz) are done: phase 5 is done. **Next:** "Then, with the colleague" (below
-phase 5), and the open items. A GPU pass rents a machine that costs money: never
+from studioz) are done: phase 5 is done. Then the memory guard "Risks" promised
+(2026-10-18, under "Machine load"). **Next:** "Then, with the colleague" (below phase
+5), and the open items. A GPU pass rents a machine that costs money: never
 start one without the user saying so. `git log
 origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed. Push and
@@ -34,6 +35,7 @@ architecture):
 | `problems.py`, `changes.py` | the panel's Problèmes tab and the sidebar's Changes panel; `changes.LangPairs` caches deckz's fr/en pairs |
 | `baselines.py`, `comparison.py` | handouts as of the last commit, frame-by-frame before/after |
 | `commits.py`, `sync.py` | the Commit and Synchronisation dialogs |
+| `memory.py` | the machine's available memory (`/proc/meminfo`): the status bar's item, and the threshold under which builds and renders wait |
 | `jobs.py`, `actions.py` | the job queue, kept in each workspace's `.run/studioz/jobs/`; build (a deck, every deck), upload, publish |
 | `videos.py` | the Vidéos view and a scene's page: `deckz videos list --json`, the renders of the last commit kept (hard links) for the before/after, the render jobs |
 | `gpu.py` | GPU passes: the modal's estimate (`deckz labs gpu pass --dry-run --json`), the pass's and `down`'s job steps, the machines billing (`status --plain --offline`, cached by their `state.json`) |
@@ -1614,6 +1616,21 @@ deckz, a skill, or studioz, in that order of preference.
 - **Machine load.** Even with the compile limit, two watches and a GPU queue on a
   15 GB machine is tight. studioz watches only the deck in front of the person,
   shows memory, and holds new jobs over a threshold.
+
+  **Done** (2026-10-18, `studioz.memory`): the status bar shows the memory available
+  (`MemAvailable`, Linux only; nothing elsewhere), orange under the threshold,
+  `studioz --min-free-memory` (3 GiB by default, announced at start; 0 never holds).
+  A job needing memory (a build, a render) about to start under it waits, "en attente
+  de mémoire" with what's available and "Lancer quand même"; studioz checks again
+  every 5 s and starts one held job per check, since a build's memory grows over its
+  first seconds. Uploads, publications, GPU passes and `down` never wait (a `down`
+  held back would leave a machine billing). Tried on `studioz-dev` with the threshold
+  at 64 GiB: every deck's build and the Fortinet deck's held (the jobs item "1 en
+  attente de mémoire", the memory item orange), the first stopped while held, the
+  second started by "Lancer quand même" and built; at 3 GiB, the item plain (6.4 GiB
+  available of 15.3). **Left:** the watches, the baselines' builds and the agents
+  aren't jobs and never wait; what takes the memory isn't shown (each workspace's
+  watch and agent).
 - **Long-lived workspaces drift.** A workspace kept for weeks diverges from the
   upstream branch and conflicts at Sync. studioz shows how far behind it is and
   offers the update early; the agent helps with conflicts, but the person sees the

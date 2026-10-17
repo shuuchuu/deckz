@@ -6,6 +6,7 @@ from time import monotonic, sleep
 from fastapi.testclient import TestClient
 from pytest import fixture
 from studioz.jobs import Job, Jobs, JobState
+from studioz.memory import GIB, Memory, read
 
 ORIGIN = {"Origin": "http://localhost:8421"}
 DECK = "/espaces/demo/formations/client/abc"
@@ -399,3 +400,80 @@ def test_the_status_bar_says_which_jobs_ended(
     assert ended["detail"] == "content/a.md:3: unknown variable"
     assert job.ended is not None
     assert ended["ended"] == job.ended.timestamp() * 1000
+
+
+class _Machine:
+    """The memory a test sets: what's available."""
+
+    def __init__(self, available: int) -> None:
+        self.available = available
+
+    def __call__(self) -> Memory:
+        return Memory(16 * GIB, self.available)
+
+
+def test_a_build_waits_for_memory_one_at_a_time(tmp_path: Path) -> None:
+    machine = _Machine(1 * GIB)
+    jobs = Jobs(min_free=3 * GIB, read_memory=machine, retry=0.05)
+    first = jobs.submit(tmp_path / "a", "a", [_python("print('a')")])
+    second = jobs.submit(tmp_path / "b", "b", [_python("import time; time.sleep(30)")])
+    # An upload needs little: never held.
+    light = jobs.submit(
+        tmp_path / "c", "c", [_python("print('c')")], needs_memory=False
+    )
+    _wait(light)
+    sleep(0.2)
+    assert (first.state, second.state) == (JobState.QUEUED, JobState.QUEUED)
+    assert first.held == (1 * GIB, 3 * GIB)
+
+    machine.available = 4 * GIB
+    deadline = monotonic() + 10
+    while first.state is JobState.QUEUED and second.state is JobState.QUEUED:
+        assert monotonic() < deadline
+        sleep(0.01)
+    # One started; the other waits for the next check, which sees it
+    # taking memory (here, the machine short again).
+    machine.available = 1 * GIB
+    sleep(0.3)
+    assert [first.state, second.state].count(JobState.QUEUED) == 1
+    held = first if first.state is JobState.QUEUED else second
+
+    jobs.force(held.workspace, held.id)  # "Lancer quand même"
+
+    assert held.state is not JobState.QUEUED
+    assert held.held is None
+    for job in (first, second):
+        jobs.stop(job.workspace, job.id)
+        _wait(job)
+
+
+def test_a_held_job_says_so(
+    fake_deckz: Path, client: TestClient, workspace: Path
+) -> None:
+    jobs = client.app.state.studio.jobs  # ty: ignore[unresolved-attribute]
+    jobs._read_memory = _Machine(1 * GIB)
+    job = jobs.submit(workspace, "build", [_python("print('built')")])
+
+    page = client.get(f"/espaces/demo/taches/{job.id}").text
+    assert "En attente de mémoire : 1,0 Go disponibles" in page
+    assert "Lancer quand même" in page
+    assert "en attente de mémoire" in client.get("/espaces/demo/taches/resume").text
+    badge = client.get("/memoire").text
+    assert 'data-state="short"' in badge
+    assert "Mémoire : 1,0 Go" in badge
+
+    client.post(f"/espaces/demo/taches/{job.id}/forcer", headers=ORIGIN)
+    _wait(job)
+
+    assert job.state is JobState.DONE
+    assert "built" in job.log
+
+
+def test_memory_is_read_from_proc(tmp_path: Path) -> None:
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text(
+        "MemTotal:       16000000 kB\nMemFree:  100 kB\nMemAvailable:    4000000 kB\n"
+    )
+
+    assert read(meminfo) == Memory(16000000 * 1024, 4000000 * 1024)
+    assert read(tmp_path / "missing") is None

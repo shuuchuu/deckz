@@ -46,6 +46,7 @@ from . import (
     commits,
     gpu,
     labs,
+    memory,
     notebooks,
     problems,
     sources,
@@ -204,6 +205,7 @@ def _hours(hours: float) -> str:
 templates.env.filters["ago"] = _ago
 templates.env.filters["dollars"] = _dollars
 templates.env.filters["hours"] = _hours
+templates.env.filters["gib"] = memory.gib
 templates.env.filters["markdown"] = _markdown
 templates.env.filters["workflow_text"] = workflows.text
 templates.env.filters["deck_tree"] = workspaces.deck_tree
@@ -1011,6 +1013,33 @@ def job_stop(request: Request, studio: StudioDep, name: str, job_id: int) -> Res
     return _render(request, "_job.html", workspace=found, job=job, open=True)
 
 
+@router.post("/espaces/{name}/taches/{job_id}/forcer", response_class=HTMLResponse)
+def job_force(request: Request, studio: StudioDep, name: str, job_id: int) -> Response:
+    """Start a job held for memory anyway.
+
+    Returns:
+        The job's section.
+    """
+    found, job = _job_or_404(studio, name, job_id)
+    studio.jobs.force(found.worktree.path, job_id)
+    return _render(request, "_job.html", workspace=found, job=job, open=True)
+
+
+@router.get("/memoire", response_class=HTMLResponse)
+def memory_badge(request: Request, studio: StudioDep) -> Response:
+    """The status bar's memory item: what's available, short or not.
+
+    Returns:
+        The item, nothing where the memory can't be read.
+    """
+    return _render(
+        request,
+        "_memory_badge.html",
+        found=studio.jobs.memory(),
+        min_free=studio.jobs.min_free,
+    )
+
+
 @router.post("/espaces/{name}/taches/{job_id}/relancer", response_class=HTMLResponse)
 def job_rerun(request: Request, studio: StudioDep, name: str, job_id: int) -> Response:
     """Run a finished build again, as it ran.
@@ -1194,6 +1223,7 @@ def upload_deck(request: Request, studio: StudioDep, name: str, deck: str) -> Re
         actions.upload_steps(path),
         directory,
         form=f"/espaces/{name}/formations/{deck}/envoyer/formulaire",
+        needs_memory=False,
     )
     return _started(request, found)
 
@@ -1263,6 +1293,7 @@ def publish(
         f"Publier {actions.PUBLISHABLE[what][0]}",
         steps,
         form=f"/espaces/{name}/publier/formulaire",
+        needs_memory=False,
     )
     return _started(request, found)
 
@@ -1759,6 +1790,7 @@ def gpu_start(
         + "&".join(f"carnet={quote(file)}" for file in files),
         lane="gpu",
         link=link,
+        needs_memory=False,
     )
     return _started(request, found)
 
@@ -1843,6 +1875,7 @@ def gpu_stop(
         gpu.down_steps(path, machine),
         rerun=True,
         lane="gpu",
+        needs_memory=False,
     )
     return _started(request, found)
 
@@ -2573,6 +2606,7 @@ def create_app(
     login: Login | None = None,
     drafter: Callable[[Path, list[str]], Awaitable[str]] | None = None,
     backlog: Backlog | None = None,
+    jobs: Jobs | None = None,
 ) -> FastAPI:
     """The studioz application for the deckz repository `repository`.
 
@@ -2586,6 +2620,8 @@ def create_app(
         login: Claude Code's login check (same).
         drafter: What writes a commit message (same).
         backlog: The workspaces' `deckz i18n stale` runs (same).
+        jobs: The jobs, holding back those needing memory under their \
+            threshold (`studioz --min-free-memory`; tests replace the memory).
 
     Returns:
         The application.
@@ -2607,7 +2643,7 @@ def create_app(
         baselines or Baselines(),
         changes.LangPairs(),
         backlog or Backlog(),
-        Jobs(),
+        jobs or Jobs(),
         agents or agent.Agents(),
         login or Login(),
         drafter or asks.draft_message,

@@ -7,6 +7,7 @@ import appdirs
 from fastapi.testclient import TestClient
 from pytest import fixture
 from studioz.app import create_app
+from studioz.memory import Memory
 
 
 @fixture(autouse=True)
@@ -28,6 +29,9 @@ def _isolated(tmp_path: Path, monkeypatch: Any, tmp_path_factory: Any) -> None:
         encoding="utf8",
     )
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(config))
+    # Nor the machine's memory: a loaded machine would hold the jobs back.
+    plenty = Memory(64 << 30, 32 << 30)
+    monkeypatch.setattr("studioz.memory.read", lambda *_: plenty)
 
 
 def _git(cwd: Path, *args: str) -> str:

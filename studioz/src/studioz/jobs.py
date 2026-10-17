@@ -9,6 +9,12 @@ machine-wide. A GPU pass has a lane of its own: it lasts an hour and writes
 only notebooks, and the builds needn't wait for it. A job's log is kept to
 show, and a job can be stopped.
 
+A job needing memory (a build, a render) waits while the machine has less
+than `min_free` available (`studioz.memory`), checked again every few seconds,
+one held job started at a time, unless the person starts it anyway. Uploads,
+publications and GPU passes need little and are never held: a `down` held
+back would leave a machine billing.
+
 Each job's record and log are kept in its workspace's `.run/studioz/jobs/`
 (the last `_KEPT`), so that they outlive studioz: stopping studioz stops its
 jobs, and those it stopped, or a crash left running, are "interrompues" when
@@ -23,14 +29,17 @@ import re
 import signal
 import subprocess
 from collections import deque
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from threading import Lock, Thread
+from time import sleep
 from typing import Any
 
+from . import memory
+from .memory import Memory
 from .watches import workspace_environment
 
 _LOG_LINES = 2000
@@ -39,6 +48,8 @@ _STOP_GRACES = {"gpu": 300.0}
 """A lane's grace, when longer: a GPU pass stopped destroys its machine first \
 (`deckz labs gpu pass`), and killed meanwhile it would leave it billing."""
 _KEPT = 30
+_MEMORY_RETRY = 5.0
+"""Seconds between two checks of the memory for the jobs held back."""
 """The jobs kept per workspace, the most recent."""
 # deckz's log lines end with where they were logged, alone on its line when
 # the message wraps: noise in a job's log.
@@ -90,6 +101,12 @@ class Job:
     """Jobs of one lane run one after the other; lanes side by side."""
     link: tuple[str, str] | None = None
     """What to see once it ended (a label, a URL): a notebook's before/after."""
+    needs_memory: bool = True
+    """Whether it waits while memory is short (a build, a render)."""
+    held: tuple[int, int] | None = None
+    """While it waits for memory: the bytes available, and those it waits for."""
+    forced: bool = False
+    """Started anyway, memory short or not."""
 
     @property
     def finished(self) -> bool:
@@ -120,6 +137,7 @@ class Job:
             "state": self.state.name,
             "lane": self.lane,
             "link": self.link,
+            "needs_memory": self.needs_memory,
         }
 
 
@@ -156,6 +174,7 @@ def _load(workspace: Path) -> list[Job]:
                 _when(record.get("ended")),
                 lane=str(record.get("lane") or ""),
                 link=tuple(record["link"]) if record.get("link") else None,
+                needs_memory=bool(record.get("needs_memory", True)),
             )
         except (OSError, ValueError, KeyError, TypeError):
             continue
@@ -201,11 +220,28 @@ def _forget(job: Job) -> None:
 class Jobs:
     """Every job studioz runs, each workspace's one after the other."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        min_free: int = memory.DEFAULT_MIN_FREE,
+        read_memory: Callable[[], Memory | None] | None = None,
+        retry: float = _MEMORY_RETRY,
+    ) -> None:
+        """The jobs, none yet.
+
+        Args:
+            min_free: Bytes of memory a job needing some waits for; 0 never \
+                holds one.
+            read_memory: What reads it: `memory.read` by default.
+            retry: Seconds between two checks for the jobs held.
+        """
         self._jobs: list[Job] = []
         self._loaded: set[Path] = set()
         self._lock = Lock()
         self._closed = False
+        self.min_free = min_free
+        self._read_memory = read_memory or memory.read
+        self._retry = retry
+        self._retrying = False
 
     def _known(self, workspace: Path) -> list[Job]:
         """The workspace's jobs, those kept from before loaded first.
@@ -231,6 +267,7 @@ class Jobs:
         form: str | None = None,
         lane: str = "",
         link: tuple[str, str] | None = None,
+        needs_memory: bool = True,
     ) -> Job:
         """Queue a job, started at once if its workspace's lane runs none.
 
@@ -243,6 +280,7 @@ class Jobs:
             form: The dialog starting it again, when it needs one.
             lane: Its lane: `gpu` for a GPU pass, else the builds' one.
             link: What to see once it ended (a label, a URL).
+            needs_memory: Whether it waits while memory is short.
 
         Returns:
             The job.
@@ -259,6 +297,7 @@ class Jobs:
                 form,
                 lane=lane,
                 link=link,
+                needs_memory=needs_memory,
             )
             self._jobs.append(job)
             # The oldest finished ones go, records and logs.
@@ -286,7 +325,19 @@ class Jobs:
             rerun=True,
             lane=job.lane,
             link=job.link,
+            needs_memory=job.needs_memory,
         )
+
+    def force(self, workspace: Path, job_id: int) -> None:
+        """Start a job held for memory anyway, once its lane is free."""
+        job = self.get(workspace, job_id)
+        if job is None or job.state is not JobState.QUEUED:
+            return
+        job.forced = True
+        self._start_next(workspace, job.lane)
+
+    def memory(self) -> Memory | None:
+        return self._read_memory()
 
     def jobs(self, workspace: Path) -> list[Job]:
         """The workspace's jobs.
@@ -301,20 +352,65 @@ class Jobs:
         with self._lock:
             return next((j for j in self._known(workspace) if j.id == job_id), None)
 
-    def _start_next(self, workspace: Path, lane: str) -> None:
+    def _start_next(self, workspace: Path, lane: str) -> bool:
+        """Start the lane's next job, unless one runs or memory is short.
+
+        Returns:
+            Whether one started.
+        """
         with self._lock:
             if self._closed:
-                return
+                return False
             mine = [job for job in self._known(workspace) if job.lane == lane]
             if any(job.state is JobState.RUNNING for job in mine):
-                return
+                return False
             job = next((j for j in mine if j.state is JobState.QUEUED), None)
             if job is None:
-                return
+                return False
+            short = self._short(job)
+            if short is not None:
+                job.held = short
+                if not self._retrying:
+                    self._retrying = True
+                    Thread(target=self._retry_held, daemon=True).start()
+                return False
+            job.held = None
             job.state = JobState.RUNNING
             job.started = datetime.now(UTC)
         _save(job)
         Thread(target=self._run, args=(job,), daemon=True).start()
+        return True
+
+    def _short(self, job: Job) -> tuple[int, int] | None:
+        """What memory the job waits for, called holding the lock.
+
+        Returns:
+            The bytes available and those it waits for, None if it may start.
+        """
+        if not job.needs_memory or job.forced or not self.min_free:
+            return None
+        found = self._read_memory()
+        if found is None or found.available >= self.min_free:
+            return None
+        return found.available, self.min_free
+
+    def _retry_held(self) -> None:
+        # One held job started per check: a build's memory grows over its
+        # first seconds, and the next check sees it.
+        while True:
+            sleep(self._retry)
+            with self._lock:
+                held = [
+                    (job.workspace, job.lane)
+                    for job in self._jobs
+                    if job.state is JobState.QUEUED and job.held is not None
+                ]
+                if self._closed or not held:
+                    self._retrying = False
+                    return
+            for workspace, lane in dict.fromkeys(held):
+                if self._start_next(workspace, lane):
+                    break
 
     def _run(self, job: Job) -> None:
         state = JobState.DONE

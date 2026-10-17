@@ -13,13 +13,21 @@ app = App(name="studioz", help="Work on a deckz repository from the browser.")
 
 
 @app.default
-def serve(*, workdir: Path = Path(), port: int = 8421, browser: bool = True) -> None:
+def serve(
+    *,
+    workdir: Path = Path(),
+    port: int = 8421,
+    browser: bool = True,
+    min_free_memory: float = 3.0,
+) -> None:
     """Start studioz on this machine, for the repository of the current directory.
 
     Args:
         workdir: Any directory of the repository's checkouts
         port: Local port to listen on
         browser: Open studioz in the browser once it's ready
+        min_free_memory: Gibibytes of memory a build or a render waits for
+            before it starts (0: never waits); "Lancer quand même" starts it
 
     Raises:
         SystemExit: With code 1 outside a deckz repository.
@@ -31,14 +39,24 @@ def serve(*, workdir: Path = Path(), port: int = 8421, browser: bool = True) -> 
     from deckz.exceptions import DeckzError
     from deckz.utils import get_git_dir
 
+    from . import memory
     from .app import create_app
+    from .jobs import Jobs
 
     if os.environ.pop("ANTHROPIC_API_KEY", None) is not None:
         # The agent works on the person's own Claude account (plan,
         # "Credentials"): a key left in the shell would bill it instead.
         print("studioz: ANTHROPIC_API_KEY ignoré, l'agent utilise votre compte Claude")
+    min_free = int(min_free_memory * memory.GIB)
+    if min_free and memory.read() is not None:
+        print(
+            f"studioz: constructions et rendus en attente sous {memory.gib(min_free)}"
+            " de mémoire disponible (--min-free-memory)"
+        )
     try:
-        application = create_app(get_git_dir(workdir.resolve()))
+        application = create_app(
+            get_git_dir(workdir.resolve()), jobs=Jobs(min_free=min_free)
+        )
     except DeckzError as error:
         print(f"studioz: {error}")
         raise SystemExit(1) from error

@@ -456,7 +456,11 @@ deck's or every deck's full build, `deckz upload` after showing `deckz upload
 their logs in the panel's Tâches tab; deckz's own refusals still decide. Jobs are
 kept in the workspace's `.run/studioz/jobs/`, so they outlive studioz (those it
 stopped or a crash left running are "interrompues"); a build runs again as is, an
-upload or a publication reopens its dialog. `static/notifications.js` notifies each
+upload or a publication reopens its dialog. A build or a render waits while the
+machine has less memory available than `studioz --min-free-memory` (3 GiB;
+`studioz.memory`, `/proc/meminfo`, shown in the status bar), one held job started per
+check, unless "Lancer quand même"; uploads, publications and GPU passes never wait (a
+`down` held back would leave a machine billing). `static/notifications.js` notifies each
 job's end as VS Code does (a toast, the status bar's bell, a desktop notification
 when the page is hidden), from the status bar's jobs item.
 `studioz.videos` backs the Vidéos view and a scene's page (`static/video.js`):

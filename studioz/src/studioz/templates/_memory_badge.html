@@ -1,0 +1,8 @@
+{#- The status bar's memory item: what the machine has available. Under the
+    threshold, studioz holds the builds and renders back (`studioz.jobs`). -#}
+{% if found %}
+<span class="status-item memory-badge"{% if min_free and found.available < min_free %} data-state="short"{% endif %}
+      title="Mémoire disponible : {{ found.available | gib }} sur {{ found.total | gib }}.
+{%- if min_free %} Sous {{ min_free | gib }}, studioz fait attendre les constructions et les rendus qu'on lance (« Lancer quand même » les démarre).{% endif %}">
+  Mémoire : {{ found.available | gib }}</span>
+{% endif %}
