@@ -91,8 +91,9 @@ no variables of its own: every file of a deck renders with the same
   too much text for a slide.
 - `deckz check parity DECK_DIR` (needs the `deckz[parity]` extra) --
   compare a built deck's PDF and HTML slide by slide, needing both
-  already built (`deckz run --handout --html`), in French unless
-  `--lang` says otherwise (`--lang fr en`: both, one after the other).
+  already built (`deckz run --handout --html`, with the same `--lang` on
+  both: `--lang en` for the English build, `--lang fr en` for both, one
+  after the other; French by default).
   Writes an HTML report by default; `--plain` instead prints a
   worst-first text report and contact sheets per language, meant for an
   agent.
