@@ -8,6 +8,7 @@ fetch script, plus a script the notebook itself wrote with `%%writefile`.
 """
 
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -87,6 +88,16 @@ def shell_guard(log: str) -> str:
     return SHELL_GUARD.replace("__SHELL_LOG__", repr(log))
 
 
+_GHSPARSE = r"https://github\.com/shuuchuu/datasets/raw/refs/heads/main/ghsparse\.sh"
+DATASET_FETCH = re.compile(
+    rf"wget -q {_GHSPARSE} -O /tmp/ghsparse\.sh && bash /tmp/ghsparse\.sh [\w.-]+"
+    # The older form: `bash` exits 0 when `wget` fails (it reads an empty script),
+    # and dash, Colab's `sh`, has no `pipefail`, so the failure showed a cell later.
+    rf"|wget -qO- {_GHSPARSE} \| bash -s [\w.-]+"
+)
+"""The repo's standard dataset fetch (see labs/README.md), exactly: the local runner's
+`bash` runs nothing else."""
+
 RUNNER = r"""
 import ast, asyncio, builtins, inspect, json, re, shlex, subprocess, sys
 
@@ -97,12 +108,7 @@ SAFE_SHELL = {
     "wget", "curl", "unzip", "tar", "gunzip", "ls",
     "cat", "head", "mkdir", "cp", "mv", "echo",
 }
-# The repo's standard dataset fetch (see labs/README.md), exactly: `bash` runs
-# nothing else.
-DATASET_FETCH = re.compile(
-    r"wget -qO- https://github\.com/shuuchuu/datasets/raw/refs/heads/main/ghsparse\.sh"
-    r" \| bash -s [\w.-]+"
-)
+DATASET_FETCH = re.compile(__DATASET_FETCH__)
 # Scripts the notebook itself wrote with `%%writefile`, which `python` and
 # `torchrun` may run.
 written = set()
@@ -158,7 +164,8 @@ def shell(cmd, _subprocess=subprocess):
     if script:
         run = dict(args=script)
     elif DATASET_FETCH.fullmatch(cmd.strip()):
-        run = dict(args=cmd, shell=True)
+        # Into this run's own directory: parallel checks would share /tmp's.
+        run = dict(args=cmd.replace("/tmp/ghsparse.sh", "ghsparse.sh"), shell=True)
     else:
         parts = re.split(r"&&|\|\||;|\|", cmd)
         words = {part.split()[0] for part in parts if part.split()}
@@ -247,8 +254,18 @@ def main():
             _emit(i, role, f"{type(e).__name__}: {e}")
 
 
-main()
+if __name__ == "__main__":
+    main()
 """
+
+
+def runner_source() -> str:
+    """The local runner, run as `python runner.py CELLS.json [--smoke]`.
+
+    Returns:
+        Python source.
+    """
+    return RUNNER.replace("__DATASET_FETCH__", repr(DATASET_FETCH.pattern))
 
 
 def report_lines(stderr: str, returncode: int) -> Iterator[str]:
@@ -316,7 +333,7 @@ def run_notebook(
         spec = Path(tmp) / "cells.json"
         spec.write_text(json.dumps(cells))
         runner = Path(tmp) / "runner.py"
-        runner.write_text(RUNNER)
+        runner.write_text(runner_source())
         try:
             proc = subprocess.run(
                 [python, str(runner), str(spec), *(["--smoke"] if smoke else [])],

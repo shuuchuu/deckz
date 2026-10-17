@@ -3,7 +3,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from deckz.labs.execution import check_notebook
+from pytest import mark
+
+from deckz.labs.execution import DATASET_FETCH, check_notebook, runner_source
+
+_GHSPARSE = "https://github.com/shuuchuu/datasets/raw/refs/heads/main/ghsparse.sh"
+_FETCH = f"wget -q {_GHSPARSE} -O /tmp/ghsparse.sh && bash /tmp/ghsparse.sh landscape"
+_PIPED_FETCH = f"wget -qO- {_GHSPARSE} | bash -s landscape"
 
 
 def _write_notebook(path: Path, cells: list[dict[str, Any]]) -> None:
@@ -12,6 +18,45 @@ def _write_notebook(path: Path, cells: list[dict[str, Any]]) -> None:
 
 def _code(source: str) -> dict[str, Any]:
     return {"cell_type": "code", "metadata": {}, "source": source, "outputs": []}
+
+
+@mark.parametrize("line", [_FETCH, _PIPED_FETCH])
+def test_the_dataset_fetch_is_recognized_in_both_forms(line: str) -> None:
+    assert DATASET_FETCH.fullmatch(line)
+
+
+@mark.parametrize(
+    "line",
+    [
+        f"{_FETCH}; rm -rf ~",
+        _FETCH.replace("bash /tmp/ghsparse.sh", "bash /tmp/other.sh"),
+        _FETCH.replace("-O /tmp/ghsparse.sh", "-O /tmp/other.sh"),
+        _FETCH.replace("shuuchuu/datasets", "someone/datasets"),
+        f"{_PIPED_FETCH} && git push",
+    ],
+)
+def test_the_dataset_fetch_is_recognized_exactly(line: str) -> None:
+    assert not DATASET_FETCH.fullmatch(line)
+
+
+def test_the_local_runner_fetches_into_its_own_directory() -> None:
+    # Not /tmp, which parallel checks would share.
+    namespace: dict[str, Any] = {"__name__": "runner"}
+    exec(compile(runner_source(), "<runner>", "exec"), namespace)
+    calls: list[dict[str, Any]] = []
+
+    class FakeSubprocess:
+        @staticmethod
+        def run(**kwargs: Any) -> Any:
+            calls.append(kwargs)
+            return type("Done", (), {"returncode": 0})()
+
+    namespace["shell"](f"{_FETCH}\n", _subprocess=FakeSubprocess)
+
+    assert calls[0]["shell"] is True
+    assert calls[0]["args"].strip() == (
+        f"wget -q {_GHSPARSE} -O ghsparse.sh && bash ghsparse.sh landscape"
+    )
 
 
 def test_check_notebook_reports_a_raising_cell(tmp_path: Path) -> None:
