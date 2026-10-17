@@ -101,6 +101,7 @@ class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
             assets_builders_module=self._settings.paths.assets_builders_module,
             assets_dir=self._settings.paths.assets_dir,
             compiler=self.compiler(),
+            lock=self._settings.paths.assets_lock,
         )
 
     def assets_metadata_retriever(self) -> AssetsMetadataRetrieverProtocol:

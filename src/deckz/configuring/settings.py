@@ -53,6 +53,7 @@ class GlobalPaths(BaseModel):
     labs_notebooks_dir: _Path = cast("Path", "{git_dir}/labs/notebooks")
     labs_published_dir: _Path = cast("Path", "{git_dir}/labs/published")
     labs_gpu_dir: _Path = cast("Path", "{git_dir}/.run/gpu")
+    assets_lock: _Path = cast("Path", "{git_dir}/.run/assets.lock")
     scenes_dir: _Path = cast("Path", "{git_dir}/figures/scenes")
     videos_dir: _Path = cast("Path", "{assets_dir}/videos")
     templates_dir: _Path = cast("Path", "{git_dir}/templates")

@@ -182,7 +182,11 @@ files living under any deck's directory, not just one
 `current_dir`/`content_dir` pair. Each target compiles holding
 `deck_lock` (an `flock` on `<build_dir>/.lock`), so two builds of one deck
 (a `--watch` and a full build, two terminals) wait for each other instead of
-writing the same files at once. `build` raises `CompilationError`, naming
+writing the same files at once; likewise, `AssetsBuilder` runs the assets
+builders holding `assets_lock` (`<git_dir>/.run/assets.lock`), both through
+`utils.file_lock`. `TypstFiguresAssetsBuilder` stamps each SVG with a digest
+of the mirrors it compiles, not of the sources, so an edit racing a build
+never leaves a stale SVG stamped as up to date. `build` raises `CompilationError`, naming
 the target's label, when any PDF fails to compile, so every `run` command
 fails. A Jinja error in a content file is a `RenderError` naming the file
 and line (`render_dependencies`), whose build copy is removed so that the

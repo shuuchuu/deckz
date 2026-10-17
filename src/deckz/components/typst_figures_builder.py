@@ -14,7 +14,7 @@ from pathlib import Path
 
 from ..exceptions import DeckzError
 from ..stamps import digest, is_fresh, stamp_path, write_stamp
-from ..utils import copy_file_if_changed
+from ..utils import copy_file_if_changed, write_atomic
 from .protocols import AssetsBuilderProtocol
 
 # A string literal on one line, not a package (`"@preview/cetz:0.5.2"`).
@@ -34,6 +34,13 @@ class TypstFiguresAssetsBuilder(AssetsBuilderProtocol):
     stamp (`deckz.stamps`) covers its figure, the files it references
     (libraries, images, ...) and those `_svg.typ` does (the theme), and
     `extra_watched_files`: a change of any of them rebuilds it, and only it.
+
+    The stamp digests the mirrors, the very bytes Typst compiles, not the
+    sources: a figure edited after it was mirrored then gets a stamp its
+    source no longer matches, so the next build compiles it again, where a
+    digest of the source would stamp the old drawing as up to date. The
+    same inputs are digested again after compiling, and a figure whose
+    inputs changed meanwhile gets a stamp nothing matches.
     """
 
     def __init__(
@@ -96,18 +103,21 @@ class TypstFiguresAssetsBuilder(AssetsBuilderProtocol):
                 path.unlink()
 
         to_build = []
-        wrapper = self._typst_sources(self._input_dir / "_svg.typ")
+        wrapper = self._typst_sources(self._output_dir / "_svg.typ")
         for svg, (figure, lang) in svgs.items():
+            # Ordered by source path, as when stamps digested the sources:
+            # the same bytes in the same order, so the same stamps.
             inputs = sorted(
                 {
-                    *self._typst_sources(self._input_dir / figure),
+                    *self._typst_sources(self._output_dir / figure),
                     *wrapper,
                     *self._extra_watched_files,
-                }
+                },
+                key=self._source_path,
             )
             stamp = digest(inputs, lang)
             if not is_fresh(svg, stamp, inputs):
-                to_build.append((svg, figure, lang, stamp))
+                to_build.append((svg, figure, lang, inputs, stamp))
         if not to_build:
             return
         self._logger.info("Compiling %d Typst figure(s) to SVG", len(to_build))
@@ -138,8 +148,8 @@ class TypstFiguresAssetsBuilder(AssetsBuilderProtocol):
         isn't seen.
 
         Returns:
-            The files, `.typ` sources under `input_dir` rather than their \
-            mirrors.
+            The files, as Typst reads them: the mirrors under `output_dir` \
+            of the sources mirrored there.
         """
         found = {file}
         pending = [file]
@@ -157,8 +167,6 @@ class TypstFiguresAssetsBuilder(AssetsBuilderProtocol):
     def _resolve(self, reference: str, current: Path) -> Path | None:
         if reference.startswith("/"):
             path = self._assets_dir / reference[1:]
-            if path.is_relative_to(self._output_dir):
-                path = self._input_dir / path.relative_to(self._output_dir)
         else:
             path = current.parent / reference
         try:
@@ -166,14 +174,22 @@ class TypstFiguresAssetsBuilder(AssetsBuilderProtocol):
         except OSError:  # E.g. a string too long to be a path.
             return None
 
+    def _source_path(self, path: Path) -> Path:
+        if path.is_relative_to(self._output_dir):
+            return self._input_dir / path.relative_to(self._output_dir)
+        return path
+
     def _svg_path(self, figure: Path, lang: str) -> Path:
         return self._output_dir / figure.with_suffix(f".{lang}.svg")
 
-    def _compile(self, svg: Path, figure: Path, lang: str, stamp: str) -> str | None:
+    def _compile(
+        self, svg: Path, figure: Path, lang: str, inputs: list[Path], stamp: str
+    ) -> str | None:
         import typst
 
         try:
-            svg.write_bytes(
+            write_atomic(
+                svg,
                 typst.compile(
                     str(self._output_dir / "_svg.typ"),
                     root=str(self._assets_dir),
@@ -184,9 +200,19 @@ class TypstFiguresAssetsBuilder(AssetsBuilderProtocol):
                         "figure": f"/{self._output_dir.name}/{figure.as_posix()}",
                         "lang": lang,
                     },
-                )
+                ),
             )
         except typst.TypstError as error:
             return f"{figure} ({lang}):\n{error.diagnostic or error}"
+        if digest(inputs, lang) != stamp:
+            self._logger.info(
+                "%s (%s) changed while it was compiled: it's compiled again "
+                "at the next build",
+                figure,
+                lang,
+            )
+            # A stamp no digest matches: with none, `is_fresh` would take the
+            # SVG, newer than its inputs, as up to date.
+            stamp = "changed while compiled"
         write_stamp(svg, stamp)
         return None

@@ -27,6 +27,8 @@ import hashlib
 from collections.abc import Iterable
 from pathlib import Path
 
+from .utils import write_atomic
+
 
 def stamp_path(output: Path) -> Path:
     """Where `output`'s stamp is written.
@@ -92,8 +94,12 @@ def is_fresh(output: Path, stamp: str, inputs: Iterable[Path] = ()) -> bool:
 
 
 def write_stamp(output: Path, stamp: str) -> None:
-    """Record that `output` was just built from inputs digesting to `stamp`."""
-    stamp_path(output).write_text(f"{stamp}\n", encoding="utf8")
+    """Record that `output` was just built from inputs digesting to `stamp`.
+
+    The stamp is written atomically: a stamp cut short by a failure, or read \
+    while it's written, never matches.
+    """
+    write_atomic(stamp_path(output), f"{stamp}\n".encode())
 
 
 def python_sources(module: Path, roots: Iterable[Path]) -> tuple[Path, ...]:

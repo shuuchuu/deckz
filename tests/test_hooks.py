@@ -52,6 +52,8 @@ def test_assets_builder_rejects_a_malformed_builder(tmp_path: Path) -> None:
     path = _module(
         tmp_path, "def assets_builders(assets_dir, compiler):\n    return [object()]\n"
     )
-    builder = AssetsBuilder(path, tmp_path, cast("CompilerProtocol", None))
+    builder = AssetsBuilder(
+        path, tmp_path, cast("CompilerProtocol", None), tmp_path / "assets.lock"
+    )
     with raises(HookError, match="lacks a build_assets or watched_dirs"):
         builder.build_assets()

@@ -541,6 +541,17 @@ unless `is_fresh(output, stamp, inputs)`, then `write_stamp(output, stamp)`,
 which writes `<output>.stamp`. Commit the stamps of committed outputs, so a
 fresh clone rebuilds none of them. `python_sources` lists a Python module and
 the repo's modules it imports, the inputs of an output a module builds.
+Digest the very bytes you build from, read before building: a source edited
+in between then leaves a stamp it no longer matches, and the next build redoes
+the output, where a digest taken after building would stamp a stale output as
+up to date. `write_stamp` writes atomically, and so does
+`deckz.utils.write_atomic(path, data)`: a deck compiling meanwhile never reads
+a truncated output.
+
+Builders run one checkout's assets build at a time: every command building
+assets (`run`, `run section`, `run assets`, `--watch`...) holds a lock
+(`.run/assets.lock`) while they run, and says so when it waits for another
+one.
 
 `deckz` ships one ready-made builder, `TypstFiguresAssetsBuilder`
 (`deckz.components.typst_figures_builder`), for a Typst-themed repo whose

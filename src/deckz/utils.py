@@ -1,8 +1,9 @@
 """Provide general utility functions that would not fit in other modules."""
 
-from collections.abc import Generator, Iterable, Iterator, Mapping
+from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from contextlib import contextmanager, suppress
 from dataclasses import replace
+from logging import getLogger
 from multiprocessing import get_context
 from multiprocessing.pool import Pool
 from pathlib import Path, PurePosixPath
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
 # up an edit to it.
 _path_modules: dict[tuple[Path, int, str], ModuleType] = {}
 _path_modules_lock = Lock()
+_logger = getLogger(__name__)
 
 
 def file_changed(original: Path, copy: Path) -> bool:
@@ -51,8 +53,58 @@ def copy_file_if_changed(original: Path, copy: Path) -> bool:
     if not file_changed(original, copy):
         return False
     copy.parent.mkdir(parents=True, exist_ok=True)
-    copyfile(original, copy)
+    _replace_atomically(copy, lambda temporary: copyfile(original, temporary))
     return True
+
+
+def write_atomic(path: Path, data: bytes) -> None:
+    """Write `data` to `path` in one step, as seen from other processes.
+
+    A process reading `path` meanwhile (a deck compiling while assets build) \
+    sees its old content or its new one, never a truncated file, and a write \
+    failing midway leaves the old content whole.
+    """
+    _replace_atomically(path, lambda temporary: temporary.write_bytes(data))
+
+
+def _replace_atomically(path: Path, write: Callable[[Path], object]) -> None:
+    """Have `write` fill a temporary file next to `path`, then move it there."""
+    import os
+    from threading import get_ident
+
+    temporary = path.with_name(f".{path.name}.{os.getpid()}-{get_ident()}.tmp")
+    try:
+        write(temporary)
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+@contextmanager
+def file_lock(path: Path, waiting_message: str) -> Generator[None]:
+    """Hold an exclusive `flock` on `path`, across deckz processes.
+
+    The kernel releases it when its process exits, however it exits. Each \
+    call opens the file anew, so two holders in one process contend like \
+    two processes would.
+
+    Args:
+        path: The lock file, created (with its directory) if missing.
+        waiting_message: Logged when another holder makes this one wait.
+
+    Yields:
+        Once the lock is held, until exiting.
+    """
+    import fcntl
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            _logger.info(waiting_message)
+            fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
 
 
 def sync_tree(files: Mapping[PurePosixPath, Path], destination: Path) -> None:

@@ -1,10 +1,14 @@
+import logging
 import os
 from pathlib import Path
+from typing import Any
 
-from pytest import raises
+from pytest import LogCaptureFixture, MonkeyPatch, raises
 
 from deckz.components.typst_figures_builder import TypstFiguresAssetsBuilder
 from deckz.exceptions import DeckzError
+from deckz.stamps import digest
+from deckz.utils import copy_file_if_changed
 
 _SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>\n'
 
@@ -201,3 +205,98 @@ def test_build_assets_raises_on_a_compile_error(tmp_path: Path) -> None:
 
     with raises(DeckzError, match=r"fig\.typ"):
         builder.build_assets()
+
+
+def _count_compilations(monkeypatch: MonkeyPatch) -> list[str]:
+    import typst
+
+    compiled: list[str] = []
+    compile_ = typst.compile
+
+    def counting(*args: Any, **kwargs: Any) -> Any:
+        compiled.append(kwargs["sys_inputs"]["figure"])
+        return compile_(*args, **kwargs)
+
+    monkeypatch.setattr(typst, "compile", counting)
+    return compiled
+
+
+def test_build_assets_leaves_unchanged_figures_and_their_stamps(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    assets_dir, input_dir, output_dir = _make_layout(tmp_path)
+    builder = TypstFiguresAssetsBuilder(input_dir, output_dir, assets_dir)
+    builder.build_assets()
+    stamp = output_dir / "fig.fr.svg.stamp"
+    before = stamp.read_bytes()
+    compiled = _count_compilations(monkeypatch)
+
+    builder.build_assets()
+
+    assert compiled == []
+    assert stamp.read_bytes() == before
+    # The mirrors' bytes in their sources' order: the stamps of SVGs built
+    # when stamps digested the sources still match.
+    sources = sorted(input_dir / name for name in ("fig.typ", "_lib.typ", "_svg.typ"))
+    assert before.decode().strip() == digest(sources, "fr")
+
+
+def test_a_figure_edited_after_it_was_mirrored_is_compiled_again(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    # The edit lands after the mirror was written, before the stamp is
+    # computed: the SVG shows the mirror, so must its stamp.
+    assets_dir, input_dir, output_dir = _make_layout(tmp_path)
+    figure = input_dir / "fig.typ"
+    builder = TypstFiguresAssetsBuilder(input_dir, output_dir, assets_dir)
+
+    def copy_then_edit(original: Path, copy: Path) -> bool:
+        copied = copy_file_if_changed(original, copy)
+        if original == figure:
+            figure.write_text("Edited\n", encoding="utf8")
+        return copied
+
+    monkeypatch.setattr(
+        "deckz.components.typst_figures_builder.copy_file_if_changed", copy_then_edit
+    )
+    builder.build_assets()
+    monkeypatch.undo()
+    drawn = (output_dir / "fig.fr.svg").read_bytes()
+    compiled = _count_compilations(monkeypatch)
+
+    builder.build_assets()
+
+    assert sorted(compiled) == ["/typ/fig.typ", "/typ/fig.typ"]
+    assert (output_dir / "fig.fr.svg").read_bytes() != drawn
+
+
+def test_a_figure_whose_inputs_change_while_it_compiles_is_compiled_again(
+    tmp_path: Path, monkeypatch: MonkeyPatch, caplog: LogCaptureFixture
+) -> None:
+    import typst
+
+    assets_dir, input_dir, output_dir = _make_layout(tmp_path)
+    theme = tmp_path / "theme.typ"
+    theme.write_text("", encoding="utf8")
+    builder = TypstFiguresAssetsBuilder(
+        input_dir, output_dir, assets_dir, languages=["fr"], extra_watched_files=[theme]
+    )
+    compile_ = typst.compile
+
+    def edit_while_compiling(*args: Any, **kwargs: Any) -> Any:
+        theme.write_text("// edited\n", encoding="utf8")
+        return compile_(*args, **kwargs)
+
+    monkeypatch.setattr(typst, "compile", edit_while_compiling)
+    with caplog.at_level(logging.INFO):
+        builder.build_assets()
+    monkeypatch.undo()
+
+    stamp = output_dir / "fig.fr.svg.stamp"
+    assert (output_dir / "fig.fr.svg").is_file()
+    assert stamp.read_text(encoding="utf8") == "changed while compiled\n"
+    assert "changed while it was compiled" in caplog.text
+    compiled = _count_compilations(monkeypatch)
+    builder.build_assets()
+    assert compiled == ["/typ/fig.typ"]
+    assert stamp.read_text(encoding="utf8") != "changed while compiled\n"

@@ -1,7 +1,46 @@
 import os
 from pathlib import Path
 
+from pytest import MonkeyPatch, raises
+
 from deckz.stamps import digest, is_fresh, python_sources, stamp_path, write_stamp
+from deckz.utils import copy_file_if_changed, write_atomic
+
+
+def test_write_atomic_failing_midway_leaves_the_old_file_whole(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    output = _write(tmp_path / "fig.svg", "<svg/>")
+    write_stamp(output, "old")
+
+    def failing_replace(*_: object) -> None:
+        raise OSError
+
+    monkeypatch.setattr(os, "replace", failing_replace)
+    for write in (
+        lambda: write_atomic(output, b"<svg>new</svg>"),
+        lambda: write_stamp(output, "new"),
+        lambda: copy_file_if_changed(_write(tmp_path / "new.svg", "new"), output),
+    ):
+        with raises(OSError):
+            write()
+
+    assert output.read_text(encoding="utf8") == "<svg/>"
+    assert stamp_path(output).read_text(encoding="utf8") == "old\n"
+    assert sorted(path.name for path in tmp_path.iterdir()) == [
+        "fig.svg",
+        "fig.svg.stamp",
+        "new.svg",
+    ]
+
+
+def test_write_atomic_replaces_the_file(tmp_path: Path) -> None:
+    output = _write(tmp_path / "fig.svg", "<svg/>")
+
+    write_atomic(output, b"<svg>new</svg>")
+
+    assert output.read_bytes() == b"<svg>new</svg>"
+    assert [path.name for path in tmp_path.iterdir()] == ["fig.svg"]
 
 
 def _write(path: Path, text: str) -> Path:

@@ -27,7 +27,7 @@ from .configuring.settings import DeckSettings, GlobalSettings
 from .configuring.variables import get_variables
 from .exceptions import CompilationError, DeckzError
 from .models import Deck, FlavorName, Lang, PartName, lang_dir
-from .utils import all_deck_settings
+from .utils import all_deck_settings, file_lock
 
 _logger = getLogger(__name__)
 _NULL_PROGRESS = NullProgress()
@@ -170,15 +170,9 @@ def deck_lock(build_dir: Path, label: str) -> Generator[None]:
     Yields:
         Once the lock is held, until exiting.
     """
-    import fcntl
-
-    build_dir.mkdir(parents=True, exist_ok=True)
-    with (build_dir / ".lock").open("a") as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            _logger.info("Waiting for another build of %s to finish", label)
-            fcntl.flock(lock, fcntl.LOCK_EX)
+    with file_lock(
+        build_dir / ".lock", f"Waiting for another build of {label} to finish"
+    ):
         yield
 
 
