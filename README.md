@@ -907,16 +907,22 @@ The main commands:
   reports the tables instead (the
   `table_marker_label` marker), most wrapped first, flagging those whose
   longest words alone are wider than the frame; exits 1 if any is.
-- `deckz check parity [DECK_DIR] [SLIDES...]` (extra: `deckz[parity]`,
-  then `playwright install chromium`): compare a built deck's PDF and HTML
-  slide by slide (`deckz run --handout --html`), reporting each pair's
-  mean grayscale difference, the frames a reveal.js theme shrank to fit (a
-  slide element carrying `dataset.ratio`/`dataset.overflow`), and anything
-  the page logged, failed to load or tried to fetch from the network (a
-  deck must work offline). By default writes an HTML report
-  (`.build/parity/report.html`, sortable by gap, shrunk frames flagged),
-  opened with `--open`; `--plain` instead prints a worst-first text report
-  (agent-friendly) and writes contact sheets (PDF left, HTML right).
+- `deckz check parity [DECK_DIR] [SLIDES...] [--lang LANG...]` (extra:
+  `deckz[parity]`, then `playwright install chromium`): compare a built
+  deck's PDF and HTML slide by slide (`deckz run --handout --html`),
+  reporting each pair's mean grayscale difference, the frames a reveal.js
+  theme shrank to fit (a slide element carrying
+  `dataset.ratio`/`dataset.overflow`), and anything the page logged, failed
+  to load or tried to fetch from the network (a deck must work offline).
+  French builds by default (or `DECKZ_LANG`'s), `--lang en` the English ones
+  (under `en/`), `--lang fr en` both, one after the other. By default
+  writes an HTML report per language (`.build/parity/report.html`,
+  `.build/en/parity/report.html`, sortable by gap, shrunk frames flagged),
+  opened with `--open`, and prints a summary whose lines start with their
+  language; `--plain` instead prints a worst-first text report per
+  language (agent-friendly) and writes contact sheets (PDF left, HTML
+  right); `--json` prints an array, one object per language with its
+  `"lang"`.
 - `deckz hooks install`: install deckz's `pre-commit` (`deckz check
   --staged`) and `commit-msg` git hooks into the current repository's
   hooks directory (git's `core.hooksPath` when set, so a repo can commit

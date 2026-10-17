@@ -1,7 +1,8 @@
+from json import loads
 from pathlib import Path
 
 from pygit2 import init_repository
-from pytest import raises
+from pytest import CaptureFixture, raises
 
 from deckz.analyzing.parity import (
     _difference,
@@ -10,9 +11,11 @@ from deckz.analyzing.parity import (
     compare,
     write_contact_sheets,
 )
+from deckz.cli import main
 from deckz.cli.check._parity_report import write_html_report
 from deckz.configuring.settings import DeckPaths, DeckSettings
 from deckz.exceptions import DeckzError
+from deckz.models import Lang, lang_dir
 
 _TWO_PAGE_TYP = """\
 #set page(paper: "a4")
@@ -51,17 +54,16 @@ def _deck_settings(tmp_path: Path) -> DeckSettings:
     return DeckSettings(paths=DeckPaths(current_dir=current_dir, git_dir=tmp_path))
 
 
-def _build_deck(settings: DeckSettings) -> None:
+def _build_deck(settings: DeckSettings, lang: Lang = "fr") -> None:
     import typst
 
     paths = settings.paths
-    paths.pdf_dir.mkdir(parents=True)
+    pdf_dir = lang_dir(paths.pdf_dir, lang)
+    pdf_dir.mkdir(parents=True)
     typst_src = paths.current_dir / "main.typ"
     typst_src.write_text(_TWO_PAGE_TYP, encoding="utf8")
-    typst.Compiler(str(typst_src)).compile(
-        output=str(paths.pdf_dir / "mydeck-handout.pdf")
-    )
-    html_dir = paths.html_dir / "mydeck-html"
+    typst.Compiler(str(typst_src)).compile(output=str(pdf_dir / "mydeck-handout.pdf"))
+    html_dir = lang_dir(paths.html_dir, lang) / "mydeck-html"
     html_dir.mkdir(parents=True)
     (html_dir / "index.html").write_text(_FAKE_REVEAL_HTML, encoding="utf8")
 
@@ -158,6 +160,53 @@ def test_compare_reports_pages_slides_diffs_shrunk_and_problems(
     assert report.problems == ("console error: boom",)
     assert (report.pdf_dir / "001.png").is_file()
     assert (report.html_dir / "001.png").is_file()
+
+
+def test_compare_reads_and_writes_the_language_s_directories(
+    tmp_path: Path,
+) -> None:
+    settings = _deck_settings(tmp_path)
+    _build_deck(settings, "en")
+    paths = settings.paths
+
+    report = compare(settings, "en")
+
+    assert report.lang == "en"
+    assert report.compared == (1, 2)
+    assert report.out_dir == paths.build_dir / "en" / "parity"
+    assert (report.pdf_dir / "002.png").is_file()
+    assert not (paths.build_dir / "parity").exists()
+    with raises(DeckzError, match=r"not built: .*--lang fr`"):
+        compare(settings, "fr")
+
+
+def test_compare_names_the_build_a_missing_language_needs(tmp_path: Path) -> None:
+    settings = _deck_settings(tmp_path)
+    _build_deck(settings)
+
+    with raises(DeckzError, match=r"pdf/en/mydeck-handout\.pdf.*--html --lang en`"):
+        compare(settings, "en")
+
+
+def test_check_parity_compares_every_language(
+    tmp_path: Path, capsys: CaptureFixture[str]
+) -> None:
+    settings = _deck_settings(tmp_path)
+    _build_deck(settings, "fr")
+    _build_deck(settings, "en")
+    deck_dir = str(settings.paths.current_dir)
+
+    main(("check", "parity", deck_dir, "--lang", "fr", "en"))
+    lines = capsys.readouterr().out.splitlines()
+    main(("check", "parity", deck_dir, "--lang", "fr", "en", "--json"))
+    records = loads(capsys.readouterr().out)
+
+    assert [line.split(":")[0] for line in lines] == ["fr", "fr", "en", "en"]
+    assert lines[2].startswith("en: 2 slides compared, mean diff ")
+    assert [record["lang"] for record in records] == ["fr", "en"]
+    assert records[1]["report"] == str(
+        settings.paths.build_dir / "en" / "parity" / "report.html"
+    )
 
 
 def test_write_contact_sheets_writes_one_sheet(tmp_path: Path) -> None:

@@ -116,6 +116,7 @@ def write_html_report(report: ParityReport) -> Path:
     )
     if report.mismatched:
         summary = f'<span class="warn">SLIDE COUNT MISMATCH</span> -- {summary}'
+    summary = f"[{report.lang}] {summary}"
     problems = ""
     if report.problems:
         items = "".join(f"<li>{escape(p)}</li>" for p in report.problems)

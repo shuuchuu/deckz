@@ -21,6 +21,7 @@ from shutil import rmtree
 from typing import TYPE_CHECKING, Any
 
 from ..exceptions import DeckzError
+from ..models import Lang, lang_dir
 from ..utils import deck_name_from_dir
 
 if TYPE_CHECKING:
@@ -54,8 +55,11 @@ _SETTLE_VIDEOS = """async (index) => {
 class ParityReport:
     """The result of comparing one deck's PDF and HTML, slide by slide."""
 
+    lang: Lang
+    """The language of the builds compared."""
     out_dir: Path
-    """`<deck-dir>/.build/parity`: where every render and report is written."""
+    """`<deck-dir>/.build/parity` (`.build/en/parity` in English): where every \
+    render and report is written."""
     pdf_dir: Path
     html_dir: Path
     pages: int
@@ -220,15 +224,19 @@ def write_contact_sheets(report: ParityReport) -> int:
     return sheets
 
 
-def compare(settings: "DeckSettings", only: set[int] | None = None) -> ParityReport:
+def compare(
+    settings: "DeckSettings", lang: Lang = "fr", only: set[int] | None = None
+) -> ParityReport:
     """Build the PDF/HTML comparison of `settings`' deck, slide by slide.
 
-    Needs the deck already built with both `--handout` and `--html`
-    (`deckz run --handout --no-presentation --no-print --html`): this only
-    reads those outputs, it doesn't build anything itself.
+    Needs the deck already built in `lang` with both `--handout` and \
+    `--html` (`deckz run --handout --no-presentation --no-print --html \
+    --lang <lang>`): this only reads those outputs, it doesn't build \
+    anything itself.
 
     Args:
         settings: The deck's settings.
+        lang: The language whose builds to compare, under `lang_dir`.
         only: Restrict rendering and comparison to these slide numbers \
             (1-indexed), or every slide if `None`.
 
@@ -248,17 +256,17 @@ def compare(settings: "DeckSettings", only: set[int] | None = None) -> ParityRep
 
     paths = settings.paths
     name = deck_name_from_dir(paths.current_dir)
-    pdf_file = paths.pdf_dir / f"{name}-handout.pdf"
-    index = paths.html_dir / f"{name}-html" / "index.html"
+    pdf_file = lang_dir(paths.pdf_dir, lang) / f"{name}-handout.pdf"
+    index = lang_dir(paths.html_dir, lang) / f"{name}-html" / "index.html"
     missing = [str(path) for path in (pdf_file, index) if not path.is_file()]
     if missing:
         msg = (
-            f"not built: {', '.join(missing)} "
-            "(`deckz run --handout --no-presentation --no-print --html`)"
+            f"not built: {', '.join(missing)} (`deckz run --handout "
+            f"--no-presentation --no-print --html --lang {lang}`)"
         )
         raise DeckzError(msg)
 
-    out = paths.build_dir / "parity"
+    out = lang_dir(paths.build_dir, lang) / "parity"
     rmtree(out, ignore_errors=True)
     pdf_dir, html_dir = out / "pdf", out / "html"
     pdf_dir.mkdir(parents=True)
@@ -275,6 +283,7 @@ def compare(settings: "DeckSettings", only: set[int] | None = None) -> ParityRep
         for i in compared
     }
     return ParityReport(
+        lang=lang,
         out_dir=out,
         pdf_dir=pdf_dir,
         html_dir=html_dir,

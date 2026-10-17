@@ -91,9 +91,11 @@ no variables of its own: every file of a deck renders with the same
   too much text for a slide.
 - `deckz check parity DECK_DIR` (needs the `deckz[parity]` extra) --
   compare a built deck's PDF and HTML slide by slide, needing both
-  already built (`deckz run --handout --html`). Writes an HTML report by
-  default; `--plain` instead prints a worst-first text report and
-  contact sheets, meant for an agent.
+  already built (`deckz run --handout --html`), in French unless
+  `--lang` says otherwise (`--lang fr en`: both, one after the other).
+  Writes an HTML report by default; `--plain` instead prints a
+  worst-first text report and contact sheets per language, meant for an
+  agent.
 - `deckz labs fmt`/`ids`/`outputs`/`check`/`compare`/`missing`/`dump`/
   `publish` operate on `labs/notebooks` (see `deckz labs --help` for
   each). `fmt --check` and `ids --dry-run` report without writing;

@@ -46,4 +46,5 @@ The error names the file. Common causes:
 - `deckz check overflow <deck>`: the frames shrunk to fit, worst first (`--tables` for
   the tables whose cells wrap most). A frame shrunk below about 97% is too full.
 - `deckz run --html` builds the deck as a web page too; `deckz check parity <deck>`
-  compares it with the PDF, slide by slide.
+  compares it with the PDF, slide by slide (`--lang fr en` for both languages, each
+  built with `deckz run --handout --html --lang fr en`).
