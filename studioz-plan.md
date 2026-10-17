@@ -13,7 +13,8 @@ released (deckz 31.3.4). Phase 5 (long jobs) was planned on 2026-10-17 (under
 "Phase 5"); its increments 1 (notifications, jobs kept across restarts, every deck's
 build), 2 (videos), 3 (labs previewed), 4 (`deckz labs gpu pass`) and 5 (GPU passes
 from studioz) are done: phase 5 is done. Then the memory guard "Risks" promised
-(2026-10-18, under "Machine load"). **Next:** "Then, with the colleague" (below phase
+(2026-10-18, under "Machine load"), and the `jinja-syntax` check ("Open items").
+**Next:** "Then, with the colleague" (below phase
 5), and the open items. A GPU pass rents a machine that costs money: never
 start one without the user saying so. `git log
 origin/main..main` in
@@ -91,9 +92,17 @@ yielding the SDK's own message objects; nothing in them touches the network.
 
 Found along the way, not done (each increment's "Left" has the rest):
 
-- A broken Jinja tag (`{{ x`) passes `deckz check` (and so the pre-commit hook);
-  it fails only at build. A deckz check that renders each content file would catch
-  it.
+- ~~A broken Jinja tag (`{{ x`) passes `deckz check`~~ Done 2026-10-18: deckz's
+  `jinja-syntax` check parses every content file (shared and deck-local) with the
+  repository's own Jinja environment and checks its filter and test names (parsing,
+  not compiling: 1,558 files of slides in 0.4 s, plus 1 s listing the decks'
+  directories, which `raw-latex` pays too); a problem names the file, the line and
+  the fix (`{% raw %}` for braces meant as text). Slides passes it as it is. Tried on
+  `studioz-dev`: a `}}` removed, `deckz check` and `--staged` (the pre-commit hook)
+  refused it, studioz's Problèmes showed it, and its link on a deck page opened the
+  editor on the line; put back, the problem went within 28 s. Found on the way:
+  `deckz status` keeps 15 check problems, in check order, so 123 old `lab-format`
+  ones hid the new one; the problems naming a file of your changes now come first.
 - `tests/test_deck_builder.py::test_interrupt_does_not_wait_for_running_compilations`
   failed once in about 20 full runs, under load: a timing test (a 0.5 s sleep),
   not looked into yet. (`test_labs_gpu.py::test_queue_kills_what_a_run_leaves_running`

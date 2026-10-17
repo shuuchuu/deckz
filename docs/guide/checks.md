@@ -14,6 +14,7 @@ nightly in CI): they're slow, or need the network.
 | `lab-format` | notebooks in deckz's JSON style | `deckz labs fmt <notebook>` |
 | `asset-credits` | image credit lines in Markdown, not LaTeX | rewrite the line in Markdown |
 | `raw-latex` | no LaTeX left in the content | rewrite it in Markdown |
+| `jinja-syntax` | every content file's Jinja parses with the repository's environment, its filters and tests known (otherwise only the build fails) | fix the tag or the filter's name; `{% raw %}…{% endraw %}` around braces meant as text |
 | `lab-urls` | labs linked through the repository's templating, not a pasted URL | use the repository's lab link |
 
 A repository adds its own checks in `templates/checks.py`; `deckz check --help` lists

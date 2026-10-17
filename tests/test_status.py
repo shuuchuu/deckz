@@ -10,6 +10,7 @@ from deckz.configuring.settings import GlobalSettings
 from deckz.stamps import digest, write_stamp
 from deckz.status import (
     changed_paths,
+    checks_section,
     decks_section,
     status,
     translation_section,
@@ -145,3 +146,21 @@ def test_status_command_prints_every_section(repo: Path, capsys: Any) -> None:
     assert output.startswith("Your changes: 0 changed files")
     for title in ("Translation", "Labs", "Videos", "Built decks"):
         assert f" {title}: " in output
+
+
+def test_checks_name_the_problems_of_your_changes_first(repo: Path) -> None:
+    # Old problems, many of them, committed.
+    for i in range(20):
+        (repo / "content" / f"old-{i:02}.tex").write_text("x\n", encoding="utf8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "--quiet", "-m", "Old problems")
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / "content" / "questions.md").write_text("{{ broken\n", encoding="utf8")
+    _, changed = changed_paths(repo, base)
+
+    section = checks_section(_settings(repo), changed)
+
+    assert section.summary == "21 problems: `deckz check` lists them"
+    assert section.items[0].text.startswith("jinja-syntax: content/questions.md:1:")
+    assert section.items[1].text.startswith("raw-latex: content/old-00.tex")
+    assert section.items[-1].text == "... and 6 more"

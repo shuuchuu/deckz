@@ -8,7 +8,7 @@ the labs and videos are compared with their remotes as last fetched.
 """
 
 import subprocess
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -105,8 +105,16 @@ def _capped(items: Sequence[StatusItem]) -> tuple[StatusItem, ...]:
     return (*items[:_MAX_ITEMS], StatusItem(f"... and {more} more"))
 
 
-def checks_section(settings: "GlobalSettings") -> StatusSection:
+def checks_section(
+    settings: "GlobalSettings", changed: Collection[str] = ()
+) -> StatusSection:
     """The content checks the pre-commit hook runs, on the working tree.
+
+    Args:
+        settings: The repository's settings.
+        changed: Your changes: the problems naming one of these files come
+            first, before the list is cut (a check failing on many old
+            files would hide the one you just broke).
 
     Returns:
         Their section.
@@ -120,6 +128,10 @@ def checks_section(settings: "GlobalSettings") -> StatusSection:
         if name not in settings.checks.opt_in
         for problem in check()
     ]
+    # A problem starts with the file it's about: `path:line: …`, `path: …`.
+    items.sort(
+        key=lambda item: item.text.split(": ", 1)[1].split(":")[0] not in changed
+    )
     summary = (
         f"{_count(len(items), 'problem')}: `deckz check` lists them"
         if items
@@ -438,7 +450,7 @@ def status(
     git_dir = settings.paths.git_dir
     base, scope = base_revision(git_dir, since)
     uncommitted, changed = changed_paths(git_dir, base)
-    sections = {"checks": checks_section(settings)} if checks else {}
+    sections = {"checks": checks_section(settings, changed)} if checks else {}
     sections |= {
         "translation": translation_section(settings, uncommitted, changed),
         "labs": labs_section(settings, uncommitted, fetch=fetch),

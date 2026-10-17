@@ -200,6 +200,56 @@ def raw_latex(settings: "GlobalSettings") -> list[str]:
     return problems
 
 
+def jinja_syntax(settings: "GlobalSettings") -> list[str]:
+    # Every content file parses with the repository's own Jinja environment
+    # (`templates/jinja2/env.py`), the one a build renders it with, its
+    # filters and tests known to it: a broken tag (`{{ x`) or a misspelt
+    # filter fails here rather than at the next build. That needs no deck's
+    # variables, as rendering would; and checking the names is what compiling
+    # adds, in a third of its time (1,500 files in 0.4 s).
+    from jinja2 import TemplateSyntaxError, nodes
+
+    from ..components.factory import GlobalSettingsFactory
+    from ..exceptions import HookError
+
+    paths = settings.paths
+    if not paths.jinja2_env_module.is_file():
+        return []  # Nothing renders without one.
+    renderer = GlobalSettingsFactory(settings).renderer()
+    problems = []
+    for a_content_dir in content_dirs(paths.git_dir, paths.content_dir):
+        if not a_content_dir.is_dir():
+            continue
+        for extension in settings.file_extensions:
+            for path in sorted(a_content_dir.rglob(f"*{extension}")):
+                where = _rel(path, paths.git_dir)
+                try:
+                    env = renderer.environment_for(path.suffix)
+                    ast = env.parse(path.read_text(encoding="utf-8"))
+                except HookError as error:
+                    return [str(error)]
+                except TemplateSyntaxError as error:
+                    problems.append(
+                        f"{where}:{error.lineno}: {error.message}: fix the Jinja"
+                        " tag, or put it inside {% raw %}…{% endraw %} if it's"
+                        " meant as text"
+                    )
+                    continue
+                for node in ast.find_all((nodes.Filter, nodes.Test)):
+                    kind, known = (
+                        ("filter", env.filters)
+                        if isinstance(node, nodes.Filter)
+                        else ("test", env.tests)
+                    )
+                    if node.name not in known:
+                        problems.append(
+                            f"{where}:{node.lineno}: no {kind} named"
+                            f" {node.name!r} in templates/jinja2/env.py's"
+                            f" environment: fix its name"
+                        )
+    return problems
+
+
 def _published_notebooks_slug(settings: "GlobalSettings") -> str | None:
     # The owner/repo of labs.publish_remote, or None if it isn't configured.
     from pygit2 import GitError, Repository
@@ -252,5 +302,6 @@ CHECKS: dict[str, Callable[["GlobalSettings"], list[str]]] = {
     "lab-format": lab_format,
     "asset-credits": asset_credits,
     "raw-latex": raw_latex,
+    "jinja-syntax": jinja_syntax,
     "lab-urls": lab_urls,
 }

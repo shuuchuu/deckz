@@ -295,7 +295,8 @@ idempotent; `check=True` changes nothing. The CLI prints them
 `analyzing/content_checks.py` holds deckz's own generic content checks
 (`lab-ids`, `lab-pairs`, `lab-outputs`, `lab-secrets` (with `labs/secrets.py`,
 also behind `labs publish`'s refusal), `lab-format`, `asset-credits`,
-`raw-latex`, `lab-urls`), each a
+`raw-latex`, `jinja-syntax` (each content file parsed with the repository's own
+Jinja environment, its filter and test names checked), `lab-urls`), each a
 `(settings) -> list[str]` function in its `CHECKS` dict.
 `components/checks.py::ChecksRunner` merges those with the target repo's
 own, from an optional `templates/checks.py` module (`checks(settings) ->

@@ -5,6 +5,7 @@ from pygit2 import init_repository
 
 from deckz.analyzing.content_checks import (
     asset_credits,
+    jinja_syntax,
     lab_format,
     lab_ids,
     lab_outputs,
@@ -235,3 +236,54 @@ def test_lab_format_flags_a_compact_notebook(tmp_path: Path) -> None:
 
     assert len(problems) == 1
     assert "deckz labs fmt" in problems[0]
+
+
+_ENV = (
+    "from jinja2 import Environment\n\n\n"
+    "def environment_for(suffix: str) -> Environment:\n"
+    "    env = Environment()\n"
+    "    env.filters['image'] = lambda path: path\n"
+    "    return env\n"
+)
+
+
+def test_jinja_syntax_flags_a_broken_tag_and_an_unknown_filter(
+    tmp_path: Path,
+) -> None:
+    init_repository(str(tmp_path))
+    _write(tmp_path / "templates" / "jinja2" / "env.py", _ENV)
+    content = tmp_path / "content" / "topic"
+    _write(
+        content / "fine.md", "# A\n\n{{ 'a.svg' | image }} {% raw %}{{ x{% endraw %}\n"
+    )
+    _write(content / "broken.md", "# A\n\nText {{ variables.depth\n")
+    _write(
+        content / "misspelt.md",
+        "# A\n\n{{ 'a.svg' | imgae }}\n{% if x is od %}{% endif %}\n",
+    )
+
+    problems = jinja_syntax(_settings(tmp_path))
+
+    assert len(problems) == 3
+    assert problems[0].startswith(
+        "content/topic/broken.md:3: unexpected end of template"
+    )
+    assert "{% raw %}" in problems[0]
+    assert problems[1] == (
+        "content/topic/misspelt.md:3: no filter named 'imgae' in"
+        " templates/jinja2/env.py's environment: fix its name"
+    )
+    assert problems[2].startswith("content/topic/misspelt.md:4: no test named 'od'")
+
+
+def test_jinja_syntax_needs_the_repository_environment(tmp_path: Path) -> None:
+    init_repository(str(tmp_path))
+    _write(tmp_path / "content" / "topic" / "broken.md", "{{ x\n")
+
+    # Nothing renders without it: nothing to check.
+    assert jinja_syntax(_settings(tmp_path)) == []
+
+    _write(tmp_path / "templates" / "jinja2" / "env.py", "x = 1\n")
+    problems = jinja_syntax(_settings(tmp_path))
+    assert len(problems) == 1
+    assert "environment_for" in problems[0]

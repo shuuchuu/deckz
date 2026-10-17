@@ -884,7 +884,10 @@ The main commands:
   are public), notebooks in deckz's canonical JSON (`lab-format`, fixed by
   `deckz labs fmt`),
   asset credit lines (`title`/`author`/`license`, and their `_en`) free of LaTeX
-  (`asset-credits`), no raw LaTeX in content (`raw-latex`), no hand-written
+  (`asset-credits`), no raw LaTeX in content (`raw-latex`), every content
+  file's Jinja parsing with `templates/jinja2/env.py`'s environment, its filters
+  and tests known to it (`jinja-syntax`: a broken tag otherwise fails only the
+  build), no hand-written
   link to the configured lab-publishing remote (`lab-urls`) -- plus, if
   `templates/checks.py` defines a `checks(settings)` function, the target
   repo's own, merged in under their own names (see
