@@ -51,6 +51,7 @@ from shutil import which
 from typing import TYPE_CHECKING, Any, Protocol
 
 from ..exceptions import GpuRunError, MissingExtraError
+from .execution import SHELL_GUARD
 
 if TYPE_CHECKING:
     from ..configuring.settings import GlobalSettings
@@ -63,7 +64,7 @@ Runner = Callable[..., subprocess.CompletedProcess[str]]
 DEFAULT_MACHINE = "main"
 _MACHINE_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
 
-_RESULT_EXTS = (".done", ".log", ".maxrss")
+_RESULT_EXTS = (".done", ".log", ".maxrss", ".shell")
 """What a run leaves next to its executed notebook in `out/`."""
 
 REDACTED = "[deckz: redacted {}]"
@@ -81,6 +82,8 @@ START_COMMAND = (
 sshd config listens on 127.0.0.1:2222 only, so start one on port 22."""
 
 EXECUTE = """\
+import json
+import os
 import resource
 import sys
 
@@ -89,15 +92,30 @@ from nbclient import NotebookClient
 
 source, target = sys.argv[1:]
 nb = nbformat.read(source, as_version=4)
+# The kernel's shell guard logs each failed shell command here, outside /content.
+guard = f"/tmp/deckz-shell-guard-{os.getpid()}.py"
+log = f"/tmp/deckz-shell-failures-{os.getpid()}.jsonl"
+with open(guard, "w") as f:
+    f.write(@SHELL_GUARD@.replace("__SHELL_LOG__", repr(log)))
+open(log, "w").close()
+open(target + ".shell", "w").close()
 
 
-def save(**_):
+def save(cell_index=None, **_):
+    if cell_index is not None:
+        with open(log) as f:
+            failures = f.read().splitlines()
+        open(log, "w").close()
+        with open(target + ".shell", "a") as f:
+            for line in failures:
+                f.write(json.dumps([cell_index, *json.loads(line)]) + "\\n")
     nbformat.write(nb, target)
 
 
 client = NotebookClient(
     nb, timeout=None, kernel_name="python3", allow_errors=True, record_timing=True,
     resources={"metadata": {"path": "/content"}},
+    extra_arguments=[f"--IPKernelApp.exec_files={guard}"],
 )
 client.on_cell_executed = save
 client.execute()
@@ -105,8 +123,10 @@ save()
 # The kernel's peak memory (and its children's), in KiB.
 with open(target + ".maxrss", "w") as f:
     f.write(str(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss))
-"""
-"""Runs one notebook on the machine, saving it after every cell."""
+""".replace("@SHELL_GUARD@", repr(SHELL_GUARD))
+"""Runs one notebook on the machine, saving it after every cell, and each shell \
+command that failed in `<target>.shell` (`labs.execution.SHELL_GUARD`), as JSON \
+lines `[cell_index, exit_code, command]`."""
 
 IDLE_CPUS = """\
 import os
@@ -350,6 +370,15 @@ class CellError:
 
 
 @dataclass(frozen=True)
+class ShellFailure:
+    """A shell command (`!cmd`, `%pip`) that failed, which doesn't raise."""
+
+    index: int
+    exit_code: int
+    command: str
+
+
+@dataclass(frozen=True)
 class RunReport:
     path: Path
     exit_code: int | None
@@ -359,6 +388,7 @@ class RunReport:
     code_cells: int
     errors: tuple[CellError, ...] = ()
     slowest: tuple[CellTiming, ...] = field(default_factory=tuple)
+    shell_failures: tuple[ShellFailure, ...] = ()
 
 
 class GpuBackend(Protocol):
@@ -1059,7 +1089,7 @@ class GpuRun:
             msg = f"rsync failed:\n{proc.stderr}"
             raise GpuRunError(msg)
         for name, envs in self._read_json(self._secrets_file, {}).items():
-            for path in (out / name, out / f"{name}.log"):
+            for path in (out / name, out / f"{name}.log", out / f"{name}.shell"):
                 if not path.is_file():
                     continue
                 text = path.read_text(encoding="utf-8", errors="surrogateescape")
@@ -1190,20 +1220,21 @@ def _cell_seconds(cell: dict[str, Any]) -> float:
 
 
 def report(path: Path, *, slowest: int = 5) -> RunReport:
-    """Read an executed notebook and its `.done`/`.maxrss` files.
+    """Read an executed notebook and its `.done`/`.maxrss`/`.shell` files.
 
     Args:
         path: The executed notebook, as fetched into `out/`.
         slowest: How many of the slowest cells to report.
 
     Returns:
-        Its exit code and run time, peak RAM, the cells that raised, and \
-        the slowest cells.
+        Its exit code and run time, peak RAM, the cells that raised, the \
+        shell commands that failed, and the slowest cells.
     """
     nb = json.loads(path.read_text(encoding="utf-8"))
     done = path.with_name(path.name + ".done")
     code_seconds = done.read_text(encoding="utf-8").split() if done.is_file() else []
     maxrss = path.with_name(path.name + ".maxrss")
+    shell = path.with_name(path.name + ".shell")
     code = [(i, c) for i, c in enumerate(nb["cells"]) if c["cell_type"] == "code"]
     errors = tuple(
         CellError(i, out.get("ename", ""), out.get("evalue", "")[:200])
@@ -1235,6 +1266,14 @@ def report(path: Path, *, slowest: int = 5) -> RunReport:
         code_cells=len(code),
         errors=errors,
         slowest=tuple(timings[:slowest]),
+        shell_failures=tuple(
+            ShellFailure(*json.loads(line))
+            for line in (
+                shell.read_text(encoding="utf-8").splitlines()
+                if shell.is_file()
+                else []
+            )
+        ),
     )
 
 
@@ -1252,5 +1291,9 @@ def format_report(run: RunReport) -> str:
         f" {run.cells_ran}/{run.code_cells} code cells ran"
     ]
     lines += [f"  [{e.index}] raised {e.name}: {e.value}" for e in run.errors]
+    lines += [
+        f"  [{s.index}] shell command exited with code {s.exit_code}: {s.command}"
+        for s in run.shell_failures
+    ]
     lines += [f"  [{t.index}] {t.seconds:7.0f} s  {t.first_line}" for t in run.slowest]
     return "\n".join(lines)

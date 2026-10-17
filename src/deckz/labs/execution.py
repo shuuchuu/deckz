@@ -27,6 +27,66 @@ EXEC_TIMEOUT = 300
 # (Lightning's `[rank: 0] Seed set to 0`, Optuna's `[I 2026-...] Trial ...`).
 EVENT = "\x1eQA "
 
+# Run by a real kernel at startup (`--IPKernelApp.exec_files`), for the runners
+# using one (`labs.container`, `labs.gpu`): a failing `!cmd` (or `%pip`) never
+# raises, it only sets `_exit_code`, and the cell goes on, as in Colab. So each
+# failure is appended as `[exit_code, cmd]` to a JSON-lines log the runner reads
+# after each cell. IPython's `system_piped`, and ipykernel's override, both call
+# the `system` their module imported: wrapping it there sees every shell line,
+# `{var}` already expanded, on IPython 7 (Colab's), which has no
+# `system_raise_on_error`. Colab's own shell (`google.colab._shell`, which its
+# runtime image starts) runs them through `_system_commands._run_command`
+# instead, returning a result with a `returncode`; also called by `x = !cmd`
+# there. Defined in a function deleted afterwards, so the notebook's namespace is
+# left as it was.
+SHELL_GUARD = r"""
+def __deckz_shell_guard(log):
+    import importlib, json
+
+    def guard(run, exit_code):
+        def guarded(cmd, *args, **kwargs):
+            result = run(cmd, *args, **kwargs)
+            code = exit_code(result)
+            if code:
+                with open(log, "a") as f:
+                    f.write(json.dumps([code, str(cmd)[:300]]) + "\n")
+            return result
+
+        guarded.__deckz_guard__ = True
+        return guarded
+
+    for name, function, exit_code in (
+        ("IPython.core.interactiveshell", "system", lambda code: code),
+        ("ipykernel.zmqshell", "system", lambda code: code),
+        (
+            "google.colab._system_commands",
+            "_run_command",
+            lambda result: getattr(result, "returncode", 0),
+        ),
+    ):
+        try:
+            module = importlib.import_module(name)
+        except ImportError:
+            continue
+        run = getattr(module, function, None)
+        if run is not None and not getattr(run, "__deckz_guard__", False):
+            setattr(module, function, guard(run, exit_code))
+
+
+__deckz_shell_guard(__SHELL_LOG__)
+del __deckz_shell_guard
+"""
+
+
+def shell_guard(log: str) -> str:
+    """`SHELL_GUARD`, appending each failed shell command to `log`.
+
+    Returns:
+        Python source, for `--IPKernelApp.exec_files`.
+    """
+    return SHELL_GUARD.replace("__SHELL_LOG__", repr(log))
+
+
 RUNNER = r"""
 import ast, asyncio, builtins, inspect, json, re, shlex, subprocess, sys
 
@@ -46,6 +106,8 @@ DATASET_FETCH = re.compile(
 # Scripts the notebook itself wrote with `%%writefile`, which `python` and
 # `torchrun` may run.
 written = set()
+# The cell running, which a failed shell command is reported in.
+running = [-1]
 
 
 def emit(*event):
@@ -89,19 +151,24 @@ def expand(cmd):
 
 
 def shell(cmd, _subprocess=subprocess):
+    # A failing command doesn't raise, as in IPython: it's reported, and the cell
+    # goes on.
     cmd = expand(cmd)
     script = written_script(cmd.strip())
     if script:
-        _subprocess.run(script, check=True, capture_output=True)
-        return
-    if DATASET_FETCH.fullmatch(cmd.strip()):
-        _subprocess.run(cmd, shell=True, check=True, capture_output=True)
-        return
-    words = {part.split()[0] for part in re.split(r"&&|\|\||;|\|", cmd) if part.split()}
-    if not words <= SAFE_SHELL:
-        emit("skipped-shell", cmd)
-        return
-    _subprocess.run(cmd, shell=True, check=True, capture_output=True)
+        run = dict(args=script)
+    elif DATASET_FETCH.fullmatch(cmd.strip()):
+        run = dict(args=cmd, shell=True)
+    else:
+        parts = re.split(r"&&|\|\||;|\|", cmd)
+        words = {part.split()[0] for part in parts if part.split()}
+        if not words <= SAFE_SHELL:
+            emit("skipped-shell", cmd)
+            return
+        run = dict(args=cmd, shell=True)
+    code = _subprocess.run(**run, check=False, capture_output=True).returncode
+    if code:
+        emit("shell-failed", running[0], code, cmd.strip()[:300])
 
 
 def writefile(name, body):
@@ -169,6 +236,7 @@ def main():
     _iscoroutine, _run = inspect.iscoroutine, asyncio.run
     _flags = ast.PyCF_ALLOW_TOP_LEVEL_AWAIT
     for i, role, code in json.load(open(sys.argv[1])):
+        running[0] = i
         try:
             # Colab allows top-level `await`: such a cell compiles to a coroutine.
             compiled = _compile(_translate(code), f"<cell {i}>", "exec", flags=_flags)
@@ -187,8 +255,9 @@ def report_lines(stderr: str, returncode: int) -> Iterator[str]:
     """Render a run's captured stderr and exit code as report lines.
 
     Yields:
-        One line per skipped shell command, the overall execution result, \
-        and each cell that raised.
+        One line per skipped shell command, per kernel death and per shell \
+        command that failed (without raising, as in IPython), then the \
+        overall execution result, and each cell that raised.
     """
     # Not `splitlines()`: it also splits on `\x1e`, the marker's first character.
     events = [
@@ -196,7 +265,7 @@ def report_lines(stderr: str, returncode: int) -> Iterator[str]:
         for line in stderr.split("\n")
         if line.startswith(EVENT)
     ]
-    markers = {"skipped-shell", "kernel-died"}
+    markers = {"skipped-shell", "kernel-died", "shell-failed"}
     # A failure reported again by a rerun (`labs.container`) is reported once.
     failures = list(
         dict.fromkeys(tuple(event) for event in events if event[0] not in markers)
@@ -210,6 +279,11 @@ def report_lines(stderr: str, returncode: int) -> Iterator[str]:
             if rerun
             else f"  [{i}] the kernel died again"
         )
+    shell_failed = dict.fromkeys(
+        tuple(event) for event in events if event[0] == "shell-failed"
+    )
+    for _, i, code, cmd in shell_failed:
+        yield f"  [{i}] shell command exited with code {code}: {cmd[:120]}"
     if returncode:
         # Killed (out of memory: -9) or crashed: the cells after the last event
         # never ran.

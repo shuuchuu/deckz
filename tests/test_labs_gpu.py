@@ -403,6 +403,25 @@ def test_report_reads_exit_time_ram_errors_and_slowest_cells(tmp_path: Path) -> 
         "#### nn__demo-fr.full.ipynb: exit 0, 95 s, peak RAM 13.0 GiB,"
         " 2/3 code cells ran"
     )
+    assert run.shell_failures == ()
+
+
+def test_report_reads_the_failed_shell_commands(tmp_path: Path) -> None:
+    path = _executed(tmp_path)
+    path.with_name(path.name + ".shell").write_text(
+        '[0, 127, "nvidia-smi"]\n[1, 1, "pip install nothing"]\n'
+    )
+
+    run = report(path)
+
+    assert [(s.index, s.exit_code, s.command) for s in run.shell_failures] == [
+        (0, 127, "nvidia-smi"),
+        (1, 1, "pip install nothing"),
+    ]
+    assert format_report(run).splitlines()[2:4] == [
+        "  [0] shell command exited with code 127: nvidia-smi",
+        "  [1] shell command exited with code 1: pip install nothing",
+    ]
 
 
 def test_note_finished_notes_each_run_once(repo: Path) -> None:
@@ -540,11 +559,13 @@ def test_fetch_redacts_the_secrets_of_the_executed_copies(
     out.mkdir()
     (out / name).write_text('{"text": "env: PASSWORD=s3cr3t-t0ken"}')
     (out / f"{name}.log").write_text("token s3cr3t-t0ken\n")
+    (out / f"{name}.shell").write_text('[3, 128, "curl -H s3cr3t-t0ken x"]\n')
 
     gpu_run.fetch()
 
     assert "s3cr3t-t0ken" not in (out / name).read_text()
     assert (out / f"{name}.log").read_text() == "token [deckz: redacted LAB_TOKEN]\n"
+    assert "s3cr3t-t0ken" not in (out / f"{name}.shell").read_text()
 
 
 def test_hooked_notebooks_run_one_at_a_time_across_machines(repo: Path) -> None:
@@ -621,6 +642,7 @@ def test_queue_again_clears_the_earlier_results(repo: Path) -> None:
     assert clear[-1].endswith(
         "rm -f demo-fr.full.ipynb demo-fr.full.ipynb.done"
         " demo-fr.full.ipynb.log demo-fr.full.ipynb.maxrss"
+        " demo-fr.full.ipynb.shell"
     )
 
 

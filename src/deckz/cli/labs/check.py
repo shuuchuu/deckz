@@ -24,7 +24,10 @@ def check(
     It mirrors Colab's shell lines and magics, but runs only harmless data
     fetches among the shell commands; `--container` runs everything, in the
     published repository's dev container (what Codespaces opens, built from
-    `labs/published/.devcontainer/`; needs Docker).
+    `labs/published/.devcontainer/`; needs Docker). A shell command that
+    fails (`!cmd`, `%pip`) doesn't raise, as in Colab, where the cell goes
+    on: each one gets its own line, `[i] shell command exited with code N:
+    cmd`, before the verdict on raising cells.
 
     Args:
         notebooks: Notebook files, or directories to search recursively

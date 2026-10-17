@@ -3,7 +3,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from pytest import raises
+from pytest import importorskip, raises
 
 from deckz.exceptions import LabContainerError
 from deckz.labs.container import dev_container, runner_source
@@ -136,3 +136,72 @@ def test_a_prebuilt_image_with_its_dockerfile_is_built_under_its_name(
         "--file",
         str(published / ".devcontainer" / "Dockerfile"),
     ]
+
+
+def test_the_runner_runs_the_shell_guard_in_the_kernel() -> None:
+    notebook = {"cells": [], "metadata": {}, "nbformat": 4}
+
+    source = runner_source(notebook, [], "lab-demo-fr.ipynb", smoke=False)
+
+    compile(source, "<runner>", "exec")
+    assert "__deckz_shell_guard" in source
+    assert "--IPKernelApp.exec_files=" in source
+    assert "'/tmp/deckz-shell-failures.jsonl'" in source
+
+
+def test_failed_shell_commands_are_reported_once_each_without_raising() -> None:
+    from deckz.labs.execution import EVENT, report_lines
+
+    events = [
+        ["shell-failed", 1, 1, "false"],
+        ["kernel-died", 3, True],
+        ["shell-failed", 1, 1, "false"],
+        ["shell-failed", 2, 127, "nvidia-smi"],
+    ]
+    stderr = "".join(EVENT + json.dumps(event) + "\n" for event in events)
+
+    lines = list(report_lines(stderr, 0))
+
+    assert lines == [
+        "  [3] the kernel died: ran the notebook again from the start, as a "
+        "trainee would after Colab restarts it",
+        "  [1] shell command exited with code 1: false",
+        "  [2] shell command exited with code 127: nvidia-smi",
+        "  execution: no code cell raised",
+    ]
+
+
+def test_the_shell_guard_logs_each_failed_shell_command_in_a_real_kernel(
+    tmp_path: Path,
+) -> None:
+    # deckz's own environment has no kernel: run with
+    # `uv run --with ipykernel --with nbclient pytest`.
+    importorskip("ipykernel")
+    nbclient = importorskip("nbclient")
+    nbformat = importorskip("nbformat")
+    from deckz.labs.execution import shell_guard
+
+    log = tmp_path / "failures.jsonl"
+    guard = tmp_path / "guard.py"
+    guard.write_text(shell_guard(str(log)))
+    cells = [
+        "!false\nran = True",
+        "%pip install --quiet --no-index deckz-no-such-package",
+        "!true\nassert ran and _exit_code == 0",
+        "assert not [name for name in globals() if 'deckz' in name]",
+    ]
+    nb = nbformat.v4.new_notebook(cells=[nbformat.v4.new_code_cell(c) for c in cells])
+    client = nbclient.NotebookClient(
+        nb,
+        timeout=60,
+        kernel_name="python3",
+        resources={"metadata": {"path": str(tmp_path)}},
+        extra_arguments=[f"--IPKernelApp.exec_files={guard}"],
+    )
+
+    client.execute()
+
+    failures = [json.loads(line) for line in log.read_text().splitlines()]
+    assert [code for code, _ in failures] == [1, 1]
+    assert failures[0][1] == "false"
+    assert "pip install --quiet --no-index deckz-no-such-package" in failures[1][1]

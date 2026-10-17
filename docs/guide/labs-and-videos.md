@@ -13,6 +13,8 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   for a virtual environment with the lab's libraries). It skips shell commands other
   than data fetches: `--container` runs everything, for real, in the Codespace the
   published repository opens (`labs/published/.devcontainer/`, needs Docker).
+  A failed shell command doesn't stop the cell, as in Colab: look at each
+  "shell command exited with code N" line (`nvidia-smi` on a CPU aside).
 - A hands-on notebook stores no outputs (trainees would see the answers); a demo
   stores those of a full run in its own language: run it, then `deckz labs outputs
   <executed copy> <notebook>`.

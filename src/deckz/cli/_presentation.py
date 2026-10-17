@@ -338,7 +338,9 @@ def print_gpu_reports(reports: Iterable["RunReport"]) -> None:
     """Print `deckz labs gpu report`'s runs as a table, for a person."""
     from rich.table import Table
 
-    table = Table("Notebook", "Exit", "Time", "Peak RAM", "Cells", "Raised")
+    table = Table(
+        "Notebook", "Exit", "Time", "Peak RAM", "Cells", "Raised", "Shell failed"
+    )
     for run in reports:
         table.add_row(
             run.path.name,
@@ -347,6 +349,8 @@ def print_gpu_reports(reports: Iterable["RunReport"]) -> None:
             "?" if run.peak_ram_gib is None else f"{run.peak_ram_gib:.1f} GiB",
             f"{run.cells_ran}/{run.code_cells}",
             "\n".join(f"[{e.index}] {e.name}" for e in run.errors)
+            or "[green]none[/green]",
+            "\n".join(f"[{s.index}] exit {s.exit_code}" for s in run.shell_failures)
             or "[green]none[/green]",
         )
     Console(highlight=False).print(table)

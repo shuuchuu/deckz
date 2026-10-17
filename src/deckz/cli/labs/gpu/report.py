@@ -15,10 +15,11 @@ def report(
 ) -> None:
     """Report on executed notebooks: exit code, run time, peak RAM, what raised.
 
-    Reads each executed notebook and its `.done`/`.maxrss` files, as fetched
-    into a machine's `out/` (every one fetched by default). Write a demo's
-    outputs back into the repository with `deckz labs outputs EXECUTED
-    NOTEBOOK`.
+    Reads each executed notebook and its `.done`/`.maxrss`/`.shell` files, as
+    fetched into a machine's `out/` (every one fetched by default): the shell
+    commands that failed (`!cmd`, `%pip`), which don't raise, are listed too.
+    Write a demo's outputs back into the repository with `deckz labs outputs
+    EXECUTED NOTEBOOK`.
 
     Args:
         notebooks: Executed notebooks to report on, instead of every fetched one

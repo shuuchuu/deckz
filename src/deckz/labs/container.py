@@ -25,13 +25,17 @@ from pathlib import Path
 from typing import Any
 
 from ..exceptions import LabContainerError
-from .execution import report_lines
+from .execution import report_lines, shell_guard
 
 DEVCONTAINER_JSON = Path(".devcontainer") / "devcontainer.json"
+SHELL_LOG = "/tmp/deckz-shell-failures.jsonl"
 
 # Runs inside the container, as `python -`, with the notebook and its cells' roles
 # in place of the placeholders. Reports each failing cell as soon as it fails, so a
-# run cut short by the timeout still reports what failed until then.
+# run cut short by the timeout still reports what failed until then. The kernel runs
+# `labs.execution.SHELL_GUARD` at startup, to report each failed shell command too;
+# the guard and its log live in /tmp, outside the workspace, where a notebook's
+# `git add -A` or `rm -rf *` never sees them.
 RUNNER = r"""
 import json, pathlib, sys
 
@@ -44,9 +48,25 @@ NOTEBOOK = __NOTEBOOK__
 ROLES = __ROLES__
 OFFSET = __OFFSET__
 NAME = __NAME__
+GUARD = pathlib.Path("/tmp/deckz-shell-guard.py")
+SHELL_LOG = pathlib.Path(__SHELL_LOG__)
+GUARD.write_text(__GUARD__)
+SHELL_LOG.write_text("")
 
 
 running = [-1]
+
+
+def emit(event):
+    print(EVENT + json.dumps(event), file=sys.__stderr__, flush=True)
+
+
+def shell_failures(cell_index):
+    lines = SHELL_LOG.read_text().splitlines()
+    SHELL_LOG.write_text("")
+    for line in lines:
+        code, cmd = json.loads(line)
+        emit(["shell-failed", cell_index - OFFSET, code, cmd])
 
 
 def started(cell, cell_index):
@@ -54,12 +74,13 @@ def started(cell, cell_index):
 
 
 def executed(cell, cell_index, execute_reply):
+    shell_failures(cell_index)
     for out in cell.get("outputs", []):
         if out.get("output_type") == "error":
             i = cell_index - OFFSET
             role = ROLES.get(str(i), "code")
             err = f"{out.get('ename')}: {out.get('evalue', '')}"[:300]
-            print(EVENT + json.dumps([i, role, err]), file=sys.__stderr__, flush=True)
+            emit([i, role, err])
             break
 
 
@@ -78,13 +99,15 @@ for attempt in range(2):
         resources={"metadata": {"path": str(pathlib.Path.cwd())}},
         on_cell_execute=started,
         on_cell_executed=executed,
+        # A restarted kernel runs it again.
+        extra_arguments=[f"--IPKernelApp.exec_files={GUARD}"],
     )
     try:
         client.execute()
         break
     except DeadKernelError:
-        event = ["kernel-died", running[0] - OFFSET, attempt == 0]
-        print(EVENT + json.dumps(event), file=sys.__stderr__, flush=True)
+        shell_failures(running[0])
+        emit(["kernel-died", running[0] - OFFSET, attempt == 0])
 """
 
 # Prepended as a code cell for `--smoke`: every Lightning Trainer capped to one short
@@ -211,6 +234,8 @@ def runner_source(
         .replace("__ROLES__", repr(roles))
         .replace("__OFFSET__", "1" if smoke else "0")
         .replace("__NAME__", repr(name))
+        .replace("__SHELL_LOG__", repr(SHELL_LOG))
+        .replace("__GUARD__", repr(shell_guard(SHELL_LOG)))
     )
 
 

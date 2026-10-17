@@ -32,6 +32,26 @@ def test_check_notebook_reports_success(tmp_path: Path) -> None:
     assert any("no code cell raised" in line for line in lines)
 
 
+def test_check_notebook_reports_a_failed_shell_command_and_runs_on(
+    tmp_path: Path,
+) -> None:
+    # As in IPython: the failure doesn't raise, the cell goes on.
+    path = tmp_path / "demo.ipynb"
+    _write_notebook(
+        path,
+        [
+            _code("%%writefile fail.py\nimport sys\nsys.exit(3)"),
+            _code("!python fail.py\nafter = True"),
+            _code("assert after"),
+        ],
+    )
+
+    lines = list(check_notebook(path, python=sys.executable, timeout=30))
+
+    assert "  [1] shell command exited with code 3: python fail.py" in lines
+    assert "  execution: no code cell raised" in lines
+
+
 def test_check_notebook_flags_missing_solution_section(tmp_path: Path) -> None:
     path = tmp_path / "demo.ipynb"
     _write_notebook(path, [_code("x = 1")])

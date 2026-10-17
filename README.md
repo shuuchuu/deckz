@@ -1040,6 +1040,13 @@ The main commands:
   notebook, and nothing is mounted into it. When the kernel dies (a setup
   cell that kills it for Colab to restart it on what it installed), the
   notebook runs once more from the start, as a trainee would run it again.
+  A failing shell command (`!cmd`, `%pip`) never raises, in Colab as here:
+  the cell goes on, and the report gives it a line of its own,
+  `[i] shell command exited with code N: cmd`, before "no code cell
+  raised" (in a real kernel, a guard deckz starts it with wraps IPython's,
+  ipykernel's and Colab's shell runners; `labs gpu report` reads the same
+  lines from `<notebook>.shell`). A command expected to fail (`!nvidia-smi`
+  on a CPU) shows there too.
 - `deckz labs compare [LAB_DIRS...]`: structural differences between
   fr/en notebook pairs beyond what a translation changes.
 - `deckz labs missing`: every notebook present in only one language.

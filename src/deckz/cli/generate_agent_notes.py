@@ -97,7 +97,11 @@ no variables of its own: every file of a deck renders with the same
 - `deckz labs fmt`/`ids`/`outputs`/`check`/`compare`/`missing`/`dump`/
   `publish` operate on `labs/notebooks` (see `deckz labs --help` for
   each). `fmt --check` and `ids --dry-run` report without writing;
-  `publish` is for a human to run, never an agent.
+  `publish` is for a human to run, never an agent. In `labs check` (and
+  `labs gpu report`), a "shell command exited with code N" line is a
+  failure to look at even though the run says "no code cell raised": a
+  failing `!cmd` or `%pip` doesn't raise, in Colab either (`nvidia-smi`
+  on a CPU aside).
 - `deckz videos render`/`list`/`publish` (needs `deckz[videos]`: Manim,
   plus `ffmpeg`) operate on `@register_scene` classes under
   `figures/scenes` (see `deckz videos --help`). `publish` is for a human
