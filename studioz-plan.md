@@ -1455,7 +1455,7 @@ Neither nbconvert nor nbdime, against the plan: a notebook holds few things a pa
 shows, and nbdime's diff is a web app of its own, while the comparison needed the
 same rendering as the page. studioz renders them itself: Markdown with markdown-it
 (its math kept whole by an inline rule), code with Pygments (now a declared
-dependency: re-lock slides), outputs in nbconvert's order of types, ANSI colors and
+dependency: slides re-locked in `310928d8`), outputs in nbconvert's order of types, ANSI colors and
 carriage returns (tqdm's bars) included, consecutive stream writes merged; widgets
 show their text (a progress bar's last state). MathJax 3.2.2's single
 `tex-svg-full.js` (2.2 MB, vendored) typesets the math in the browser, as Colab does:
