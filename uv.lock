@@ -3560,6 +3560,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "jinja2" },
     { name = "markdown-it-py" },
+    { name = "pygments" },
     { name = "python-multipart" },
     { name = "uvicorn" },
 ]
@@ -3572,6 +3573,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115,<1" },
     { name = "jinja2", specifier = ">=3,<4" },
     { name = "markdown-it-py", specifier = ">=3,<5" },
+    { name = "pygments", specifier = ">=2.17,<3" },
     { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "uvicorn", specifier = ">=0.34,<1" },
 ]

@@ -622,3 +622,32 @@ button.status-item:hover { background: rgb(255 255 255 / 0.15); }
 .notification-actions button { padding: 0.1rem 0.6rem; font-size: 0.8rem; }
 .notification-close { grid-column: 3; grid-row: 1; border-color: transparent; background: transparent; color: var(--muted); }
 .toasts .notification-actions { grid-column: 2 / 3; }
+
+/* A lab notebook's page (`lab.html`): the notebook in a sandboxed frame
+   where a deck's page has the PDF, its own page (`notebook.css`). */
+/* No editor beside it: the whole width (`.viewer-area` takes its `--split`). */
+.lab-area { flex: 1 1 0; background: var(--bg); }
+.lab-view { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.lab-bar { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; align-items: center; padding: 0.4rem 0.8rem; border-bottom: 1px solid var(--line); }
+.lab-states { display: flex; flex-wrap: wrap; gap: 0.3rem; flex: 1; align-items: baseline; }
+.lab-file { color: var(--muted); font-size: 0.85em; }
+.lab-state { font-size: 0.75em; padding: 0 0.5rem; border-radius: 999px; border: 1px solid currentcolor; white-space: nowrap; }
+.lab-state[data-state="changed"], .lab-state[data-state="new"] { color: #8a4b08; }
+.lab-state[data-state="missing"] { color: var(--muted); }
+@media (prefers-color-scheme: dark) {
+  .lab-state[data-state="changed"], .lab-state[data-state="new"] { color: #e0a96d; }
+}
+.lab-note { margin: 0.8rem; padding: 0.4rem 0.6rem; border-left: 3px solid var(--accent); background: var(--panel); font-size: 0.9em; }
+.lab-frame { flex: 1; width: 100%; border: 0; background: var(--bg); }
+.crumb-kind { margin-left: 0.3rem; font-size: 0.8em; color: var(--muted); }
+
+/* The sidebar's TP view: a lab per line, its kinds as links. */
+.tree li.lab-item { display: flex; gap: 0.3rem; align-items: baseline; padding: 0.1rem 0.2rem 0.1rem 1em; }
+.lab-item .lab-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lab-item .lab-kind { font-size: 0.8em; padding: 0 0.35rem; border-radius: 3px; text-decoration: none; white-space: nowrap; }
+.lab-item .lab-kind.current { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.lab-item .lab-kind.changed::after { content: " ●"; color: #8a4b08; }
+@media (prefers-color-scheme: dark) {
+  .lab-item .lab-kind.changed::after { color: #e0a96d; }
+}
+.lab-item .lab-kind small { color: var(--muted); }

@@ -293,4 +293,23 @@ if (tree && filter) {
   tree.querySelector("li.current")?.scrollIntoView({ block: "nearest" });
 }
 
+// The TP view's filter: the labs whose path has the text, and their
+// folders. The list reloads whenever the workspace changes, the filter kept.
+function filterLabs() {
+  const filter = document.getElementById("lab-filter");
+  const list = document.querySelector(".labs-list");
+  if (!filter || !list) return;
+  const text = filter.value.trim().toLowerCase();
+  for (const lab of list.querySelectorAll("li.lab-item")) {
+    lab.hidden = Boolean(text) && !lab.dataset.lab.toLowerCase().includes(text);
+  }
+  for (const folder of list.querySelectorAll("details.folder")) {
+    folder.parentElement.hidden = !folder.querySelector("li.lab-item:not([hidden])");
+  }
+}
+document.addEventListener("input", (event) => {
+  if (event.target.id === "lab-filter") filterLabs();
+});
+document.body.addEventListener("htmx:afterSettle", filterLabs);
+
 render();

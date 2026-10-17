@@ -11,8 +11,8 @@ translation backlog (2026-10-11, after phase 4); then the VS Code layout's
 increments 1 to 4 (2026-10-15, under "The VS Code layout"). All of it is pushed and
 released (deckz 31.3.4). Phase 5 (long jobs) was planned on 2026-10-17 (under
 "Phase 5"); its increments 1 (notifications, jobs kept across restarts, every deck's
-build) and 2 (videos) are done. **Next:** phase 5's increment 3 (labs previewed). Its
-GPU increments rent
+build), 2 (videos) and 3 (labs previewed) are done. **Next:** phase 5's increment 4
+(one command for a GPU pass, in deckz). Its GPU increments rent
 machines that cost money: never start one without the user saying so. `git log
 origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed. Push and
@@ -35,11 +35,12 @@ architecture):
 | `commits.py`, `sync.py` | the Commit and Synchronisation dialogs |
 | `jobs.py`, `actions.py` | the job queue, kept in each workspace's `.run/studioz/jobs/`; build (a deck, every deck), upload, publish |
 | `videos.py` | the Vidéos view and a scene's page: `deckz videos list --json`, the renders of the last commit kept (hard links) for the before/after, the render jobs |
+| `labs.py`, `notebooks.py` | the TP view and a notebook's page (`deckz labs list --json`, cached while the notebook files are the same); a notebook rendered as Colab shows it, and compared cell by cell, in a sandboxed frame |
 | `agent.py` | each workspace's agent conversation (Agent SDK): options, the git refusal hook, questions, the transcript |
 | `checkpoints.py` | the workspace's files before and after each agent turn, and undoing the last one |
 | `asks.py` | what the dialogs ask the agent (prompts), and the proposed commit message |
 | `workflows.py` | the workflows a workspace's `deckz.yml` declares (`studioz.workflows`), their forms' prompts and files |
-| `static/` | `deck.js` (pdf.js viewer, comparison), `video.js` (a scene's page: before/after played together), `editor.js` (CodeMirror: Markdown, YAML, Python), `dialogs.js` (dialogs opened from reloading panels), `agent.js` (the agent panel), `layout.js` (the VS Code layout: activity bar, sidebars, bottom panel, sashes, status bar), `notifications.js` (jobs' ends: toasts, the bell, desktop notifications), vendored JS (`uv run doit vendor`) |
+| `static/` | `deck.js` (pdf.js viewer, comparison), `video.js` (a scene's page: before/after played together), `lab.js` and `notebook.js`/`notebook.css` (a notebook's page, and the sandboxed page inside its frame, MathJax's configuration), `editor.js` (CodeMirror: Markdown, YAML, Python), `dialogs.js` (dialogs opened from reloading panels), `agent.js` (the agent panel), `layout.js` (the VS Code layout: activity bar, sidebars, bottom panel, sashes, status bar), `notifications.js` (jobs' ends: toasts, the bell, desktop notifications), vendored JS (`uv run doit vendor`) |
 
 Tests: `studioz/tests/`, against temporary repositories, a fake `deckz` (a script
 in the workspace's `.venv/bin/`), a local bare remote and a fake Agent SDK client
@@ -1428,6 +1429,61 @@ show their first frame; a scene's page isn't in Ctrl+P; renders made while studi
 never saw the scene unchanged have no before (the page says so); `deckz videos render`
 of a long scene in a job can't be told apart from a stuck one (Manim's progress isn't
 in its log).
+
+**Increment 3: done** (2026-10-17). In deckz: `deckz labs list [--json]`, each
+notebook's lab, kind and language (and its file, in JSON), in the guide beside `labs
+missing`. In studioz:
+- a TP view in the activity bar (`studioz.labs`): the labs by folder, each with its
+  kinds ("démo", "TP", a lone language named), those changed since the last commit
+  marked, their count as the badge, and a filter (kept across the list's reloads);
+- a notebook's page (`/espaces/<name>/tp/<lab>/<kind>?lang=`): the notebook rendered as
+  Colab shows it, outputs included, its other language when one is missing (the page
+  says so), "Ouvrir dans mon éditeur" (`xdg-open`/`open`: the system's application for
+  notebooks), and the TP commands in the palette;
+- "Avant/après": the notebook at `HEAD` beside the current one, cell by cell
+  (`studioz.notebooks.compare`): cells matched by Colab's `metadata.id` (10,956 of
+  slides' cells have one; nbformat's `id` too), else by source, a cell in place of one
+  of the same kind being that cell changed; unchanged runs collapsed; a changed cell's
+  two versions side by side, its lines marked, and in prose the words; outputs side by
+  side when they changed, collapsed when not (execution counts ignored); a new
+  notebook all added;
+- the lab problems in Problèmes (`lab-format`, `lab-pairs`, …) link to the notebook's
+  page in the language they name, and a changed notebook in Modifications to its
+  before/after.
+
+Neither nbconvert nor nbdime, against the plan: a notebook holds few things a page
+shows, and nbdime's diff is a web app of its own, while the comparison needed the
+same rendering as the page. studioz renders them itself: Markdown with markdown-it
+(its math kept whole by an inline rule), code with Pygments (now a declared
+dependency: re-lock slides), outputs in nbconvert's order of types, ANSI colors and
+carriage returns (tqdm's bars) included, consecutive stream writes merged; widgets
+show their text (a progress bar's last state). MathJax 3.2.2's single
+`tex-svg-full.js` (2.2 MB, vendored) typesets the math in the browser, as Colab does:
+SVG, so no font to fetch. Outputs hold the notebook's own HTML, so the page showing it
+is served sandboxed (`Content-Security-Policy: sandbox allow-scripts …`, an origin of
+its own, so nothing in it reaches studioz's routes) and runs studioz's scripts only.
+The view polls every 5 s and the TP list every 10 s: a notebook edited in the
+person's own editor fires no `workspace-changed`; the listing is cached while the
+notebook files are the same, the frame kept (scrolled where it was) while the notebook
+is.
+
+Tried on `studioz-dev` in Chrome (its deckz pointed at the worktree, put back after):
+270 notebooks listed (`deckz labs list --json`: 1.8 s cold); the linear-regression demo
+rendered as Colab shows it (pandas tables, seaborn plots, the cost function's math,
+0.3 s for 650 kB); a 23 MB demo (two figures 8,600 and 13,000 px high) served in 0.8 s, its
+images now loaded lazily since decoding them all at once froze the tab; edits to that notebook (a word, a
+`return` line, an output, a new cell; put back after) in the before/after, a further
+edit made outside studioz shown within 7 s; a `lab-format` problem clicked on a deck
+page opened its notebook in English; "Ouvrir dans mon éditeur" opened GNOME Text
+Editor, this machine's fallback for JSON (no notebook application installed).
+**Found and fixed:** the frame took half the page (`.viewer-area`'s `--split` with no
+editor beside it); the folders came in deckz's file order (`genai` after
+`genai/fine-tuning`); outside edits never showed (no event: now polled); the
+before/after's sticky header was half hidden. **Left:** the extension's screenshots
+time out on the frame's URL opened on its own (its sandbox; inside studioz's page they
+work); a markdown cell's changes show as source, not rendered; code lines aren't
+marked word by word; the frame's height is its own (it scrolls inside the page);
+notebook pages aren't in Ctrl+P (nor scenes').
 
 ### Then, with the colleague
 

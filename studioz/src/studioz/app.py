@@ -7,6 +7,7 @@ from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
+from functools import partial
 from importlib.resources import files
 from pathlib import Path
 from threading import Event
@@ -43,6 +44,8 @@ from . import (
     background,
     changes,
     commits,
+    labs,
+    notebooks,
     problems,
     sources,
     sync,
@@ -529,6 +532,7 @@ def problems_panel(
         count=sum(len(group.problems) for group in shown),
         report=report,
         deck=formation,
+        base=f"/espaces/{quote(name)}",
     )
 
 
@@ -560,6 +564,12 @@ def changes_panel(
         affected=studio.affected.report(path),
         deck=formation,
         lang=lang,
+        notebook_page=partial(
+            problems.notebook,
+            labs_dir=studio.settings.paths.labs_notebooks_dir.relative_to(
+                studio.settings.paths.git_dir
+            ),
+        ),
     )
 
 
@@ -1404,6 +1414,160 @@ def video_page(
     )
 
 
+@router.get("/espaces/{name}/tp", response_class=HTMLResponse)
+def labs_panel(
+    request: Request, studio: StudioDep, name: str, tp: str = ""
+) -> Response:
+    """The sidebar's TP view: each lab, its notebooks by kind and language.
+
+    Returns:
+        The view's list, which reloads when the workspace changes.
+    """
+    found = studio.workspace(name)
+    path = found.worktree.path
+    return _render(
+        request,
+        "_labs.html",
+        workspace=found,
+        listing=labs.listing(path),
+        changed={change.path for change in background.changes(path)},
+        current=tp,
+        kinds=labs.KINDS,
+    )
+
+
+def _notebook(
+    studio: Studio, name: str, notebook: str, lang: Lang
+) -> tuple[workspaces.Workspace, labs.Listing, labs.Notebook]:
+    found = studio.workspace(name)
+    listed = labs.listing(found.worktree.path)
+    shown = listed.find(notebook, lang)
+    if shown is None:
+        detail = listed.error or f"Pas de notebook « {notebook} » dans « {name} »"
+        raise HTTPException(404, detail)
+    return found, listed, shown
+
+
+@router.get("/espaces/{name}/tp/{notebook:path}/apercu", response_class=HTMLResponse)
+def lab_view(
+    request: Request,
+    studio: StudioDep,
+    name: str,
+    notebook: str,
+    lang: Lang = "fr",
+    vue: str | None = None,
+) -> Response:
+    """The notebook rendered, or its changes since the last commit.
+
+    Returns:
+        The frame showing it (`lab_frame`), kept as it is while the \
+        notebook doesn't change, which reloads when the workspace changes.
+    """
+    found, listed, shown = _notebook(studio, name, notebook, lang)
+    path = found.worktree.path
+    file = path / shown.file
+    stat = file.stat()
+    view = "changes" if vue == "avant-apres" else "render"
+    change = next((c for c in background.changes(path) if c.path == shown.file), None)
+    version = f"{stat.st_mtime_ns}-{stat.st_size}"
+    if view == "changes":
+        version += f"-{labs.head(path)[:12]}"
+    return _render(
+        request,
+        "_lab_view.html",
+        workspace=found,
+        notebook=shown,
+        lang=lang,
+        languages=listed.languages(shown.name),
+        view=view,
+        version=version,
+        changed=change is not None,
+        new=change is not None and change.status in {"??", "A ", "AM"},
+        kinds=labs.KINDS,
+    )
+
+
+@router.get("/espaces/{name}/tp/{notebook:path}/rendu", response_class=HTMLResponse)
+def lab_frame(
+    request: Request,
+    studio: StudioDep,
+    name: str,
+    notebook: str,
+    lang: Lang = "fr",
+    vue: str | None = None,
+) -> Response:
+    """The page inside the frame: the notebook, or its changes.
+
+    Served sandboxed (`notebooks.frame_headers`): its outputs' HTML is the
+    notebook's.
+
+    Returns:
+        The page.
+
+    Raises:
+        HTTPException: 404 for a notebook that isn't JSON.
+    """
+    found, _, shown = _notebook(studio, name, notebook, lang)
+    path = found.worktree.path
+    current = labs.read(path, shown.file)
+    if current is None:
+        raise HTTPException(404, f"« {shown.file} » n'est pas un notebook lisible")
+    context: dict[str, Any] = {"notebook": shown, "lang": shown.language}
+    if vue == "avant-apres":
+        before = labs.committed(path, shown.file)
+        context["changes"] = notebooks.compare(before or {"cells": []}, current)
+        context["new"] = before is None
+    else:
+        context["cells"] = notebooks.cells(current)
+    origin = f"{request.url.scheme}://{request.url.netloc}"
+    return templates.TemplateResponse(
+        request, "notebook.html", context, headers=notebooks.frame_headers(origin)
+    )
+
+
+@router.post("/espaces/{name}/tp/{notebook:path}/ouvrir", response_class=HTMLResponse)
+def open_lab(studio: StudioDep, name: str, notebook: str, lang: Lang = "fr") -> str:
+    """Open the notebook in the application the system opens notebooks with.
+
+    Returns:
+        What happened, for the page's notice.
+    """
+    found, _, shown = _notebook(studio, name, notebook, lang)
+    error = labs.open_in_editor(found.worktree.path / shown.file)
+    if error:
+        return f"Le notebook n'a pas pu être ouvert : {error}"
+    return f"{shown.file} ouvert dans l'application des notebooks."
+
+
+@router.get("/espaces/{name}/tp/{notebook:path}", response_class=HTMLResponse)
+def lab_page(
+    request: Request,
+    studio: StudioDep,
+    name: str,
+    notebook: str,
+    lang: Lang = "fr",
+    vue: str | None = None,
+) -> Response:
+    """A notebook's page: rendered as Colab shows it, or its changes.
+
+    Returns:
+        The page; the notebook (`lab_view`) loads itself.
+    """
+    found = studio.workspace(name)
+    workspaces.mark_used(found.worktree.path)
+    return _render(
+        request,
+        "lab.html",
+        workspace=found,
+        decks=workspaces.decks(found.worktree.path),
+        notebook=notebook,
+        lang=lang,
+        view="changes" if vue == "avant-apres" else "render",
+        kinds=labs.KINDS,
+        declared=workflows.declared(found.worktree.path),
+    )
+
+
 def _agent_entry(entry: agent.Entry) -> str:
     return templates.get_template("_agent_entry.html").render(entry=entry)
 
@@ -2158,6 +2322,7 @@ def create_app(
         or problems.Statuses(
             workspaces.base_branch(main),
             videos_dir=paths.videos_dir.relative_to(paths.git_dir),
+            labs_dir=paths.labs_notebooks_dir.relative_to(paths.git_dir),
         ),
         affected or changes.Affected(),
         baselines or Baselines(),

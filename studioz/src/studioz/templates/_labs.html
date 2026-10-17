@@ -1,0 +1,36 @@
+{#- The sidebar's TP view: each lab by folder, its notebooks by kind (`deckz
+    labs list`), each a link to its page, those changed since the last commit
+    marked. Reloads when the workspace changes, and every 10 s. -#}
+{% set waiting = listing.notebooks | selectattr("file", "in", changed) | list | length %}
+<section class="labs" id="labs" hx-swap="outerHTML" hx-trigger="workspace-changed from:body, every 10s"
+         hx-get="/espaces/{{ workspace.name }}/tp{% if current %}?tp={{ current | urlencode }}{% endif %}">
+  <h2 class="view-title"><span>TP <span class="count" title="Les notebooks modifiés depuis le dernier commit">{{ waiting }}</span></span></h2>
+  {% if listing.error %}
+  <p class="error">deckz n'a pas pu lister les notebooks : {{ listing.error }}</p>
+  {% elif not listing.notebooks %}
+  <p class="empty">Aucun notebook dans cet espace.</p>
+  {% else %}
+  <input class="filter" id="lab-filter" type="search" placeholder="Filtrer…" aria-label="Filtrer les labs" hx-preserve>
+  <ul class="tree labs-list">
+    {% for folder, group in listing.folders().items() %}
+    <li><details class="folder" open>
+      <summary title="{{ folder }}">{{ folder or "." }}</summary>
+      <ul>
+        {% for lab in group %}
+        <li class="lab-item" data-lab="{{ lab.lab }}">
+          <span class="lab-name" title="{{ lab.lab }}">{{ lab.lab.rpartition("/")[2] }}</span>
+          {% for kind, found in lab.kinds().items() %}
+          {% set name = lab.lab ~ "/" ~ kind %}
+          {% set edited = found | selectattr("file", "in", changed) | list %}
+          <a class="lab-kind{% if name == current %} current{% endif %}{% if edited %} changed{% endif %}"
+             href="/espaces/{{ workspace.name }}/tp/{{ name }}"
+             title="{{ name }} ({{ found | map(attribute='language') | join(', ') }}){% if edited %}, modifié : {{ edited | map(attribute='language') | join(', ') }}{% endif %}">{{ kinds.get(kind, kind) }}{% if found | length < 2 %} <small>{{ found[0].language }}</small>{% endif %}</a>
+          {% endfor %}
+        </li>
+        {% endfor %}
+      </ul>
+    </details></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>

@@ -12,7 +12,7 @@ Two sources:
   from what the build recorded).
 
 Each problem names the file, and line, it's about when it can, so that a
-page can open it in the editor.
+page can open it in the editor; a lab notebook's links to its page.
 """
 
 import json
@@ -39,6 +39,9 @@ _TITLES = {
     "videos": "Vidéos",
 }
 _LOCATION = re.compile(r"(?P<file>[^\s:'\"`()]+\.(?:md|yml))(?::(?P<line>\d+))?")
+_NOTEBOOK = re.compile(r"(?P<file>[^\s:'\"`()]+)-(?P<lang>[a-z]+)\.ipynb")
+# A pair of notebooks, as `lab-pairs` names it: `<lab>/<kind>: …`.
+_PAIR = re.compile(r"(?P<file>[^\s:'\"`()]+/[^\s:'\"`()./]+):")
 
 
 @dataclass(frozen=True)
@@ -51,6 +54,8 @@ class Problem:
     line: int | None = None
     page: int | None = None
     """The page of the deck's handout it's about."""
+    notebook: str | None = None
+    """The lab notebook it's about, as its page names it: `<lab>/<kind>?lang=…`."""
 
 
 @dataclass(frozen=True)
@@ -83,6 +88,28 @@ def locate(workspace: Path, text: str) -> tuple[str | None, int | None]:
     return None, None
 
 
+def notebook(text: str, labs_dir: Path | None) -> str | None:
+    """The first lab notebook, or pair of notebooks, `text` names, as its page names it.
+
+    Args:
+        text: A problem.
+        labs_dir: The notebooks' directory, relative to the workspace.
+
+    Returns:
+        Its lab and kind, and its language (`nlp/embeddings/demo?lang=fr`), \
+        or None.
+    """
+    if labs_dir is None:
+        return None
+    found = [(m.start(), m["file"], m["lang"]) for m in _NOTEBOOK.finditer(text)]
+    found += [(m.start(), m["file"], "fr") for m in _PAIR.finditer(text)]
+    for _, file, lang in sorted(found):
+        stem = Path(file)
+        if stem.is_relative_to(labs_dir) and ".." not in stem.parts:
+            return f"{stem.relative_to(labs_dir).as_posix()}?lang={lang}"
+    return None
+
+
 def status_command(workspace: Path, since: str | None) -> list[str]:
     """`deckz status` of a workspace, by its own deckz.
 
@@ -95,7 +122,9 @@ def status_command(workspace: Path, since: str | None) -> list[str]:
     return [*command, "--since", since] if since else command
 
 
-def _groups(workspace: Path, sections: list[dict]) -> tuple[Group, ...]:
+def _groups(
+    workspace: Path, sections: list[dict], labs_dir: Path | None = None
+) -> tuple[Group, ...]:
     groups = []
     for section in sections:
         key = section.get("key", "")
@@ -105,7 +134,15 @@ def _groups(workspace: Path, sections: list[dict]) -> tuple[Group, ...]:
         problems = []
         for item in section["items"]:
             file, line = locate(workspace, item["text"])
-            problems.append(Problem(item["text"], item.get("fix", ""), file, line))
+            problems.append(
+                Problem(
+                    item["text"],
+                    item.get("fix", ""),
+                    file,
+                    line,
+                    notebook=notebook(item["text"], labs_dir),
+                )
+            )
         groups.append(Group(title, tuple(problems), key))
     return tuple(groups)
 
@@ -136,6 +173,7 @@ class Statuses(Runs[tuple[Group, ...]]):
         base: str | None,
         command=status_command,
         videos_dir: Path | None = None,
+        labs_dir: Path | None = None,
     ) -> None:
         """Prepare the runs.
 
@@ -144,6 +182,7 @@ class Statuses(Runs[tuple[Group, ...]]):
                 base with it): the branch they sync with.
             command: `status_command`, which tests replace.
             videos_dir: The renders' directory, relative to a workspace.
+            labs_dir: The lab notebooks' directory, relative to a workspace.
         """
 
         def run(workspace: Path) -> list[str]:
@@ -152,7 +191,9 @@ class Statuses(Runs[tuple[Group, ...]]):
 
         super().__init__(
             run,
-            lambda workspace, out: _groups(workspace, json.loads(out)["sections"]),
+            lambda workspace, out: _groups(
+                workspace, json.loads(out)["sections"], labs_dir
+            ),
             lambda workspace: (
                 *fingerprint(workspace),
                 *(renders(workspace, videos_dir) if videos_dir else ()),

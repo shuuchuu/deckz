@@ -3,6 +3,7 @@
     activity bar's badges. -#}
 {% set deck = deck or "" %}
 {% set video = video or "" %}
+{% set notebook = notebook or "" %}
 {%- macro deck_items(folder, deck, base) %}
   {% for sub in folder.folders %}
   <li><details class="folder" data-folder="{{ sub.path }}"{% if deck.startswith(sub.path ~ "/") %} open{% endif %}>
@@ -23,6 +24,11 @@
     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1"/><path d="M10 9.5v5l4.5-2.5Z"/></svg>
     <span class="visually-hidden">Vidéos</span>
     <span class="badge" data-badge-of="#videos"></span>
+  </button>
+  <button type="button" data-view="tp" title="TP : les notebooks des labs, rendus, et leurs changements">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M10 3v6l-5.5 9.5A1.6 1.6 0 0 0 5.9 21h12.2a1.6 1.6 0 0 0 1.4-2.5L14 9V3"/><path d="M7.5 15h9"/></svg>
+    <span class="visually-hidden">TP</span>
+    <span class="badge" data-badge-of="#labs"></span>
   </button>
   <button type="button" data-view="modifications" title="Modifications, synchronisation, traductions">
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-6 3-11 7"/></svg>
@@ -60,6 +66,12 @@
     <section class="videos" id="videos" hx-swap="outerHTML" hx-trigger="load"
              hx-get="/espaces/{{ workspace.name }}/videos{% if video %}?video={{ video | urlencode }}{% endif %}">
       <h2>Vidéos</h2>
+    </section>
+  </section>
+  <section class="view" data-view="tp" aria-label="TP" hidden>
+    <section class="labs" id="labs" hx-swap="outerHTML" hx-trigger="load"
+             hx-get="/espaces/{{ workspace.name }}/tp{% if notebook %}?tp={{ notebook | urlencode }}{% endif %}">
+      <h2>TP</h2>
     </section>
   </section>
   <section class="view" data-view="modifications" aria-label="Modifications" hidden>

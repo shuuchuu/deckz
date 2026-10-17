@@ -7,7 +7,9 @@
   <ul>
     {% for problem in group.problems %}
     <li>
-      {% if deck and (problem.file or problem.page) %}
+      {% if problem.notebook %}
+      <a class="problem" href="{{ base }}/tp/{{ problem.notebook }}" title="Voir le notebook">{{ problem.text }}</a>
+      {% elif deck and (problem.file or problem.page) %}
       <a href="#" class="problem"
          {% if problem.file %}data-file="{{ problem.file }}"{% endif %}
          {% if problem.line %}data-line="{{ problem.line }}"{% endif %}

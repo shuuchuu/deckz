@@ -404,7 +404,8 @@ and changes not coming from studioz's own pages (DNS rebinding, cross-site
 requests): every route that changes something is a POST.
 A workspace's pages share VS Code's layout (`workspace_base.html`, `static/layout.js`):
 an activity bar choosing the sidebar's one view (Formations, a tree of the decks
-without the folders they all share; Modifications; Publication; Avec l'agent), the
+without the folders they all share; Vidéos; TP; Modifications; Publication; Avec
+l'agent), the
 page above a panel of tabs (Problèmes; a deck's Construction, opening by itself
 when a build fails; Tâches, where a job started from a dialog goes on, the dialog
 closing on the response's `job-started` event), the agent on the right, all resizable
@@ -466,6 +467,15 @@ aren't committed, so the last commit's are hard links studioz keeps under
 `.run/studioz/videos/`, which survive the next render because deckz moves a
 render into place rather than writing into it (keep it so). `deckz status`
 runs again when a render's stamp or quality changes (`problems.renders`).
+`studioz.labs` backs the TP view and a lab notebook's page (`static/lab.js`): the
+workspace's `deckz labs list --json` (cached while the notebook files are the same,
+since the pages poll: a notebook edited in the person's own editor fires no event),
+the notebook rendered as Colab shows it, or its changes since the last commit cell by
+cell, by `studioz.notebooks` (markdown-it, Pygments, MathJax in the browser; no
+nbconvert nor nbdime). The page holding the notebook is served sandboxed, its scripts
+studioz's own (`notebooks.frame_headers`): outputs carry the notebook's HTML, and
+nothing in it may reach studioz's routes. A notebook isn't edited in studioz (it's
+JSON): "Ouvrir dans mon éditeur" opens it with the system's application.
 `studioz.agent` backs the agent panel beside every workspace and deck page:
 one Claude Code conversation per workspace through the Agent SDK, logged in as
 the person (never an API key: studioz removes `ANTHROPIC_API_KEY`), in the

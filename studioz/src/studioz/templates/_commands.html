@@ -6,6 +6,7 @@
 {% set base = "/espaces/" ~ workspace.name %}
 {% set deck = deck or "" %}
 {% set video = video or "" %}
+{% set notebook = notebook or "" %}
 <div id="commands" hidden>
   {% if deck %}
   <button type="button" data-dialog="#action-dialog" data-url="{{ base }}/formations/{{ deck }}/construire/formulaire">Formation : construire les PDF…</button>
@@ -25,6 +26,14 @@
   <button type="button" data-click='.langs a[data-lang="{{ code }}"]'>Vidéo : passer en {{ code }}</button>
   {% endfor %}
   {% endif %}
+  {% if notebook %}
+  <button type="button" data-click='.views button[data-view="render"]'>TP : voir le notebook</button>
+  <button type="button" data-click='.views button[data-view="changes"]'>TP : voir l'avant/après</button>
+  <button type="button" data-click='.lab-bar .deck-actions button'>TP : ouvrir dans mon éditeur</button>
+  {% for code in ("fr", "en") if code != lang %}
+  <button type="button" data-click='.langs a[data-lang="{{ code }}"]'>TP : passer en {{ code }}</button>
+  {% endfor %}
+  {% endif %}
   <button type="button" data-dialog="#action-dialog" data-url="{{ base }}/construire/formulaire">Formations : construire toutes les formations…</button>
   <button type="button" data-dialog="#commit-dialog" data-url="{{ base }}/commit/formulaire" data-include="#commit-form"
           data-values='{{ {"formation": deck, "lang": lang or "fr"} | tojson }}'>Modifications : committer…</button>
@@ -41,6 +50,7 @@
   <button type="button" data-toggle="agent" data-keys="Ctrl+Alt+B">Affichage : agent</button>
   <button type="button" data-show-view="formations">Affichage : Formations</button>
   <button type="button" data-show-view="videos">Affichage : Vidéos</button>
+  <button type="button" data-show-view="tp">Affichage : TP</button>
   <button type="button" data-show-view="modifications">Affichage : Modifications</button>
   <button type="button" data-show-view="publication">Affichage : Publication</button>
   <button type="button" data-show-view="agent">Affichage : Avec l'agent</button>

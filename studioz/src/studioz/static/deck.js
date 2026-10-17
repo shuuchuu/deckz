@@ -170,7 +170,8 @@ async function show(url) {
 // The Problems and Changes panels' links (`_problems.html`, `_changes.html`).
 document.addEventListener("click", (event) => {
   const link = event.target.closest("a.problem, a.change");
-  if (!link) return;
+  // A lab notebook's problem links to its page.
+  if (!link || !(link.dataset.file || link.dataset.page)) return;
   event.preventDefault();
   const page = Number(link.dataset.page) || null;
   if (page) viewer.scrollPageIntoView({ pageNumber: page });

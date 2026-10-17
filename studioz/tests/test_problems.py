@@ -7,7 +7,13 @@ from time import monotonic, sleep
 
 from fastapi.testclient import TestClient
 from studioz.app import create_app
-from studioz.problems import Statuses, StatusReport, build_problems, locate
+from studioz.problems import (
+    Statuses,
+    StatusReport,
+    build_problems,
+    locate,
+    notebook,
+)
 from studioz.watches import Snapshot, State
 
 # Stands for `deckz status --json`: counts its runs, and reports a check
@@ -238,3 +244,14 @@ def test_publication_panel(tmp_path: Path, repository: Path, workspace: Path) ->
     # Publishing goes through the dialog, never from the panel itself.
     assert 'data-url="/espaces/demo/publier/formulaire"' in text
     assert 'hx-post="/espaces/demo/publier"' not in text
+
+
+def test_a_lab_notebook_links_to_its_page() -> None:
+    labs = Path("labs/notebooks")
+    text = "labs/notebooks/nlp/embeddings/demo-fr.ipynb: not in deckz's notebook format"
+
+    assert notebook(text, labs) == "nlp/embeddings/demo?lang=fr"
+    assert notebook("other/x/demo-fr.ipynb: …", labs) is None
+    assert notebook(text, None) is None
+    pair = "labs/notebooks/nlp/embeddings/demo: 49 cells in fr, 48 in en"
+    assert notebook(pair, labs) == "nlp/embeddings/demo?lang=fr"

@@ -39,6 +39,10 @@ def task_vendor():
         pdfjs / "build/pdf.worker.min.mjs": vendor / "pdfjs/pdf.worker.min.mjs",
         pdfjs / "web/pdf_viewer.mjs": vendor / "pdfjs/web/pdf_viewer.mjs",
         pdfjs / "web/pdf_viewer.css": vendor / "pdfjs/web/pdf_viewer.css",
+        # A lab notebook's math: MathJax 3's single file, its SVG output
+        # needing no font to fetch from a sandboxed page (`notebook.html`).
+        modules / "mathjax/LICENSE": vendor / "mathjax/LICENSE",
+        modules / "mathjax/es5/tex-svg-full.js": vendor / "mathjax/tex-svg-full.js",
     }
 
     # CodeMirror is dozens of small modules: one bundle of what

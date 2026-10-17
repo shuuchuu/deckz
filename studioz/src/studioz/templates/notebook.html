@@ -1,0 +1,73 @@
+{#- The page inside a notebook's frame (served sandboxed, `notebooks.
+    frame_headers`): the notebook's cells, or (`changes`) its changes since
+    the last commit, each changed cell before and after. MathJax typesets the
+    math of what has `tex2jax_process` (Markdown), never code nor outputs. -#}
+{%- macro outputs(cell) -%}
+{% set shown = cell.shown_outputs %}
+{% if shown %}<div class="outputs">{% for output in shown %}{{ output }}{% endfor %}</div>{% endif %}
+{%- endmacro -%}
+{%- macro prompt(cell) -%}
+<span class="prompt">[{{ cell.count if cell.count is not none else " " }}]</span>
+{%- endmacro -%}
+{%- macro render(cell) -%}
+<div class="cell {{ cell.kind }}">
+  {% if cell.kind == "code" %}
+  <div class="input">{{ prompt(cell) }}<pre class="source highlight">{{ cell.html }}</pre></div>
+  {{ outputs(cell) }}
+  {% elif cell.kind == "markdown" %}
+  <div class="markdown tex2jax_process">{{ cell.html }}</div>
+  {% else %}
+  <pre class="source raw">{{ cell.html }}</pre>
+  {% endif %}
+</div>
+{%- endmacro -%}
+{%- macro compared(cell, lines, step) -%}
+<div class="cell {{ cell.kind }}">
+  <div class="input">{% if cell.kind == "code" %}{{ prompt(cell) }}{% endif %}<pre class="source{% if cell.kind == 'code' %} highlight{% endif %}">
+    {%- for line in lines %}<span class="line{% if line.mark %} {{ line.mark }}{% endif %}">{{ line.html }}</span>{% endfor -%}
+  </pre></div>
+  {% if cell.kind == "code" %}
+  {% if step.outputs_changed %}{{ outputs(cell) }}
+  {% elif cell.shown_outputs %}<details class="unchanged-outputs"><summary>Sorties inchangées</summary>{{ outputs(cell) }}</details>{% endif %}
+  {% endif %}
+</div>
+{%- endmacro -%}
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+<meta charset="utf-8">
+<base target="_blank">
+<title>{{ notebook.file }}</title>
+<link rel="stylesheet" href="/static/notebook.css">
+<script src="/static/notebook.js"></script>
+<script src="/static/vendor/mathjax/tex-svg-full.js" async></script>
+</head>
+<body class="tex2jax_ignore{% if changes is defined %} comparing{% endif %}">
+{% if changes is defined %}
+  {% set differing = changes | rejectattr("kind", "equalto", "same") | list %}
+  {% if new %}<p class="banner">Nouveau notebook : le dernier commit ne l'a pas, toutes ses cellules sont ajoutées.</p>
+  {% elif not differing %}<p class="banner">Aucune cellule n'a changé depuis le dernier commit (seules ses métadonnées, ou sa mise en forme).</p>{% endif %}
+  <div class="sides-head"><span>Avant : le dernier commit</span><span>Après : le notebook actuel</span></div>
+  {% for step in changes %}
+  {% if step.kind == "same" %}
+  <details class="same">
+    <summary>{{ step.same | length }} cellule{{ "s" if step.same | length > 1 }} inchangée{{ "s" if step.same | length > 1 }}</summary>
+    {% for cell in step.same %}{{ render(cell) }}{% endfor %}
+  </details>
+  {% elif step.kind == "changed" %}
+  {% set before, after = step.lines %}
+  <div class="change changed" title="{{ 'Source modifiée' if step.source_changed else '' }}{{ ', ' if step.source_changed and step.outputs_changed }}{{ 'Sorties modifiées' if step.outputs_changed }}">
+    <div class="side">{{ compared(step.before, before, step) }}</div>
+    <div class="side">{{ compared(step.after, after, step) }}</div>
+  </div>
+  {% elif step.kind == "added" %}
+  <div class="change added" title="Cellule ajoutée"><div class="side empty"></div><div class="side">{{ render(step.after) }}</div></div>
+  {% else %}
+  <div class="change removed" title="Cellule supprimée"><div class="side">{{ render(step.before) }}</div><div class="side empty"></div></div>
+  {% endif %}
+  {% endfor %}
+{% else %}
+  {% for cell in cells %}{{ render(cell) }}{% else %}<p class="banner">Ce notebook n'a aucune cellule.</p>{% endfor %}
+{% endif %}
+</body>
+</html>

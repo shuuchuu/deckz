@@ -16,6 +16,8 @@
       <span class="status" data-status="{{ file.status }}">{{ file.status }}</span>
       {% if deck and file.editable and file.status != "supprimé" %}
       <a href="#" class="change" data-file="{{ file.path }}">{{ file.path }}</a>
+      {% elif file.status != "supprimé" and notebook_page(file.path) %}
+      <a href="/espaces/{{ workspace.name }}/tp/{{ notebook_page(file.path) }}&vue=avant-apres" title="Son avant/après">{{ file.path }}</a>
       {% else %}
       <span class="path">{{ file.path }}</span>
       {% endif %}

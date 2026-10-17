@@ -1,0 +1,39 @@
+{#- A lab notebook's page: the notebook rendered as Colab shows it, or its
+    changes since the last commit, cell by cell (`_lab_view.html`, in a
+    sandboxed frame), its language and view switched without a reload
+    (`lab.js`). Not edited here: the agent edits it, or the person's own
+    editor. -#}
+{% extends "workspace_base.html" %}
+{% block title %}{{ notebook }} · {{ workspace.name }}{% endblock %}
+{% block page_head %}
+<script type="module" src="/static/lab.js"></script>
+{% endblock %}
+{% block main %}
+<main class="deck lab-page" id="lab-page">
+  <div class="toolbar">
+    {% set lab, _, kind = notebook.rpartition("/") %}
+    {% set folder, _, short = lab.rpartition("/") %}
+    <span class="crumb deck-path" title="{{ notebook }}">{% if folder %}<span class="crumb-dir">{{ folder }}/</span>{% endif %}<span class="crumb-name">{{ short }}</span> <span class="crumb-kind">{{ kinds.get(kind, kind) }}</span></span>
+    <span class="langs">
+      {% for code in ("fr", "en") %}
+      <a data-lang="{{ code }}" href="?lang={{ code }}{% if view == 'changes' %}&vue=avant-apres{% endif %}"{% if code == lang %} class="current" aria-current="true"{% endif %}>{{ code }}</a>
+      {% endfor %}
+    </span>
+    <span class="views">
+      <button type="button" data-view="render" aria-pressed="{{ 'true' if view == 'render' else 'false' }}"
+              title="Le notebook tel que Colab l'affiche, sorties comprises">Rendu</button>
+      <button type="button" data-view="changes" aria-pressed="{{ 'true' if view == 'changes' else 'false' }}"
+              title="Ses changements depuis le dernier commit, cellule par cellule, sorties comprises">Avant/après</button>
+    </span>
+  </div>
+  <div class="deck-body">
+    <div class="viewer-area lab-area">
+      <section class="lab-view" id="lab-view" hx-swap="outerHTML" hx-trigger="load"
+               hx-get="/espaces/{{ workspace.name }}/tp/{{ notebook }}/apercu?lang={{ lang }}{% if view == 'changes' %}&vue=avant-apres{% endif %}">
+        <p class="empty">Lecture du notebook…</p>
+      </section>
+      <p class="notice" id="notice" role="status"></p>
+    </div>
+  </div>
+</main>
+{% endblock %}

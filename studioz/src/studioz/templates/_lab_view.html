@@ -1,0 +1,33 @@
+{#- A notebook rendered, or (`view` "changes") its changes since the last
+    commit, in a sandboxed frame (`notebook.html`: its outputs' HTML is the
+    notebook's). Reloads when the workspace changes, and every 5 s (the
+    person's own editor tells studioz nothing); the frame, its id naming the
+    notebook's version, stays as it is (scrolled where it was) until the
+    notebook changes. -#}
+{% set base = "/espaces/" ~ workspace.name ~ "/tp/" ~ notebook.name %}
+{% set query = "?lang=" ~ notebook.language ~ ("&vue=avant-apres" if view == "changes" else "") %}
+<section class="lab-view" id="lab-view" data-view="{{ view }}" data-lang="{{ notebook.language }}"
+         hx-get="{{ base }}/apercu{{ query }}" hx-trigger="workspace-changed from:body, every 5s" hx-swap="outerHTML">
+  <header class="lab-bar">
+    <span class="lab-states">
+      <span class="lab-file" title="{{ notebook.file }}">{{ notebook.file.rpartition("/")[2] }}</span>
+      {% if new %}<span class="lab-state" data-state="new" title="Le dernier commit n'a pas ce notebook">nouveau</span>
+      {% elif changed %}<span class="lab-state" data-state="changed" title="Modifié depuis le dernier commit : voir l'avant/après">modifié</span>{% endif %}
+      {% for code in ("fr", "en") if code not in languages %}
+      <span class="lab-state" data-state="missing" title="Pas de version {{ code }} de ce notebook : deckz labs missing">{{ code }} manquant</span>
+      {% endfor %}
+      {% if notebook.language != lang %}<span class="lab-state" data-state="missing">affiché en {{ notebook.language }}</span>{% endif %}
+    </span>
+    <span class="deck-actions">
+      <button type="button" class="secondary" hx-post="{{ base }}/ouvrir?lang={{ notebook.language }}" hx-target="#notice" hx-swap="innerHTML"
+              title="L'ouvrir avec l'application du système pour les notebooks (Jupyter, VS Code…) : le modifier là, puis `deckz labs fmt`">Ouvrir dans mon éditeur</button>
+    </span>
+  </header>
+  {% if view == "changes" and not changed %}
+  <p class="lab-note">Ce notebook n'a pas changé depuis le dernier commit.</p>
+  {% else %}
+  <iframe class="lab-frame" id="lab-frame-{{ view }}-{{ version }}" hx-preserve
+          sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+          src="{{ base }}/rendu{{ query }}&v={{ version }}" title="{{ notebook.file }}"></iframe>
+  {% endif %}
+</section>

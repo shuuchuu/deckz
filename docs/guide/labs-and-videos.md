@@ -8,6 +8,8 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
 
 - Edit a notebook in Jupyter or Colab, then `deckz labs fmt <notebook>`: deckz keeps
   notebooks in one JSON style so that changes stay readable (`lab-format` checks it).
+- `deckz labs list` lists the notebooks, each with its lab, kind and language
+  (`--json` for a script); `deckz labs missing`, those lacking the other language.
 - `deckz labs dump <notebook>` prints a compact view, cells numbered.
 - `deckz labs check <notebook>` runs it the way Colab would (`--python <interpreter>`
   for a virtual environment with the lab's libraries). It skips shell commands other
