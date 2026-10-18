@@ -64,6 +64,7 @@ class GlobalSettingsFactory[T: "GlobalSettings"](GlobalFactoryProtocol):
                 FRAME_LABEL,
                 self._settings.overflow_marker_label,
                 self._settings.table_marker_label,
+                self._settings.line_marker_label,
             ),
         )
 

@@ -83,7 +83,9 @@ no variables of its own: every file of a deck renders with the same
   tree (so it matches what's about to be committed, and another
   session's unfinished edits don't block or hide a check).
 - `deckz check overflow DECK_DIR` -- a built handout's shrunk-to-fit
-  frames, worst first, with their source content file(s). Needs the
+  frames, worst first, with their source content file(s), then its
+  header or footer lines that wrap (a too-long section or deck title),
+  with what to shorten. Needs the
   handout already built (`deckz run --handout`, with the same `--lang`
   on both: `--lang en` for the English build, `--lang fr en` for both).
   `--tables` lists the

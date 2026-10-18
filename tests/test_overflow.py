@@ -1,3 +1,4 @@
+import json
 from json import loads
 from pathlib import Path
 
@@ -9,9 +10,11 @@ from deckz.analyzing.overflow import (
     _normalize,
     _page_titles,
     shrunk_frames,
+    wrapped_lines,
     wrapped_tables,
 )
 from deckz.cli import main
+from deckz.components import marker_records
 from deckz.configuring.settings import DeckPaths, DeckSettings
 from deckz.exceptions import DeckzError
 
@@ -281,3 +284,127 @@ def test_check_overflow_reports_every_lang(
         ("fr", "120%"),
         ("en", "150%"),
     ]
+
+
+def _line_marker(page: int, line: str, text: str, ratio: str) -> str:
+    return (
+        f'#metadata((page: {page}, line: "{line}", text: "{text}", '
+        f'ratio: "{ratio}", fix: "shorten it")) <formation-line>\n'
+    )
+
+
+def _handout_with_lines(settings: DeckSettings, markers: str) -> Path:
+    import typst
+
+    current_dir = settings.paths.current_dir
+    build_dir = current_dir / ".build" / "deck-handout"
+    build_dir.mkdir(parents=True)
+    main_typ = build_dir / "deck-handout.typ"
+    main_typ.write_text(markers + "Hello\n", encoding="utf8")
+    pdf = current_dir / "pdf" / "deck-handout.pdf"
+    pdf.parent.mkdir(parents=True)
+    typst.Compiler(str(main_typ)).compile(output=str(pdf))
+    # A build keeps its PDF next to its main file too: the record's date is
+    # compared with that one.
+    main_typ.with_suffix(".pdf").write_bytes(pdf.read_bytes())
+    return main_typ
+
+
+def test_wrapped_lines_groups_a_line_s_pages_worst_first(tmp_path: Path) -> None:
+    settings = _deck_settings(tmp_path)
+    _handout_with_lines(
+        settings,
+        _line_marker(2, "footer", "Deck", "103%")
+        + _line_marker(5, "header breadcrumb", "A ⋅ B", "120%")
+        + _line_marker(6, "header breadcrumb", "A ⋅ B", "121%")
+        + _line_marker(7, "footer", "Deck", "104%"),
+    )
+
+    lines = wrapped_lines(settings)
+
+    assert lines is not None
+    assert [(line.line, line.text, line.ratio, line.pages) for line in lines] == [
+        ("header breadcrumb", "A ⋅ B", "121%", (5, 6)),
+        ("footer", "Deck", "104%", (2, 7)),
+    ]
+    assert lines[0].fix == "shorten it"
+
+
+def test_wrapped_lines_reads_the_build_s_record(tmp_path: Path) -> None:
+    settings = _deck_settings(tmp_path)
+    main_typ = _handout_with_lines(settings, "")
+    marker = {
+        "page": 3,
+        "line": "footer",
+        "text": "Deck",
+        "ratio": "110%",
+        "fix": "shorten it",
+    }
+    elements = [{"label": "<formation-line>", "value": marker}]
+    marker_records.write(main_typ, ("formation-line",), json.dumps(elements))
+
+    lines = wrapped_lines(settings, query=False)
+
+    assert lines is not None
+    assert [(line.text, line.pages) for line in lines] == [("Deck", (3,))]
+
+
+def test_wrapped_lines_is_none_for_a_build_that_did_not_record_them(
+    tmp_path: Path,
+) -> None:
+    settings = _deck_settings(tmp_path)
+    main_typ = _handout_with_lines(settings, _line_marker(2, "footer", "Deck", "103%"))
+    # An older deckz recorded the other labels only.
+    marker_records.write(main_typ, ("formation-overflow",), "[]")
+
+    assert wrapped_lines(settings) is None
+
+
+def test_check_overflow_reports_wrapped_lines_and_fails(
+    tmp_path: Path, capsys: CaptureFixture[str]
+) -> None:
+    settings = _deck_settings(tmp_path)
+    _handout_with_lines(
+        settings,
+        _line_marker(5, "header breadcrumb", "A ⋅ B", "120%")
+        + _line_marker(6, "header breadcrumb", "A ⋅ B", "121%"),
+    )
+
+    with raises(SystemExit) as exc_info:
+        main(("check", "overflow", str(settings.paths.current_dir)))
+
+    assert exc_info.value.code == 1
+    out = capsys.readouterr().out
+    assert "no shrunk frame" in out
+    assert 'p.5 and 1 more  header breadcrumb wraps: "A ⋅ B": shorten it' in out
+
+    with raises(SystemExit):
+        main(("check", "overflow", str(settings.paths.current_dir), "--json"))
+
+    assert loads(capsys.readouterr().out) == [
+        {
+            "lang": "fr",
+            "kind": "line",
+            "ratio": "121%",
+            "page": 5,
+            "pages": [5, 6],
+            "where": "header breadcrumb",
+            "text": "A ⋅ B",
+            "fix": "shorten it",
+            "source": None,
+        }
+    ]
+
+
+def test_check_overflow_notes_a_build_that_did_not_record_lines(
+    tmp_path: Path, capsys: CaptureFixture[str]
+) -> None:
+    settings = _deck_settings(tmp_path)
+    main_typ = _handout_with_lines(settings, "")
+    marker_records.write(main_typ, ("formation-overflow",), "[]")
+
+    main(("check", "overflow", str(settings.paths.current_dir)))
+
+    captured = capsys.readouterr()
+    assert "no shrunk frame" in captured.out
+    assert "build it again" in captured.err

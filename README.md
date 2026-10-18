@@ -196,6 +196,12 @@ typst_ignore_system_fonts: true
   (`page`, `wrap`: the table's height over its height with no cell
   wrapped, as a percentage, and `overflow`: whether its longest words
   alone are wider than the frame) -- the table layout stays your theme's.
+- `line_marker_label`: the Typst metadata label (default `formation-line`)
+  `deckz check overflow` queries for header or footer lines that wrap
+  (`page`, `line`: which one, `text`, `ratio`: its width over its room,
+  `fix`: what to shorten, optional `frame`: true when that's in the page's
+  frame, whose `# Title` line deckz then names) -- measuring them stays
+  your theme's.
 - `file_extensions`: the extensions tried, in order, when resolving a file
   include. Defaults to `[".md"]`.
 - `labs`: settings for the `deckz labs` commands, e.g.:
@@ -886,7 +892,8 @@ The main commands:
   content checks -- lab notebook IDs valid and unique (`lab-ids`), fr/en
   lab notebook pairs present and in sync (`lab-pairs`), hands-on notebooks
   with no stored outputs and demos with code with some, shown by Colab (no
-  `private_outputs`) (`lab-outputs`), nothing that looks like a credential
+  `private_outputs`), and no demo cell whose outputs are only whitespace
+  (`lab-outputs`), nothing that looks like a credential
   in a notebook's cells or stored text outputs (`lab-secrets`; the labs
   are public), notebooks in deckz's canonical JSON (`lab-format`, fixed by
   `deckz labs fmt`),
@@ -911,7 +918,15 @@ The main commands:
   already built (`deckz run --handout`, or a `deckz run file`/`deckz run
   section` preview), and reads what its compilation recorded (a build by
   an older deckz is queried again and matched by title with the PDF's
-  text, from poppler's `pdftotext`). Exits 1 if any frame was shrunk. `--lang en` checks the English build (`deckz run
+  text, from poppler's `pdftotext`). Then the header and footer lines that
+  wrap onto a second line (the `line_marker_label` marker, `<formation-line>`
+  by default: a long section title in the breadcrumb, a long frame title,
+  a long deck title in the footer), each with its text, its pages and what
+  to shorten (a frame title with its `# Title`'s file and line); a
+  handout built by an older deckz, which didn't record them, gets a note
+  to build it again. Exits 1 if any frame was shrunk or any line wraps.
+  `--json` tags each finding with its `kind` (`frame` or `line`, `table`
+  with `--tables`). `--lang en` checks the English build (`deckz run
   --lang en`, kept under `en/` in the build and PDF directories), `--lang
   fr en` both, each frame tagged with its language. `--tables`
   reports the tables instead (the

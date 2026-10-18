@@ -159,6 +159,83 @@ def test_lab_outputs_accepts_a_hands_on_without_and_a_demo_with_outputs(
     assert lab_outputs(_settings(tmp_path)) == []
 
 
+def _demo_with_cells(tmp_path: Path, *cells: dict) -> None:
+    _write(
+        tmp_path / "labs" / "notebooks" / "topic" / "demo-fr.ipynb",
+        json.dumps({"metadata": {}, "cells": list(cells)}),
+    )
+
+
+def _code(*outputs: dict) -> dict:
+    return {"cell_type": "code", "source": ["1"], "outputs": list(outputs)}
+
+
+_SHOWN = {"output_type": "stream", "name": "stdout", "text": ["done\n"]}
+
+
+def test_lab_outputs_flags_a_demo_cell_with_only_blank_outputs(
+    tmp_path: Path,
+) -> None:
+    init_repository(str(tmp_path))
+    _demo_with_cells(
+        tmp_path,
+        _code(_SHOWN),
+        _code({"output_type": "stream", "name": "stdout", "text": ["\n", " \n"]}),
+        _code(
+            {"output_type": "stream", "name": "stderr", "text": "\n"},
+            {"output_type": "execute_result", "data": {"text/plain": ["  "]}},
+        ),
+    )
+
+    problems = lab_outputs(_settings(tmp_path))
+
+    assert len(problems) == 1
+    assert "demo-fr.ipynb" in problems[0]
+    assert "[1], [2]" in problems[0]
+    assert "only whitespace" in problems[0]
+    assert "deckz labs outputs" in problems[0]
+
+
+def test_lab_outputs_accepts_demo_cells_without_or_with_visible_outputs(
+    tmp_path: Path,
+) -> None:
+    init_repository(str(tmp_path))
+    _demo_with_cells(
+        tmp_path,
+        _code(_SHOWN),
+        _code(),
+        _code(
+            {"output_type": "stream", "name": "stdout", "text": "\n"},
+            {"output_type": "display_data", "data": {"image/png": "iVBOR"}},
+        ),
+        _code({"output_type": "error", "ename": "E", "evalue": "", "traceback": []}),
+        _code({"output_type": "display_data", "data": {"text/html": ["<b>x</b>"]}}),
+    )
+
+    assert lab_outputs(_settings(tmp_path)) == []
+
+
+def test_lab_outputs_does_not_flag_blank_outputs_in_a_hands_on(
+    tmp_path: Path,
+) -> None:
+    # A hands-on has its own, stronger problem: any stored output.
+    init_repository(str(tmp_path))
+    _write(
+        tmp_path / "labs" / "notebooks" / "topic" / "hands-on-fr.ipynb",
+        json.dumps(
+            {
+                "metadata": {},
+                "cells": [_code({"output_type": "stream", "text": "\n"})],
+            }
+        ),
+    )
+
+    problems = lab_outputs(_settings(tmp_path))
+
+    assert len(problems) == 1
+    assert "hands-on notebook has stored outputs" in problems[0]
+
+
 def test_asset_credits_flags_latex_in_a_credit_line(tmp_path: Path) -> None:
     init_repository(str(tmp_path))
     _write(

@@ -20,7 +20,7 @@ def check_overflow(
     langs: Langs = ("fr",),
     json: bool = False,
 ) -> None:
-    """Report a built handout's shrunk-to-fit frames, worst first.
+    """Report a built handout's shrunk-to-fit frames and wrapped lines, worst first.
 
     Needs the handout already built (`deckz run --workdir DECK_DIR --handout
     --no-presentation --no-print`, or a `deckz run file`/`deckz run section`
@@ -34,7 +34,18 @@ def check_overflow(
     `GlobalSettings.overflow_marker_label`), prints its language, shrink
     ratio, page, frame title and the content file and line of its `# Title`
     (with an older build, every file a title matches, "?" when none did),
-    one language after the other. Exits 1 if any frame was shrunk.
+    one language after the other.
+
+    Then, from the `line_marker_label` markers (see
+    `GlobalSettings.line_marker_label`), the header and footer lines that
+    wrap onto a second line (a long section title in the breadcrumb, over
+    the frame title; a long frame title, out of the header; a long deck
+    title in the footer, past the page bottom): each one's language, width
+    over its room, first page and how many pages show it, which line, its
+    text, what to shorten and, for a frame title, its `# Title`'s file and
+    line. A handout built by an
+    older deckz, which didn't record them, gets a note to build it again.
+    Exits 1 if any frame was shrunk or any line wraps.
 
     With `--tables`, reports the tables instead, from the
     `table_marker_label` markers (see `GlobalSettings.table_marker_label`),
@@ -50,10 +61,11 @@ def check_overflow(
         langs: Languages whose builds to check, English builds being kept
             under `en/` in the build and PDF directories
         json: Print the findings as a JSON array instead, each with its
-            "lang"
+            "lang" and "kind" ("frame" or "line"; "table" with `--tables`)
 
     """
     from sys import exit as sys_exit
+    from sys import stderr
 
     from ...configuring.settings import DeckSettings
 
@@ -63,11 +75,22 @@ def check_overflow(
         _report_tables(settings, langs, json=json)
         return
 
-    from ...analyzing.overflow import shrunk_frames
+    from ...analyzing.overflow import shrunk_frames, wrapped_lines
 
     frames = [
         (lang, frame) for lang in langs for frame in shrunk_frames(settings, lang=lang)
     ]
+    lines = []
+    for lang in langs:
+        found = wrapped_lines(settings, lang=lang)
+        if found is None:
+            print(
+                f"{lang}: header and footer lines not checked: the handout was built "
+                "by a deckz that didn't record them, build it again",
+                file=stderr,
+            )
+        else:
+            lines += [(lang, line) for line in found]
 
     if json:
         from .._presentation import print_json
@@ -76,6 +99,7 @@ def check_overflow(
             [
                 {
                     "lang": lang,
+                    "kind": "frame",
                     "ratio": frame.ratio,
                     "page": frame.page,
                     "title": frame.title,
@@ -84,15 +108,36 @@ def check_overflow(
                 }
                 for lang, frame in frames
             ]
+            + [
+                {
+                    "lang": lang,
+                    "kind": "line",
+                    "ratio": line.ratio,
+                    "page": line.pages[0],
+                    "pages": list(line.pages),
+                    "where": line.line,
+                    "text": line.text,
+                    "fix": line.fix,
+                    "source": line.source,
+                }
+                for lang, line in lines
+            ]
         )
-    elif not frames:
-        print("no shrunk frame")
     else:
+        if not frames:
+            print("no shrunk frame")
         for lang, frame in frames:
             sources = _sources(frame.sources, frame.line)
             print(f"{lang}  {frame.ratio:>7}  p.{frame.page}  {frame.title}  {sources}")
+        for lang, line in lines:
+            more = f" and {len(line.pages) - 1} more" if len(line.pages) > 1 else ""
+            where = f"  {line.source}" if line.source else ""
+            print(
+                f"{lang}  {line.ratio:>7}  p.{line.pages[0]}{more}  {line.line} "
+                f'wraps: "{line.text}": {line.fix}{where}'
+            )
 
-    if frames:
+    if frames or lines:
         sys_exit(1)
 
 
@@ -118,6 +163,7 @@ def _report_tables(
             [
                 {
                     "lang": lang,
+                    "kind": "table",
                     "wrap": table.wrap,
                     "overflow": table.overflow,
                     "page": table.page,

@@ -453,7 +453,12 @@ def test_show_frames_reads_what_the_build_recorded(
     record = build / "abc-handout.markers.json"
     recorded = json.loads(record.read_text(encoding="utf8"))
     # Every label deckz reads, even those no marker has.
-    assert recorded.keys() == {"deckz-frame", "formation-overflow", "formation-table"}
+    assert recorded.keys() == {
+        "deckz-frame",
+        "formation-overflow",
+        "formation-table",
+        "formation-line",
+    }
     markers = recorded["deckz-frame"]
     assert [marker["index"] for marker in markers] == [0, 0]
     # A record is only read while it's as new as the PDF: shift its pages
@@ -494,12 +499,44 @@ def test_check_overflow_names_the_shrunk_frame_s_line(
     assert json.loads(capsys.readouterr().out) == [
         {
             "lang": "fr",
+            "kind": "frame",
             "ratio": "90%",
             "page": hello,
             "title": "Hello",
             "sources": ["content/greeting/hello.md"],
             "line": 1,
         }
+    ]
+
+
+def test_check_overflow_names_a_wrapped_frame_title_s_line(
+    working_dir: Path, capsys: CaptureFixture[str]
+) -> None:
+    main(_RUN_ARGS)
+    record = working_dir / ".build" / "abc-handout" / "abc-handout.markers.json"
+    recorded = json.loads(record.read_text(encoding="utf8"))
+    hello = next(
+        marker["page"]
+        for marker in recorded["deckz-frame"]
+        if "greeting" in marker["fragment"]
+    )
+    # What the theme would record for a frame title too long for its line,
+    # and for a footer, whose fix isn't in the frame.
+    marker = {"line": "frame title", "text": "Hello", "ratio": "130%"}
+    recorded["formation-line"] = [
+        {**marker, "page": hello, "fix": "shorten it", "frame": True},
+        {**marker, "line": "footer", "page": hello, "fix": "shorten the deck title"},
+    ]
+    record.write_text(json.dumps(recorded), encoding="utf8")
+    capsys.readouterr()
+
+    with raises(SystemExit):
+        main(("check", "overflow", "--json"))
+
+    found = json.loads(capsys.readouterr().out)
+    assert [(item["where"], item["source"]) for item in found] == [
+        ("frame title", "content/greeting/hello.md:1"),
+        ("footer", None),
     ]
 
 

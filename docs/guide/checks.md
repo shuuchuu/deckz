@@ -9,7 +9,7 @@ nightly in CI): they're slow, or need the network.
 |---|---|---|
 | `lab-ids` | every notebook has a valid, unique published ID | `deckz labs ids` |
 | `lab-pairs` | every lab exists in French and English, with the same cells and code | translate the missing one; `deckz labs compare <lab dir>` |
-| `lab-outputs` | hands-on notebooks store no outputs; demos store a full run's | clear them, or run the demo and `deckz labs outputs` |
+| `lab-outputs` | hands-on notebooks store no outputs; demos store a full run's, none of them blank | clear them, or run the demo and `deckz labs outputs` |
 | `lab-secrets` | no token or password in a notebook (they're public) | remove it, revoke it; `labs.not_secrets` for a false positive |
 | `lab-format` | notebooks in deckz's JSON style | `deckz labs fmt <notebook>` |
 | `asset-credits` | image credit lines in Markdown, not LaTeX | rewrite the line in Markdown |

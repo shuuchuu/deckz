@@ -23,7 +23,7 @@ import json
 import re
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..exceptions import LabIdConflictError
 from ..labs.comparison import compare_pairs, missing_notebooks
@@ -110,6 +110,13 @@ def lab_outputs(settings: "GlobalSettings") -> list[str]:
                 f"{where}: demo notebook has no stored outputs: run it, then "
                 f"`deckz labs outputs <executed copy> {where}`"
             )
+        elif kind == "demo" and (blank := _blank_output_cells(cells)):
+            numbers = ", ".join(f"[{i}]" for i in blank)
+            problems.append(
+                f"{where}: demo notebook cells {numbers} (as `deckz labs dump` "
+                "numbers them) store outputs that are only whitespace: run it "
+                f"again, then `deckz labs outputs <executed copy> {where}`"
+            )
         colab = notebook.get("metadata", {}).get("colab", {})
         if kind == "demo" and colab.get("private_outputs"):
             problems.append(
@@ -118,6 +125,38 @@ def lab_outputs(settings: "GlobalSettings") -> list[str]:
                 "(Colab: Edit > Notebook settings)"
             )
     return problems
+
+
+def _blank_output_cells(cells: list[dict[str, Any]]) -> list[int]:
+    # The code cells whose stored outputs show nothing: each one text (a
+    # stream, or a result with only `text/*` data) of whitespace alone, as
+    # `deckz labs outputs` once wrote for `\r\n` lines. A cell without any
+    # output (imports, definitions) is fine, and so is one with an image or
+    # an error next to blank text.
+    return [
+        i
+        for i, cell in enumerate(cells)
+        if cell.get("cell_type") == "code"
+        and cell.get("outputs")
+        and all(_blank_text_output(output) for output in cell["outputs"])
+    ]
+
+
+def _blank_text_output(output: dict[str, Any]) -> bool:
+    output_type = output.get("output_type")
+    if output_type == "stream":
+        texts = [output.get("text", "")]
+    elif output_type in {"execute_result", "display_data"}:
+        data = output.get("data", {})
+        if not data or any(not mime.startswith("text/") for mime in data):
+            return False
+        texts = list(data.values())
+    else:
+        return False
+    return all(
+        not "".join(text if isinstance(text, list) else [text]).strip()
+        for text in texts
+    )
 
 
 def _notebooks(settings: "GlobalSettings") -> list[Path]:

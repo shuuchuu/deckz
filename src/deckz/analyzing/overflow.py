@@ -1,14 +1,17 @@
-"""Find a built handout's shrunk-to-fit frames and wrapped tables, with their sources.
+"""Find a built handout's shrunk frames, wrapped tables and lines, with their sources.
 
 The target repo's Typst theme emits one `settings.overflow_marker_label`
 metadata marker per frame it had to shrink to fit the page (`ratio`, `page`),
-and one `settings.table_marker_label` marker per table it laid out (`page`,
+one `settings.table_marker_label` marker per table it laid out (`page`,
 `wrap`: the table's height over its height with no cell wrapped, as a
 percentage, and `overflow`: whether its longest words alone are wider than the
-frame). deckz's business is only to query and report them, not to produce
-them: the shrinking and the table layout stay the theme's. This reads the
-handout already built by `deckz run --handout` (or a `deckz run file`/`deckz
-run section` preview) -- the markers its compilation recorded
+frame), and one `settings.line_marker_label` marker per page whose header or
+footer line wraps (`page`, `line`, `text`, `ratio`: its width over its room,
+`fix`: what to shorten, `frame`: whether that's in the page's frame). deckz's
+business is only to query and report them, not to produce them: the
+shrinking and the layouts stay the theme's. This reads the handout already
+built by `deckz run --handout` (or a `deckz run file`/`deckz run section`
+preview) -- the markers its compilation recorded
 (`deckz.components.marker_records`), and each page's frame, content file and
 line (`deckz.analyzing.frames`) -- it doesn't build anything itself.
 
@@ -25,6 +28,7 @@ title differing from its heading's text), every candidate source is listed.
 import re
 import subprocess
 from collections.abc import Collection
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -62,6 +66,25 @@ class ShrunkFrame:
     """The content file(s) building this frame, or `("?",)` if none matched."""
     line: int | None = None
     """The frame's `# Title` line in its only source, if known."""
+
+
+@dataclass(frozen=True)
+class WrappedLine:
+    """A header or footer line that wraps, on one or more handout pages."""
+
+    line: str
+    """Which line, as the theme names it (e.g. `footer`)."""
+    text: str
+    """Its plain text."""
+    ratio: str
+    """Its width over its room, on its worst page (above `"100%"`)."""
+    pages: tuple[int, ...]
+    """Every page where it wraps, in order."""
+    fix: str
+    """What to shorten, as the theme words it."""
+    source: str | None = None
+    """`<content file>:<line>` of its frame's `# Title`, for a line whose fix \
+    is in the frame (the marker's `frame`, e.g. the frame title), if known."""
 
 
 @dataclass(frozen=True)
@@ -137,17 +160,14 @@ def _headings(
     return found
 
 
-def _locate(
-    settings: "DeckSettings", label: str, *, lang: "Lang", query: bool
-) -> list[_Located]:
-    """Every `label` marker of the built handout, with its frame and sources.
+def _handout(settings: "DeckSettings", lang: "Lang") -> tuple[Path, Path, Path]:
+    """The built handout's files.
 
     Returns:
-        One `_Located` per marker, in document order.
+        Its build directory, main Typst file and PDF.
 
     Raises:
-        DeckzError: If the deck's handout hasn't been built, or, without \
-            `query`, if its build recorded no markers.
+        DeckzError: If the deck's handout hasn't been built.
     """
     paths = settings.paths
     name = deck_name_from_dir(paths.current_dir)
@@ -160,7 +180,22 @@ def _locate(
             f"(`deckz run --handout --lang {lang}`)"
         )
         raise DeckzError(msg)
+    return build_dir, main_typ, pdf
 
+
+def _locate(
+    settings: "DeckSettings", label: str, *, lang: "Lang", query: bool
+) -> list[_Located]:
+    """Every `label` marker of the built handout, with its frame and sources.
+
+    Returns:
+        One `_Located` per marker, in document order.
+
+    Raises:
+        DeckzError: If the deck's handout hasn't been built, or, without \
+            `query`, if its build recorded no markers.
+    """
+    build_dir, main_typ, pdf = _handout(settings, lang)
     markers = marker_records.recorded(main_typ, label)
     if markers is None:
         if not query:
@@ -288,3 +323,53 @@ def wrapped_tables(
         )
     ]
     return sorted(tables, key=lambda table: -_percent(table.wrap))
+
+
+def wrapped_lines(
+    settings: "DeckSettings", *, lang: "Lang" = "fr", query: bool = True
+) -> list[WrappedLine] | None:
+    """Every header or footer line of the built handout that wraps, worst first.
+
+    Needs the handout already built, in `lang` (see `shrunk_frames`, also
+    for `query`). The same line wrapping on several pages (a long section
+    title in every breadcrumb of its frames, a long footer on every page) is
+    one `WrappedLine`.
+
+    Returns:
+        One `WrappedLine` per line and text, sorted by `ratio` descending; \
+        None when the handout's build recorded markers but not these (an \
+        older deckz's build: build it again), or, without `query`, recorded \
+        none. Raises a `DeckzError` if the deck's handout hasn't been built.
+    """
+    label = settings.line_marker_label
+    _, main_typ, pdf = _handout(settings, lang)
+    markers = marker_records.recorded(main_typ, label)
+    if markers is None:
+        if not query or marker_records.recorded_without(main_typ, label):
+            return None
+        markers = query_markers(settings, main_typ, label)
+    by_page = {}
+    if any(marker.get("frame") for marker in markers):
+        # Built before deckz marked frames: no source, only pages.
+        with suppress(DeckzError):
+            by_page = {
+                frame.page: frame for frame in frames(settings, pdf, query=query)
+            }
+    grouped: dict[tuple[str, str, str | None], list[dict]] = {}
+    for marker in markers:
+        frame = by_page.get(marker["page"]) if marker.get("frame") else None
+        source = f"{frame.file}:{frame.line}" if frame and frame.file else None
+        key = (marker["line"], marker["text"], source)
+        grouped.setdefault(key, []).append(marker)
+    lines = [
+        WrappedLine(
+            line=line,
+            text=text,
+            ratio=max((found["ratio"] for found in group), key=_percent),
+            pages=tuple(found["page"] for found in group),
+            fix=group[0]["fix"],
+            source=source,
+        )
+        for (line, text, source), group in grouped.items()
+    ]
+    return sorted(lines, key=lambda line: -_percent(line.ratio))

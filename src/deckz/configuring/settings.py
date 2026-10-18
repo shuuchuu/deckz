@@ -313,6 +313,17 @@ class GlobalSettings(BaseModel):
     alone are wider than the frame) keys; the table layout itself stays \
     the theme's.
     """
+    line_marker_label: str = "formation-line"
+    """Typst label `deckz check overflow` queries for lines that wrap.
+
+    The target repo's Typst theme emits one `<label>` metadata value per \
+    page whose header or footer line, meant to fit on one line, wraps: \
+    `page`, `line` (which one, e.g. `footer`), `text` (its plain text), \
+    `ratio` (its width over its room, as a percentage), `fix` (what to \
+    shorten, in the repo's terms) and, optionally, `frame` (true when \
+    that's in the page's frame, whose `# Title` line is then reported); \
+    the check itself stays the theme's.
+    """
     pandoc_command: tuple[str, ...] = ()
     """Command converting a rendered Markdown fragment to Typst.
 

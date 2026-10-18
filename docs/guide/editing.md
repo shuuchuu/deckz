@@ -43,7 +43,8 @@ The error names the file. Common causes:
 
 ## Checking the result
 
-- `deckz check overflow <deck>`: the frames shrunk to fit, worst first (`--tables` for
+- `deckz check overflow <deck>`: the frames shrunk to fit, worst first, and the header
+  or footer lines that wrap onto a second line, with what to shorten (`--tables` for
   the tables whose cells wrap most). A frame shrunk below about 97% is too full.
 - `deckz run --html` builds the deck as a web page too; `deckz check parity <deck>`
   compares it with the PDF, slide by slide (`--lang fr en` for both languages, each

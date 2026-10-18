@@ -1,13 +1,16 @@
 """What each Typst compilation records of its document's metadata markers.
 
 deckz reads a few Typst metadata markers in built documents: its own frame
-markers (`frame_markers`), and the theme's shrunk frames and tables
-(`GlobalSettings.overflow_marker_label`, `table_marker_label`). Querying a
-document compiles it, as long as building it, so the compilation that builds
-it queries them too, for a few milliseconds, and records them next to its
-PDF: `<main>.markers.json`, each label's values in document order. Readers
-use the record while it's at least as new as the PDF (`recorded`), and fall
-back to a query of their own for a build no compilation recorded.
+markers (`frame_markers`), and the theme's shrunk frames, tables and wrapped
+lines (`GlobalSettings.overflow_marker_label`, `table_marker_label`,
+`line_marker_label`). Querying a document compiles it, as long as building
+it, so the compilation that builds it queries them too, for a few
+milliseconds, and records them next to its PDF: `<main>.markers.json`, each
+label's values in document order. Readers use the record while it's at least
+as new as the PDF (`recorded`), and fall back to a query of their own for a
+build no compilation recorded. A record without a label (an older deckz's,
+that didn't query it) is not a query's business: its build is the one to
+redo (`recorded_without`).
 """
 
 import json
@@ -73,3 +76,20 @@ def recorded(main: Path, label: str) -> list | None:
     except (FileNotFoundError, json.JSONDecodeError):
         return None
     return markers.get(label)
+
+
+def recorded_without(main: Path, label: str) -> bool:
+    """Whether the last compilation of `main` recorded markers, but not `label`'s.
+
+    Returns:
+        True when there's a record as new as `main`'s PDF, written by a \
+        deckz that didn't query `label`.
+    """
+    record = record_path(main)
+    try:
+        if record.stat().st_mtime_ns < main.with_suffix(".pdf").stat().st_mtime_ns:
+            return False
+        markers = json.loads(record.read_text(encoding="utf8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return False
+    return label not in markers
