@@ -537,6 +537,7 @@ def problems_panel(
         if watch and watch.deck == directory and watch.lang == lang:
             groups.append(problems.build_problems(path, watch.snapshot()))
         groups.append(problems.shrunk(path, directory, lang))
+        groups.append(problems.wrapped(path, directory, lang))
     groups += report.result or ()
     shown = [group for group in groups if group is not None]
     query = f"?formation={quote(formation)}&lang={lang}" if formation else ""

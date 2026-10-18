@@ -7,9 +7,10 @@ Two sources:
   deckz in the background (`studioz.background`), and again whenever the
   workspace's files changed since: the checks take some 10 s on a large
   repository;
-- the deck on screen: its live build's failure (`studioz.watches`), and the
-  frames its last build shrank to fit the page (`deckz.analyzing.overflow`,
-  from what the build recorded).
+- the deck on screen: its live build's failure (`studioz.watches`), the
+  frames its last build shrank to fit the page and the header or footer
+  lines it wrapped (`deckz.analyzing.overflow`, from what the build
+  recorded).
 
 Each problem names the file, and line, it's about when it can, so that a
 page can open it in the editor; a lab notebook's links to its page.
@@ -20,7 +21,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from deckz.analyzing.overflow import shrunk_frames
+from deckz.analyzing.overflow import shrunk_frames, wrapped_lines
 from deckz.configuring.settings import DeckSettings
 from deckz.exceptions import DeckzError
 from deckz.models import Lang
@@ -244,3 +245,46 @@ def shrunk(workspace: Path, deck: Path, lang: Lang) -> Group | None:
             )
         )
     return Group("Cadres réduits pour tenir", tuple(problems)) if problems else None
+
+
+# The header and footer lines the theme marks, by its name for them.
+_LINES = {
+    "header breadcrumb": "Fil d'Ariane",
+    "frame title": "Titre du cadre",
+    "footer": "Pied de page",
+}
+
+
+def _pages(pages: tuple[int, ...]) -> str:
+    shown = ", ".join(str(page) for page in pages[:5])
+    more = f" et {len(pages) - 5} autres" if len(pages) > 5 else ""
+    return f"p. {shown}{more}"
+
+
+def wrapped(workspace: Path, deck: Path, lang: Lang) -> Group | None:
+    """The header and footer lines the deck's last handout build wrapped.
+
+    Returns:
+        Their group, None if there's none or no build recorded them.
+    """
+    try:
+        found = wrapped_lines(DeckSettings.from_yaml(deck), lang=lang, query=False)
+    except DeckzError:
+        return None
+    problems = []
+    for line in found or ():
+        file, _, number = (line.source or "").rpartition(":")
+        if not file or sources.source(workspace, file) is None:
+            file = ""
+        name = _LINES.get(line.line, line.line)
+        problems.append(
+            Problem(
+                f"{_pages(line.pages)} {name} sur deux lignes ({_ratio(line.ratio)})"
+                f" : « {line.text} »",
+                fix=line.fix,
+                file=file or None,
+                line=int(number) if file else None,
+                page=line.pages[0],
+            )
+        )
+    return Group("Lignes sur deux lignes", tuple(problems)) if problems else None

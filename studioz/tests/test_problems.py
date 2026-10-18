@@ -212,6 +212,44 @@ def test_panel_with_the_deck_s_shrunk_frames(
     assert "workspace-changed from:body" in page
 
 
+def test_panel_with_the_deck_s_wrapped_lines(
+    tmp_path: Path, repository: Path, workspace: Path
+) -> None:
+    _content(workspace)
+    panel = _panel(repository, _fake(tmp_path)[0])
+    deck = workspace / "client" / "abc"
+    build = deck / ".build" / "abc-handout"
+    fragment = build / "greeting" / "hello.md"
+    fragment.parent.mkdir(parents=True)
+    fragment.write_text("Intro\n# Hello\n\nText\n", encoding="utf8")
+    (build / "abc-handout.typ").write_text("", encoding="utf8")
+    (build / "abc-handout.pdf").write_bytes(b"%PDF-1.4")
+    (deck / "pdf").mkdir()
+    (deck / "pdf" / "abc-handout.pdf").write_bytes(b"%PDF-1.4")
+    title = {"line": "frame title", "text": "Hello", "fix": "shorten the title"}
+    footer = {"line": "footer", "text": "A long deck", "fix": "shorten deck_title"}
+    markers = {
+        "deckz-frame": [{"fragment": str(fragment), "index": 0, "page": 3}],
+        "formation-overflow": [],
+        "formation-line": [
+            {**title, "page": 3, "ratio": "112.5%", "frame": True},
+            *({**footer, "page": page, "ratio": "104%"} for page in range(1, 8)),
+        ],
+    }
+    (build / "abc-handout.markers.json").write_text(json.dumps(markers), "utf8")
+
+    page = panel("?formation=client/abc&lang=fr")
+
+    assert "Lignes sur deux lignes" in page
+    assert "p. 3 Titre du cadre sur deux lignes (112,5 %) : « Hello »" in page
+    assert 'data-file="content/greeting/hello.md"' in page
+    assert 'data-line="2"' in page
+    assert "shorten the title" in page
+    # The same footer on every page is one problem, its pages abridged.
+    assert "p. 1, 2, 3, 4, 5 et 2 autres Pied de page sur deux lignes" in page
+    assert "« A long deck »" in page
+
+
 def test_publication_panel(tmp_path: Path, repository: Path, workspace: Path) -> None:
     script = tmp_path / "fake_status.py"
     script.write_text(
