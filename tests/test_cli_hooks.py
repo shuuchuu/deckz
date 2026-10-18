@@ -57,39 +57,62 @@ def test_check_commit_msg_allows_a_synced_commit(repo: Path) -> None:
     main(("hooks", "check-commit-msg", str(message)))  # Should not raise.
 
 
-def test_check_commit_msg_refuses_a_one_sided_change_with_no_trailer(
-    repo: Path, caplog: LogCaptureFixture
-) -> None:
+def _one_sided(repo: Path) -> None:
+    """Commit a fr/en pair, then stage a change to its French side only."""
     _write(repo / "content" / "topic" / "topic.md", "fr v1")
     _write(repo / "content" / "topic" / "en" / "topic.md", "en v1")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-m", "Add topic")
     _write(repo / "content" / "topic" / "topic.md", "fr v2")
     _git(repo, "add", "-A")
+
+
+def test_check_commit_msg_marks_a_one_sided_change_pending(
+    repo: Path, caplog: LogCaptureFixture
+) -> None:
+    _one_sided(repo)
     message = repo / "msg.txt"
     message.write_text("Update fr\n", encoding="utf-8")
+
+    main(("hooks", "check-commit-msg", str(message)))
+
+    assert message.read_text(encoding="utf-8") == "Update fr\n\nLang-sync: pending\n"
+    assert "content/topic/topic.md (not content/topic/en/topic.md)" in caplog.text
+    assert "deckz i18n stale" in caplog.text
+    assert "deckz i18n mark-synced" in caplog.text
+
+
+def test_check_commit_msg_marks_above_the_editor_comments(repo: Path) -> None:
+    _one_sided(repo)
+    message = repo / "msg.txt"
+    message.write_text(
+        "Update fr\n\n# Lang-sync: en-only (a comment, not read)\n"
+        "# ------------------------ >8 ------------------------\n"
+        "+Lang-sync: fr-only (in the diff, not read)\n",
+        encoding="utf-8",
+    )
+
+    main(("hooks", "check-commit-msg", str(message)))
+
+    assert message.read_text(encoding="utf-8").startswith(
+        "Update fr\n\nLang-sync: pending\n\n# Lang-sync: en-only"
+    )
+
+
+def test_check_commit_msg_refuses_a_lang_sync_line_not_read(
+    repo: Path, caplog: LogCaptureFixture
+) -> None:
+    _one_sided(repo)
+    message = repo / "msg.txt"
+    text = "Fix typo\n\nLang-sync: fr only (typo)\n"
+    message.write_text(text, encoding="utf-8")
 
     with raises(SystemExit) as exc_info:
         main(("hooks", "check-commit-msg", str(message)))
 
     assert exc_info.value.code == 1
-    assert "content/topic/topic.md (not content/topic/en/topic.md)" in caplog.text
-    assert "Lang-sync: pending" in caplog.text
-    assert "Lang-sync: fr-only (<why>)" in caplog.text
-    assert "en-only" not in caplog.text
-
-
-def test_check_commit_msg_accepts_a_trailer(repo: Path) -> None:
-    _write(repo / "content" / "topic" / "topic.md", "fr v1")
-    _write(repo / "content" / "topic" / "en" / "topic.md", "en v1")
-    _git(repo, "add", "-A")
-    _git(repo, "commit", "-m", "Add topic")
-    _write(repo / "content" / "topic" / "topic.md", "fr v2")
-    _git(repo, "add", "-A")
-    message = repo / "msg.txt"
-    message.write_text("Fix typo\n\nLang-sync: fr-only (typo)\n", encoding="utf-8")
-
-    main(("hooks", "check-commit-msg", str(message)))  # Should not raise.
+    assert "Lang-sync: fr only (typo)\nisn't read" in caplog.text
+    assert message.read_text(encoding="utf-8") == text
 
 
 def test_hooks_install_then_commit_runs_the_hook(repo: Path) -> None:
@@ -98,6 +121,18 @@ def test_hooks_install_then_commit_runs_the_hook(repo: Path) -> None:
     _git(repo, "add", "-A")
 
     _git(repo, "commit", "-m", "Init")  # Should not raise (nothing one-sided).
+    _one_sided(repo)
+
+    _git(repo, "commit", "-m", "Update fr")
+
+    message = subprocess.run(
+        ["git", "log", "-1", "--format=%B"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert message.strip() == "Update fr\n\nLang-sync: pending"
 
 
 def test_hooks_install_also_writes_claude_settings(repo: Path) -> None:
@@ -174,22 +209,30 @@ def test_session_start_then_stop_is_silent_without_a_change(
     assert capsys.readouterr().out == ""
 
 
-def test_check_commits_refuses_a_one_sided_commit(
+def test_check_commits_lists_a_commit_with_no_trailer(
     repo: Path, caplog: LogCaptureFixture
 ) -> None:
-    _write(repo / "content" / "topic" / "topic.md", "fr v1")
-    _write(repo / "content" / "topic" / "en" / "topic.md", "en v1")
-    _git(repo, "add", "-A")
-    _git(repo, "commit", "-m", "Add topic")
-    _write(repo / "content" / "topic" / "topic.md", "fr v2")
-    _git(repo, "commit", "-am", "Update fr")
+    _one_sided(repo)
+    _git(repo, "commit", "-m", "Update fr")
+
+    main(("hooks", "check-commits", "HEAD~1..HEAD"))  # Should not raise.
+
+    assert "leave a translation pending" in caplog.text
+    assert "Update fr" in caplog.text
+
+
+def test_check_commits_refuses_a_lang_sync_line_not_read(
+    repo: Path, caplog: LogCaptureFixture
+) -> None:
+    _one_sided(repo)
+    _git(repo, "commit", "-m", "Fix typo\n\nLang-sync: fronly (typo)")
 
     with raises(SystemExit) as exc_info:
         main(("hooks", "check-commits", "HEAD~1..HEAD"))
 
     assert exc_info.value.code == 1
-    assert "Update fr" in caplog.text
-    assert "content/topic/topic.md (not content/topic/en/topic.md)" in caplog.text
+    assert "Fix typo: Lang-sync: fronly (typo)" in caplog.text
+    assert "deckz i18n mark-synced" in caplog.text
 
 
 def test_check_commits_accepts_a_trailer(repo: Path) -> None:

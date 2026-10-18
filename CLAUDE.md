@@ -322,14 +322,17 @@ overwrite a hook file without deckz's own marker line unless `--force`
 unless named (slow, networked, or not yet passing ones).
 `deckz hooks install --ci` writes a GitHub Actions workflow
 (`hooks_install.ci_workflow`, from `deckz.yml`'s `ci` settings) running the
-same checks on every push and pull request, the trailer rule through
-`deckz hooks check-commits` (`i18n_stale.one_sided_commits`) on the commits
-themselves.
+same checks on every push and pull request, and `deckz hooks check-commits`
+(`i18n_stale.one_sided_commits`) on the commits themselves.
 The commit-msg hook (`deckz hooks check-commit-msg`, `cli/hooks/`) reuses
 `analyzing/i18n_stale.py`'s fr/en pairing (`content_pairs`/
-`notebook_pairs`/`lang_sync_kind`) to refuse, via `CommitRefusedError`, a
-commit whose staged diff touches one side of a pair (`staged_one_sided_pairs`)
-without a `Lang-sync` trailer in the draft message. Changes found later to need no
+`notebook_pairs`/`lang_sync_kind`) to mark (`mark_pending`, through `git
+interpret-trailers`) a commit whose staged diff touches one side of a pair
+(`staged_one_sided_pairs`) and whose draft message makes no choice `Lang-sync:
+pending`: refusing it protected nothing, since `stale_files` reads a commit with
+no trailer as pending anyway. It refuses (`CommitRefusedError`), and
+`check-commits` fails on, only a `Lang-sync` line that isn't read
+(`unread_lang_sync`), the author's choice it would lose. Changes found later to need no
 port leave `deckz i18n stale` through `deckz i18n mark-synced`
 (`i18n_stale.mark_synced`): an empty commit (`--only`, so nothing staged goes in)
 naming each file in a `Lang-synced` trailer, which the history walk counts as the

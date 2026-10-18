@@ -5,9 +5,9 @@ Each installed git hook (in the repository's hooks directory: git's
 that shells back out to `deckz`: the pre-commit hook runs `deckz check
 --staged` (so the checks apply to the commit about to be made, not the
 unstaged working tree); the commit-msg hook runs `deckz hooks
-check-commit-msg`, refusing a commit that changes one side of a fr/en pair
-without a `Lang-sync` trailer (see
-`deckz.analyzing.i18n_stale.staged_one_sided_pairs`).
+check-commit-msg`, marking a commit that changes one side of a fr/en pair
+without a `Lang-sync` trailer `Lang-sync: pending` (see
+`deckz.analyzing.i18n_stale.mark_pending`).
 
 A hook file deckz didn't write itself (no `_MARKER` line) is left alone
 unless `force` is passed, so installing never silently clobbers a repo's

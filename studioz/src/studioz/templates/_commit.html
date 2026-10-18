@@ -52,9 +52,9 @@
                 title="L'agent porte la modification dans l'autre langue ; vous cochez ensuite les deux fichiers">Traduire avec l'agent</button></li>
       {% endfor %}
     </ul>
-    <p>Portez la modification et cochez-la aussi, ou dites pourquoi
-      (le dépôt l'exige : c'est le trailer <code>Lang-sync</code> du message) :</p>
-    <label><input type="radio" name="lang_sync" value="pending"{% if draft.lang_sync == "pending" %} checked{% endif %}>
+    <p>Portez la modification et cochez-la aussi, ou dites-le dans le message
+      (son trailer <code>Lang-sync</code>) :</p>
+    <label><input type="radio" name="lang_sync" value="pending"{% if draft.lang_sync != "only" %} checked{% endif %}>
       La traduction suivra dans un prochain commit (<code>deckz i18n stale</code> la rappelle d'ici là)</label>
     {% if sides | length == 1 %}
     <label><input type="radio" name="lang_sync" value="only"{% if draft.lang_sync == "only" %} checked{% endif %}>

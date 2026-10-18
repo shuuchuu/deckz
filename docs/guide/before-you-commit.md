@@ -23,8 +23,9 @@ Stage the files you changed (`git add <files>`) and commit. Two git hooks run:
 
 - **pre-commit** runs the content checks on what you're committing (see
   [Checks](checks.md)); fix what it reports, and commit again;
-- **commit-msg** asks for a `Lang-sync` line when the commit changes one language of
-  a pair only (see [Translating](translating.md)).
+- **commit-msg** marks a commit changing one language of a pair only `Lang-sync:
+  pending`, unless you said there's nothing to port (see
+  [Translating](translating.md)).
 
 Never skip them (`--no-verify`): CI runs the same checks on every push anyway.
 

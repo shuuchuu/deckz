@@ -953,18 +953,19 @@ The main commands:
   hooks directory (git's `core.hooksPath` when set, so a repo can commit
   them, else `.git/hooks/`). Each hook, like each Claude Code hook
   command, runs `deckz` from the `PATH`, else `uv run --quiet deckz`.
-  The `commit-msg` hook refuses a commit that changes one side of a fr/en
-  content or lab notebook pair with no `Lang-sync` trailer (`fr-only
-  (<reason>)`/`en-only (<reason>)`/`pending`, see `deckz i18n stale`
-  above). Refuses to overwrite a hook file it didn't itself write, unless
+  The `commit-msg` hook marks a commit that changes one side of a fr/en
+  content or lab notebook pair with no `Lang-sync` trailer `Lang-sync:
+  pending` (or keeps the author's `fr-only (<reason>)`/`en-only
+  (<reason>)`, see `deckz i18n stale` above), and refuses one whose
+  `Lang-sync` line isn't read (misspelled, or not in the last paragraph). Refuses to overwrite a hook file it didn't itself write, unless
   `--force` is passed. Also adds deckz's generic Claude Code hooks to
   `.claude/settings.json` (safe to call repeatedly; every other key of
   the file is left untouched) -- see [Claude Code
   hooks](#claude-code-hooks). With `--ci`, also writes
   `.github/workflows/deckz.yml`, a GitHub Actions workflow giving every
   contributor's commits the hooks' checks, installed or not: `deckz check`
-  and `deckz hooks check-commits` (the `Lang-sync` rule, on the pushed or
-  proposed commits) on every push and pull request, and `deckz.yml`'s
+  and `deckz hooks check-commits` (the pushed or proposed commits'
+  `Lang-sync` lines, which must be read) on every push and pull request, and `deckz.yml`'s
   `ci.nightly_checks` every night. Its `ci` settings: `deckz_repository`
   and `deckz_ref` (a deckz checked out next to the repository, for one
   installing it from `../deckz`), `apt_packages` (system packages its

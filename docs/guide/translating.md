@@ -6,18 +6,22 @@ are either one string (the same in both languages) or a `{fr: ..., en: ...}` map
 
 ## Committing in one language
 
-You don't have to translate in the same commit. When a commit changes one side of a
-pair only, git asks you to say why, with a line at the end of the commit message,
-after a blank line:
+You don't have to translate in the same commit, nor say anything about it. When a
+commit changes one side of a pair only, the commit-msg hook adds this line at the end
+of its message:
 
 ```text
 Lang-sync: pending
 ```
 
-when the other language will be updated later, or `Lang-sync: fr-only (<why>)` /
-`Lang-sync: en-only (<why>)` when there's nothing to port (a typo, the language's own
-typography). The refusal message lists the files and the lines to paste; git keeps
-your message, so committing again is quick.
+and lists the files, which `deckz i18n stale` shows until the other language is
+updated. When there's nothing to port (a typo, the language's own typography), end
+the message yourself with `Lang-sync: fr-only (<why>)` or `Lang-sync: en-only
+(<why>)`, after a blank line, and the hook keeps it; forgot to, `deckz i18n
+mark-synced` (below) settles it later. The hook refuses a commit only when its
+`Lang-sync` line isn't read (misspelled, or not in the message's last paragraph),
+since your choice would be lost; git keeps your message, so committing again is
+quick.
 
 ## Catching up
 

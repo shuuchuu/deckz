@@ -149,17 +149,14 @@ def test_one_language_changed_asks_why(committer: TestClient, workspace: Path) -
     assert 'data-agent-task="traduire"' in page
     assert '{"changed": "content/a/x.md", "other": "content/a/en/x.md"}' in page
     assert 'value="only"' in page
+    assert 'value="pending" checked' in page
 
-    page = committer.post(
-        COMMIT, data={"path": X, "message": "Typo"}, headers=ORIGIN
-    ).text
-    assert "sans leur version dans l'autre langue" in page
-    assert _git(workspace, "rev-parse", "HEAD") == head
     page = committer.post(
         COMMIT, data={"path": X, "message": "Typo", "lang_sync": "only"}, headers=ORIGIN
     ).text
     assert "Dites pourquoi" in page
     assert ">Typo</textarea>" in page
+    assert _git(workspace, "rev-parse", "HEAD") == head
 
     committer.post(
         COMMIT,
@@ -174,13 +171,13 @@ def test_one_language_changed_asks_why(committer: TestClient, workspace: Path) -
     assert _committed(workspace)[0] == "Typo\n\nLang-sync: fr-only (une coquille)"
 
 
-def test_lang_sync_pending_or_written_in_the_message(
+def test_lang_sync_pending_by_default_or_written_in_the_message(
     committer: TestClient, workspace: Path
 ) -> None:
     _write(workspace, "content/a/en/x.md", "changed\n")
     committer.post(
         COMMIT,
-        data={"path": EN, "message": "New text", "lang_sync": "pending"},
+        data={"path": EN, "message": "New text"},
         headers=ORIGIN,
     )
     assert _committed(workspace)[0] == "New text\n\nLang-sync: pending"

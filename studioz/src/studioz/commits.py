@@ -110,8 +110,9 @@ def lang_sync_trailer(
 
     Args:
         one_sided: The pairs the commit changes on one side only.
-        choice: `pending` (the other language comes in a later commit) or \
-            `only` (nothing to port, for `reason`).
+        choice: `only` (nothing to port, for `reason`), else the other \
+            language comes in a later commit (`pending`, as deckz's \
+            commit-msg hook marks a commit making no choice).
         reason: Why, for `only`.
 
     Returns:
@@ -120,14 +121,8 @@ def lang_sync_trailer(
     Raises:
         ValueError: With what's missing, in French.
     """
-    if choice == "pending":
-        return "pending"
     if choice != "only":
-        msg = (
-            "Ces fichiers changent sans leur version dans l'autre langue : "
-            "cochez-la aussi, ou dites pourquoi."
-        )
-        raise ValueError(msg)
+        return "pending"
     sides = {change.changed for change in one_sided}
     if len(sides) != 1:
         msg = (

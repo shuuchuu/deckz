@@ -159,7 +159,8 @@ def translation_section(
         StatusItem(
             f"{change.changed_path}: changed without {change.other_path} "
             "(not committed yet)",
-            "port the change, or commit it with a Lang-sync trailer",
+            "port the change, or commit it: it stays in `deckz i18n stale` "
+            "until ported",
         )
         for change in one_sided(uncommitted, lang_pairs(settings))
     ]

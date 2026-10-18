@@ -311,8 +311,9 @@ def check(workspace: Path, up: Upstream, sha: str) -> Outcome:
     """Check the commits up to `sha` as they would be pushed.
 
     `deckz check --staged`, run by the workspace's own deckz with an index
-    holding `sha` (whatever the workspace's files are), then the `Lang-sync`
-    rule on each commit not on the upstream branch.
+    holding `sha` (whatever the workspace's files are), then each commit not
+    on the upstream branch's `Lang-sync` line, if any, read (`deckz hooks
+    check-commits`).
 
     Returns:
         Whether they pass, with the checks' output.
@@ -341,7 +342,7 @@ def check(workspace: Path, up: Upstream, sha: str) -> Outcome:
     )
     if code:
         return Outcome(
-            False, "Un commit change une seule langue sans trailer Lang-sync.", trailers
+            False, "Un commit a une ligne Lang-sync que deckz ne lit pas.", trailers
         )
     return Outcome(True, "Les vérifications passent.", output, sha)
 

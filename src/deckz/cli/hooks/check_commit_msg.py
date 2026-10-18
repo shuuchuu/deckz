@@ -5,51 +5,38 @@ from . import app
 
 @app.command(name="check-commit-msg")
 def check_commit_msg(message_file: Path, /, *, workdir: Path = Path()) -> None:
-    """Refuse a commit changing one side of a fr/en pair with no `Lang-sync` trailer.
+    """Mark a commit changing one side of a fr/en pair `Lang-sync: pending`.
 
     Meant to be called by git's `commit-msg` hook (see `deckz hooks
-    install`), MESSAGE_FILE being the path git passes it. Does nothing if
-    the staged changes don't touch exactly one side of any tracked
-    content/notebook pair.
+    install`), MESSAGE_FILE being the path git passes it. When the staged
+    changes touch exactly one side of a content/notebook pair and the
+    message makes no choice, appends the `Lang-sync: pending` trailer and
+    lists the files `deckz i18n stale` will show until they're ported. A
+    `fr-only (<why>)`/`en-only (<why>)` trailer in the message is kept; a
+    `Lang-sync` line that isn't read as a trailer (misspelled, or
+    misplaced) refuses the commit.
 
     Args:
         message_file: Path of the file holding the draft commit message
         workdir: Path to move into before running the command
 
-    Raises:
-        CommitRefusedError: If the staged changes need a trailer that \
-            the draft message doesn't carry.
-
     """
-    from ...analyzing.i18n_stale import lang_sync_kind, staged_one_sided_pairs
+    from logging import getLogger
+
+    from ...analyzing.i18n_stale import mark_pending
     from ...configuring.settings import GlobalSettings
-    from ...exceptions import CommitRefusedError
 
-    settings = GlobalSettings.from_yaml(workdir)
-    one_sided = staged_one_sided_pairs(settings)
-    if not one_sided:
+    changes = mark_pending(GlobalSettings.from_yaml(workdir), message_file)
+    if not changes:
         return
-    message = message_file.read_text(encoding="utf-8")
-    if lang_sync_kind(message) is not None:
-        return
-
-    changes = "\n".join(
-        f"  {change.changed_path} (not {change.other_path})" for change in one_sided
+    files = "\n".join(
+        f"  {change.changed_path} (not {change.other_path})" for change in changes
     )
-    sides = sorted({change.changed for change in one_sided})
-    only = "\n".join(
-        f"  Lang-sync: {side}-only (<why>)    nothing to port: a typo, "
-        "the language's own typography..."
-        for side in sides
-    )
-    msg = (
+    getLogger(__name__).info(
         "these files changed without their other-language version:\n"
-        f"{changes}\n"
-        "Say why in the commit message: after a blank line, end it with one of\n"
-        "  Lang-sync: pending              the other language comes in a later "
-        "commit (`deckz i18n stale` lists it until then)\n"
-        f"{only}\n"
-        "or stage the other language's version too. Your message is kept in "
-        ".git/COMMIT_EDITMSG."
+        f"{files}\n"
+        "The commit is marked Lang-sync: pending, and `deckz i18n stale` lists "
+        "them until they're ported. If there's nothing to port (a typo, the "
+        "language's own typography): `deckz i18n mark-synced <file> --reason "
+        '"<why>"`.'
     )
-    raise CommitRefusedError(msg)

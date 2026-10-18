@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
-from ..exceptions import DeckzError, InvalidConfigurationError
+from ..exceptions import CommitRefusedError, DeckzError, InvalidConfigurationError
 from ..utils import content_dirs
 
 if TYPE_CHECKING:
@@ -34,6 +34,9 @@ EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 _TRAILER_LINE = re.compile(r"^[A-Za-z][\w-]*:\s?.*$")
 _LANG_SYNC_KIND = re.compile(r"^(fr-only|en-only|pending)\b")
+_LANG_SYNC_LINE = re.compile(r"^\s*lang-sync\s*:.*$", re.IGNORECASE | re.MULTILINE)
+_SCISSORS = re.compile(r"^\S{1,8} -+ >8 -+$", re.MULTILINE)
+"""The line below which `git commit --verbose` shows the diff, ignored."""
 LANG_SYNCED = "Lang-synced"
 """The trailer naming a file whose pair is in sync as of its commit."""
 
@@ -108,6 +111,22 @@ def lang_sync_kind(message: str) -> str | None:
         return None
     match = _LANG_SYNC_KIND.match(value)
     return match.group(1) if match else None
+
+
+def unread_lang_sync(message: str) -> str | None:
+    """A `Lang-sync` line of `message` that `lang_sync_kind` doesn't read.
+
+    A choice the author made and would lose: misspelled (`fr only`), or not
+    in the message's last paragraph.
+
+    Returns:
+        The first such line, or None if the message has none, or a trailer \
+        read.
+    """
+    if lang_sync_kind(message) is not None:
+        return None
+    match = _LANG_SYNC_LINE.search(message)
+    return match.group(0).strip() if match else None
 
 
 def _en_sibling(path: PurePosixPath) -> PurePosixPath:
@@ -425,8 +444,9 @@ def one_sided(
 ) -> list[OneSidedChange]:
     """The pairs with exactly one side among `changed`: the `Lang-sync` rule.
 
-    A commit changing such a pair needs a `Lang-sync` trailer (the commit-msg
-    hook, `deckz hooks check-commits`).
+    A commit changing such a pair records its choice in a `Lang-sync`
+    trailer, `pending` unless the author picks one (the commit-msg hook,
+    `mark_pending`).
 
     Args:
         changed: Changed paths, relative to the repository's root.
@@ -445,10 +465,9 @@ def one_sided(
 def staged_one_sided_pairs(settings: "GlobalSettings") -> list[OneSidedChange]:
     """Every fr/en pair with exactly one side in the git index's staged changes.
 
-    Used by the `commit-msg` hook (`deckz hooks check-commit-msg`): unlike
-    `stale_files`, which looks at the whole history, this only looks at
-    what's about to be committed, to ask for a `Lang-sync` trailer right
-    when it's needed.
+    Used by the `commit-msg` hook (`mark_pending`): unlike `stale_files`,
+    which looks at the whole history, this only looks at what's about to be
+    committed, to mark it with a `Lang-sync` trailer when it needs one.
 
     Args:
         settings: The repository's settings.
@@ -470,6 +489,89 @@ def staged_one_sided_pairs(settings: "GlobalSettings") -> list[OneSidedChange]:
     )
 
 
+def _cleaned(git_dir: Path, message: str) -> str:
+    """`message` as git commits it from an editor.
+
+    Returns:
+        It without its comments (`git stripspace`, which knows \
+        `core.commentChar`), nor what follows `commit --verbose`'s scissors \
+        line.
+    """
+    from subprocess import run
+
+    if match := _SCISSORS.search(message):
+        message = message[: match.start()]
+    return run(
+        ["git", "stripspace", "--strip-comments"],
+        input=message,
+        cwd=git_dir,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
+
+def mark_pending(
+    settings: "GlobalSettings", message_file: Path
+) -> list[OneSidedChange]:
+    """Mark a draft commit message `Lang-sync: pending` when the commit needs it.
+
+    The `commit-msg` hook (`deckz hooks check-commit-msg`): a commit
+    changing one side of a pair whose message makes no choice gets the
+    trailer appended (`git interpret-trailers`, which puts it before git's
+    comments), so that `git log` shows what's left to translate. A commit
+    that skipped the hook reads the same in `stale_files`: the trailer
+    records the debt, refusing the commit wouldn't settle it.
+
+    Args:
+        settings: The repository's settings.
+        message_file: The draft message, as git passes it to the hook.
+
+    Returns:
+        The one-sided pairs if the message was marked, else `[]`.
+
+    Raises:
+        CommitRefusedError: If the message has a `Lang-sync` line that \
+            isn't read (`unread_lang_sync`): its choice would be lost.
+    """
+    from subprocess import run
+
+    changes = staged_one_sided_pairs(settings)
+    if not changes:
+        return []
+    git_dir = settings.paths.git_dir
+    message = _cleaned(git_dir, message_file.read_text(encoding="utf-8"))
+    if lang_sync_kind(message) is not None:
+        return []
+    if line := unread_lang_sync(message):
+        msg = (
+            f"the commit message's line\n  {line}\nisn't read as a Lang-sync "
+            "trailer. It must be in the message's last paragraph, after a blank "
+            "line, as one of\n"
+            "  Lang-sync: pending          the other language comes later\n"
+            "  Lang-sync: fr-only (<why>)  nothing to port to English\n"
+            "  Lang-sync: en-only (<why>)  nothing to port to French\n"
+            "or delete it, and the commit is marked Lang-sync: pending. Your "
+            "message is kept in .git/COMMIT_EDITMSG."
+        )
+        raise CommitRefusedError(msg)
+    run(
+        [
+            "git",
+            "interpret-trailers",
+            "--in-place",
+            "--no-divider",
+            "--trailer",
+            "Lang-sync: pending",
+            str(message_file.resolve()),
+        ],
+        cwd=git_dir,
+        capture_output=True,
+        check=True,
+    )
+    return changes
+
+
 @dataclass(frozen=True)
 class OneSidedCommit:
     """A commit changing one side of fr/en pairs with no `Lang-sync` trailer."""
@@ -477,17 +579,20 @@ class OneSidedCommit:
     sha: str
     subject: str
     changes: tuple[OneSidedChange, ...]
+    unread: str | None
+    """Its `Lang-sync` line that isn't read (`unread_lang_sync`), if any."""
 
 
 def one_sided_commits(
     settings: "GlobalSettings", revisions: str
 ) -> list[OneSidedCommit]:
-    """The commits of `revisions` the commit-msg hook would have refused.
+    """The commits of `revisions` the commit-msg hook would have marked or refused.
 
     For CI, where a contributor's commits arrive whether or not they
     installed the hooks: each commit touching one side of a pair (as the
-    pairs stand now) without a `Lang-sync` trailer. A `revisions` git can't
-    list raises a `DeckzError` naming git's error.
+    pairs stand now) without a `Lang-sync` trailer, which leaves the pair
+    pending, unless its message has a `Lang-sync` line that isn't read. A
+    `revisions` git can't list raises a `DeckzError` naming git's error.
 
     Args:
         settings: The repository's settings.
@@ -522,5 +627,9 @@ def one_sided_commits(
         )
         changes = tuple(one_sided(changed, pairs))
         if changes:
-            found.append(OneSidedCommit(sha, message.splitlines()[0], changes))
+            found.append(
+                OneSidedCommit(
+                    sha, message.splitlines()[0], changes, unread_lang_sync(message)
+                )
+            )
     return found

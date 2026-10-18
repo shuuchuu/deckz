@@ -8,8 +8,9 @@ def install(*, force: bool = False, ci: bool = False, workdir: Path = Path()) ->
     """Install deckz's git hooks and generic Claude Code hooks.
 
     The pre-commit hook runs `deckz check --staged`; the commit-msg hook
-    runs `deckz hooks check-commit-msg`, refusing a commit that changes one
-    side of a fr/en content or notebook pair with no `Lang-sync` trailer.
+    runs `deckz hooks check-commit-msg`, marking a commit that changes one
+    side of a fr/en content or notebook pair with no `Lang-sync` trailer
+    `Lang-sync: pending`.
     Refuses to overwrite a git hook file that isn't one deckz itself wrote,
     unless `force` is passed.
 
@@ -27,8 +28,9 @@ def install(*, force: bool = False, ci: bool = False, workdir: Path = Path()) ->
         force: Overwrite an existing git hook (or with --ci, workflow) even
             if it isn't deckz's own
         ci: Also write `.github/workflows/deckz.yml`, a GitHub Actions
-            workflow running `deckz check` and the `Lang-sync` rule on every
-            push and pull request (`deckz hooks check-commits`), and
+            workflow running `deckz check` and reading the `Lang-sync`
+            trailers on every push and pull request (`deckz hooks
+            check-commits`), and
             `deckz.yml`'s `ci.nightly_checks` every night: every
             contributor's commits get them, hooks installed or not
         workdir: Path to move into before running the command

@@ -356,6 +356,18 @@ The two kinds of debt are tracked differently:
 
 ### 8.1 The commit-msg hook marks instead of refusing
 
+**Status (2026-10-18):** done. `i18n_stale.mark_pending` appends the trailer
+through `git interpret-trailers` (above git's comments and `commit -v`'s scissors,
+which the hook's file still holds) and the hook lists the files, `deckz i18n stale`
+and `mark-synced`. The hook still refuses, and `check-commits` fails on, one case:
+a `Lang-sync` line that isn't read (`unread_lang_sync`: `fr only (…)`, or not in
+the last paragraph), whose choice would be lost silently. `check-commits` lists the
+commits left pending without failing. studioz's Commit dialog checks "La
+traduction suivra" by default. Tried on a scratch worktree of slides: a plain
+`-m` commit marked (1.6 s), `fr-only` kept through an editor commit with `-v`, a
+misspelled line refused; `check-commits` over slides' 1,405 commits passes, listing
+18 pending, so no old commit turns CI red. The CI workflow is unchanged.
+
 - A one-sided change without a trailer gets `Lang-sync: pending` appended to the
   message by the hook itself (a commit-msg hook may edit the message file), and the
   hook prints the files left to translate and `deckz i18n stale`. The marker is then
