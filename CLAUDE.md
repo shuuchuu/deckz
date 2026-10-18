@@ -305,7 +305,13 @@ or deferred (`ChecksSettings.blocking`: `deckz.yml`'s `checks.deferred`, else
 on a blocking check's problems only, or on any problem of the checks named on
 its command line, and prints the deferred ones, whose harm comes after the
 commit (`--plain` and `--json` say which); `deckz status` marks the
-`blocks_commit` items, and so does studioz.
+`blocks_commit` items, and so does studioz. `ChecksRunner.findings()` gives
+each problem as a `Finding` (its check, whether it blocks, and `path`: the file
+its text starts with, as every built-in's does), which the gates where deferred
+problems come due filter by path: `deckz upload` (`affected.deck_findings`, the
+files `affected.reaches` the deck) and `deckz labs publish` (those under the
+notebooks directory), both with `--skip-checks`, and `deckz status DECK`
+(`status.deck_status`).
 `components/checks.py::ChecksRunner` merges those with the target repo's
 own, from an optional `templates/checks.py` module (`checks(settings) ->
 Mapping[str, Callable[[], list[str]]]`, loaded through

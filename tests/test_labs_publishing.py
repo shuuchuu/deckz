@@ -1,6 +1,7 @@
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from pytest import raises
 
@@ -230,3 +231,26 @@ def test_publish_sends_the_files_to_their_own_remote(tmp_path: Path) -> None:
     assert notebooks == ["topic-demo-fr.ipynb"]
     assert files == [".devcontainer/devcontainer.json"]
     assert publish_both() is False
+
+
+def test_publish_command_refuses_a_notebook_with_check_problems(
+    tmp_path: Path, monkeypatch: Any, caplog: Any
+) -> None:
+    import appdirs
+
+    from deckz.cli import main
+
+    monkeypatch.setattr(appdirs, "user_config_dir", lambda _: str(tmp_path))
+    remote, work = _make_repos(tmp_path)
+
+    with raises(SystemExit) as exc_info:
+        main(("labs", "publish", "--workdir", str(work)))
+
+    assert exc_info.value.code == 1
+    assert "problems in the notebooks" in caplog.text
+    assert "lab-pairs: labs/notebooks/topic/demo-en.ipynb: missing" in caplog.text
+    assert not _git(remote, "branch", "--list")
+
+    main(("labs", "publish", "--skip-checks", "--workdir", str(work)))
+
+    assert _git(remote, "ls-tree", "--name-only", "main") == "topic-demo-fr.ipynb\n"

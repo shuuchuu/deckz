@@ -14,7 +14,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .configuring.settings import GlobalSettings
+    from .analyzing.i18n_stale import StaleFile
+    from .components.checks import Finding
+    from .configuring.settings import DeckSettings, GlobalSettings
 
 _MAX_ITEMS = 15
 
@@ -107,6 +109,12 @@ def _capped(items: Sequence[StatusItem]) -> tuple[StatusItem, ...]:
     return (*items[:_MAX_ITEMS], StatusItem(f"... and {more} more"))
 
 
+def _finding_item(finding: "Finding") -> StatusItem:
+    return StatusItem(
+        f"{finding.check}: {finding.text}", blocks_commit=finding.blocking
+    )
+
+
 def checks_section(
     settings: "GlobalSettings", changed: Collection[str] = ()
 ) -> StatusSection:
@@ -123,21 +131,12 @@ def checks_section(
     """
     from .components.factory import GlobalSettingsFactory
 
-    available = GlobalSettingsFactory(settings).checks_runner().checks()
-    items = [
-        StatusItem(f"{name}: {problem}", blocks_commit=settings.checks.blocking(name))
-        for name, check in available.items()
-        if name not in settings.checks.opt_in
-        for problem in check()
-    ]
-    # Those refusing a commit first, then those of your changes. A problem
-    # starts with the file it's about: `path:line: …`, `path: …`.
-    items.sort(
-        key=lambda item: (
-            not item.blocks_commit,
-            item.text.split(": ", 1)[1].split(":")[0] not in changed,
-        )
+    found = GlobalSettingsFactory(settings).checks_runner().findings()
+    # Those refusing a commit first, then those of your changes.
+    found.sort(
+        key=lambda finding: (not finding.blocking, str(finding.path) not in changed)
     )
+    items = [_finding_item(finding) for finding in found]
     blocking = sum(item.blocks_commit for item in items)
     summary = (
         f"{_count(len(items), 'problem')}, {blocking} blocking a commit: "
@@ -150,6 +149,15 @@ def checks_section(
 
 def _commit_date(git_dir: Path, sha: str) -> str:
     return _git(git_dir, "show", "-s", "--format=%cs", sha) or "?"
+
+
+def _stale_item(stale: "StaleFile") -> StatusItem:
+    return StatusItem(
+        f"{stale.path}: {_count(len(stale.commits), 'commit')} not ported to "
+        f"{stale.sibling}",
+        f"`deckz i18n stale {stale.path}` shows them (`deckz i18n "
+        f'mark-synced {stale.path} --reason "<why>"` if none needs porting)',
+    )
 
 
 def translation_section(
@@ -174,15 +182,7 @@ def translation_section(
     ]
     every = stale_files(settings)
     yours = [stale for stale in every if str(stale.path) in changed]
-    items += [
-        StatusItem(
-            f"{stale.path}: {_count(len(stale.commits), 'commit')} not ported to "
-            f"{stale.sibling}",
-            f"`deckz i18n stale {stale.path}` shows them (`deckz i18n "
-            f'mark-synced {stale.path} --reason "<why>"` if none needs porting)',
-        )
-        for stale in yours
-    ]
+    items += [_stale_item(stale) for stale in yours]
     if every:
         oldest = min(
             (_commit_date(git_dir, stale.commits[0].sha) for stale in every),
@@ -468,5 +468,123 @@ def status(
     if decks:
         sections["decks"] = decks_section(settings, changed)
     return f"{_count(len(changed), 'changed file')}, {scope}", [
+        replace(section, key=key) for key, section in sections.items()
+    ]
+
+
+def _built_items(settings: "DeckSettings") -> list[StatusItem]:
+    """What the deck's built PDFs need: rebuilding, and the frames to shorten.
+
+    Returns:
+        Its items, in the language order of `LANGS`.
+    """
+    from .analyzing.overflow import shrunk_frames, wrapped_lines
+    from .exceptions import DeckzError
+    from .models import LANGS, lang_dir
+    from .pipelines import deck_targets, outdated_pdfs
+
+    where = settings.paths.current_dir.relative_to(settings.paths.git_dir)
+    langs = [
+        lang
+        for lang in LANGS
+        if any(lang_dir(settings.paths.pdf_dir, lang).glob("*.pdf"))
+    ]
+    if not langs:
+        return [StatusItem(f"{where}: no PDF built", f"`deckz run --workdir {where}`")]
+    items = []
+    if outdated := outdated_pdfs(deck_targets(settings, langs)):
+        items.append(
+            StatusItem(
+                f"{where}: {_count(len(outdated), 'PDF')} not matching its content",
+                f"`deckz run --workdir {where}` with the kinds and languages you "
+                "hand out",
+            )
+        )
+    for lang in langs:
+        try:
+            frames = shrunk_frames(settings, lang=lang, query=False)
+            lines = wrapped_lines(settings, lang=lang, query=False) or []
+        except DeckzError:
+            continue  # No handout in that language: nothing built to look at.
+        fix = (
+            "shorten it, or split the frame "
+            f"(`deckz check overflow {where} --lang {lang}`)"
+        )
+        items += [
+            StatusItem(
+                f'{lang} handout p.{frame.page} "{frame.title}": shrunk to '
+                f"{frame.ratio} ({', '.join(frame.sources)}"
+                f"{f':{frame.line}' if frame.line else ''})",
+                fix,
+            )
+            for frame in frames
+        ]
+        items += [
+            StatusItem(
+                f'{lang} handout p.{line.pages[0]}: {line.line} wraps: "{line.text}"',
+                line.fix,
+            )
+            for line in lines
+        ]
+    return items
+
+
+def deck_status(
+    settings: "DeckSettings", *, checks: bool = True, decks: bool = True
+) -> tuple[str, list[StatusSection]]:
+    """`deckz status DECK`: what's left before the deck is taught or uploaded.
+
+    The checks' problems in its files (deferred ones included: they're due
+    now), its files waiting for a port to the other language, and its built
+    PDFs: outdated, or with shrunk frames and wrapping lines.
+
+    Args:
+        settings: The deck's settings.
+        checks: Run the content checks (the slowest part).
+        decks: Look at the deck's built PDFs.
+
+    Returns:
+        `(the deck, the sections)`.
+    """
+    from .analyzing.affected import deck_findings, reaches
+    from .analyzing.i18n_stale import stale_files
+    from .components.factory import GlobalSettingsFactory
+
+    where = settings.paths.current_dir.relative_to(settings.paths.git_dir)
+    sections = {}
+    if checks:
+        found = deck_findings(
+            settings, GlobalSettingsFactory(settings).checks_runner().findings()
+        )
+        found.sort(key=lambda finding: not finding.blocking)
+        summary = (
+            f"{_count(len(found), 'problem')} in the deck's files: fix them before "
+            "teaching or uploading it"
+            if found
+            else "every check passes on the deck's files"
+        )
+        sections["checks"] = StatusSection(
+            "Checks", summary, _capped([_finding_item(f) for f in found])
+        )
+    test = reaches(settings)
+    stale = [stale for stale in stale_files(settings) if test(stale.path)]
+    summary = (
+        f"{_count(len(stale), 'file')} of the deck waiting for a port to the "
+        "other language"
+        if stale
+        else "every file of the deck is in sync with its translation"
+    )
+    sections["translation"] = StatusSection(
+        "Translation", summary, _capped([_stale_item(s) for s in stale])
+    )
+    if decks:
+        items = _built_items(settings)
+        summary = (
+            f"{_count(len(items), 'thing')} to look at in its PDFs"
+            if items
+            else "its PDFs match its content, no frame shrunk"
+        )
+        sections["decks"] = StatusSection("Built decks", summary, _capped(items))
+    return f"deck {where}", [
         replace(section, key=key) for key, section in sections.items()
     ]

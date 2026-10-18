@@ -87,12 +87,15 @@ class UploadPlan:
 def upload_plan(workspace: Path, deck: Path) -> UploadPlan:
     """What `deckz upload` would send from the deck, without connecting.
 
+    Without the content checks, which the upload runs itself: they take
+    several seconds (every check, then those about the deck's files).
+
     Returns:
         Its PDFs and the outdated ones, or why deckz couldn't tell.
     """
     try:
         result = subprocess.run(
-            [_deckz(workspace), "upload", "--dry-run", "--json"],
+            [_deckz(workspace), "upload", "--dry-run", "--json", "--skip-checks"],
             cwd=deck,
             env=workspace_environment(workspace),
             capture_output=True,
@@ -111,13 +114,18 @@ def upload_plan(workspace: Path, deck: Path) -> UploadPlan:
         return UploadPlan((), (), error.replace(f"{workspace}/", ""))
 
 
-def upload_steps(workspace: Path) -> list[list[str]]:
-    """`deckz upload`, which refuses outdated PDFs itself.
+def upload_steps(workspace: Path, *, skip_checks: bool = False) -> list[list[str]]:
+    """`deckz upload`, which refuses outdated PDFs and the deck's problems itself.
+
+    Args:
+        workspace: The workspace.
+        skip_checks: Upload despite the content checks' problems in the \
+            deck's files (`--skip-checks`), once the person has seen them.
 
     Returns:
         The job's one step, to run in the deck's directory.
     """
-    return [[_deckz(workspace), "upload"]]
+    return [[_deckz(workspace), "upload", *(["--skip-checks"] if skip_checks else [])]]
 
 
 def publish_steps(workspace: Path, what: str) -> list[list[str]]:

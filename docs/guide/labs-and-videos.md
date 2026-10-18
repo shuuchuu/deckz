@@ -46,7 +46,9 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   and so does publishing. Read secrets from the environment.
 - `deckz labs publish` publishes the committed notebooks, and the files committed
   under `labs/published/` (with them, or to a repository of their own, such as the
-  one a Codespace opens: `labs.published_files_remote`).
+  one a Codespace opens: `labs.published_files_remote`). It refuses while a check
+  reports a problem in a notebook, even one that didn't block its commit
+  (`lab-pairs`, `lab-format`...): fix it and commit, or `--skip-checks`.
   Only maintainers do it: `deckz status` says when committed files differ from the
   published ones.
 

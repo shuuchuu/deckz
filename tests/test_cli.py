@@ -782,6 +782,74 @@ def test_upload_dry_run_lists_the_pdfs_and_the_outdated_ones(
     assert found["outdated"] == ["company/bilingual/pdf/bilingual-handout.pdf"]
 
 
+def test_upload_refuses_a_deck_with_check_problems(
+    bilingual_dir: Path, caplog: Any, capsys: Any
+) -> None:
+    import json
+
+    main(("run", *_HANDOUT_ONLY, "--no-part-handouts"))
+    content = bilingual_dir / "content" / "hello.md"
+    content.write_text(
+        content.read_text() + "\n```{=latex}\n\\newpage\n```\n", encoding="utf8"
+    )
+    main(("run", *_HANDOUT_ONLY, "--no-part-handouts"))
+    # Another deck's problem isn't this one's.
+    git_dir = bilingual_dir.parent.parent
+    stray = git_dir / "content" / "unused" / "notes.tex"
+    stray.parent.mkdir(parents=True)
+    stray.write_text("\\section{x}", encoding="utf8")
+    capsys.readouterr()
+    main(("check", "--plain"))
+    assert "content/unused/notes.tex" in capsys.readouterr().out
+
+    main(("upload", "--dry-run", "--json"))
+    (problem,) = json.loads(capsys.readouterr().out)["problems"]
+    assert problem.startswith("raw-latex: company/bilingual/content/hello.md:")
+
+    main(("upload", "--dry-run", "--json", "--skip-checks"))
+    assert json.loads(capsys.readouterr().out)["problems"] == []
+
+    with raises(SystemExit) as exc_info:
+        main(("upload",))
+    assert exc_info.value.code == 1
+    assert "problems in this deck's files" in caplog.text
+    assert "--skip-checks" in caplog.text
+    assert "notes.tex" not in caplog.text
+
+
+def test_status_of_a_deck_lists_what_is_due_before_teaching_it(
+    bilingual_dir: Path, capsys: Any
+) -> None:
+    import json
+
+    main(("run", *_HANDOUT_ONLY, "--no-part-handouts"))
+    content = bilingual_dir / "content" / "hello.md"
+    content.write_text(
+        content.read_text() + "\n```{=latex}\n\\newpage\n```\n", encoding="utf8"
+    )
+    capsys.readouterr()
+
+    main(("status", ".", "--json"))
+
+    found = json.loads(capsys.readouterr().out)
+    assert found["scope"] == "deck company/bilingual"
+    sections = {section["key"]: section for section in found["sections"]}
+    assert list(sections) == ["checks", "translation", "decks"]
+    (problem,) = sections["checks"]["items"]
+    assert problem["text"].startswith("raw-latex: company/bilingual/content/hello.md:")
+    assert not problem["blocks_commit"]
+    (outdated,) = sections["decks"]["items"]
+    assert outdated["text"] == "company/bilingual: 1 PDF not matching its content"
+
+
+def test_status_of_a_deck_refuses_since(bilingual_dir: Path, caplog: Any) -> None:
+    with raises(SystemExit) as exc_info:
+        main(("status", ".", "--since", "HEAD"))
+
+    assert exc_info.value.code == 1
+    assert "--since and --fetch are about your changes" in caplog.text
+
+
 def test_run_en_missing_file_fails_loudly(
     bilingual_dir: Path, caplog: Any, capsys: Any
 ) -> None:

@@ -10,7 +10,8 @@ converted by pandoc and compiled with Typst. Run `deckz --help`
 or `deckz <command> --help` for the full, authoritative command reference
 -- these notes only cover conventions that aren't self-documenting there.
 The people you work with follow deckz's guide (`docs/guide/` in the deckz
-repository): run the same commands it shows, `deckz status` first.
+repository): run the same commands it shows, `deckz status` first
+(`deckz status DECK` for a deck about to be taught or uploaded).
 
 ## Layout
 

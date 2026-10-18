@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping
 from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
         Section,
         UnresolvedPath,
     )
+    from .checks import Finding
     from .deck_builder import PlannedCompile
 
 
@@ -157,6 +158,8 @@ class ChecksRunnerProtocol(Protocol):
     """Every content check to run: deckz's own, merged with the target repo's."""
 
     def checks(self) -> Mapping[str, Callable[[], list[str]]]: ...
+
+    def findings(self, names: Collection[str] | None = None) -> list["Finding"]: ...
 
 
 class GlobalFactoryProtocol(Protocol):

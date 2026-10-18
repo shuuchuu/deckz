@@ -1263,7 +1263,13 @@ def upload_form(request: Request, studio: StudioDep, name: str, deck: str) -> Re
 @router.post(
     "/espaces/{name}/formations/{deck:path}/envoyer", response_class=HTMLResponse
 )
-def upload_deck(request: Request, studio: StudioDep, name: str, deck: str) -> Response:
+def upload_deck(
+    request: Request,
+    studio: StudioDep,
+    name: str,
+    deck: str,
+    skip_checks: Annotated[bool, Form()] = False,
+) -> Response:
     """Start a job uploading the deck's PDFs (deckz refuses outdated ones).
 
     Returns:
@@ -1274,7 +1280,7 @@ def upload_deck(request: Request, studio: StudioDep, name: str, deck: str) -> Re
     studio.jobs.submit(
         path,
         f"Envoyer les PDF de {deck} sur Google Drive",
-        actions.upload_steps(path),
+        actions.upload_steps(path, skip_checks=skip_checks),
         directory,
         form=f"/espaces/{name}/formations/{deck}/envoyer/formulaire",
         needs_memory=False,

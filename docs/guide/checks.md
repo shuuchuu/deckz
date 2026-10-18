@@ -11,7 +11,9 @@ A **blocking** check's problem refuses the commit (and fails CI): the commit is 
 its harm happens, a secret kept in the history or a build broken for everyone at
 their next `git pull`. A **deferred** check's problem is printed without failing:
 it does harm later, when a lab is published or a deck uploaded or taught, so you can
-commit and fix it then. `deckz status` keeps listing them (studioz too, in its
+commit and fix it then: `deckz labs publish` refuses while a check reports a problem in
+a notebook, `deckz upload` while one does in the deck's files (both take
+`--skip-checks`), and `deckz status <deck>` lists a deck's before you teach it. `deckz status` keeps listing them (studioz too, in its
 Problems tab), the blocking ones marked "(blocks a commit)". `deckz check <name>`
 fails on any problem of the checks it names, deferred or not.
 

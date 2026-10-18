@@ -426,6 +426,27 @@ Not every check can wait: for some, the commit (or the push, since slides commit
 
 ### 8.3 Gates where the debt is due
 
+**Status (2026-10-19):** done, without changing the check contract: every built-in
+problem already starts with its file, as plugins' are asked to, so
+`ChecksRunner.findings()` returns `Finding(check, text, blocking)` whose `path` is
+that leading path, and each gate filters by it. `deckz upload` refuses while a
+problem names a file the deck reaches (`affected.reaches`: under its directory, or
+resolved by it, an English file as its French sibling; `deck-definitions` names the
+deck's own `deck.yml`), listed with the outdated PDFs in one refusal, and `--dry-run
+--json` gains `problems`. `deckz labs publish` refuses while one is under the
+notebooks directory (a credential still refused inside `publish`, whatever the
+flag). Both take `--skip-checks`. `deckz status DECK` (`status.deck_status`): the
+deck's problems, its stale files, its PDFs outdated or missing, and each language's
+shrunk frames and wrapping lines from what its build recorded; `--since`/`--fetch`
+with it are refused. studioz's Upload dialog keeps its dry run fast
+(`--skip-checks`: every check takes ~20 s on slides), says the upload checks the
+deck's files, and has "Envoyer malgré les problèmes". Not mapped: `asset-credits`
+(which decks show an asset isn't known). Tried on slides: `deckz status
+decks/eni/cv3` in 11 s (checks and translation clean, 6 outdated PDFs, shrunk frames
+with their sources); on a scratch worktree, a `{=latex}` block in `gan.md` showed in
+`cv3`'s upload dry run and not `ml1`'s, and a reformatted notebook was the publish
+gate's only finding of the two planted.
+
 "Settled in due time" needs a time. The debt is collected at the points where it would
 do harm, which already refuse other things:
 

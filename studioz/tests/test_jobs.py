@@ -199,8 +199,14 @@ def test_upload_shows_the_pdfs_and_refuses_outdated_ones(
     assert "ne correspond plus au contenu" in form
     assert "disabled>Envoyer 2 PDF" in form
 
+    assert 'name="skip_checks"' in form
+
     job = _job(client, client.post(f"{DECK}/envoyer", headers=ORIGIN).text)
     assert "deckz upload in abc" in job.log
+    page = client.post(
+        f"{DECK}/envoyer", data={"skip_checks": "true"}, headers=ORIGIN
+    ).text
+    assert "deckz upload --skip-checks in abc" in _job(client, page).log
 
 
 def test_publish(fake_deckz: Path, client: TestClient) -> None:

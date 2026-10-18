@@ -823,8 +823,12 @@ The main commands:
   rendered (compared with their remotes as last fetched; `--fetch` fetches
   them first), and the built PDFs of the decks your changes reach that
   don't match them (`--no-decks` skips them). Each item says how to
-  resolve it; `--json` for scripts, each section with a stable `key`. `deckz show affected PATH...` prints the decks a change to
-  PATHs reaches.
+  resolve it; `--json` for scripts, each section with a stable `key`.
+  `deckz status DECK` reports on one deck instead, whoever made its
+  changes: the checks' problems in its files (deferred ones included),
+  its files waiting for a port, and its built PDFs not matching its
+  content, with their shrunk frames and wrapping lines. `deckz show
+  affected PATH...` prints the decks a change to PATHs reaches.
 - `deckz new deck DIR --name NAME --title TITLE`, `deckz new section
   PATH [--title TITLE]`, `deckz labs new LAB hands-on|demo`: create the
   files of a new deck, shared section (its `.yml` with a `full` flavor, a
@@ -1049,6 +1053,10 @@ The main commands:
   them, when a PDF doesn't match the deck's content anymore: a content
   fragment changed since it was built, the Markdown conversion changed, or
   no build produces it. Rebuild or delete those, or pass `--include-stale`.
+  It refuses too while the content checks report a problem in the deck's
+  files (deferred checks included: the upload is when they're due; a
+  problem is the deck's when the file it starts with is under the deck's
+  directory or one the deck resolves), unless `--skip-checks`.
 - `deckz extras issue TITLE [BODY]`: create a GitHub issue.
 - `deckz extras random REASON`: roll a dice and email the result (handy for
   arbitrary decision-making, e.g. picking who does a task).
@@ -1102,10 +1110,12 @@ The main commands:
 - `deckz labs missing`: every notebook present in only one language.
 - `deckz labs dump NOTEBOOKS...`: a compact, readable view of one or more
   notebooks.
-- `deckz labs publish [--break-published-links]`: replace the labs
-  remote's branch with one commit of HEAD's lab notebooks, named by ID,
-  and publish the files committed under `paths.labs_published_dir` (with
-  them, or to `labs.published_files_remote`).
+- `deckz labs publish [--break-published-links] [--skip-checks]`: replace
+  the labs remote's branch with one commit of HEAD's lab notebooks, named
+  by ID, and publish the files committed under `paths.labs_published_dir`
+  (with them, or to `labs.published_files_remote`). Refuses while the
+  content checks report a problem in a notebook (deferred ones included),
+  unless `--skip-checks`; a credential is refused regardless.
 - `deckz labs gpu up|queue|run|status|fetch|report|down` (extra:
   `deckz[gpu]`): run notebooks on a rented GPU machine the way Colab runs
   them -- Colab's runtime image, `labs.gpu.cpus` CPUs per run, peak RAM

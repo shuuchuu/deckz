@@ -18,6 +18,11 @@
   {% if plan.outdated %}
   <p class="error">deckz refusera l'envoi : reconstruisez d'abord ces PDF (« Construire… », avec les mêmes documents et langues).</p>
   {% endif %}
+  <p>deckz vérifie aussi les fichiers de la formation au moment de l'envoi, et le refuse
+    tant qu'une vérification y signale un problème (même un qui n'a pas bloqué le commit) :
+    la tâche les liste.</p>
+  <label><input type="checkbox" name="skip_checks" value="true">
+    Envoyer malgré les problèmes signalés (<code>--skip-checks</code>)</label>
   <footer>
     <button type="submit"{% if plan.outdated %} disabled{% endif %}>Envoyer {{ plan.pdfs | length }} PDF</button>
     <span class="hint">La première fois, Google demande l'autorisation dans le navigateur.</span>

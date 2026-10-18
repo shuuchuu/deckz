@@ -6,6 +6,8 @@ from ._groups import EVERYDAY
 
 @app.command(group=EVERYDAY)
 def status(
+    deck: Path | None = None,
+    /,
     *,
     since: str | None = None,
     fetch: bool = False,
@@ -23,7 +25,14 @@ def status(
     rendered, and the built PDFs of the decks your changes reach that
     don't match them. Every item says how to resolve it.
 
+    With DECK, a deck's directory, what's left before teaching or
+    uploading that deck instead, whoever made it: the checks' problems in
+    its files (deferred ones included), its files waiting for a port to the
+    other language, and its built PDFs not matching its content, with
+    their shrunk frames and wrapping lines.
+
     Args:
+        deck: Report on this deck only
         since: Count your changes from this revision (e.g. `HEAD~5`, a
             date's commit) instead of the upstream's merge base
         fetch: Fetch the labs and videos remotes first, instead of
@@ -33,17 +42,30 @@ def status(
             their content (several seconds when a change reaches many)
         json: Print one JSON object instead
         workdir: Path to move into before running the command
+
+    Raises:
+        DeckzError: If DECK comes with --since or --fetch.
     """
-    from ..configuring.settings import GlobalSettings
+    from ..configuring.settings import DeckSettings, GlobalSettings
+    from ..exceptions import DeckzError
+    from ..status import deck_status
     from ..status import status as _status
 
-    scope, sections = _status(
-        GlobalSettings.from_yaml(workdir),
-        since=since,
-        fetch=fetch,
-        checks=checks,
-        decks=decks,
-    )
+    if deck is None:
+        scope, sections = _status(
+            GlobalSettings.from_yaml(workdir),
+            since=since,
+            fetch=fetch,
+            checks=checks,
+            decks=decks,
+        )
+    elif since is not None or fetch:
+        msg = "--since and --fetch are about your changes, not one deck's: drop them"
+        raise DeckzError(msg)
+    else:
+        scope, sections = deck_status(
+            DeckSettings.from_yaml(workdir / deck), checks=checks, decks=decks
+        )
     if json:
         from dataclasses import asdict
 

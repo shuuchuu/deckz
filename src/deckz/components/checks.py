@@ -1,6 +1,8 @@
-from collections.abc import Callable, Mapping
+import re
+from collections.abc import Callable, Collection, Mapping
+from dataclasses import dataclass
 from functools import cached_property
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 from ..exceptions import HookError
@@ -9,6 +11,41 @@ from .protocols import ChecksRunnerProtocol
 
 if TYPE_CHECKING:
     from ..configuring.settings import GlobalSettings
+
+
+_LEADING_PATH = re.compile(r"(?P<path>[^\s:]+?)(?::\d+)?(?=[:\s]|$)")
+
+
+@dataclass(frozen=True)
+class Finding:
+    """A problem a check reported, with where it applies."""
+
+    check: str
+    text: str
+    """The problem, as the check wrote it."""
+    blocking: bool
+    """Whether it blocks a commit (`ChecksSettings.blocking`)."""
+
+    @property
+    def path(self) -> PurePosixPath | None:
+        """The repository path the problem starts with, if any.
+
+        Every built-in check starts its problems with the file they're
+        about (`path: …`, `path:line: …`, a notebook pair's stem), as
+        plugins are asked to: that's what ties a problem to the decks or
+        notebooks a publication sends.
+        """
+        match = _LEADING_PATH.match(self.text)
+        return PurePosixPath(match["path"]) if match else None
+
+    def under(self, directory: PurePosixPath) -> bool:
+        """Whether it's about `directory` (repository-relative) or what's in it.
+
+        Returns:
+            True if its path is `directory` or under it.
+        """
+        path = self.path
+        return path is not None and path.is_relative_to(directory)
 
 
 class ChecksRunner(ChecksRunnerProtocol):
@@ -51,6 +88,24 @@ class ChecksRunner(ChecksRunnerProtocol):
             )
             raise HookError(msg)
         return {**builtin, **plugin}
+
+    def findings(self, names: Collection[str] | None = None) -> list[Finding]:
+        """Run the checks `deckz check` runs, or `names`, and gather their problems.
+
+        Returns:
+            Every problem, check by check, in `checks()`'s order.
+        """
+        settings = self._settings
+        return [
+            Finding(name, problem, settings.checks.blocking(name))
+            for name, check in self.checks().items()
+            if (
+                name in names
+                if names is not None
+                else name not in settings.checks.opt_in
+            )
+            for problem in check()
+        ]
 
     @cached_property
     def _plugin_checks(self) -> dict[str, Callable[[], list[str]]]:
