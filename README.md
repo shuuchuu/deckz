@@ -709,6 +709,13 @@ left alone.
 Filters can tell the two conversions apart with pandoc's `FORMAT` (e.g.
 `typst` vs `revealjs`), so one Lua filter can handle a construct for both.
 
+### Upgrading from 31.x (`clean content`)
+
+`deckz clean content` is gone: it deleted every content file no deck
+included, including the ones a repository keeps on purpose for decks to
+come. `deckz deps` now lists those files (and `deckz deps --json` has them
+under `"unused_files"`), and you delete the ones you choose.
+
 ### Upgrading from 30.x (`--lang`)
 
 `--en` is gone: use `--lang en` instead, or `--lang fr en` to handle both
@@ -963,7 +970,10 @@ The main commands:
   queries the build, a whole compilation, after a build by an older
   deckz): it builds nothing itself.
 - `deckz deps [SECTION] [FLAVOR]`: show shared sections/flavors usage
-  across the repository, including unused ones.
+  across the repository, including unused ones, and the content files no
+  deck includes (shared or local, fr or `en/`), with their number of
+  frames. It only lists those files: unused content can be kept on
+  purpose, as material for decks to come.
 - `deckz search-sections KEYWORDS...`: search shared sections by title or
   Markdown heading.
 - `deckz section-flavors SECTION`: list a section's flavor names.
@@ -975,8 +985,7 @@ The main commands:
   up to their name.
 - `deckz asset search ASSET` / `deckz asset deps`: find where an asset is
   used, or find assets missing license metadata.
-- `deckz clean` / `deckz clean all` / `deckz clean content`: remove build
-  directories, or unused shared/local content files (fr or `en/`). `deckz clean all` also
+- `deckz clean` / `deckz clean all`: remove build directories. `deckz clean all` also
   removes the whole `<git_dir>/.run/` scratch tree (`run shared`/`run all`/
   `run file`/`run section`), and `<git_dir>/.check/` (`check variables`).
 - `deckz i18n missing-en [--all] [--untranslated]`: report fr

@@ -22,15 +22,20 @@ def deps(
     json: bool = False,
     workdir: Path = Path(),
 ) -> None:
-    """Display information about shared sections and flavors usage.
+    """Display information about shared sections, flavors and content files usage.
+
+    The content files no deck includes (shared or local to a deck, fr or en/)
+    are listed, never deleted: they can be kept on purpose, as material for
+    decks to come.
 
     Args:
         section: Restrict the output to only this section
         flavor: Restrict the output further to only this section
-        unused: Display unused flavors
+        unused: Display unused flavors and content files
         json: Print one JSON object instead, with "unused_flavors"
-            (section to flavor names) and, given SECTION, "dependents" (deck
-            to part names)
+            (section to flavor names), "unused_files" (path from the
+            repository root to its number of frames) and, given SECTION,
+            "dependents" (deck to part names)
         workdir: Path to move into before running the command
 
     """
@@ -60,6 +65,10 @@ def deps(
                 str(path): sorted(flavors)
                 for path, flavors in sections_analyzer.unused_flavors().items()
             }
+            report["unused_files"] = {
+                str(path.relative_to(settings.paths.git_dir)): _frame_count(path)
+                for path in sorted(sections_analyzer.unused_files())
+            }
         if section is not None:
             report["dependents"] = {
                 str(deck): sorted(parts)
@@ -73,6 +82,11 @@ def deps(
     if unused:
         with Console(stderr=True).status("Processing decks"):
             _print_unused_report(sections_analyzer.unused_flavors(), console)
+        console.print()
+        with Console(stderr=True).status("Finding unused content files"):
+            _print_unused_files_report(
+                sections_analyzer.unused_files(), settings.paths.git_dir, console
+            )
 
     if section is not None:
         if unused:
@@ -99,6 +113,45 @@ def _print_unused_report(
         for path, flavors in unused_flavors.items():
             content.add_row(str(path), " ".join(sorted(flavors)))
     console.print(Padding(content if unused_flavors else "None.", (0, 0, 0, 2)))
+
+
+def _print_unused_files_report(
+    unused_files: "Iterable[Path]", git_dir: Path, console: "Console"
+) -> None:
+    from rich.padding import Padding
+    from rich.table import Table
+
+    console.rule("[bold]Unused content files", align="left")
+    console.print()
+    paths = sorted(unused_files)
+    if paths:
+        content = Table("File", "Frames")
+        for path in paths:
+            content.add_row(
+                f"[link=file://{path}]{path.relative_to(git_dir)}[/link]",
+                str(_frame_count(path)),
+            )
+    console.print(Padding(content if paths else "None.", (0, 0, 0, 2)))
+
+
+def _frame_count(path: Path) -> int:
+    """Count a Markdown file's frames: its level-1 headings, outside code blocks.
+
+    Returns:
+        The number of `# ` lines outside fenced code blocks.
+    """
+    count, fence = 0, ""
+    for line in path.read_text(encoding="utf8").splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith(("```", "~~~")):
+            marker = stripped[:3]
+            if not fence:
+                fence = marker
+            elif marker == fence:
+                fence = ""
+        elif not fence and line.startswith("# "):
+            count += 1
+    return count
 
 
 def _print_section_report(

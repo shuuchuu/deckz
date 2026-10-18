@@ -223,38 +223,46 @@ def test_clean_all_removes_run_scratch_dir(working_dir: Path) -> None:
     assert not run_scratch_dir.exists()
 
 
-def test_clean_content_dry_run(working_dir: Path) -> None:
-    shared_unused_path = working_dir.parent.parent / "content" / "questions.md"
-    local_unused_path = working_dir / "content" / "orphan.md"
-    assert shared_unused_path.exists()
-    assert local_unused_path.exists()
-
-    main(("clean", "content", "--dry-run"))
-
-    assert shared_unused_path.exists()
-    assert local_unused_path.exists()
+def _unused_files(capsys: Any) -> dict[str, int]:
+    main(("deps", "--json"))
+    return loads(capsys.readouterr().out)["unused_files"]
 
 
-def test_clean_content(working_dir: Path) -> None:
-    shared_unused_path = working_dir.parent.parent / "content" / "questions.md"
+def test_deps_lists_unused_files(working_dir: Path, capsys: Any) -> None:
+    git_dir = working_dir.parent.parent
+    shared_unused_path = git_dir / "content" / "questions.md"
     local_unused_path = working_dir / "content" / "orphan.md"
     used_path = working_dir / "content" / "about.md"
+
+    unused = _unused_files(capsys)
+
+    assert str(shared_unused_path.relative_to(git_dir)) in unused
+    assert str(local_unused_path.relative_to(git_dir)) in unused
+    assert str(used_path.relative_to(git_dir)) not in unused
+    # Listed, never deleted: unused content can be kept on purpose.
     assert shared_unused_path.exists()
     assert local_unused_path.exists()
-    assert used_path.exists()
-
-    main(("clean", "content"))
-
-    assert not shared_unused_path.exists()
-    assert not local_unused_path.exists()
-    assert used_path.exists()
 
 
-def test_clean_content_keeps_en_translations(bilingual_dir: Path) -> None:
-    shared_content_dir = bilingual_dir.parent.parent / "content"
+def test_deps_counts_unused_files_frames(working_dir: Path, capsys: Any) -> None:
+    git_dir = working_dir.parent.parent
+    path = git_dir / "content" / "reserve.md"
+    path.write_text(
+        "# First\n\n```python\n# a comment, not a frame\n```\n\n# Second\n\n## Sub\n",
+        encoding="utf8",
+    )
+
+    assert _unused_files(capsys)[str(path.relative_to(git_dir))] == 2
+
+
+def test_deps_unused_files_keeps_en_translations(
+    bilingual_dir: Path, capsys: Any
+) -> None:
+    git_dir = bilingual_dir.parent.parent
+    shared_content_dir = git_dir / "content"
     (shared_content_dir / "en").mkdir()
     local_en_path = bilingual_dir / "content" / "en" / "hello.md"
-    # Under --en, a deck's local en/ file wins over the shared one...
+    # Under --lang en, a deck's local en/ file wins over the shared one...
     shadowed_en_path = shared_content_dir / "en" / "hello.md"
     shadowed_en_path.write_text("Hello\n", encoding="utf8")
     # ...and over a shared fr file...
@@ -272,13 +280,26 @@ def test_clean_content_keeps_en_translations(bilingual_dir: Path) -> None:
         encoding="utf8",
     )
 
-    main(("clean", "content"))
+    unused = _unused_files(capsys)
 
-    assert local_en_path.exists()
-    assert local_en_over_shared_fr_path.exists()
-    assert shared_fallback_en_path.exists()
-    assert not shadowed_en_path.exists()
-    assert not orphan_en_path.exists()
+    def listed(path: Path) -> bool:
+        return str(path.relative_to(git_dir)) in unused
+
+    assert not listed(local_en_path)
+    assert not listed(local_en_over_shared_fr_path)
+    assert not listed(shared_fallback_en_path)
+    assert listed(shadowed_en_path)
+    assert listed(orphan_en_path)
+
+
+def test_clean_content_is_gone(working_dir: Path) -> None:
+    shared_unused_path = working_dir.parent.parent / "content" / "questions.md"
+
+    with raises(SystemExit) as exc_info:
+        main(("clean", "content"))
+
+    assert exc_info.value.code != 0
+    assert shared_unused_path.exists()
 
 
 def _use_logo_in_en_only(bilingual_dir: Path) -> Path:
@@ -317,7 +338,7 @@ def test_asset_json(bilingual_dir: Path, capsys: Any) -> None:
 
 def test_deps_json(working_dir: Path, capsys: Any) -> None:
     main(("deps", "--json"))
-    assert loads(capsys.readouterr().out) == {"unused_flavors": {"about": ["standard"]}}
+    assert loads(capsys.readouterr().out)["unused_flavors"] == {"about": ["standard"]}
 
     deck_path = working_dir / "deck.yml"
     deck_path.write_text(
@@ -327,10 +348,9 @@ def test_deps_json(working_dir: Path, capsys: Any) -> None:
         encoding="utf8",
     )
     main(("deps", "about", "--json"))
-    assert loads(capsys.readouterr().out) == {
-        "unused_flavors": {},
-        "dependents": {"company/abc": ["p2"]},
-    }
+    report = loads(capsys.readouterr().out)
+    assert report["unused_flavors"] == {}
+    assert report["dependents"] == {"company/abc": ["p2"]}
 
 
 def test_flavor_deduplicate_dry_run(working_dir: Path) -> None:
