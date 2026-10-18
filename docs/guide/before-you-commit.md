@@ -22,7 +22,10 @@ says where your work stands, item by item, each with what to do:
 Stage the files you changed (`git add <files>`) and commit. Two git hooks run:
 
 - **pre-commit** runs the content checks on what you're committing (see
-  [Checks](checks.md)); fix what it reports, and commit again;
+  [Checks](checks.md)). It refuses the commit only for a blocking check's problem
+  (a secret in a notebook, a broken Jinja tag or deck definition); fix it, and
+  commit again. The other problems it prints can wait until you publish or teach;
+  `deckz status` keeps listing them;
 - **commit-msg** marks a commit changing one language of a pair only `Lang-sync:
   pending`, unless you said there's nothing to port (see
   [Translating](translating.md)).

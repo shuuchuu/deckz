@@ -243,12 +243,19 @@ def get_git_dir(path: Path) -> Path:
 
 
 def load_yaml(path: Path) -> Any:
-    from yaml import YAMLError, safe_load
+    from yaml import YAMLError, load
+
+    try:
+        # libyaml's scanner: a deck loads each section it includes, again for
+        # every deck (1,200 loads for 43 decks), most of their parse time.
+        from yaml import CSafeLoader as SafeLoader
+    except ImportError:  # A PyYAML built without libyaml.
+        from yaml import SafeLoader
 
     from .exceptions import InvalidConfigurationError
 
     try:
-        return safe_load(path.read_text(encoding="utf8"))
+        return load(path.read_text(encoding="utf8"), Loader=SafeLoader)
     except (YAMLError, UnicodeDecodeError) as e:
         msg = f"{path} is not valid YAML:\n{e}"
         raise InvalidConfigurationError(msg) from e

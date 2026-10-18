@@ -1,11 +1,15 @@
+import json
 import subprocess
+import sys
 from pathlib import Path
+from time import monotonic, sleep
 
 from fastapi.testclient import TestClient
 from pytest import fixture
 from studioz.app import create_app
 from studioz.background import changes
 from studioz.commits import blocked
+from studioz.problems import Statuses
 
 ORIGIN = {"Origin": "http://localhost:8421"}
 FORM = "/espaces/demo/commit/formulaire"
@@ -313,3 +317,45 @@ def test_the_draft_outlives_the_page(committer: TestClient, workspace: Path) -> 
     page = again.post(FORM, data={"formation": "client/abc"}, headers=ORIGIN).text
     assert "></textarea>" in page
     assert 'name="path" value="README.md">' in page
+
+
+def test_dialog_counts_the_problems_blocking_a_commit(
+    repository: Path, workspace: Path
+) -> None:
+    items = [
+        {
+            "text": "jinja-syntax: content/a/x.md:1: unexpected end",
+            "fix": "",
+            "blocks_commit": True,
+        },
+        {"text": "raw-latex: content/a/x.md:2: {=latex} block", "fix": ""},
+        {"text": "raw-latex: content/a/x.md:3: {=latex} block", "fix": ""},
+    ]
+    status = json.dumps(
+        {
+            "scope": "",
+            "sections": [
+                {"key": "checks", "title": "Checks", "summary": "", "items": items}
+            ],
+        }
+    )
+    script = f"print({status!r})"
+    _write(workspace, "content/a/x.md", "changed\n")
+    statuses = Statuses(None, lambda *_: [sys.executable, "-c", script])
+    client = TestClient(
+        create_app(repository, statuses=statuses), base_url="http://localhost:8421"
+    )
+
+    deadline = monotonic() + 10
+    while "Vérification de l'espace en cours" in (
+        page := client.post(FORM, data={}, headers=ORIGIN).text
+    ):
+        assert monotonic() < deadline, "timed out"
+        sleep(0.05)
+
+    text = " ".join(page.split())
+    assert (
+        "1 problème qui bloque le commit : le dépôt refusera un commit qui le "
+        "contient." in text
+    )
+    assert "Les 2 autres ne bloquent pas le commit" in text

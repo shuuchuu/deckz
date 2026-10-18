@@ -5,6 +5,7 @@ from pygit2 import init_repository
 
 from deckz.analyzing.content_checks import (
     asset_credits,
+    deck_definitions,
     jinja_syntax,
     lab_format,
     lab_ids,
@@ -364,3 +365,40 @@ def test_jinja_syntax_needs_the_repository_environment(tmp_path: Path) -> None:
     problems = jinja_syntax(_settings(tmp_path))
     assert len(problems) == 1
     assert "environment_for" in problems[0]
+
+
+def test_deck_definitions_passes_decks_that_parse(tmp_path: Path) -> None:
+    init_repository(str(tmp_path))
+    _write(
+        tmp_path / "content" / "topic" / "topic.yml",
+        "title: T\nflavors:\n- name: main\n  includes: [a]\n",
+    )
+    _write(tmp_path / "content" / "topic" / "a.md", "a")
+    _write(
+        tmp_path / "deck" / "deck.yml",
+        "name: deck\nparts: [{name: p, sections: [$topic@main]}]\n",
+    )
+
+    assert deck_definitions(_settings(tmp_path)) == []
+
+
+def test_deck_definitions_flags_what_a_build_would_fail_on(tmp_path: Path) -> None:
+    init_repository(str(tmp_path))
+    _write(tmp_path / "content" / "topic" / "topic.yml", "title: T\nflavors: [\n")
+    _write(
+        tmp_path / "deck" / "deck.yml",
+        "name: deck\nparts: [{name: p, sections: [$gone@main, $topic@main]}]\n",
+    )
+    _write(tmp_path / "other" / "deck.yml", "name: [\n")
+
+    problems = deck_definitions(_settings(tmp_path))
+
+    assert len(problems) == 3
+    gone, topic, other = problems
+    assert gone.startswith("deck/deck.yml: gone@main (unresolvable section")
+    assert gone.endswith(": fix the definition, or restore what it names")
+    assert topic.startswith(
+        "deck/deck.yml: topic@main (content/topic/topic.yml is not valid YAML"
+    )
+    assert other.startswith("other/deck.yml is not valid YAML")
+    assert str(tmp_path) not in "".join(problems)

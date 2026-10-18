@@ -296,8 +296,16 @@ idempotent; `check=True` changes nothing. The CLI prints them
 (`lab-ids`, `lab-pairs`, `lab-outputs`, `lab-secrets` (with `labs/secrets.py`,
 also behind `labs publish`'s refusal), `lab-format`, `asset-credits`,
 `raw-latex`, `jinja-syntax` (each content file parsed with the repository's own
-Jinja environment, its filter and test names checked), `lab-urls`), each a
-`(settings) -> list[str]` function in its `CHECKS` dict.
+Jinja environment, its filter and test names checked), `deck-definitions`
+(every deck parsed in French, in the process pool), `lab-urls`), each a
+`(settings) -> list[str]` function in its `CHECKS` dict. A check is blocking
+or deferred (`ChecksSettings.blocking`: `deckz.yml`'s `checks.deferred`, else
+`content_checks.DEFERRED`, every built-in but `lab-secrets`, `jinja-syntax` and
+`deck-definitions`; a plugin check blocks unless listed): `deckz check` exits 1
+on a blocking check's problems only, or on any problem of the checks named on
+its command line, and prints the deferred ones, whose harm comes after the
+commit (`--plain` and `--json` say which); `deckz status` marks the
+`blocks_commit` items, and so does studioz.
 `components/checks.py::ChecksRunner` merges those with the target repo's
 own, from an optional `templates/checks.py` module (`checks(settings) ->
 Mapping[str, Callable[[], list[str]]]`, loaded through

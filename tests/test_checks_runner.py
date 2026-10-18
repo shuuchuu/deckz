@@ -28,6 +28,7 @@ def test_without_a_plugin_module_only_builtin_checks_run(tmp_path: Path) -> None
         "asset-credits",
         "raw-latex",
         "jinja-syntax",
+        "deck-definitions",
         "lab-urls",
     }
     assert checks["raw-latex"]() == []

@@ -66,8 +66,11 @@
   </div>
   {% endif %}
   <p class="checks">
-    {% if checks %}Le panneau Problèmes signale {{ checks.problems | length }} problème{{ "s" if checks.problems | length > 1 }} de vérification :
-    le dépôt refusera le commit s'ils sont dans les fichiers cochés.
+    {% if checks %}{% set blocking = checks.problems | selectattr("blocks_commit") | list | length %}{% set others = checks.problems | length - blocking %}
+    {% if blocking %}Le panneau Problèmes signale {{ blocking }} problème{{ "s" if blocking > 1 }} qui bloque{{ "nt" if blocking > 1 }} le commit :
+    le dépôt refusera un commit qui {{ "les" if blocking > 1 else "le" }} contient.{% endif %}
+    {% if others %}{{ "Les" if blocking else "Le panneau Problèmes signale" }} {{ others }} {{ "autre" ~ ("s" if others > 1) if blocking else "problème" ~ ("s" if others > 1) ~ " de vérification" }}
+    ne bloque{{ "nt" if others > 1 }} pas le commit : à régler avant de publier ou d'enseigner.{% endif %}
     {% elif report.running and not report.checked %}Vérification de l'espace en cours.
     {% else %}Les vérifications ne signalent aucun problème.{% endif %}
     Le dépôt vérifie à nouveau les fichiers au commit (quelques secondes).

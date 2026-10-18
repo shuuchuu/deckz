@@ -23,6 +23,8 @@ _MAX_ITEMS = 15
 class StatusItem:
     text: str
     fix: str = ""
+    blocks_commit: bool = False
+    """Whether it refuses a commit (a blocking check's finding)."""
 
 
 @dataclass(frozen=True)
@@ -123,17 +125,23 @@ def checks_section(
 
     available = GlobalSettingsFactory(settings).checks_runner().checks()
     items = [
-        StatusItem(f"{name}: {problem}")
+        StatusItem(f"{name}: {problem}", blocks_commit=settings.checks.blocking(name))
         for name, check in available.items()
         if name not in settings.checks.opt_in
         for problem in check()
     ]
-    # A problem starts with the file it's about: `path:line: …`, `path: …`.
+    # Those refusing a commit first, then those of your changes. A problem
+    # starts with the file it's about: `path:line: …`, `path: …`.
     items.sort(
-        key=lambda item: item.text.split(": ", 1)[1].split(":")[0] not in changed
+        key=lambda item: (
+            not item.blocks_commit,
+            item.text.split(": ", 1)[1].split(":")[0] not in changed,
+        )
     )
+    blocking = sum(item.blocks_commit for item in items)
     summary = (
-        f"{_count(len(items), 'problem')}: `deckz check` lists them"
+        f"{_count(len(items), 'problem')}, {blocking} blocking a commit: "
+        "`deckz check` lists them"
         if items
         else "every check passes"
     )

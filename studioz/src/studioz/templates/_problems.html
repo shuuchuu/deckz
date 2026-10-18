@@ -7,6 +7,7 @@
   <ul>
     {% for problem in group.problems %}
     <li>
+      {% if problem.blocks_commit %}<span class="blocks" title="Le dépôt refuse un commit qui le contient">bloque le commit</span>{% endif %}
       {% if problem.notebook %}
       <a class="problem" href="{{ base }}/tp/{{ problem.notebook }}" title="Voir le notebook">{{ problem.text }}</a>
       {% elif deck and (problem.file or problem.page) %}

@@ -6,9 +6,9 @@ Nothing here depends on a repo's theme or content conventions.
 Each check is a `(settings) -> list[str]` function, its problems already
 formatted as a human-readable line (commonly `"<path>: <message>"` or
 `"<path>:<line>: <message>"`). `CHECKS` maps every built-in check's name to
-its function; `run_checks` runs a selection of them (every one by default)
-and returns each failing check's problems, keyed by name. `deckz check
-content` is the CLI for this; a target repo can add its own checks, in the
+its function, and `DEFERRED` those whose findings don't block a commit by
+default. `deckz check content` is the CLI for this; a target repo can add
+its own checks, in the
 same shape, from a `templates/checks.py` plugin (see
 [`checks`][deckz.components.checks] for how the two are merged).
 
@@ -32,7 +32,7 @@ from ..labs.notebook import notebook_paths
 from ..utils import content_dirs
 
 if TYPE_CHECKING:
-    from ..configuring.settings import GlobalSettings
+    from ..configuring.settings import DeckSettings, GlobalSettings
 
 _CREDIT_LINE = re.compile(r"^\s*(title|author|license)(_en)?\s*:.*\\[a-zA-Z{]")
 _LATEX_BLOCK = re.compile(r"^[ \t]*```+[ \t]*\{=latex\}", re.MULTILINE)
@@ -289,6 +289,53 @@ def jinja_syntax(settings: "GlobalSettings") -> list[str]:
     return problems
 
 
+def _deck_problems(settings: "DeckSettings") -> list[str]:
+    from ..components.factory import DeckSettingsFactory
+    from ..configuring.variables import get_variables
+    from ..exceptions import DeckParsingError, DeckzError
+
+    git_dir = settings.paths.git_dir
+    definition = settings.paths.deck_definition
+    where = _rel(definition, git_dir)
+    try:
+        DeckSettingsFactory(settings, lang="fr").parser().from_deck_definition(
+            definition
+        )
+        get_variables(settings, "fr")
+    except DeckParsingError as error:
+        return [
+            f"{where}: {problem.replace(f'{git_dir}/', '')}: fix the definition,"
+            " or restore what it names"
+            for problem in error.errors
+        ]
+    except DeckzError as error:
+        message = str(error).replace(f"{git_dir}/", "")
+        return [message if message.startswith(where) else f"{where}: {message}"]
+    return []
+
+
+def deck_definitions(settings: "GlobalSettings") -> list[str]:
+    # Every deck parses in French, as its build would: its deck.yml, the
+    # sections it includes and their flavors, the files they name, its
+    # variables.yml. A deleted shared file still included, or a section
+    # .yml that doesn't parse, fails here rather than in every build of
+    # the decks using it. English is `missing-en`'s (a plugin's, slow).
+    # About a second for 43 decks, in deckz's process pool.
+    from ..exceptions import DeckzError
+    from ..utils import all_deck_settings, create_pool
+
+    git_dir = settings.paths.git_dir
+    try:
+        decks = list(all_deck_settings(git_dir))
+    except DeckzError as error:
+        return [str(error).replace(f"{git_dir}/", "")]
+    if not decks:
+        return []
+    with create_pool(min(len(decks), 4)) as pool:
+        found = pool.map(_deck_problems, decks)
+    return [problem for deck in found for problem in deck]
+
+
 def _published_notebooks_slug(settings: "GlobalSettings") -> str | None:
     # The owner/repo of labs.publish_remote, or None if it isn't configured.
     from pygit2 import GitError, Repository
@@ -342,5 +389,25 @@ CHECKS: dict[str, Callable[["GlobalSettings"], list[str]]] = {
     "asset-credits": asset_credits,
     "raw-latex": raw_latex,
     "jinja-syntax": jinja_syntax,
+    "deck-definitions": deck_definitions,
     "lab-urls": lab_urls,
 }
+
+DEFERRED = (
+    "lab-ids",
+    "lab-pairs",
+    "lab-outputs",
+    "lab-format",
+    "asset-credits",
+    "raw-latex",
+    "lab-urls",
+)
+"""The built-in checks whose findings don't fail `deckz check` by default.
+
+Their harm comes later than the commit (a lab published, a deck uploaded or
+taught), so a contributor commits freely and the debt is settled before
+then. Those left out block a commit, the point of their harm:
+`lab-secrets` (a secret stays in the history), `jinja-syntax` and
+`deck-definitions` (each `git pull` breaks everyone's builds). `deckz.yml`'s
+`checks.deferred` replaces this list.
+"""

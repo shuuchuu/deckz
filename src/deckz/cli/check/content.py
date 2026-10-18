@@ -21,14 +21,20 @@ def content(
     carrying no stored outputs and demos with code carrying some
     (`lab-outputs`), nothing credential-like in a notebook (`lab-secrets`),
     notebooks in deckz's canonical JSON (`lab-format`),
-    asset credit lines free of LaTeX (`asset-credits`), and no raw LaTeX in
-    content (`raw-latex`, `lab-urls`). A `templates/checks.py` module (see
-    `GlobalPaths.checks_module`) can add the repository's own, merged in
-    under their own names.
+    asset credit lines free of LaTeX (`asset-credits`), no raw LaTeX in
+    content (`raw-latex`, `lab-urls`), content files' Jinja tags
+    (`jinja-syntax`), and every deck parsing in French (`deck-definitions`).
+    A `templates/checks.py` module (see `GlobalPaths.checks_module`) can
+    add the repository's own, merged in under their own names.
 
     With no CHECKS given, runs every one, deckz's built-ins first, except
     those `deckz.yml` lists under `checks.opt_in`, which run only when
-    named. Exits 1 if any check reports a problem.
+    named, and exits 1 if a blocking check reports a problem. A deferred
+    check's problems (`checks.deferred`; by default every built-in but
+    `lab-secrets`, `jinja-syntax` and `deck-definitions`) are printed
+    without failing: their harm comes later than the commit (a lab
+    published, a deck uploaded), and `deckz status` keeps showing them.
+    Checks named in CHECKS fail on any problem.
 
     Args:
         checks: Only run these checks, by name, instead of every one
@@ -40,8 +46,10 @@ def content(
             `lab-urls`) does nothing under `--staged`, since the export has
             no `.git` of its own
         plain: Compact, stable lines for a script or an agent, instead of
-            one header per failing check
-        json: Print the findings as one JSON object, instead
+            one header per failing check: `blocking` or `deferred`, the
+            check's name and the problem, separated by tabs
+        json: Print the findings as one JSON object, instead: `blocking`
+            and `deferred`, each mapping a check's name to its problems
         workdir: Path to move into before running the command
 
     """
@@ -51,6 +59,7 @@ def content(
     from ...checking import export_staged
     from ...components.factory import GlobalSettingsFactory
     from ...configuring.settings import GlobalSettings
+    from .._presentation import print_checks
 
     settings = GlobalSettings.from_yaml(workdir)
     if staged:
@@ -68,18 +77,15 @@ def content(
         sys_exit(2)
 
     results = {name: problems for name in selected if (problems := available[name]())}
+    blocking = {
+        name: problems
+        for name, problems in results.items()
+        if checks is not None or settings.checks.blocking(name)
+    }
+    deferred = {
+        name: problems for name, problems in results.items() if name not in blocking
+    }
 
-    if json:
-        from .._presentation import print_json
-
-        print_json(results)
-    elif plain:
-        for name, problems in results.items():
-            for problem in problems:
-                print(f"{name}\t{problem}")
-    else:
-        for name, problems in results.items():
-            print(f"#### {name}", *(f"  {problem}" for problem in problems), sep="\n")
-
-    if results:
+    print_checks(blocking, deferred, plain=plain, json=json)
+    if blocking:
         sys_exit(1)

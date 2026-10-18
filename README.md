@@ -598,6 +598,22 @@ checks:
   opt_in: [lab-outputs, published-videos]
 ```
 
+A check is either blocking or deferred. A blocking check's problems fail
+`deckz check`, hence the pre-commit hook and CI; a deferred one's are
+printed (and listed by `deckz status`) without failing, unless the check is
+named: their harm comes later than the commit, when a lab is published or a
+deck uploaded or taught, so a contributor commits freely and the debt is
+settled before then. By default every built-in check is deferred but
+`lab-secrets` (a secret stays in the history), `jinja-syntax` and
+`deck-definitions` (every `git pull` would break everyone's builds), and
+every plugin check blocks. `checks.deferred` replaces deckz's list, naming
+built-in and plugin checks alike (`[]` makes every check block):
+
+```yaml
+checks:
+  deferred: [lab-ids, lab-pairs, lab-format, asset-credits, raw-latex, lab-frames]
+```
+
 ### Claude Code hooks
 
 `deckz hooks install` also adds deckz's own Claude Code hooks to

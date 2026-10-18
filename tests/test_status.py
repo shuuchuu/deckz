@@ -160,7 +160,11 @@ def test_checks_name_the_problems_of_your_changes_first(repo: Path) -> None:
 
     section = checks_section(_settings(repo), changed)
 
-    assert section.summary == "21 problems: `deckz check` lists them"
+    assert section.summary == (
+        "21 problems, 1 blocking a commit: `deckz check` lists them"
+    )
     assert section.items[0].text.startswith("jinja-syntax: content/questions.md:1:")
+    assert section.items[0].blocks_commit
     assert section.items[1].text.startswith("raw-latex: content/old-00.tex")
+    assert not section.items[1].blocks_commit
     assert section.items[-1].text == "... and 6 more"

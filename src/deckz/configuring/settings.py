@@ -183,6 +183,23 @@ class ChecksSettings(BaseModel):
     Built-in or plugin checks too slow, networked or not yet passing to \
     run on every commit (the pre-commit hook runs `deckz check --staged`, \
     i.e. every other check). A name no check has is ignored."""
+    deferred: tuple[str, ...] | None = None
+    """Checks whose findings `deckz check` prints without failing, unless named.
+
+    Unset, deckz's built-in deferred checks (`content_checks.DEFERRED`: \
+    those whose harm comes after the commit); a list replaces them, `[]` \
+    making every check block a commit. A plugin check blocks unless listed. \
+    A name no check has is ignored."""
+
+    def blocking(self, name: str) -> bool:
+        """Whether a finding of check `name` fails `deckz check` run unnamed.
+
+        Returns:
+            True unless it's deferred.
+        """
+        from ..analyzing.content_checks import DEFERRED
+
+        return name not in (DEFERRED if self.deferred is None else self.deferred)
 
 
 class VideosSettings(BaseModel):

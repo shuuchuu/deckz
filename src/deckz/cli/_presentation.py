@@ -7,7 +7,7 @@ This module is where the CLI turns those into rich widgets.
 """
 
 import sys
-from collections.abc import Callable, Generator, Iterable, Sequence
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from logging import getLogger
 from pathlib import Path, PurePath
@@ -436,6 +436,48 @@ def print_status(scope: str, sections: "Iterable[StatusSection]") -> None:
         console.print(f"\n{mark} [bold]{section.title}[/]: ", end="")
         console.print(section.summary, markup=False)
         for item in section.items:
-            console.print(f"  - {item.text}", markup=False)
+            blocks = "(blocks a commit) " if item.blocks_commit else ""
+            console.print(f"  - {blocks}{item.text}", markup=False)
             if item.fix:
                 console.print(f"    → {item.fix}", markup=False)
+
+
+def print_checks(
+    blocking: Mapping[str, Sequence[str]],
+    deferred: Mapping[str, Sequence[str]],
+    *,
+    plain: bool = False,
+    json: bool = False,
+) -> None:
+    """Print `deckz check`'s findings, blocking checks' first.
+
+    Deferred checks' findings don't fail it, which the output says: a header
+    mark, a `deferred` column (`plain`) or key (`json`), and a closing log
+    line when nothing blocks.
+    """
+    if json:
+        print_json({"blocking": blocking, "deferred": deferred})
+        return
+    if plain:
+        for level, found in (("blocking", blocking), ("deferred", deferred)):
+            for name, problems in found.items():
+                for problem in problems:
+                    print(f"{level}\t{name}\t{problem}")
+        return
+    for found, mark in (
+        (blocking, ""),
+        (deferred, " (deferred: doesn't block a commit)"),
+    ):
+        for name, problems in found.items():
+            print(
+                f"#### {name}{mark}",
+                *(f"  {problem}" for problem in problems),
+                sep="\n",
+            )
+    if deferred and not blocking:
+        count = sum(len(problems) for problems in deferred.values())
+        getLogger(__name__).info(
+            f"{count} problem{'s' if count > 1 else ''} of deferred checks: they "
+            "don't block a commit, fix them before publishing or teaching "
+            "(`deckz status` keeps showing them)"
+        )

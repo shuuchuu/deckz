@@ -26,7 +26,8 @@ before = runs.read_text() if runs.exists() else ""
 runs.write_text(before + sys.argv[2] + "\\n")
 print(json.dumps({"scope": "", "sections": [
     {"key": "checks", "title": "Checks", "summary": "1 problem", "items": [
-        {"text": "lab-frames: content/greeting/hello.md:2: no lab link", "fix": ""}]},
+        {"text": "lab-frames: content/greeting/hello.md:2: no lab link", "fix": "",
+         "blocks_commit": True}]},
     {"key": "translation", "title": "Translation", "summary": "", "items": []},
     {"key": "decks", "title": "Built decks", "summary": "", "items": [
         {"text": "client/abc: 1 PDF not matching its content", "fix": "deckz run"}]},
@@ -88,6 +89,7 @@ def test_status_runs_again_only_after_a_change(tmp_path: Path, workspace: Path) 
     assert group.title == "Vérifications"
     (problem,) = group.problems
     assert (problem.file, problem.line) == ("content/greeting/hello.md", 2)
+    assert problem.blocks_commit
     # Changes count from the merge base with the branch synced with.
     base = subprocess.run(
         ["git", "-C", str(workspace), "merge-base", "HEAD", "main"],
@@ -183,6 +185,7 @@ def test_panel_with_the_deck_s_shrunk_frames(
 
     page = panel("")
     assert "Vérifications" in page
+    assert ">bloque le commit</span>" in page
     # Without a deck, nothing to open the file in.
     assert 'class="problem"' in page
     assert "data-file" not in page

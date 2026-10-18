@@ -115,6 +115,7 @@ tr.closed td { color: var(--muted); }
 .changes .commit-open { font-size: 0.85em; padding: 0.1rem 0.6rem; margin-bottom: 0.2rem; }
 .problems .fix { display: block; color: var(--muted); font-size: 0.85em; }
 .problems .checking { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.problems .blocks { display: inline-block; margin-right: 0.4em; padding: 0 0.35em; border-radius: 3px; background: var(--error-bg); color: var(--danger); font-size: 0.8em; }
 .problems .hint, .problems .error { font-size: 0.85em; margin: 0.4rem 0; }
 .topbar a.workspace-name { color: inherit; text-decoration: none; }
 

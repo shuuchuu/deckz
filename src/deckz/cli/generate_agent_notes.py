@@ -77,8 +77,12 @@ no variables of its own: every file of a deck renders with the same
   notebooks with no stored outputs and demos with some, no credential in
   a notebook, notebooks in canonical JSON (`deckz labs fmt`), asset credit
   lines free of LaTeX, no raw LaTeX in content, no hand-written link to
-  the lab-publishing remote -- plus the repo's own `templates/checks.py`
-  checks, merged in under their own names. `--staged` checks the git
+  the lab-publishing remote, content files' Jinja parsing, every deck
+  parsing -- plus the repo's own `templates/checks.py` checks, merged in
+  under their own names. Only blocking checks' problems fail it (by
+  default `lab-secrets`, `jinja-syntax`, `deck-definitions` and the repo's
+  own; `checks.deferred` in `deckz.yml`); the deferred ones' are printed,
+  to fix before publishing or teaching. `--staged` checks the git
   index's staged version of every tracked file instead of the working
   tree (so it matches what's about to be committed, and another
   session's unfinished edits don't block or hide a check).

@@ -381,6 +381,28 @@ misspelled line refused; `check-commits` over slides' 1,405 commits passes, list
 
 ### 8.2 Blocking and deferred checks
 
+**Status (2026-10-18):** done. The open question's answer was no: nothing run at
+commit parsed a deck (slides' `deck-files` only checks which files a deck directory
+holds). A new built-in, blocking `deck-definitions` parses every deck in French
+(`deck.yml`, the sections and flavors it includes, the files they name,
+`variables.yml`), in 0.9 s on slides' 43 decks with a pool of 4, once `load_yaml`
+used libyaml's loader: PyYAML's pure-Python scanner was 11 s of 14 s profiled (each
+deck loads every section it includes again: 1,213 loads), which speeds up every
+deck parse in deckz. `checks.deferred` (unset: `content_checks.DEFERRED`, every
+built-in but `lab-secrets`, `jinja-syntax`, `deck-definitions`; a list replaces it)
+and `ChecksSettings.blocking`. `deckz check` exits 1 on blocking findings only, or on
+any finding of a check named on its command line (so CI's nightly `deckz check
+missing-en` still fails); `--plain` gains a first `blocking`/`deferred` column and
+`--json` the two keys (nothing parsed either). `deckz status` sorts the blocking
+findings first, marked, its summary counting them (`StatusItem.blocks_commit`);
+studioz badges them "bloque le commit" and the Commit dialog counts them apart. The
+post-edit Claude hook still reports every finding of the file edited: an agent
+settles debt in what it touches. Tried on a scratch worktree of slides: clean in
+19 s (the whole pre-commit run); a staged `{=latex}` block printed, exit 0; a staged
+deletion of `ai/history-light.md` refused (`decks/orsys/iao/deck.yml`), exit 1.
+Left for 8.4: slides' `deckz.yml` comment and handbook still say the commit-msg hook
+refuses.
+
 Not every check can wait: for some, the commit (or the push, since slides commits to
 `main`) is the point of harm.
 

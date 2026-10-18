@@ -57,6 +57,8 @@ class Problem:
     """The page of the deck's handout it's about."""
     notebook: str | None = None
     """The lab notebook it's about, as its page names it: `<lab>/<kind>?lang=…`."""
+    blocks_commit: bool = False
+    """Whether the repository refuses a commit holding it (a blocking check's)."""
 
 
 @dataclass(frozen=True)
@@ -142,6 +144,7 @@ def _groups(
                     file,
                     line,
                     notebook=notebook(item["text"], labs_dir),
+                    blocks_commit=bool(item.get("blocks_commit")),
                 )
             )
         groups.append(Group(title, tuple(problems), key))
