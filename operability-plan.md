@@ -464,6 +464,21 @@ stay accepted from plugins, mapped by their leading path when there is one.
 
 ### 8.4 Docs
 
+**Status (2026-10-19):** done. The guide's pages followed 8.1–8.3 as each shipped.
+Slides 7c41b332: `HANDBOOK.md`'s "Traduire", "Committer", "Avant d'enseigner" and
+"Publier" (commit as you like; what blocks a commit and why; `deckz status <deck>`,
+`upload` and `labs publish` where the rest is due), `CLAUDE.md`, the `qa-fix` and
+`sync-langs` skills and `deckz.yml`'s comments no longer describe the refusal. Slides'
+house checks all blocked (a plugin check blocks unless listed), so its `deckz.yml`
+gains `checks.deferred`: deckz's deferred built-ins, repeated since the list replaces
+them, plus `lab-frames`, `lab-hands-on`, `lab-cpu`, `lab-portable`, `lab-typography`,
+`lab-ruff`, `deck-files` and `quiz-answers`; `python` (its problems name no file, so
+no gate catches them) and `lab-codespace` stay blocking. Tried on a scratch worktree:
+a staged wrong quiz answer and a French notebook's missing non-breaking space, all
+deferred, exit 0; the commit went through marked `Lang-sync: pending`, and `bdm`'s
+upload dry run listed the quiz's two problems. Left: the acceptance test with the
+colleague ("Then, in slides").
+
 The guide's translating and checks pages, then slides' `HANDBOOK.md`: commit as you
 like; what blocks a commit and why; where the debt shows (`deckz status`, studioz),
 and when it must be settled.
