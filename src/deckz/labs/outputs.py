@@ -24,10 +24,13 @@ _REDACTED_MARK = REDACTED.partition("{")[0]
 def _resolve_carriage_returns(text: str) -> str:
     r"""Simulate a terminal: a `\r` discards what came before it on its line.
 
+    A `\r` ending a line discards nothing: it's a `\r\n` line ending (IPython
+    runs `!cmd` in a pty outside Colab), or a progress bar's last update.
+
     Returns:
         `text`, with each line collapsed to what a terminal would display.
     """
-    return "\n".join(line.rsplit("\r", 1)[-1] for line in text.split("\n"))
+    return "\n".join(line.rstrip("\r").rsplit("\r", 1)[-1] for line in text.split("\n"))
 
 
 def _stream_text(output: dict[str, Any]) -> str:

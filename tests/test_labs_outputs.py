@@ -141,6 +141,29 @@ def test_apply_executed_outputs_resolves_carriage_returns(tmp_path: Path) -> Non
     assert notebook.cells[0]["outputs"][0]["text"] == ["100%\n", "done\n"]
 
 
+def test_apply_executed_outputs_keeps_crlf_lines(tmp_path: Path) -> None:
+    path = tmp_path / "demo.ipynb"
+    path.write_text(canonical_dump(_notebook([_code_cell()])))
+    notebook = Notebook(path)
+    executed = _notebook(
+        [
+            _code_cell(
+                outputs=[
+                    {
+                        "output_type": "stream",
+                        "name": "stdout",
+                        "text": "a\r\nb\r\n10%\r50%\r\n",
+                    }
+                ]
+            )
+        ]
+    )
+
+    apply_executed_outputs(notebook, executed)
+
+    assert notebook.cells[0]["outputs"][0]["text"] == ["a\n", "b\n", "50%\n"]
+
+
 def _photo_like_png_b64() -> str:
     channels = [
         Image.effect_noise((300, 300), 40).filter(ImageFilter.GaussianBlur(6))
