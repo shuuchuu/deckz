@@ -258,16 +258,19 @@ def _convert_errors(settings: "GlobalSettings", path: Path) -> str:
     Returns:
         pandoc's error output, empty if the conversion succeeds.
     """
+    from tempfile import TemporaryDirectory
+
     from .components.factory import GlobalSettingsFactory
     from .exceptions import DeckzError
 
-    scratch = path.with_name(f".{path.name}.deckz-hook-check{path.suffix}")
-    try:
-        GlobalSettingsFactory(settings).markdown_converter().convert(path, scratch)
-    except DeckzError as error:
-        return str(error)
-    finally:
-        scratch.unlink(missing_ok=True)
+    # Outside the content tree: a hook killed mid-conversion once left its
+    # scratch file next to the source, where `deckz check` then failed on it.
+    with TemporaryDirectory(prefix="deckz-hook-") as scratch_dir:
+        scratch = Path(scratch_dir) / path.name
+        try:
+            GlobalSettingsFactory(settings).markdown_converter().convert(path, scratch)
+        except DeckzError as error:
+            return str(error)
     return ""
 
 

@@ -12,8 +12,11 @@ class PandocConverter(MarkdownConverterProtocol):
         self._pandoc_command = tuple(pandoc_command)
 
     def convert(self, source: Path, destination: Path) -> None:
+        # pandoc runs from the source's directory, so that the paths the
+        # fragment names resolve as they do for it; the output goes where the
+        # caller asked, wherever that is.
         completed_process = run(
-            [*self._pandoc_command, source.name, "-o", destination.name],
+            [*self._pandoc_command, source.name, "-o", str(destination.absolute())],
             cwd=source.parent,
             capture_output=True,
             encoding="utf8",
