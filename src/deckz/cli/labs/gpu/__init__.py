@@ -1,6 +1,11 @@
-from cyclopts import App
+from typing import Annotated
+
+from cyclopts import App, Parameter
 
 from .. import app as _parent_app
+
+Gpus = Annotated[list[str] | None, Parameter(consume_multiple=True, negative="")]
+"""GPU names in order of preference: `--gpu A B`, or `--gpu A --gpu B`."""
 
 app = App(
     name="gpu",

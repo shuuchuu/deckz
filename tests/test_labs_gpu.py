@@ -8,7 +8,14 @@ from pathlib import Path
 from typing import Any
 
 from pygit2 import init_repository
-from pytest import CaptureFixture, MonkeyPatch, approx, fixture, raises
+from pytest import (
+    CaptureFixture,
+    LogCaptureFixture,
+    MonkeyPatch,
+    approx,
+    fixture,
+    raises,
+)
 
 from deckz.cli import main
 from deckz.configuring.settings import (
@@ -22,6 +29,7 @@ from deckz.labs import gpu_pass
 from deckz.labs.gpu import (
     IDLE_CPUS,
     QUEUE,
+    STOP_SIGNALS,
     GpuRun,
     GpuStatus,
     InstanceInfo,
@@ -31,6 +39,7 @@ from deckz.labs.gpu import (
     format_report,
     machines,
     report,
+    uninterrupted,
 )
 
 _OFFER = {
@@ -61,6 +70,8 @@ class FakeRunner:
         self.instances: list[dict[str, Any] | None] = []
         self.contracts = iter(range(100, 200))
         self.ssh_output = ""
+        # How many `ssh ... true` readiness checks refuse the key first.
+        self.ssh_refusals = 0
 
     def __call__(self, args: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
         self.calls.append(list(args))
@@ -77,6 +88,9 @@ class FakeRunner:
                 current = self.instances[0] if self.instances else None
             out = json.dumps(current) if current is not None else ""
         elif args[0] == "ssh":
+            if args[-1] == "true" and self.ssh_refusals:
+                self.ssh_refusals -= 1
+                return subprocess.CompletedProcess(args, 255, "", "Permission denied")
             out = self.ssh_output
         return subprocess.CompletedProcess(args, 0, out, "")
 
@@ -152,6 +166,25 @@ def test_up_avoids_a_machine_that_failed_to_boot(repo: Path) -> None:
     assert ["vastai", "destroy", "instance", "100", "-y"] in vastai
     searches = [call for call in vastai if call[1] == "search"]
     assert "machine_id!=42" not in searches[0][3]
+    assert "machine_id!=42" in searches[1][3]
+    assert json.loads((gpu_run.directory.parent / "avoid.json").read_text()) == [42]
+    state = gpu_run.state()
+    assert state is not None
+    assert state.id == 101
+
+
+def test_up_avoids_a_machine_that_never_accepts_ssh(repo: Path) -> None:
+    runner = FakeRunner()
+    runner.instances = [_running()]
+    runner.ssh_refusals = 20  # Every readiness check of the first machine.
+    runner.ssh_output = "GPU 0: Tesla T4"
+    gpu_run = _gpu_run(repo, runner)
+
+    assert gpu_run.up() == "GPU 0: Tesla T4"
+
+    vastai = runner.commands("vastai")
+    assert ["vastai", "destroy", "instance", "100", "-y"] in vastai
+    searches = [call for call in vastai if call[1] == "search"]
     assert "machine_id!=42" in searches[1][3]
     assert json.loads((gpu_run.directory.parent / "avoid.json").read_text()) == [42]
     state = gpu_run.state()
@@ -359,6 +392,128 @@ def test_down_destroys_and_forgets_the_machine(repo: Path) -> None:
     assert gpu_run.down() == 100
     assert gpu_run.state() is None
     assert gpu_run.down() is None
+    assert not (gpu_run.directory.parent / "avoid.json").exists()  # It booted.
+
+
+def test_down_avoids_a_machine_that_never_finished_booting(
+    repo: Path, caplog: LogCaptureFixture
+) -> None:
+    # Destroyed by hand while stuck "loading": never rented again.
+    runner = FakeRunner()
+    gpu_run = _gpu_run(repo, runner)
+    gpu_run.directory.mkdir(parents=True)
+    (gpu_run.directory / "state.json").write_text(
+        json.dumps({"id": 100, "gpu": "RTX A5000", "machine": 42})
+    )
+
+    assert gpu_run.down() == 100
+
+    assert json.loads((gpu_run.directory.parent / "avoid.json").read_text()) == [42]
+    assert "machine 42 avoided from now on" in caplog.text
+    runner.instances = [_running()]
+    runner.ssh_output = "GPU 0: Tesla T4"
+    gpu_run.up()
+    searches = [c for c in runner.commands("vastai") if c[1] == "search"]
+    assert "machine_id!=42" in searches[-1][3]
+
+
+class ScriptedRunner(FakeRunner):
+    """vastai answers as scripted: `searches` by GPU, `creates` in turn."""
+
+    def __init__(
+        self,
+        searches: dict[str, tuple[str, str]],
+        creates: list[tuple[str, str]] | None = None,
+    ) -> None:
+        super().__init__()
+        self.searches = searches
+        self.creates = creates or []
+
+    def __call__(
+        self, args: list[str], **kwargs: Any
+    ) -> subprocess.CompletedProcess[str]:
+        if args[:3] == ["vastai", "search", "offers"]:
+            self.calls.append(list(args))
+            gpu = args[3].split()[0].removeprefix("gpu_name=")
+            return subprocess.CompletedProcess(args, 0, *self.searches[gpu])
+        if args[:3] == ["vastai", "create", "instance"] and self.creates:
+            self.calls.append(list(args))
+            return subprocess.CompletedProcess(args, 0, *self.creates.pop(0))
+        return super().__call__(args, **kwargs)
+
+
+def test_rent_says_why_no_offer_was_rented(repo: Path) -> None:
+    # Tesla_T4: nothing matches (another pass just rented the only one, say);
+    # RTX_A4000: both offers taken meanwhile.
+    offers = [_OFFER | {"id": 8, "gpu_name": "RTX A4000"}, _OFFER | {"id": 9}]
+    gone = json.dumps({"success": False, "error": "no_such_ask", "msg": "gone"})
+    runner = ScriptedRunner(
+        {"Tesla_T4": ("[]", ""), "RTX_A4000": (json.dumps(offers), "")},
+        creates=[(gone, ""), ("", '{"error": true, "status_code": 429}')],
+    )
+    backend = VastBackend(_settings(repo), runner)
+
+    with raises(GpuRunError) as error:
+        backend.rent(("Tesla_T4", "RTX_A4000"), avoid=[5])
+
+    message = str(error.value)
+    assert message.startswith("no offer rented among Tesla_T4, RTX_A4000: ")
+    assert "Tesla_T4: no offer matches `labs.gpu.offer_filter`" in message
+    assert (
+        'RTX_A4000: offer 8 (gone), offer 9 ({"error": true, "status_code": 429})'
+        " refused"
+    ) in message
+    assert "1 machine(s) avoided" in message
+    assert "--dry-run" in message
+
+
+def test_rent_tries_the_next_offers_before_the_next_gpu(repo: Path) -> None:
+    offers = [_OFFER | {"id": i} for i in range(1, 8)]
+    gone = (json.dumps({"success": False, "msg": "gone"}), "")
+    runner = ScriptedRunner(
+        {"Tesla_T4": (json.dumps(offers), "")}, creates=[gone, gone, gone]
+    )
+
+    state = VastBackend(_settings(repo), runner).rent(("Tesla_T4",), avoid=[])
+
+    created = [call[3] for call in runner.commands("vastai") if call[1] == "create"]
+    assert created == ["1", "2", "3", "4"]
+    assert state.id == 100
+
+
+def test_offers_reports_a_failed_search(repo: Path) -> None:
+    # vastai exits 0 on an HTTP error, its error on stderr, stdout empty.
+    error = '{"error": true, "status_code": 429, "msg": "slow down"}'
+    runner = ScriptedRunner({"Tesla_T4": ("", error)})
+
+    with raises(GpuRunError, match=r"search offers failed:\n.*slow down"):
+        VastBackend(_settings(repo), runner).offers("Tesla_T4", avoid=[])
+
+
+def test_uninterrupted_holds_the_stop_signals_and_nests() -> None:
+    def blocked() -> set[int]:
+        return set(signal.pthread_sigmask(signal.SIG_BLOCK, []))
+
+    before = blocked()
+    with uninterrupted():
+        with uninterrupted():
+            assert blocked() >= STOP_SIGNALS
+        assert blocked() >= STOP_SIGNALS  # The inner block kept them held.
+    assert blocked() == before
+
+
+def test_uninterrupted_delivers_a_signal_once_the_block_is_done() -> None:
+    received: list[int] = []
+    previous = signal.signal(signal.SIGTERM, lambda signum, _: received.append(signum))
+    try:
+        with uninterrupted():
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(0.1)
+            assert received == []
+        time.sleep(0.1)
+        assert received == [signal.SIGTERM]
+    finally:
+        signal.signal(signal.SIGTERM, previous)
 
 
 def _executed(out: Path, name: str = "nn__demo-fr.full.ipynb") -> Path:
@@ -889,6 +1044,80 @@ def test_pass_destroys_the_machine_on_ctrl_c_and_sigterm(repo: Path) -> None:
     assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
 
 
+class StoppedRunner(PassRunner):
+    """A machine the pass is stopped on, with `signum`, when `when` runs."""
+
+    def __init__(self, out: Path, signum: int, when: str) -> None:
+        super().__init__(out, finishes=False)
+        self.signum = signum
+        self.when = when
+        self.destroy_blocked: set[int] = set()
+
+    def __call__(
+        self, args: list[str], **kwargs: Any
+    ) -> subprocess.CompletedProcess[str]:
+        done = super().__call__(args, **kwargs)
+        if args[:2] == ["vastai", "destroy"]:
+            self.destroy_blocked = set(signal.pthread_sigmask(signal.SIG_BLOCK, []))
+            # Never kill the test process: the pass's handler must still be set.
+            assert signal.getsignal(self.signum) not in (signal.SIG_DFL, None)
+        if args[:2] == ["vastai", self.when]:
+            os.kill(os.getpid(), self.signum)
+        return done
+
+
+@fixture
+def sighup_handled() -> Any:
+    # SIGHUP may be ignored where the tests run: handled, the pass replaces it.
+    previous = signal.signal(signal.SIGHUP, lambda *_: None)
+    yield
+    signal.signal(signal.SIGHUP, previous)
+
+
+def test_pass_destroys_a_machine_stopped_while_renting(
+    repo: Path, sighup_handled: None
+) -> None:
+    # `timeout` and a closing terminal signal the whole process group: vastai
+    # too, which must still finish renting, so that the machine is destroyed.
+    for signum in (signal.SIGTERM, signal.SIGHUP):
+        out = repo / ".run" / "gpu" / "main" / "out"
+        runner = StoppedRunner(out, signum, when="create")
+
+        with raises(gpu_pass.GpuPassStoppedError):
+            _pass(repo, runner)
+
+        assert _destroyed(runner) == [["vastai", "destroy", "instance", "100", "-y"]]
+        assert not runner.commands("ssh")  # Stopped before booting.
+
+
+def test_pass_ignores_a_second_stop_signal_until_destroyed(repo: Path) -> None:
+    # `timeout 60 uv run deckz ...`: the pass gets timeout's SIGTERM and the
+    # one uv passes on, at once.
+    runner = StoppedRunner(repo / ".run" / "gpu" / "main" / "out", signal.SIGTERM, "")
+
+    def sleep(_: float) -> None:
+        runner.when = "destroy"  # The second one, while destroying.
+        os.kill(os.getpid(), signal.SIGTERM)
+        time.sleep(1)  # The handler raises meanwhile.
+
+    with raises(gpu_pass.GpuPassStoppedError):
+        _pass(repo, runner, sleep=sleep)
+
+    assert len(_destroyed(runner)) == 1
+    assert {signal.SIGINT, signal.SIGTERM} <= runner.destroy_blocked
+    assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
+
+
+def test_pass_refuses_a_machine_another_pass_runs(repo: Path) -> None:
+    runner = FakeRunner()
+    other = _gpu_run(repo, runner)
+
+    with gpu_pass._machine_lock(other), raises(GpuRunError, match="in use by"):
+        _pass(repo, runner)
+
+    assert runner.calls == []
+
+
 def test_pass_refuses_before_renting_anything(repo: Path) -> None:
     runner = FakeRunner()
     hands_on = _demo(repo, "hands-on-fr.ipynb")
@@ -903,7 +1132,7 @@ def test_pass_refuses_before_renting_anything(repo: Path) -> None:
             _pass(repo, runner, **kwargs)
 
     rented = _gpu_run(repo, runner)
-    rented.directory.mkdir(parents=True)
+    rented.directory.mkdir(parents=True, exist_ok=True)
     (rented.directory / "state.json").write_text(
         json.dumps({"id": 1, "gpu": "T4", "machine": 2})
     )
@@ -955,6 +1184,33 @@ def test_cli_pass_dry_run_json_estimates_from_the_notes(
     # In `notebook_paths`' order.
     assert [n["last_seconds"] for n in planned["notebooks"]] == [600, 1200]
     assert planned["notebooks"][1]["notebook"] == "labs/notebooks/nn/cnn/demo-fr.ipynb"
+
+
+def test_cli_pass_gpu_takes_several_values(
+    repo: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    fr, en = _demo(repo), _demo(repo, "demo-en.ipynb")
+    asked: list[tuple[str, ...]] = []
+
+    def cheapest(self: GpuRun, gpus: tuple[str, ...] = ()) -> None:
+        asked.append(tuple(gpus))
+
+    monkeypatch.setattr(GpuRun, "cheapest", cheapest)
+    monkeypatch.chdir(fr.parent)
+    for tokens in (
+        ("--gpu", "RTX_A4000", "RTX_3090", "demo-fr.ipynb", str(en)),
+        ("demo-fr.ipynb", str(en), "--gpu", "RTX_A4000", "RTX_3090"),
+        ("--gpu", "RTX_A4000", "--gpu", "RTX_3090", "demo-fr.ipynb", str(en)),
+        ("--gpu", "RTX_A4000", "RTX_3090", "--interval", "9", "demo-fr.ipynb", str(en)),
+    ):
+        main(("labs", "gpu", "pass", "--dry-run", "--json", *tokens))
+
+        planned = json.loads(capsys.readouterr().out)
+        assert asked.pop() == ("RTX_A4000", "RTX_3090"), tokens
+        assert [Path(n["notebook"]).name for n in planned["notebooks"]] == [
+            "demo-en.ipynb",
+            "demo-fr.ipynb",
+        ], tokens
 
 
 def test_cli_status_plain_gives_the_price_and_rental_time(

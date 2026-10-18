@@ -1111,11 +1111,19 @@ The main commands:
   `.run/gpu/<name>/` (`paths.labs_gpu_dir`). Then `deckz labs outputs`
   writes a demo's outputs back.
 - `deckz labs gpu pass NOTEBOOKS... [--short] [--max-hours] [--write-outputs]
-  [--dry-run [--json]]`: all of the above in one command, which always
-  destroys its machine: once the runs are done, when one fails, past
-  `--max-hours` from the rental (default 4), on Ctrl-C and on SIGTERM. It
-  refuses a machine already rented (`--machine`) and, before renting, a
-  notebook it couldn't run. `--write-outputs` (off by default: it
+  [--dry-run [--json]] [--gpu GPU...]`: all of the above in one command, which
+  always destroys its machine: once the runs are done, when one fails, past
+  `--max-hours` from the rental (default 4), and on Ctrl-C, SIGTERM or
+  SIGHUP, whenever it comes (one arriving while it rents waits until the
+  machine is recorded, and only the first one stops the pass: `timeout 60
+  uv run deckz ...` sends two). It refuses a machine already rented
+  (`--machine`), one another pass is running, and, before renting, a
+  notebook it couldn't run. When nothing could be rented, it says why for
+  each GPU (no offer matching `labs.gpu.offer_filter`, or each offer tried
+  and what Vast.ai answered). `--gpu RTX_A4000 RTX_3090` (or `--gpu RTX_A4000
+  --gpu RTX_3090`) names the GPUs to rent instead of `labs.gpu.gpus`, in order
+  of preference; notebook paths written right after them are told apart.
+  `--write-outputs` (off by default: it
   overwrites) writes each demo's outputs back when its full run exited 0
   with no cell raising (but those tagged `raises-exception`) and no shell
   command failing; such a run fails the pass.

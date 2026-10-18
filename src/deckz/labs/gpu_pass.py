@@ -3,9 +3,18 @@
 `deckz labs gpu pass` does what `up`, `queue`, `run`, `status --watch`,
 `fetch` and `down` do one by one, and always destroys the machine at the end:
 on success, on failure, past its ceiling (`max_hours`, counted from the
-rental, since the machine bills from then), and on Ctrl-C or SIGTERM (what
-studioz sends to stop a job). The destruction itself can't be interrupted:
-a machine left running bills until someone notices.
+rental, since the machine bills from then), and on Ctrl-C, SIGTERM (what
+studioz and `timeout` send to stop a job) or SIGHUP (the terminal closing),
+whenever it comes, renting included. The rental and the destruction can't be
+interrupted (`gpu.uninterrupted`), and only the first signal stops the pass:
+`timeout` sends SIGTERM to its whole process group and `uv run` passes on the
+one it gets, so a pass run as `timeout 60 uv run deckz ...` gets two at once,
+and the second one, raising again or killing the process once its handler is
+restored, would skip the destruction. A machine left running bills until
+someone notices.
+
+Two passes can't share a machine name: the second one is refused while the
+first runs (a lock in the machine's directory, `pass.lock`).
 
 Its dry run (`plan`) says what it would cost: the offer it would rent now,
 and each notebook's last successful run time, from the machines' `notes.md`
@@ -13,6 +22,7 @@ and each notebook's last successful run time, from the machines' `notes.md`
 starts with no notes of its own).
 """
 
+import os
 import re
 import signal
 import threading
@@ -26,7 +36,14 @@ from types import FrameType
 from typing import TYPE_CHECKING
 
 from ..exceptions import GpuRunError, WorktreeError
-from .gpu import GpuRun, Offer, RunReport, format_report
+from .gpu import (
+    STOP_SIGNALS,
+    GpuRun,
+    Offer,
+    RunReport,
+    format_report,
+    uninterrupted,
+)
 
 if TYPE_CHECKING:
     from ..configuring.settings import GlobalSettings
@@ -259,35 +276,65 @@ def plan(
 
 
 @contextmanager
-def _stopped_by_sigterm() -> Generator[None]:
-    # SIGTERM raises, as Ctrl-C does, so that the machine is destroyed.
+def _stopped_once() -> Generator[None]:
+    # The first stop signal raises (KeyboardInterrupt for Ctrl-C), so that the
+    # machine is destroyed; the next ones do nothing until the pass is over,
+    # since one raising, or killing the process once the handler is gone, in
+    # the instant before the destruction blocks the signals would skip it.
     if threading.current_thread() is not threading.main_thread():
         yield
         return
+    stopping = False
 
     def stop(signum: int, _: FrameType | None) -> None:
+        nonlocal stopping
+        if stopping:
+            return
+        stopping = True
+        if signum == signal.SIGINT:
+            raise KeyboardInterrupt
         msg = f"stopped ({signal.Signals(signum).name}): the machine was destroyed"
         raise GpuPassStoppedError(msg)
 
-    previous = signal.signal(signal.SIGTERM, stop)
+    previous = {
+        signum: signal.signal(signum, stop)
+        for signum in STOP_SIGNALS
+        # Left alone when ignored: SIGHUP under `nohup`, Ctrl-C in a background job.
+        if signal.getsignal(signum) is not signal.SIG_IGN
+    }
     try:
         yield
     finally:
-        signal.signal(signal.SIGTERM, previous)
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
 
 
 @contextmanager
-def _uninterrupted() -> Generator[None]:
-    # Ctrl-C and SIGTERM wait until the machine is destroyed.
-    if threading.current_thread() is not threading.main_thread():
-        yield
-        return
-    blocked = {signal.SIGINT, signal.SIGTERM}
-    signal.pthread_sigmask(signal.SIG_BLOCK, blocked)
-    try:
-        yield
-    finally:
-        signal.pthread_sigmask(signal.SIG_UNBLOCK, blocked)
+def _machine_lock(gpu_run: GpuRun) -> Generator[None]:
+    # One pass per machine name at a time: the kernel releases the lock when
+    # its process exits, however it exits.
+    import fcntl
+
+    path = gpu_run.directory / "pass.lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            lock.seek(0)
+            holder = lock.read().strip() or "another process"
+            msg = (
+                f"machine {gpu_run.machine} is in use by another pass ({holder}):"
+                " name another one (--machine)"
+            )
+            raise GpuRunError(msg) from None
+        lock.truncate(0)
+        lock.write(f"pid {os.getpid()}")
+        lock.flush()
+        try:
+            yield
+        finally:
+            lock.truncate(0)
 
 
 def run(
@@ -329,12 +376,12 @@ def run(
     Raises:
         GpuRunError: If the machine couldn't be destroyed (it may still bill).
     """
-    check(gpu_run, notebooks, short=short, write_outputs=write_outputs)
     result = PassResult()
     names: dict[str, Path] = {}
-    deadline = clock() + max_hours * 3600
-    try:
-        with _stopped_by_sigterm():
+    with _machine_lock(gpu_run), _stopped_once():
+        check(gpu_run, notebooks, short=short, write_outputs=write_outputs)
+        deadline = clock() + max_hours * 3600
+        try:
             _logger.info("Renting a machine, destroyed after %g h at most", max_hours)
             _logger.info("Machine up: %s", gpu_run.up(gpus))
             queued, held = gpu_run.queue(notebooks, short=short)
@@ -348,20 +395,21 @@ def run(
             gpu_run.start(timeout=remaining)
             _logger.info("Running %s notebook(s)", len(queued))
             _follow(gpu_run, result, deadline, interval, report, clock, sleep)
-    finally:
-        with _uninterrupted():
-            try:
-                result.instance = gpu_run.down()
-            except GpuRunError as error:
-                msg = (
-                    f"{error}\nThe machine may still bill: `deckz labs gpu down"
-                    f" --machine {gpu_run.machine}`, and check the backend's instances"
-                )
-                raise GpuRunError(msg) from error
-            if result.instance is not None:
-                _logger.info(
-                    "Instance %s destroyed: nothing is billed", result.instance
-                )
+        finally:
+            with uninterrupted():
+                try:
+                    result.instance = gpu_run.down()
+                except GpuRunError as error:
+                    msg = (
+                        f"{error}\nThe machine may still bill: `deckz labs gpu down"
+                        f" --machine {gpu_run.machine}`, and check the backend's"
+                        " instances"
+                    )
+                    raise GpuRunError(msg) from error
+                if result.instance is not None:
+                    _logger.info(
+                        "Instance %s destroyed: nothing is billed", result.instance
+                    )
     if write_outputs:
         _write_back(settings, gpu_run, result, names, report)
     return result

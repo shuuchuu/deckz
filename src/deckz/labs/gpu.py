@@ -39,15 +39,19 @@ Colab; the queue picks up notebooks queued while it runs.
 import json
 import os
 import re
+import signal
 import subprocess
+import threading
 import time
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Generator, Sequence
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from logging import getLogger
 from pathlib import Path
 from shlex import quote
 from shutil import which
+from types import FrameType
 from typing import TYPE_CHECKING, Any, Protocol
 
 from ..exceptions import GpuRunError, MissingExtraError
@@ -72,6 +76,11 @@ REDACTED = "[deckz: redacted {}]"
 
 ATTEMPTS = 3
 """Machines rented in a row before `up` gives up on booting one."""
+
+RENT_TRIES = 5
+"""Offers of each GPU `rent` tries, cheapest first, before the next GPU: an \
+offer can be taken between the search and the rental, and the search can \
+still list one rented a moment ago."""
 
 START_COMMAND = (
     "mkdir -p /run/sshd; ssh-keygen -A;"
@@ -252,6 +261,54 @@ _STATUS = (
 )
 
 
+STOP_SIGNALS = frozenset({signal.SIGINT, signal.SIGTERM, signal.SIGHUP})
+"""What stops a command from outside: Ctrl-C, `kill`/`timeout`/studioz, and \
+the terminal closing."""
+
+
+@contextmanager
+def uninterrupted() -> Generator[None]:
+    """Hold Ctrl-C, SIGTERM and SIGHUP until the block is done.
+
+    For what must not stop halfway, such as renting a machine and recording
+    it, or destroying one: a signal arriving meanwhile is delivered once the
+    block is done, to the handler there was before it. The block's thread
+    blocks the signals, so that the commands it runs, which inherit that,
+    aren't killed by one sent to the whole process group (what `timeout` and
+    a terminal send); and the handlers only note them meanwhile, since
+    another thread of the process, which doesn't block them, can receive
+    them. Blocks nest; outside the main thread, which runs every handler, it
+    does nothing.
+
+    Yields:
+        Once the signals are held, until the block is done.
+    """
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    held: list[int] = []
+
+    def hold(signum: int, _: FrameType | None) -> None:
+        if signum not in held:
+            held.append(signum)
+
+    previous = {}
+    for signum in STOP_SIGNALS:
+        handler = signal.getsignal(signum)
+        # Ignored stays ignored; None is a handler Python didn't set.
+        if handler is not signal.SIG_IGN and handler is not None:
+            previous[signum] = signal.signal(signum, hold)
+    mask = signal.pthread_sigmask(signal.SIG_BLOCK, STOP_SIGNALS)
+    try:
+        yield
+    finally:
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
+        signal.pthread_sigmask(signal.SIG_SETMASK, mask)
+        for signum in held:
+            signal.raise_signal(signum)
+
+
 @dataclass(frozen=True)
 class Offer:
     id: int
@@ -429,11 +486,14 @@ class VastBackend:
         self._gpu = settings.labs.gpu
         self._run = run
 
-    def _vastai(self, *args: str, check: bool = True) -> str:
+    def _call(self, *args: str) -> subprocess.CompletedProcess[str]:
         if which("vastai") is None and self._run is subprocess.run:
             msg = 'vastai is not installed, install it with `pip install "deckz[gpu]"`'
             raise MissingExtraError(msg)
-        proc = self._run(["vastai", *args], capture_output=True, text=True, check=False)
+        return self._run(["vastai", *args], capture_output=True, text=True, check=False)
+
+    def _vastai(self, *args: str, check: bool = True) -> str:
+        proc = self._call(*args)
         if check and proc.returncode:
             msg = f"vastai {' '.join(args[:2])} failed:\n{proc.stdout}{proc.stderr}"
             raise GpuRunError(msg)
@@ -444,20 +504,31 @@ class VastBackend:
 
         Returns:
             The offers.
+
+        Raises:
+            GpuRunError: If the search failed (vastai's error included).
         """
         excluded = "".join(f" machine_id!={machine}" for machine in avoid)
-        found = json.loads(
-            self._vastai(
-                "search",
-                "offers",
-                f"gpu_name={gpu} {self._gpu.offer_filter}{excluded}",
-                "--storage",
-                str(self._gpu.disk_gb),
-                "-o",
-                "dph_total",
-                "--raw",
-            )
+        args = (
+            "search",
+            "offers",
+            f"gpu_name={gpu} {self._gpu.offer_filter}{excluded}",
+            "--storage",
+            str(self._gpu.disk_gb),
+            "-o",
+            "dph_total",
+            "--raw",
         )
+        proc = self._call(*args)
+        # vastai exits 0 on an HTTP error (rate limiting, say), with the error
+        # on stderr and nothing on stdout.
+        try:
+            found = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            found = None
+        if proc.returncode or not isinstance(found, list):
+            msg = f"vastai search offers failed:\n{proc.stdout}{proc.stderr}".strip()
+            raise GpuRunError(msg)
         return [
             Offer(
                 id=offer["id"],
@@ -483,17 +554,23 @@ class VastBackend:
     def rent(self, gpus: Sequence[str], avoid: Collection[int]) -> GpuState:
         """Rent the cheapest offer of the first of `gpus` on offer.
 
-        Tries the three cheapest offers of each GPU in turn: an offer can be
-        taken by someone else between the search and the rental.
+        Tries the `RENT_TRIES` cheapest offers of each GPU in turn: an offer
+        can be taken by someone else between the search and the rental.
 
         Returns:
             The rented machine.
 
         Raises:
-            GpuRunError: If no offer could be rented.
+            GpuRunError: If no offer could be rented, with why for each GPU.
         """
+        reasons = []
         for gpu in gpus:
-            for offer in self.offers(gpu, avoid)[:3]:
+            found = self.offers(gpu, avoid)
+            if not found:
+                reasons.append(f"{gpu}: no offer matches `labs.gpu.offer_filter`")
+                continue
+            refused = []
+            for offer in found[:RENT_TRIES]:
                 _logger.info(
                     "Renting offer %s: %s, $%.3f/h, %s",
                     offer.id,
@@ -501,7 +578,7 @@ class VastBackend:
                     offer.price,
                     offer.location,
                 )
-                out = self._vastai(
+                proc = self._call(
                     "create",
                     "instance",
                     str(offer.id),
@@ -517,11 +594,12 @@ class VastBackend:
                     "deckz-labs-gpu",
                     "--cancel-unavail",
                     "--raw",
-                    check=False,
                 )
                 try:
-                    created = json.loads(out)
+                    created = json.loads(proc.stdout)
                 except json.JSONDecodeError:
+                    created = None
+                if not isinstance(created, dict):
                     created = {}
                 if created.get("success"):
                     return GpuState(
@@ -530,8 +608,17 @@ class VastBackend:
                         machine=offer.machine,
                         price=offer.price,
                     )
-                _logger.info("Offer %s not rented: %s", offer.id, out.strip()[:200])
-        msg = f"no offer rented among {', '.join(gpus)}"
+                why = _refusal(created, proc)
+                _logger.info("Offer %s not rented: %s", offer.id, why)
+                refused.append(f"offer {offer.id} ({why})")
+            reasons.append(f"{gpu}: {', '.join(refused)} refused")
+        avoided = f"; {len(avoid)} machine(s) avoided (`avoid.json`)" if avoid else ""
+        msg = (
+            f"no offer rented among {', '.join(gpus)}: {'; '.join(reasons)}{avoided}."
+            " Offers come and go, and another pass may just have rented the only"
+            " one: `--dry-run` shows the offer a pass would rent now, and --gpu"
+            " names other GPUs"
+        )
         raise GpuRunError(msg)
 
     def info(self, instance_id: int) -> InstanceInfo | None:
@@ -557,6 +644,15 @@ class VastBackend:
 
     def destroy(self, instance_id: int) -> None:
         self._vastai("destroy", "instance", str(instance_id), "-y")
+
+
+def _refusal(created: dict[str, Any], proc: subprocess.CompletedProcess[str]) -> str:
+    # Why `vastai create instance` didn't rent: its JSON error, or what it said.
+    for key in ("msg", "error"):
+        if isinstance(created.get(key), str) and created[key]:
+            return created[key][:200]
+    said = f"{proc.stdout}{proc.stderr}".strip()
+    return said[:200] or f"exit code {proc.returncode}"
 
 
 class GpuRun:
@@ -702,7 +798,11 @@ class GpuRun:
         """Rent a machine, wait for it to boot and accept SSH, and check it.
 
         A machine that doesn't boot within `labs.gpu.boot_minutes` (its
-        image pull failed, say) is destroyed and never rented again.
+        image pull failed, say), or that boots but never accepts SSH (its
+        host didn't install the key), is destroyed and never rented again. Renting
+        a machine and recording it in `state.json` can't be interrupted
+        (`uninterrupted`), nor can destroying it: stopped at any moment, `up`
+        leaves a machine that `down` destroys.
 
         Returns:
             The machine's GPU line (`nvidia-smi -L`).
@@ -713,19 +813,25 @@ class GpuRun:
         for _ in range(ATTEMPTS):
             state = self.state()
             if state is None or self._backend.info(state.id) is None:
-                state = self._backend.rent(
-                    tuple(gpus) or self._gpu.gpus, self._avoided()
-                )
-                state.rented_at = (
-                    datetime.now().astimezone().isoformat(timespec="seconds")
-                )
-                self._save(state)
+                with uninterrupted():
+                    state = self._backend.rent(
+                        tuple(gpus) or self._gpu.gpus, self._avoided()
+                    )
+                    state.rented_at = (
+                        datetime.now().astimezone().isoformat(timespec="seconds")
+                    )
+                    self._save(state)
             info = self._boot(state)
             if info is not None:
-                break
-            self._write_json(self._avoid_file, [*self._avoided(), state.machine])
-            self._backend.destroy(state.id)
-            self._save(None)
+                state.host, state.port = info.host, info.ssh_port
+                self._save(state)
+                if self._wait_for_ssh():
+                    break
+                _logger.warning("Instance %s never accepted SSH", state.id)
+            with uninterrupted():
+                self._write_json(self._avoid_file, [*self._avoided(), state.machine])
+                self._backend.destroy(state.id)
+                self._save(None)
             _logger.warning(
                 "Destroyed instance %s: machine %s avoided from now on",
                 state.id,
@@ -734,12 +840,6 @@ class GpuRun:
         else:
             msg = f"{ATTEMPTS} machines failed to boot: check the backend's instances"
             raise GpuRunError(msg)
-        state.host, state.port = info.host, info.ssh_port
-        self._save(state)
-        for _ in range(20):
-            if self._ssh_ready():
-                break
-            self._sleep(15)
         gpu = self._ssh(
             "nvidia-smi -L; mkdir -p /work/in /work/out; python3 -c 'import nbclient'"
         )
@@ -758,6 +858,14 @@ class GpuRun:
 
     def _fresh_dirs(self) -> str:
         return " ".join(quote(path.rstrip("/")) for path in self._gpu.fresh_dirs)
+
+    def _wait_for_ssh(self) -> bool:
+        # Five minutes: a host still installing the key refuses it meanwhile.
+        for _ in range(20):
+            if self._ssh_ready():
+                return True
+            self._sleep(15)
+        return False
 
     def _ssh_ready(self) -> bool:
         state = self._connected()
@@ -1201,14 +1309,28 @@ class GpuRun:
     def down(self) -> int | None:
         """Destroy the machine: nothing is billed afterwards.
 
+        A machine destroyed before it finished booting (no SSH address in
+        `state.json` yet: stuck pulling the image, say) is never rented
+        again, as when `up` gives up on it.
+
         Returns:
             The destroyed instance's ID, or None if there was none.
         """
         state = self.state()
         if state is None:
             return None
-        self._backend.destroy(state.id)
-        self._save(None)
+        booted = state.host is not None and state.port is not None
+        with uninterrupted():
+            if not booted and state.machine not in self._avoided():
+                self._write_json(self._avoid_file, [*self._avoided(), state.machine])
+            self._backend.destroy(state.id)
+            self._save(None)
+        if not booted:
+            _logger.warning(
+                "Instance %s never finished booting: machine %s avoided from now on",
+                state.id,
+                state.machine,
+            )
         self.finish_hooks(machine_down=True)
         return state.id
 

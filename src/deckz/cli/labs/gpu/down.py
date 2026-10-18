@@ -8,7 +8,8 @@ def down(*, machine: str | None = None, workdir: Path = Path()) -> None:
     """Destroy the machines: nothing is billed afterwards.
 
     Fetch what you need first: a machine's disk goes with it. The hook of a
-    run it held runs then, and the notebooks held for it are dropped.
+    run it held runs then, and the notebooks held for it are dropped. A
+    machine that never finished booting is never rented again.
 
     Args:
         machine: Destroy only this machine, instead of every one rented

@@ -1,12 +1,10 @@
 from pathlib import Path
 
-from . import app
+from . import Gpus, app
 
 
 @app.command()
-def up(
-    *, gpu: list[str] | None = None, machine: str = "main", workdir: Path = Path()
-) -> None:
+def up(*, gpu: Gpus = None, machine: str = "main", workdir: Path = Path()) -> None:
     """Rent a machine, wait for it to boot and accept SSH, and check its GPU.
 
     Rents the cheapest reliable single-GPU offer of the first GPU of
@@ -15,7 +13,8 @@ def up(
     machine already rented, if any. It bills until `deckz labs gpu down`.
 
     Args:
-        gpu: GPU names to rent instead of `labs.gpu.gpus`, e.g. RTX_A4000
+        gpu: GPU names to rent instead of `labs.gpu.gpus`, in order of
+            preference: `--gpu RTX_A4000 RTX_3090`
         machine: Name of the machine, to run several at once
         workdir: Path to move into before running the command
 
