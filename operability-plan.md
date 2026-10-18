@@ -332,3 +332,92 @@ Since `--sync` keeps what a build skips, a deck's `pdf/` can hold PDFs built lon
 conversion changed, or no build produces it), before signing in; `--include-stale`
 overrides. Skipping them instead would have deleted their remote copies, and the links
 already shared. `deckz status` (phase 3, item 5) reuses `outdated_pdfs`.
+
+## Phase 8: commit freely, settle later
+
+**Status (2026-10-18):** planned, discussed with the maintainer today.
+
+The colleague should be able to use the repository naively, `git commit` without
+choosing a `Lang-sync` trailer or fixing every check, and have it work. What was left
+undone stays visible to the tooling, and the maintainer settles it when it's due.
+Today two hooks refuse such a commit: commit-msg wants a `Lang-sync` trailer on a
+one-sided change, and pre-commit's `deckz check --staged` fails on any finding.
+
+The two kinds of debt are tracked differently:
+
+- **Translation is a fact about history**: the tree can't show that French changed
+  after English. It's marked in the commit, and already is: `i18n_stale` reads a
+  commit with no trailer as `Lang-sync: pending`, so the refusal protects nothing, it
+  only makes the colleague write a choice that doesn't change the result.
+- **A check's finding is a fact about the tree**: `deckz check` on `main` shows what's
+  broken now, whichever commit did it. Marking commits "to revisit" would be redundant,
+  and wrong after a hook was skipped, a later fix, or a rebase. It's recomputed
+  (`deckz status`, studioz's Problèmes tab), and settled by a fixing commit.
+
+### 8.1 The commit-msg hook marks instead of refusing
+
+- A one-sided change without a trailer gets `Lang-sync: pending` appended to the
+  message by the hook itself (a commit-msg hook may edit the message file), and the
+  hook prints the files left to translate and `deckz i18n stale`. The marker is then
+  present, readable in `git log`, rather than inferred from an absence. A commit that
+  skipped the hook gets the same result from `i18n_stale`'s reading.
+- `fr-only`/`en-only` stay an explicit choice, the only one that exempts a pair. A
+  commit that should have carried one is settled later with `deckz i18n mark-synced`.
+- `deckz hooks check-commits` in CI no longer fails on a missing trailer (it could
+  still check that a trailer present is well-formed).
+- studioz's Commit dialog keeps asking, with `pending` as the default answer.
+
+### 8.2 Blocking and deferred checks
+
+Not every check can wait: for some, the commit (or the push, since slides commits to
+`main`) is the point of harm.
+
+- **Blocking**: `lab-secrets` (a secret stays in the history) and `jinja-syntax` (every
+  `git pull` breaks everyone's build, the maintainer's agent sessions included).
+- **Deferred**: the rest (`lab-ids`, `lab-pairs`, `lab-format`, `asset-credits`,
+  `raw-latex`), with a gate where their harm happens (8.3).
+- deckz gives its built-in checks this default; a new `deckz.yml` setting next to
+  `checks.opt_in` (e.g. `checks.deferred`, or a level per check) changes it. A plugin
+  check from `templates/checks.py` is blocking unless listed, as every check is today.
+- `deckz check` (pre-commit, CI on push) fails only on blocking findings, and prints
+  the deferred ones with their fix, without failing. A red CI on every push of the
+  colleague's would soon be ignored.
+- The pre-commit hook keeps checking the whole staged tree, not the diff. That is
+  only workable because `main` holds no blocking finding: if deferred findings could
+  fail it, the colleague's debt would refuse the maintainer's next, unrelated commit.
+  Comparing findings against `HEAD` (a baseline, as linters do) was considered and
+  rejected: messages carry line numbers that shift, and the split makes it unneeded.
+- To check: whether a deck or section `.yml` that doesn't parse is caught by any check
+  run at commit. It breaks the build like a Jinja error.
+
+### 8.3 Gates where the debt is due
+
+"Settled in due time" needs a time. The debt is collected at the points where it would
+do harm, which already refuse other things:
+
+- **`deckz upload`** refuses a deck whose files carry a deferred finding, as it refuses
+  outdated PDFs, with the same kind of override.
+- **`labs publish`** refuses a notebook with a `lab-ids`, `lab-pairs` or `lab-format`
+  finding (it already refuses `lab-secrets`).
+- **"Ready to teach on Monday"**: `deckz status <deck>`, the debt of one deck's files
+  (findings, translation pending for the language taught, shrunk frames, outdated
+  handout).
+
+These need the structured finding 5.2 left out: `Finding(path, message, fix)`, so a
+finding maps to the decks resolving its file (`analyzing/affected.py`). Plain strings
+stay accepted from plugins, mapped by their leading path when there is one.
+
+### 8.4 Docs
+
+The guide's translating and checks pages, then slides' `HANDBOOK.md`: commit as you
+like; what blocks a commit and why; where the debt shows (`deckz status`, studioz),
+and when it must be settled.
+
+### Decisions (2026-10-18)
+
+1. Translation debt is marked in the commit (`Lang-sync: pending`, added by the hook);
+   check debt is never marked, only recomputed from the tree.
+2. Only `lab-secrets` and `jinja-syntax` block a commit by default; the other built-in
+   checks are deferred to `upload`, `labs publish` and `deckz status <deck>`.
+3. The colleague commits; the maintainer settles the debt (as decision 5 above already
+   has it for translation).
