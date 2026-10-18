@@ -205,7 +205,7 @@ def ci_workflow(ci: "CiSettings") -> str:
     deckz_checkout = (
         f"""
       - name: Check out deckz next to it
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: {ci.deckz_repository}
           ref: {ci.deckz_ref}
@@ -249,12 +249,16 @@ jobs:
   check:
     runs-on: ubuntu-latest
     container: shuuchuu/deckz-ci:latest
+    # apt brings in Debian's Python, without its headers: uv would build the
+    # dependencies with no wheel (manimpango, pycairo) against it and fail.
+    env:
+      UV_PYTHON_PREFERENCE: only-managed
     defaults:
       run:
         working-directory: {repo}
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: {repo}
           fetch-depth: 0
@@ -265,7 +269,7 @@ jobs:
         run: git config --global --add safe.directory "*"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v10.3.0
 
       - name: Install the dependencies
         run: uv sync

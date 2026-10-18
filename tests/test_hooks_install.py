@@ -201,6 +201,8 @@ def test_install_ci_workflow_writes_a_valid_workflow(tmp_path: Path) -> None:
     path = install_ci_workflow(tmp_path, ci)
 
     workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+    # The container's apt packages bring in a Python without its headers.
+    assert workflow["jobs"]["check"]["env"]["UV_PYTHON_PREFERENCE"] == "only-managed"
     steps = workflow["jobs"]["check"]["steps"]
     assert any(
         step.get("with", {}).get("repository") == "owner/deckz" for step in steps
