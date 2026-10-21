@@ -88,6 +88,61 @@ def shell_guard(log: str) -> str:
     return SHELL_GUARD.replace("__SHELL_LOG__", repr(log))
 
 
+# Run before the first cell for `--smoke` (the local runner `exec`s it, `labs.container`
+# prepends it as a cell): every Lightning Trainer capped to one short epoch. Lightning
+# may not be importable yet, a lab installing it in its first cells (`!pip install
+# lightning`, which a container runs): an import hook then caps it when the notebook
+# first imports it. Defined in a function deleted afterwards, as `SHELL_GUARD`.
+SMOKE = r"""
+def __deckz_smoke():
+    import importlib.abc, sys
+
+    caps = {"max_epochs": 1, "limit_train_batches": 3, "limit_val_batches": 2}
+    names = ("lightning", "pytorch_lightning")
+
+    def cap(module):
+        trainer = getattr(module, "Trainer", None)
+        if trainer is None or getattr(trainer, "_deckz_capped", False):
+            return
+        init = trainer.__init__
+
+        def capped(self, *args, **kwargs):
+            kwargs.pop("max_steps", None)
+            init(self, *args, **{**kwargs, **caps})
+
+        trainer.__init__ = capped
+        trainer._deckz_capped = True
+
+    class CapOnImport(importlib.abc.MetaPathFinder):
+        def find_spec(self, fullname, path, target=None):
+            if fullname not in names:
+                return None
+            for finder in sys.meta_path:
+                if finder is self or not hasattr(finder, "find_spec"):
+                    continue
+                spec = finder.find_spec(fullname, path, target)
+                if spec is not None and spec.loader is not None:
+                    exec_module = spec.loader.exec_module
+
+                    def exec_and_cap(module):
+                        exec_module(module)
+                        cap(module)
+
+                    spec.loader.exec_module = exec_and_cap
+                    return spec
+            return None
+
+    for name in names:
+        if name in sys.modules:
+            cap(sys.modules[name])
+    sys.meta_path.insert(0, CapOnImport())
+
+
+__deckz_smoke()
+del __deckz_smoke
+"""
+
+
 _GHSPARSE = r"https://github\.com/shuuchuu/datasets/raw/refs/heads/main/ghsparse\.sh"
 DATASET_FETCH = re.compile(
     rf"wget -q {_GHSPARSE} -O /tmp/ghsparse\.sh && bash /tmp/ghsparse\.sh [\w.-]+"
@@ -210,29 +265,12 @@ def translate(code):
     return "\n".join(out)
 
 
-def smoke():
-    # Every Lightning Trainer capped to one short epoch.
-    caps = {"max_epochs": 1, "limit_train_batches": 3, "limit_val_batches": 2}
-    for name in ("lightning", "pytorch_lightning"):
-        try:
-            trainer = __import__(name).Trainer
-        except ImportError:
-            continue
-        init = trainer.__init__
-
-        def capped(self, *args, _init=init, **kwargs):
-            kwargs.pop("max_steps", None)
-            _init(self, *args, **{**kwargs, **caps})
-
-        trainer.__init__ = capped
-
-
 def main():
     builtins.input = no_input
     import getpass
     getpass.getpass = no_input
     if "--smoke" in sys.argv[2:]:
-        smoke()
+        exec(__SMOKE__, {})
     # Run in the real __main__ so multiprocessing can pickle functions cells define.
     # Cells share it with this runner: its helpers are bound here, so that a cell
     # defining a `translate` or a `json` of its own can't shadow them.
@@ -265,7 +303,9 @@ def runner_source() -> str:
     Returns:
         Python source.
     """
-    return RUNNER.replace("__DATASET_FETCH__", repr(DATASET_FETCH.pattern))
+    return RUNNER.replace("__DATASET_FETCH__", repr(DATASET_FETCH.pattern)).replace(
+        "__SMOKE__", repr(SMOKE)
+    )
 
 
 def report_lines(stderr: str, returncode: int) -> Iterator[str]:
