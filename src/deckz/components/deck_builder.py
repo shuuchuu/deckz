@@ -250,9 +250,10 @@ class DeckBuilder(DeckBuilderProtocol):
                 sorted(
                     dependency
                     for dependency in item.dependencies
-                    if file_changed(
+                    if needs_render(
                         dependency,
                         build_copy_path(dependency, build_dir, self._basedirs),
+                        output_format.fragment_suffix,
                     )
                 )
             )
@@ -384,7 +385,11 @@ class DeckBuilder(DeckBuilderProtocol):
                 name,
             )
         copied = copy_dependencies(
-            item.dependencies, build_dir, self._basedirs, force=render_stale
+            item.dependencies,
+            build_dir,
+            self._basedirs,
+            output_format.fragment_suffix,
+            force=render_stale,
         )
         render_dependencies(
             self._renderer,
@@ -509,10 +514,36 @@ class CopiedDependency:
     """The content file it's a copy of."""
 
 
+def _rendered_outputs(build_path: Path, fragment_suffix: str) -> list[Path]:
+    # What rendering a build copy makes: the file rendered next to it, and for
+    # Markdown, the fragment it's converted to.
+    rendered_path = build_path.with_suffix("")
+    if rendered_path.suffix == ".md":
+        return [rendered_path, rendered_path.with_suffix(fragment_suffix)]
+    return [rendered_path]
+
+
+def needs_render(dependency: Path, build_path: Path, fragment_suffix: str) -> bool:
+    """Whether `dependency`'s build copy must be rendered (and converted) again.
+
+    A build copy matching its source stands for a rendered and converted \
+    fragment (`render_dependencies` removes the copies it couldn't render), \
+    unless one of its outputs is missing, e.g. after a build killed midway.
+
+    Returns:
+        True if the copy is missing or differs from `dependency`, or an \
+        output of its rendering is missing.
+    """
+    return file_changed(dependency, build_path) or not all(
+        output.is_file() for output in _rendered_outputs(build_path, fragment_suffix)
+    )
+
+
 def copy_dependencies(
     dependencies: Iterable[ResolvedPath],
     target_build_dir: Path,
     basedirs: Iterable[Path],
+    fragment_suffix: str,
     *,
     force: bool = False,
 ) -> list[CopiedDependency]:
@@ -524,8 +555,9 @@ def copy_dependencies(
             build_path.parent.mkdir(parents=True, exist_ok=True)
             copyfile(dependency, build_path)
             copied.append(copy)
-        elif copy_file_if_changed(dependency, build_path):
-            _logger.debug("Re-rendering %s: new or changed", dependency)
+        elif needs_render(dependency, build_path, fragment_suffix):
+            _logger.debug("Re-rendering %s: new, changed or incomplete", dependency)
+            copy_file_if_changed(dependency, build_path)
             copied.append(copy)
     return copied
 
@@ -550,26 +582,34 @@ def render_dependencies(
 ) -> None:
     """Render each copied content file, and convert the Markdown ones.
 
+    Every file is copied before the first is rendered, so a failure (Jinja, \
+    pandoc, Ctrl-C) removes the copies of the failing file and of those not \
+    rendered yet: each matches its source, and the next build would take it \
+    as rendered and keep its previous output, or none.
+
     Raises:
         RenderError: Naming the content file and line, when Jinja fails.
     """
-    for copied in to_render:
+    to_render = list(to_render)
+    for index, copied in enumerate(to_render):
         item_path = copied.build_path
         rendered_path = item_path.with_suffix("")
         try:
-            renderer.render_to_path(item_path, rendered_path, variables=variables)
-        except TemplateError as error:
-            # Its copy now matches its source: without it, the next build
-            # would take the file as rendered and keep its previous output.
-            item_path.unlink(missing_ok=True)
-            line = _template_line(error, item_path)
-            where = f"{copied.source}:{line}" if line else str(copied.source)
-            msg = f"{where}: {error.message or type(error).__name__}"
-            raise RenderError(msg) from error
-        if rendered_path.suffix == ".md":
-            markdown_converter.convert(
-                rendered_path, rendered_path.with_suffix(fragment_suffix)
-            )
+            try:
+                renderer.render_to_path(item_path, rendered_path, variables=variables)
+            except TemplateError as error:
+                line = _template_line(error, item_path)
+                where = f"{copied.source}:{line}" if line else str(copied.source)
+                msg = f"{where}: {error.message or type(error).__name__}"
+                raise RenderError(msg) from error
+            if rendered_path.suffix == ".md":
+                markdown_converter.convert(
+                    rendered_path, rendered_path.with_suffix(fragment_suffix)
+                )
+        except BaseException:
+            for unrendered in to_render[index:]:
+                unrendered.build_path.unlink(missing_ok=True)
+            raise
 
 
 def _resolved_path(file: File) -> ResolvedPath:
