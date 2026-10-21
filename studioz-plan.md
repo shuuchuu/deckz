@@ -18,8 +18,10 @@ Phase 6 (the agent's usage) was planned on 2026-10-21 from the colleague's first
 afternoon; its increments 1 (the model), 2 (a new conversation for a new file), 3
 (the context's size) and 4 (slides' `docs/figures.md`, in slides' main as `b83c29fb`)
 are done.
-**Next:** phase 6's increment 5 (the colleague's next afternoon measured), "Then, with
-the colleague" (below phase 5), and the open items. A GPU pass rents a machine that costs money: never
+**Next:** phase 7 (what the colleague's first afternoon found: logging in, links,
+the slide in view, the PDF's bookmarks) and its "Also left", phase 6's increment 5
+(the colleague's next afternoon measured), "Then, with the colleague" (below
+phase 5), and the open items. A GPU pass rents a machine that costs money: never
 start one without the user saying so. `git log
 origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed. Push and
@@ -1763,6 +1765,80 @@ Each increment is usable on its own, in this order:
    find the pages from the build's markers, convert) would save the page hunting, a
    few percent at most here; trimming slides' `CLAUDE.md` saves less, since the cache
    serves it.
+
+### Phase 7: what the colleague's first afternoon found (noted 2026-10-21)
+
+The user's notes from watching the colleague's first session (the one phase 6
+measured), each with what the code does today. Each increment is usable on its own;
+the first one first, since it stops a newcomer before anything else works.
+
+1. **Logging in, and the first message.** Three ways the agent's first use fails
+   with a message that doesn't say what to do:
+   - **Not logged in, the error says "check stderr".** Sending a message ends on
+     "L'agent s'est arrêté" with the SDK's exception, which only points to Claude
+     Code's stderr. Two causes to fix: `Login.status` keeps a "logged in" for five
+     minutes (`app.Login`), so the panel lets the person send after the login went;
+     and nothing collects Claude Code's stderr. `ClaudeAgentOptions(stderr=…)` takes a
+     callback: keep its last lines, show the meaningful one, and on a failed turn
+     check the login again at once (`Login.checked` reset), so the panel shows its
+     login help instead.
+   - **`studioz login` says "Login successful" after a wrong code.** That's
+     `claude auth login --claudeai`'s own output (`cli.login` only passes its exit
+     code on). Check what it really exits with on a wrong code; either way, after it
+     studioz runs `claude auth status --json` (`agent.logged_in`) and says the truth
+     in French: connected as whom, or that it failed and to run `studioz login`
+     again; exit 1 when it failed.
+   - **The terms never accepted.** A Claude Code never started in a terminal hasn't
+     had its terms accepted, and the agent's first message fails with a cryptic
+     error. Reproduce it with a fresh `CLAUDE_CONFIG_DIR`, then: `studioz login`
+     brings the person through it (or says to run `claude` once in a terminal and
+     accept), the panel recognises the error and names that fix, and `deckz setup`'s
+     Claude step (or studioz's home page) checks it beforehand.
+   Tests: the fake client failing with a stderr line, a login check returning false
+   after a failure, `studioz login` with a fake `claude`.
+2. **Links open in a new tab.** Following a link today replaces studioz's page: in
+   the PDF (pdf.js's `PDFLinkService` in `deck.js` is built without
+   `externalLinkTarget`, so `LinkTarget.NONE`; give it `LinkTarget.BLANK` and
+   `externalLinkRel: "noopener noreferrer"`), and in the agent's Markdown
+   (`app._markdown`: a markdown-it renderer rule adding `target="_blank"
+   rel="noopener noreferrer"`). Check the others too: the Problems' and the
+   notebook page's external links (the notebook frame is sandboxed: it needs
+   `allow-popups`, and `allow-popups-to-escape-sandbox` for the new tab to work).
+3. **The agent knows the slide in view.** Writing "cette slide est moche" should be
+   enough, without "Demander à l'agent". The deck page knows the page in view (the
+   status bar's "p. 10 / 85") and, from the build's frames (`/cadres`), its file,
+   line and title. A message sent from the panel on a deck page carries it: a line
+   studioz puts before the prompt ("La personne regarde la diapositive « titre »,
+   `file`, ligne N, page N"), as the undo note is (`Conversation._note`), the
+   transcript showing the person's words only, and the slide in small under them.
+   To decide with phase 6's increment 2: whether that file is also the message's
+   `about`, which can start a new conversation. Proposed: yes, but only when the
+   person moved to another slide since their last message, so that a follow-up
+   ("merci", "aligne les T") stays. On a page with no frame (title, outline), no
+   line is added.
+4. **The PDF's bookmarks.** Typst writes the PDF's outline from the headings (check
+   which levels end up in it: sections, subsections, frames); studioz's viewer
+   (`deck.js`, pdf.js's `PDFViewer` alone, without pdf.js's own sidebar) shows none.
+   Read it with `pdf.getOutline()` and show it as a tree, collapsible, the section of
+   the page in view highlighted: in a "Plan" tab beside the deck's PDF or as a view
+   of the sidebar (the activity bar's Formations view lists decks, not a deck's
+   parts); a click goes to the page (`linkService.goToDestination`).
+
+**Also left** (from the review of what's open, 2026-10-21; not the colleague's
+notes), most useful first:
+- deckz's Ctrl-C timing tests (`test_interrupt_does_not_wait_for_running_compilations`,
+  `test_ctrl_c_stops_the_build_at_once`) fail in the pre-commit hook about one run in
+  three: make them wait on the event, not a fixed sleep.
+- A warning before a workflow (a QA, the translation backlog) when the five-hour
+  window is nearly full; a limit pause that survives a studioz restart; an ordinary
+  failing command (`grep` finding nothing) shown as "Refusé ou en échec".
+- `deckz status` takes about 10 s on slides, 6 of them the lab checks each reading
+  every notebook again: read them once.
+- Ctrl+P finds decks, not content files nor scenes; nor recent ones first.
+- Small: a toast covers the agent's send button; the Tâches log isn't kept at its
+  end; the watches and agents aren't counted in the memory item nor held under the
+  threshold; a GPU pass's estimate may change before the machine starts (say so, or
+  a `--max-price`).
 
 ## Risks
 
