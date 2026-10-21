@@ -163,6 +163,8 @@ class Workflow(BaseModel):
     """Whether the agent writes its findings as a checklist (`Report`)."""
     then: Then | None = None
     """What to do with the findings ticked in the report."""
+    model: Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9.-]*$")] | None = None
+    """Its turns' model (`then`'s too), if not studioz's (`studioz --model`)."""
 
     @model_validator(mode="after")
     def _fields(self) -> Self:

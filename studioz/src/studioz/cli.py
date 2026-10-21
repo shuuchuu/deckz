@@ -19,6 +19,9 @@ def serve(
     port: int = 8421,
     browser: bool = True,
     min_free_memory: float = 3.0,
+    # `agent.DEFAULT_MODEL`, spelled out: importing the agent would load the
+    # Agent SDK for `--help`.
+    model: str = "sonnet",
 ) -> None:
     """Start studioz on this machine, for the repository of the current directory.
 
@@ -28,6 +31,8 @@ def serve(
         browser: Open studioz in the browser once it's ready
         min_free_memory: Gibibytes of memory a build or a render waits for
             before it starts (0: never waits); "Lancer quand même" starts it
+        model: The agent's model, as Claude Code names it (`sonnet`, `opus`,
+            or a model's id); a workflow may declare its own
 
     Raises:
         SystemExit: With code 1 outside a deckz repository.
@@ -40,6 +45,7 @@ def serve(
     from deckz.utils import get_git_dir
 
     from . import memory
+    from .agent import Agents
     from .app import create_app
     from .jobs import Jobs
 
@@ -55,7 +61,9 @@ def serve(
         )
     try:
         application = create_app(
-            get_git_dir(workdir.resolve()), jobs=Jobs(min_free=min_free)
+            get_git_dir(workdir.resolve()),
+            jobs=Jobs(min_free=min_free),
+            agents=Agents(model=model),
         )
     except DeckzError as error:
         print(f"studioz: {error}")

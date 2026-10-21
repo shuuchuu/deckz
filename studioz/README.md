@@ -44,6 +44,7 @@ studioz:
       skill: qa-formation
       scope: deck                       # on a deck's page; `{deck}` is its path
       prompt: "Fais le QA de la formation {deck}."
+      model: opus                       # its turns' model, if not `studioz --model`'s
       report: true                      # its findings as a checklist
       then:                             # what to do with the ones ticked
         name: Appliquer les corrections
@@ -55,7 +56,10 @@ Each is a form, on the workspace page (and, for `scope: deck`, behind a deck pag
 "Avec l'agent…"), whose answers fill `prompt`; the agent then receives it with the
 instruction to follow `skill`. An input is `text` (one line, the default),
 `long-text` or `file` (kept in the workspace's `.run/studioz/fichiers/`, the prompt
-getting its path); each is required unless `required: false`. The prompt says what to
+getting its path); each is required unless `required: false`. A workflow's turns
+(its `then`'s too) run on its `model` when it declares one (as Claude Code names it:
+`opus`, `haiku`, a model's id), else on studioz's (`studioz --model`, `sonnet` by
+default); the person's next message goes back to studioz's. The prompt says what to
 work on, never how: that belongs in the skill, which also asks its own questions. A
 workspace reads its own `deckz.yml`, so a branch can add a workflow with its skill;
 an invalid section, or a skill the workspace lacks, is shown on its page. The home

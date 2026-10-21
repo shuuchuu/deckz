@@ -1990,6 +1990,7 @@ async def agent_events(
                 "running": conversation.running,
                 "asking": question is not None,
                 "usage": agent.usage_summary(conversation.account.windows),
+                "model": agent.model_label(conversation.model),
                 "pausedUntil": agent.when(conversation.paused_until)
                 if conversation.paused_until
                 else "",
@@ -2254,7 +2255,8 @@ async def _begin(
         else None
     )
     prompt, shown = workflow.message({**values, workflows.DECK: answers.deck}, report)
-    return None if await conversation.send(prompt, shown) else busy
+    sent = await conversation.send(prompt, shown, workflow.model)
+    return None if sent else busy
 
 
 def _declared_workflow(
@@ -2596,7 +2598,7 @@ async def report_then(
             workflows.REPORT: report.relative,
         }
     )
-    if not await studio.agents.conversation(path).send(prompt, shown):
+    if not await studio.agents.conversation(path).send(prompt, shown, workflow.model):
         return refuse("L'agent travaille encore : attendez la fin de son tour.")
     return Response(headers={"HX-Trigger": "agent-started", "HX-Reswap": "none"})
 
