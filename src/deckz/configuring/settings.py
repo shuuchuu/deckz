@@ -60,6 +60,10 @@ class GlobalPaths(BaseModel):
     jinja2_dir: _Path = cast("Path", "{templates_dir}/jinja2")
     jinja2_main_template: _Path = cast("Path", "{jinja2_dir}/main.typ")
     jinja2_html_main_template: _Path = cast("Path", "{jinja2_dir}/main.html")
+    jinja2_course_notes_main_template: _Path = cast(
+        "Path", "{jinja2_dir}/course-notes.typ"
+    )
+    course_notes_dir: _Path = cast("Path", "{git_dir}/course-notes")
     jinja2_env_module: _Path = cast("Path", "{jinja2_dir}/env.py")
     assets_builders_module: _Path = cast("Path", "{templates_dir}/assets_builders.py")
     checks_module: _Path = cast("Path", "{templates_dir}/checks.py")
@@ -75,6 +79,7 @@ class GlobalPaths(BaseModel):
 class DeckPaths(GlobalPaths):
     build_dir: _Path = cast("Path", "{current_dir}/.build")
     pdf_dir: _Path = cast("Path", "{current_dir}/pdf")
+    course_notes_pdf_dir: _Path = cast("Path", "{pdf_dir}/course-notes")
     html_dir: _Path = cast("Path", "{current_dir}/html")
     local_content_dir: _Path = cast("Path", "{current_dir}/content")
     deck_definition: _Path = cast("Path", "{current_dir}/deck.yml")
@@ -200,6 +205,31 @@ class ChecksSettings(BaseModel):
         from ..analyzing.content_checks import DEFERRED
 
         return name not in (DEFERRED if self.deferred is None else self.deferred)
+
+
+class CourseNotesSettings(BaseModel):
+    """A deck's course notes, built by `deckz run course-notes`.
+
+    A deck's written-out reference, one chapter per content file: the chapter \
+    of `<content_dir>/<path>.md` is `<course_notes_dir>/<path>.md`, its \
+    English version `en/<same name>` next to it, like content's (see \
+    `deckz.course_notes`).
+    """
+
+    model_config = ConfigDict(frozen=True)
+    skip: tuple[str, ...] = ()
+    """Content files that have no chapter, on purpose (a deck's practical \
+    information, lab frames, quizzes): patterns on their paths relative to \
+    the content directory, without extension, as `PurePosixPath.full_match` \
+    reads them (`about/**`, `**/quiz-*`). A chapter written for one is used \
+    all the same: these only keep it from being reported missing."""
+    same_as: dict[str, str] = Field(default_factory=dict)
+    """Content files another one's chapter covers (a short variant of a \
+    file): `<path>: <path of the file whose chapter covers it>`, both \
+    relative to the content directory, without extension."""
+    suffix: str = "course-notes"
+    """What a deck's course notes PDF is named after: `<deck>-<suffix>.pdf`, \
+    in `paths.course_notes_pdf_dir`."""
 
 
 class VideosSettings(BaseModel):
@@ -363,6 +393,7 @@ class GlobalSettings(BaseModel):
     checks: ChecksSettings = Field(default_factory=ChecksSettings)
     i18n: I18nSettings = Field(default_factory=I18nSettings)
     videos: VideosSettings = Field(default_factory=VideosSettings)
+    course_notes: CourseNotesSettings = Field(default_factory=CourseNotesSettings)
     setup: SetupSettings = Field(default_factory=SetupSettings)
     """What `deckz setup` checks and runs on top of deckz's own needs."""
     worktree: WorktreeSettings = Field(default_factory=WorktreeSettings)

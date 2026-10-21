@@ -18,7 +18,7 @@ def stale(
     json: bool = False,
     workdir: Path = Path(),
 ) -> None:
-    """Report content files and notebooks with changes not ported to their sibling.
+    """Report content files, notebooks and course notes chapters with unported changes.
 
     Computed from git history alone, no stored markers: a file is stale
     when a commit changed it after the last commit that changed its

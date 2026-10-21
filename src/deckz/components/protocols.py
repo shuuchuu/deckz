@@ -200,6 +200,7 @@ class DeckFactoryProtocol(GlobalFactoryProtocol, Protocol):
         build_part_handouts: bool = True,
         basedirs: tuple[Path, ...] | None = None,
         progress: ProgressReporterProtocol | None = None,
+        build_course_notes: bool = False,
     ) -> DeckBuilderProtocol: ...
 
     def parser(self) -> ParserProtocol: ...

@@ -30,6 +30,8 @@ def test_without_a_plugin_module_only_builtin_checks_run(tmp_path: Path) -> None
         "jinja-syntax",
         "deck-definitions",
         "lab-urls",
+        "course-notes-files",
+        "course-notes-pairs",
     }
     assert checks["raw-latex"]() == []
 
