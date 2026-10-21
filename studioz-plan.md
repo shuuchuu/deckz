@@ -15,9 +15,11 @@ build), 2 (videos), 3 (labs previewed), 4 (`deckz labs gpu pass`) and 5 (GPU pas
 from studioz) are done: phase 5 is done. Then the memory guard "Risks" promised
 (2026-10-18, under "Machine load"), the `jinja-syntax` check and the Commit dialog's kept draft ("Open items").
 Phase 6 (the agent's usage) was planned on 2026-10-21 from the colleague's first
-afternoon; its increment 1 (the model) is done.
-**Next:** phase 6's increment 2 (a new conversation for a new file), "Then, with the
-colleague" (below phase 5), and the open items. A GPU pass rents a machine that costs money: never
+afternoon; its increments 1 (the model) and 2 (a new conversation for a new file) are
+done.
+**Next:** phase 6's increment 3 (the context's size, shown, and gating the automatic
+new conversation on it), "Then, with the colleague" (below phase 5), and the open
+items. A GPU pass rents a machine that costs money: never
 start one without the user saying so. `git log
 origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed. Push and
@@ -1669,28 +1671,51 @@ Each increment is usable on its own, in this order:
    what its process spent since it started (three "OK" in a row reported 0.034, 0.044
    and 0.050 $), so each turn showed the sum of the turns before it until the process
    stopped (15 minutes idle); the colleague's figures were inflated so. A turn now
-   shows the difference (`Conversation._turn_cost`); a turn after a restart pays the
-   cache's rewrite once (0.10 $ against 0.01 $ the next). Left: the colleague's
+   shows the difference (`Conversation._turn_cost`). (A turn after a restart seemed to
+   pay the cache's rewrite once, 0.10 $ against 0.01 $ the next: it didn't, see
+   increment 2.) Left: the colleague's
    session ran 2 h 45 on one process at times, so measure the next one from Claude
    Code's transcript, not from the panel's sums.
-2. **A new conversation for a new file.** The editor's prefill also gives the
-   panel's form the file (a hidden `about` field, set by `agent-prefill`, cleared
-   when the person empties the message). `Conversation` keeps the file its
-   conversation is about (in `.run/studioz/agent/`, with the session); a message
-   about another file, while the conversation has entries, starts afresh first, as
-   "Nouvelle conversation" does, and the transcript shows "Nouvelle conversation :
-   autre fichier (`path`)" with "Reprendre la précédente", which resumes the session
-   kept aside (one, the last). A message with no `about` (a follow-up: "merci",
-   "aligne les T") stays in the conversation, and so does one from a workflow or a
-   dialog's ask. Check what a reset does to "Annuler ce tour" (`checkpoints.last`)
-   and to a deferred question (declined, as when the person writes). Tests: the
-   reset, the follow-up kept, "Reprendre la précédente", with the fake client.
+2. **A new conversation for a new file**: done 2026-10-21. The editor's "Demander à
+   l'agent" also gives the panel's form the file (a hidden `about`, cleared when the
+   person empties the message or sends it). A conversation is about the file of its
+   first such message (`.run/studioz/agent/about`); one about another file, while the
+   conversation has entries, sets it aside first (`precedente/`: its session,
+   transcript, pending question, file and cost, one conversation, the last) and
+   starts afresh, the transcript opening on "Nouvelle conversation : autre fichier
+   (`path`)", why in one line, and "Reprendre la précédente", which exchanges the two
+   (only the last such button is live). A message without the editor (a follow-up),
+   or from a dialog's ask, stays; a workflow's conversation is about several files
+   (`MANY`) and never set aside. A deferred question is declined (the person wrote
+   instead) and travels with its session; "Annuler ce tour" stays (the files are the
+   workspace's, whichever conversation changed them). The pages follow a replaced
+   transcript by `Conversation.epoch`. Tried in headless Chromium on `studioz-dev`
+   with the real agent: two messages from the editor on `description.md` stayed one
+   conversation, one on `schedule.md` started another (button live), "Reprendre la
+   précédente" brought the first back, and asked "on which file was my first
+   message?" it answered `description.md`, line 5. **Found and fixed:** Claude Code's
+   `total_cost_usd` counts the *session's* spending, the earlier processes' turns
+   included when it resumes it, so the first turn after a take-back or a restart
+   showed the whole session's cost (0.20 $ for a turn whose transcript shows 45 k
+   tokens read from the cache, nothing written: the 0.10 $ "rewrite" increment 1 saw
+   was this). studioz now keeps the session's total (`spent`, set aside with it) and
+   subtracts it; tried: 0.01 $ for a resumed turn. **Measured:** a new
+   conversation's first turn read 22 k tokens from the cache (the system prompt and
+   tools) and wrote 23 k (the first message's context: slides' `CLAUDE.md`, the
+   skills, git's status), about 0.10 $ on Sonnet, against 0.01 $ for a follow-up at
+   45 k. So starting afresh costs about 0.09 $ once, and saves each later call
+   `context − 45 k` tokens read (0.3 $ per million): with the colleague's 5.6 calls
+   per message, it pays back within a message from about 100 k, within three from
+   about 65 k, and not at all on a short conversation. Increment 3 gates it on that.
 3. **The context's size, shown.** Each turn's last `AssistantMessage.usage` (input
    plus cache read and write) is the context's size; the panel's header shows it
    ("Contexte : 180 k"), and past a threshold (100 k, say) suggests "Nouvelle
    conversation", which it explains in one line (each message reads it all again).
    For a long conversation the person keeps on purpose (a workflow, a discussion
-   across files).
+   across files). Also gate increment 2's automatic new conversation on it: below
+   about 60 k, a message about another file stays (increment 2's "Measured": a new
+   conversation costs more than it saves there); kept with the session, so a
+   conversation taken back knows its size.
 4. **Less exploring, in slides.** The 29 calls finding how figures are made
    (`figures/plots/`, `figures/typ/`, the `image` filter, `assets/plt/`) are what a
    fresh conversation pays again. Write that down once where the agent reads it, in

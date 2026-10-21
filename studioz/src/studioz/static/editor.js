@@ -241,7 +241,7 @@ export class SourceEditor {
     let excerpt = state.sliceDoc(range.from, range.to).trim().replace(/\s+/g, " ");
     if (excerpt.length > 120) excerpt = `${excerpt.slice(0, 117)}…`;
     const text = `À propos de \`${this.file}\`, ligne ${line}${excerpt ? ` (« ${excerpt} »)` : ""} : `;
-    document.dispatchEvent(new CustomEvent("agent-prefill", { detail: { text } }));
+    document.dispatchEvent(new CustomEvent("agent-prefill", { detail: { text, file: this.file } }));
   }
 
   // Shows the file as it is on disk now, at the same place.

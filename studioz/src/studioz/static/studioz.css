@@ -332,6 +332,9 @@ dialog a.change { font-family: var(--mono); font-size: 0.9em; overflow-wrap: any
 .agent-entry[data-kind="tool"], .agent-entry[data-kind="end"], .agent-entry[data-kind="changes"], .agent-entry[data-kind="notice"] { color: var(--muted); font-size: 0.82em; }
 .agent-entry[data-kind="tool"] .agent-text::before { content: "→ "; }
 .agent-entry[data-kind="notice"] { border-left: 3px solid var(--muted); padding-left: 0.5rem; }
+.agent-entry[data-kind="aside"] { border-left: 3px solid var(--accent); padding-left: 0.5rem; font-size: 0.85em; }
+.agent-entry[data-kind="aside"] .agent-detail { white-space: pre-wrap; color: var(--muted); }
+.agent-entry[data-kind="aside"] button { margin-top: 0.3rem; }
 .agent-entry[data-kind="end"] { border-bottom: 1px dashed var(--line); padding-bottom: 0.3rem; }
 .agent-entry[data-kind="error"] { background: var(--error-bg); padding: 0.3rem 0.6rem; border-radius: 4px; }
 .agent-detail { margin: 0.15rem 0 0; font-size: 0.85em; max-height: 8rem; overflow: auto; color: var(--muted); }

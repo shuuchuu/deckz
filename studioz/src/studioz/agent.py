@@ -31,11 +31,19 @@ The conversation outlives a page and studioz itself: its session id and the
 transcript shown are kept under the workspace's `.run/studioz/agent/`, and
 the next message resumes the session (`resume=`). The Claude Code process
 (about 0.5 GB) is stopped once the conversation has been idle a while.
+
+Each message reads the whole conversation again, so a long one costs more at
+every message (plan, "Phase 6"). A conversation is about the file of its
+first message from the editor; a message from the editor about another file
+starts a new one, setting the previous one aside, which the person may take
+back. A message written without the editor is a follow-up, and a workflow's
+conversation is about several files: neither starts a new one.
 """
 
 import asyncio
 import json
 import re
+import shutil
 import subprocess
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import suppress
@@ -79,6 +87,18 @@ _SESSION = "session"
 _TRANSCRIPT = "transcript.jsonl"
 _QUESTION = "question.json"
 """The question a turn ended on (deferred), until the session resumes with it."""
+_ABOUT = "about"
+"""The file the conversation is about, or `MANY`."""
+_SPENT = "spent"
+"""What Claude Code reported its session spent, until the last turn: resuming a
+session, it counts from there."""
+_ASIDE = "precedente"
+"""The conversation set aside for a new one about another file (the last one)."""
+_KEPT = (_SESSION, _TRANSCRIPT, _QUESTION, _ABOUT, _SPENT)
+"""What a conversation set aside takes along. The last turn's checkpoints stay:
+they are the workspace's files, whichever conversation changed them."""
+MANY = "*"
+"""What a workflow's conversation is about: never set aside for a file."""
 DEFAULT_MODEL = "sonnet"
 """The agent's model, as Claude Code names it (an alias, or a model's id)."""
 _IDLE_AFTER = 15 * 60.0
@@ -181,7 +201,8 @@ class Entry:
     """A line of the transcript a page shows."""
 
     kind: str
-    """`person`, `text`, `tool`, `error`, `end` or `notice`."""
+    """`person`, `text`, `tool`, `error`, `end`, `notice` or `aside` (a \
+    conversation set aside for this one, which the person may take back)."""
     text: str
     detail: str = ""
     at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
@@ -717,8 +738,6 @@ class Conversation:
         """The model of the turn running, or of the last one (which a question's \
         answers and a resumption after a limit continue)."""
         self._client_model: str | None = None
-        self._spent = 0.0
-        """What Claude Code's process reported spending, until the last turn."""
         self.account = account or Account()
         self.paused_until: float | None = None
         """When a limit stopped the agent: it resumes by itself then."""
@@ -730,19 +749,16 @@ class Conversation:
         self._stopped = False
         self.version = 0
         """Grows at each change, which the pages follow."""
-        self.question: Question | None = None
+        self.epoch = 0
+        """Grows when the transcript is replaced (a new conversation, one taken \
+        back): the pages show it again from the start."""
+        self._questions = count(1)
+        self.question: Question | None = self._waiting()
         """The question the agent waits on, if any."""
         self.undoable: checkpoints.Turn | None = checkpoints.last(self._directory)
         """The last turn, if it changed files: "Annuler ce tour" puts them back."""
         self._note: str | None = None
         """What the agent is told with the next message (an undone turn)."""
-        self._questions = count(1)
-        if (pending := self._pending()) and "answers" not in pending:
-            found = asked(pending.get("input") or {})
-            if found and not pending.get("declined"):
-                self.question = Question(
-                    next(self._questions), found, deferred=pending.get("id")
-                )
         self._client: Client | None = None
         self._task: asyncio.Task[None] | None = None
         self._changed = asyncio.Condition()
@@ -750,10 +766,37 @@ class Conversation:
 
     @property
     def session(self) -> str | None:
-        path = self._directory / _SESSION
+        return self._read(_SESSION)
+
+    @property
+    def about(self) -> str | None:
+        """The file the conversation is about (`MANY`: several), if known."""
+        return self._read(_ABOUT)
+
+    @property
+    def aside(self) -> bool:
+        """Whether a conversation was set aside, which the person may take back."""
+        return (self._directory / _ASIDE / _TRANSCRIPT).is_file()
+
+    def _read(self, name: str) -> str | None:
+        path = self._directory / name
         return (
             path.read_text(encoding="utf8").strip() or None if path.is_file() else None
         )
+
+    def _waiting(self) -> Question | None:
+        """The deferred question the conversation's last turn ended on.
+
+        Returns:
+            It, None if the turn didn't end on one, or it was answered or declined.
+        """
+        pending = self._pending()
+        if not pending or "answers" in pending or pending.get("declined"):
+            return None
+        found = asked(pending.get("input") or {})
+        if not found:
+            return None
+        return Question(next(self._questions), found, deferred=pending.get("id"))
 
     def _load(self) -> list[Entry]:
         path = self._directory / _TRANSCRIPT
@@ -792,7 +835,11 @@ class Conversation:
                 await asyncio.wait_for(self._changed.wait(), timeout)
 
     async def send(
-        self, prompt: str, shown: str | None = None, model: str | None = None
+        self,
+        prompt: str,
+        shown: str | None = None,
+        model: str | None = None,
+        about: str | None = None,
     ) -> bool:
         """Give the agent a message, starting its turn.
 
@@ -801,6 +848,9 @@ class Conversation:
             shown: What the transcript shows instead, if not the message (a \
                 workflow's, whose message names its skill).
             model: The turn's model, if not the conversation's (a workflow's).
+            about: The file the message is about (the editor's), `MANY` for a \
+                workflow's; None for a follow-up. A file other than the \
+                conversation's starts a new one, the previous one set aside.
 
         Returns:
             Whether it was sent: not while the agent is still at work.
@@ -810,6 +860,22 @@ class Conversation:
         # The person takes over from a pause, or from a question.
         self.paused_until = None
         self._decline("La personne a écrit un message au lieu de répondre.")
+        current = self.about
+        other = about not in {None, MANY} and current not in {None, about, MANY}
+        if other and self.entries:
+            await self._exchange(fresh=True)
+            await self._add(
+                Entry(
+                    "aside",
+                    f"Nouvelle conversation : autre fichier ({about})",
+                    f"La précédente, sur {current}, est mise de côté : chaque message "
+                    "relit toute la conversation, une nouvelle coûte moins.",
+                )
+            )
+            current = None
+        if about and (current is None or about == MANY):
+            self._directory.mkdir(parents=True, exist_ok=True)
+            (self._directory / _ABOUT).write_text(about, encoding="utf8")
         await self._add(Entry("person", (shown or prompt).strip()))
         self._turn_model = model or self.model
         self._start(prompt.strip())
@@ -888,22 +954,35 @@ class Conversation:
             )
             await client.connect()
             self._client = client
-            self._spent = 0.0
         elif self._client_model != self._turn_model:
             await self._client.set_model(self._turn_model)
         self._client_model = self._turn_model
         return self._client
 
     def _turn_cost(self, message: ResultMessage) -> ResultMessage:
-        """`message`, with the turn's cost: Claude Code's counts since it started.
+        """`message`, with the turn's cost: Claude Code's counts the session's.
+
+        Claude Code adds each turn to what the session spent, the turns of the
+        processes before it included when it resumes the session (seen with
+        2.1.283: a turn reading 45 k tokens from the cache reported 0.20 $, its
+        session's 0.19 $ before it plus its own).
 
         Returns:
             The message, its `total_cost_usd` the turn's own.
         """
-        if message.total_cost_usd is None:
+        total = message.total_cost_usd
+        if total is None:
             return message
-        spent, self._spent = self._spent, message.total_cost_usd
-        return replace(message, total_cost_usd=max(message.total_cost_usd - spent, 0))
+        try:
+            spent = float(self._read(_SPENT) or 0)
+        except ValueError:
+            spent = 0.0
+        self._directory.mkdir(parents=True, exist_ok=True)
+        (self._directory / _SPENT).write_text(str(total), encoding="utf8")
+        # Less than before: a new session.
+        return replace(
+            message, total_cost_usd=total - spent if total >= spent else total
+        )
 
     async def _pause_if_limited(self) -> None:
         """Pause the conversation until the limit that stopped its turn resets."""
@@ -1130,11 +1209,64 @@ class Conversation:
         if self._task is not None:
             await asyncio.wait({self._task}, timeout=10)
         await self._disconnect()
-        for name in (_SESSION, _TRANSCRIPT, _QUESTION):
+        for name in _KEPT:
             (self._directory / name).unlink(missing_ok=True)
         self.entries = []
         self.question = None
         self._note = None
+        self.epoch += 1
+        await self._notify()
+
+    async def take_back(self) -> str | None:
+        """Take back the conversation set aside, setting this one aside instead.
+
+        Returns:
+            None once done, else why it wasn't, in French.
+        """
+        if self.running:
+            return "L'agent travaille encore : attendez la fin de son tour."
+        if not self.aside:
+            return "Aucune conversation mise de côté"
+        left = self.about
+        self.paused_until = None
+        await self._exchange()
+        about = self.about
+        await self._add(
+            Entry(
+                "aside",
+                "Conversation précédente reprise"
+                + (f" ({about})" if about and about != MANY else ""),
+                f"Celle sur {left} est mise de côté."
+                if left and left != MANY
+                else "L'autre est mise de côté.",
+            )
+        )
+        return None
+
+    async def _exchange(self, fresh: bool = False) -> None:
+        """Exchange the conversation with the one set aside.
+
+        Args:
+            fresh: Whether to start a new one instead (the one set aside \
+                before is forgotten).
+        """
+        await self._disconnect()
+        aside = self._directory / _ASIDE
+        if fresh:
+            shutil.rmtree(aside, ignore_errors=True)
+        aside.mkdir(parents=True, exist_ok=True)
+        for name in _KEPT:
+            here, there = self._directory / name, aside / name
+            moving = self._directory / f"{name}.aside"
+            if here.exists():
+                here.replace(moving)
+            if there.exists():
+                there.replace(here)
+            if moving.exists():
+                moving.replace(there)
+        self.entries = self._load()
+        self.question = self._waiting()
+        self.epoch += 1
         await self._notify()
 
     async def _disconnect(self) -> None:
