@@ -14,8 +14,8 @@ released (deckz 31.3.4). Phase 5 (long jobs) was planned on 2026-10-17 (under
 build), 2 (videos), 3 (labs previewed), 4 (`deckz labs gpu pass`) and 5 (GPU passes
 from studioz) are done: phase 5 is done. Then the memory guard "Risks" promised
 (2026-10-18, under "Machine load"), the `jinja-syntax` check and the Commit dialog's kept draft ("Open items").
-**Next:** "Then, with the colleague" (below phase
-5), and the open items. A GPU pass rents a machine that costs money: never
+**Next:** phase 6 (the agent's usage, planned 2026-10-21 from the colleague's
+first afternoon), "Then, with the colleague" (below phase 5), and the open items. A GPU pass rents a machine that costs money: never
 start one without the user saying so. `git log
 origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed. Push and
@@ -1613,6 +1613,83 @@ job's "Arrêter…" still stops it).
 The acceptance test the operability plan already plans, extended: the colleague does a
 week's real tasks through studioz, and every time they get stuck becomes a fix in
 deckz, a skill, or studioz, in that order of preference.
+
+### Phase 6: the agent's usage (planned 2026-10-21)
+
+**What happened.** On 2026-10-21 the colleague spent their five-hour window in one
+afternoon (13:57 to 16:42): 46 messages about 20 content files, nearly all from the
+editor's "À propos de `file`, ligne N" prefill, mostly visual fixes ("c'est moche",
+"aligne les T", a figure redone). Their session's transcript (Claude Code's
+`~/.claude/projects/<workspace>/<session>.jsonl`, measured with a throwaway script)
+gives:
+- 257 model calls, all Opus 5.5 (`options()` sets no model, so the account's default);
+  45.7 M tokens read from the cache, 0.33 M written to it, 166 k generated; Claude Code
+  priced it at 15.10 $ at API rates.
+- One conversation all afternoon: its context grew from 33 k tokens (the preset system
+  prompt and tools, slides' 36 KB `CLAUDE.md`, the skills' listing) to 339 k, never
+  compacted (the model's window is long). Each call reads it all again: a "merci"
+  cost 153 k tokens at 14:37 and 271 k at 16:10; a "c'est moche" 1.4 M at 14:34 and
+  2.3 M at 16:41.
+- The cache lasts an hour (every write is `ephemeral_1h`; 14-minute pauses rewrote a
+  few hundred tokens). No file was come back to after moving on.
+- By purpose, share of the tokens read: exploring 37 % (78 calls: the file at hand and
+  its neighbours, 40; how figures and assets are done, 29), rendering and looking 43 %
+  (88 calls, most of them also editing or building: the agent builds with `deckz run
+  file`, finds the page with `deckz show frames | grep`, converts it with
+  `pdftocairo` and reads the PNGs in the same response), editing 9 %, building
+  only 9 %, answering 18 % (45 calls with no tool). The 108 PNGs themselves weigh
+  29 k tokens (3.2 M read again, 7 %).
+- 49 of 122 writes were to `en/` files: the agent ported each change itself (the
+  `stop` hook never had to block).
+
+**What it means.** The cost is the long context, not any one task. Replayed with a
+fresh conversation at each new file (same calls, starting again at 33 k tokens, which
+the cache serves across conversations: the prefix is the same), the afternoon reads
+12.3 M tokens instead of 46 M (÷3.7, an upper bound: a fresh conversation explores
+the figure conventions again). On Sonnet it costs less again. Rendering is worth
+keeping: the requests were visual, and the agent already batches build, conversion
+and reading. Not worth doing: one session per file to come back to (it happened zero
+times; a session resumed after the hour rewrites its whole context, about twelve
+times a cache read; the file on disk and `git diff` carry what matters).
+
+Each increment is usable on its own, in this order:
+
+1. **The model.** `options()` takes a model, `sonnet` by default (`studioz --model`,
+   the value shown in the agent panel's header), and `effort` left to Claude Code's
+   default. A workflow may declare its own `model` in `deckz.yml` (a QA pass may want
+   Opus), checked by `studioz.workflows`' schema. A resumed session keeps working on a
+   new model (its first call writes the cache again, once). Check: a turn's
+   `AssistantMessage.model` is the one chosen; the panel's usage line.
+2. **A new conversation for a new file.** The editor's prefill also gives the
+   panel's form the file (a hidden `about` field, set by `agent-prefill`, cleared
+   when the person empties the message). `Conversation` keeps the file its
+   conversation is about (in `.run/studioz/agent/`, with the session); a message
+   about another file, while the conversation has entries, starts afresh first, as
+   "Nouvelle conversation" does, and the transcript shows "Nouvelle conversation :
+   autre fichier (`path`)" with "Reprendre la précédente", which resumes the session
+   kept aside (one, the last). A message with no `about` (a follow-up: "merci",
+   "aligne les T") stays in the conversation, and so does one from a workflow or a
+   dialog's ask. Check what a reset does to "Annuler ce tour" (`checkpoints.last`)
+   and to a deferred question (declined, as when the person writes). Tests: the
+   reset, the follow-up kept, "Reprendre la précédente", with the fake client.
+3. **The context's size, shown.** Each turn's last `AssistantMessage.usage` (input
+   plus cache read and write) is the context's size; the panel's header shows it
+   ("Contexte : 180 k"), and past a threshold (100 k, say) suggests "Nouvelle
+   conversation", which it explains in one line (each message reads it all again).
+   For a long conversation the person keeps on purpose (a workflow, a discussion
+   across files).
+4. **Less exploring, in slides.** The 29 calls finding how figures are made
+   (`figures/plots/`, `figures/typ/`, the `image` filter, `assets/plt/`) are what a
+   fresh conversation pays again. Write that down once where the agent reads it, in
+   slides' `CLAUDE.md` or a `figures` skill (the shorter its listing line, the
+   better: the listing is in every call), after reading what those calls looked for
+   in the transcript. slides' side, with the user.
+5. **Measured again.** The colleague's next afternoon of the same kind, measured the
+   same way: tokens per message, context at the end, model. Then decide on what is
+   left: a `deckz` command giving a content file's rendered pages as PNGs (build,
+   find the pages from the build's markers, convert) would save the page hunting, a
+   few percent at most here; trimming slides' `CLAUDE.md` saves less, since the cache
+   serves it.
 
 ## Risks
 
