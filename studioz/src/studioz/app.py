@@ -3,7 +3,13 @@
 import asyncio
 import json
 import subprocess
-from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
+from collections.abc import (
+    AsyncGenerator,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Sequence,
+)
 from contextlib import asynccontextmanager, suppress
 from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
@@ -26,6 +32,9 @@ from fastapi.responses import (
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markdown_it import MarkdownIt
+from markdown_it.renderer import RendererHTML
+from markdown_it.token import Token
+from markdown_it.utils import EnvType, OptionsDict
 from markupsafe import Markup
 from starlette.datastructures import UploadFile
 
@@ -189,6 +198,23 @@ def _size(size: int) -> str:
 # The agent writes Markdown. Raw HTML in it stays text, and markdown-it
 # refuses `javascript:` links.
 _MARKDOWN = MarkdownIt("commonmark", {"html": False, "breaks": True}).enable("table")
+
+
+def _new_tab(
+    self: RendererHTML,
+    tokens: Sequence[Token],
+    idx: int,
+    options: OptionsDict,
+    env: EnvType,
+) -> str:
+    # A link in the agent's text or a report opens a new tab, studioz's page
+    # (the editor, a conversation going on) staying where it was.
+    tokens[idx].attrSet("target", "_blank")
+    tokens[idx].attrSet("rel", "noopener noreferrer")
+    return self.renderToken(tokens, idx, options, env)
+
+
+_MARKDOWN.add_render_rule("link_open", _new_tab)
 
 
 def _markdown(text: str) -> Markup:

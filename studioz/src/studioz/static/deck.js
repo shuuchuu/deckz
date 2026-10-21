@@ -9,7 +9,7 @@ import * as pdfjsLib from "/static/vendor/pdfjs/pdf.min.mjs";
 
 globalThis.pdfjsLib = pdfjsLib;
 pdfjsLib.GlobalWorkerOptions.workerSrc = "/static/vendor/pdfjs/pdf.worker.min.mjs";
-const { EventBus, PDFLinkService, PDFViewer } = await import(
+const { EventBus, LinkTarget, PDFLinkService, PDFViewer } = await import(
   "/static/vendor/pdfjs/web/pdf_viewer.mjs"
 );
 
@@ -43,7 +43,9 @@ const pageNumber = document.getElementById("page-number");
 const notice = document.getElementById("notice");
 
 const eventBus = new EventBus();
-const linkService = new PDFLinkService({ eventBus });
+// A link out of the deck opens a new tab (pdf.js adds `rel="noopener"`): the
+// default follows it in studioz's own, the page and its editor gone.
+const linkService = new PDFLinkService({ eventBus, externalLinkTarget: LinkTarget.BLANK });
 const viewer = new PDFViewer({ container, eventBus, linkService });
 linkService.setViewer(viewer);
 
