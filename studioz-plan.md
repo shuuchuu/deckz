@@ -16,8 +16,8 @@ from studioz) are done: phase 5 is done. Then the memory guard "Risks" promised
 (2026-10-18, under "Machine load"), the `jinja-syntax` check and the Commit dialog's kept draft ("Open items").
 Phase 6 (the agent's usage) was planned on 2026-10-21 from the colleague's first
 afternoon; its increments 1 (the model), 2 (a new conversation for a new file), 3
-(the context's size) and 4 (slides' `docs/figures.md`, on branch `ws/figures-doc` of
-`../slides--figures-doc` until the user merges it) are done.
+(the context's size) and 4 (slides' `docs/figures.md`, in slides' main as `b83c29fb`)
+are done.
 **Next:** phase 6's increment 5 (the colleague's next afternoon measured), "Then, with
 the colleague" (below phase 5), and the open items. A GPU pass rents a machine that costs money: never
 start one without the user saying so. `git log
@@ -1739,8 +1739,8 @@ Each increment is usable on its own, in this order:
    by `pdftotext` scripts to find a page. **Done:** in deckz, `run file`/`run section`
    take a path from the current directory or the repository's root too
    (`checking.content_relative`), and `show frames` reads a preview's PDF under
-   `.run/` (`frames._built_by`). In slides (branch `ws/figures-doc`, not merged:
-   the user's call), `docs/figures.md`, in French for people too: the three kinds of
+   `.run/` (`frames._built_by`). In slides (`b83c29fb`, merged by the user's
+   go-ahead), `docs/figures.md`, in French for people too: the three kinds of
    figure, a Typst and a matplotlib skeleton (both built for real), credits,
    references and languages, Typst math (`bold(W)`, not `\vect`), the palette and
    node styles, the helpers' signatures, a model figure per kind, the three commands
