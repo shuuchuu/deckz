@@ -1020,6 +1020,18 @@ def test_the_agent_text_is_markdown_without_html() -> None:
     assert "**a**" in _agent_entry(Entry("person", "**a**"))
 
 
+def test_the_agent_links_open_a_new_tab() -> None:
+    from studioz.app import _agent_entry
+
+    html = _agent_entry(
+        Entry(
+            "text", "Voir [la doc](https://example.org/a) ou <https://example.org/b>."
+        )
+    )
+    for url in ("https://example.org/a", "https://example.org/b"):
+        assert f'href="{url}" target="_blank" rel="noopener noreferrer"' in html
+
+
 def test_static_files_are_checked_again(agent_client: TestClient) -> None:
     response = agent_client.get("/static/agent.js")
     assert response.headers["Cache-Control"] == "no-cache"

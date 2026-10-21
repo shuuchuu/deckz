@@ -17,9 +17,10 @@ from studioz) are done: phase 5 is done. Then the memory guard "Risks" promised
 Phase 6 (the agent's usage) was planned on 2026-10-21 from the colleague's first
 afternoon; its increments 1 (the model), 2 (a new conversation for a new file), 3
 (the context's size) and 4 (slides' `docs/figures.md`, in slides' main as `b83c29fb`)
-are done. Phase 7's increment 1 (logging in, and errors naming their fix) is done.
-**Next:** phase 7's increments 2 to 4 (links in new tabs, the slide in view, the
-PDF's bookmarks; start with "Starting phase 7" below) and its
+are done. Phase 7's increments 1 (logging in, and errors naming their fix) and 2
+(links in new tabs) are done.
+**Next:** phase 7's increments 3 and 4 (the slide in view, the PDF's bookmarks;
+start with "Starting phase 7" below) and its
 "Also left", phase 6's increment 5
 (the colleague's next afternoon measured), "Then, with the colleague" (below
 phase 5), and the open items. A GPU pass rents a machine that costs money: never
@@ -158,8 +159,9 @@ checked for slides sessions (tell them only of a change in what deckz does), and
 pre-commit hook's two Ctrl-C timing tests fail about one run in three: retry the
 commit ("Also left" has their fix).
 
-Increment 1 (logging in) is done (its entry under phase 7); next is increment 2
-(links in new tabs), whose entry names each place. Logging in on a scratch
+Increments 1 (logging in) and 2 (links in new tabs) are done (their entries under
+phase 7); next is increment 3 (the slide in view), whose entry proposes when a
+message's slide makes it about another file. Logging in on a scratch
 `CLAUDE_CONFIG_DIR` (empty) never touches the person's own login; a model that
 doesn't exist (`studioz --model claude-nonexistent-9`) and a bogus session id in a
 workspace's `.run/studioz/agent/session` give real errors at no cost.
@@ -1836,14 +1838,23 @@ the first one first, since it stops a newcomer before anything else works.
    not reproduced (it needs a fresh account's first login): its words now show under
    "L'agent s'est arrêté", so the next person to hit it can read them out, and then
    it gets its own entry and fix.
-2. **Links open in a new tab.** Following a link today replaces studioz's page: in
-   the PDF (pdf.js's `PDFLinkService` in `deck.js` is built without
-   `externalLinkTarget`, so `LinkTarget.NONE`; give it `LinkTarget.BLANK` and
-   `externalLinkRel: "noopener noreferrer"`), and in the agent's Markdown
-   (`app._markdown`: a markdown-it renderer rule adding `target="_blank"
-   rel="noopener noreferrer"`). Check the others too: the Problems' and the
-   notebook page's external links (the notebook frame is sandboxed: it needs
-   `allow-popups`, and `allow-popups-to-escape-sandbox` for the new tab to work).
+2. **Links open in a new tab**: done 2026-10-22. The PDF's links out of the deck
+   (`deck.js`: `PDFLinkService` given `externalLinkTarget: LinkTarget.BLANK`; pdf.js
+   adds `rel="noopener noreferrer nofollow"` itself; links within the deck still
+   move the viewer), and every link of studioz's Markdown (`app._markdown`, a
+   markdown-it `link_open` rule adding `target="_blank" rel="noopener noreferrer"`:
+   the agent's text and the reports). The rest needed nothing: a notebook's frame
+   already has `<base target="_blank">` and `allow-popups
+   allow-popups-to-escape-sandbox`, the Problems' links open the editor, and
+   studioz's own pages link out nowhere else. **Tried for real** in headless
+   Chromium on `studioz-dev`'s Fortinet deck (external requests blocked): the title
+   page's ORSYS link opened a tab, the page stayed and the editor stayed closed
+   (`deck.js`'s page click already ignores links); a link in an agent entry (a
+   transcript line written by hand, no agent turn) and one in the tool-calling
+   agent notebook's Markdown each opened a tab. **Left:** a bare URL in the agent's
+   text stays text (markdown-it's `linkify` needs `linkify-it-py`, a new dependency
+   relocking slides; the colleague's afternoon had one link, written as a Markdown
+   link).
 3. **The agent knows the slide in view.** Writing "cette slide est moche" should be
    enough, without "Demander à l'agent". The deck page knows the page in view (the
    status bar's "p. 10 / 85") and, from the build's frames (`/cadres`), its file,
