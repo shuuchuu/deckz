@@ -8,7 +8,8 @@ deckz run --watch --workdir my/deck --handout --no-presentation --no-print
 
 rebuilds the deck's handout on every change, in about a second: each PDF's compiler
 stays alive with its cache. Watching fewer PDFs keeps fewer of these (large) processes
-alive.
+alive. Add `--course-notes` to rebuild the deck's course notes too, on a change of a
+chapter as of a slide.
 
 To look at one file or one section on its own: `deckz run file <file>`, `deckz run
 section <section> <flavor>` (they build under `.run/` and open the result).

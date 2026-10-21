@@ -34,8 +34,9 @@ course-notes` lists the deck's files with their chapters, and
 deckz run course-notes --watch
 ```
 
-recompiles the course notes PDF (`pdf/course-notes/`) on each change. A chapter
-serves every deck that includes its file. See the README's "Course notes".
+recompiles the course notes PDF (`pdf/course-notes/`) on each change (`deckz run
+--watch --course-notes` rebuilds the slides along with it). A chapter serves every
+deck that includes its file. See the README's "Course notes".
 
 ## A lab
 

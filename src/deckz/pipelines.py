@@ -50,6 +50,9 @@ class BuildTarget:
     parts: tuple[PartName, ...] | None = None
     """The parts to compile, when not all of them (`--parts`). `deck` stays \
     whole: `stale_pdfs` needs every output of the deck, not only this build's."""
+    course_notes: bool = False
+    """`deck` is a deck's course notes (`course_notes_targets`): it compiles \
+    to the course notes PDF only, whatever the build's other outputs."""
 
 
 @dataclass(frozen=True)
@@ -70,8 +73,9 @@ class OutputKinds:
     """Remove the PDFs that no build of the decks produces anymore, in the \
     languages built (see `stale_pdfs`)."""
     course_notes: bool = False
-    """The course notes PDF, in `paths.course_notes_pdf_dir`, which \
-    `stale_pdfs` never looks at."""
+    """Each deck's course notes too (`deck_targets`/`decks_targets` add \
+    their targets), in `paths.course_notes_pdf_dir`, which `stale_pdfs` \
+    never looks at."""
 
     @property
     def pdfs(self) -> bool:
@@ -96,17 +100,18 @@ def _deck_builder(
         if whole_deck or target.parts is None
         else target.deck.filter(target.parts)
     )
+    slides = not target.course_notes
     return DeckSettingsFactory(target.settings, lang=lang).deck_builder(
         variables=variables,
         deck=deck,
-        build_handout=outputs.handout,
-        build_presentation=outputs.presentation,
-        build_print=outputs.print,
-        build_html=outputs.html,
+        build_handout=slides and outputs.handout,
+        build_presentation=slides and outputs.presentation,
+        build_print=slides and outputs.print,
+        build_html=slides and outputs.html,
         build_part_handouts=outputs.part_handouts,
         basedirs=target.basedirs,
         progress=progress,
-        build_course_notes=outputs.course_notes,
+        build_course_notes=target.course_notes,
     )
 
 
@@ -130,6 +135,9 @@ def build(
     several_langs = len({target.lang for target in targets}) > 1
 
     def compile_target(target: BuildTarget) -> None:
+        slides = outputs.pdfs or outputs.html
+        if outputs.course_notes and not slides and not target.course_notes:
+            return  # Only the course notes were asked for.
         target_progress = (
             PrefixedProgress(progress, f"{target.lang}: ")
             if several_langs
@@ -205,6 +213,8 @@ def stale_pdfs(targets: Iterable[BuildTarget], outputs: OutputKinds) -> list[Pat
         return []
     expected: dict[Path, set[Path]] = {}
     for target in targets:
+        if target.course_notes:
+            continue
         directory = lang_dir(target.settings.paths.pdf_dir, target.lang)
         builder = _deck_builder(target, _EVERY_PDF, _NULL_PROGRESS, whole_deck=True)
         expected.setdefault(directory, set()).update(builder.output_paths())
@@ -231,6 +241,8 @@ def outdated_pdfs(targets: Iterable[BuildTarget]) -> list[Path]:
     targets = list(targets)
     outdated = set(stale_pdfs(targets, _EVERY_PDF))
     for target in targets:
+        if target.course_notes:
+            continue
         builder = _deck_builder(target, _EVERY_PDF, _NULL_PROGRESS, whole_deck=True)
         outdated.update(
             planned.output_path
@@ -261,12 +273,30 @@ def deck_targets(
     settings: DeckSettings,
     langs: Iterable[Lang],
     parts: Iterable[PartName] | None = None,
+    *,
+    course_notes: bool = False,
 ) -> list[BuildTarget]:
     """The deck of `settings`, restricted to `parts` if given.
 
+    Args:
+        settings: The deck's settings.
+        langs: The languages to build it in.
+        parts: The parts to build, all if None.
+        course_notes: Add the deck's course notes, whole whatever `parts`, \
+            in the languages they have chapters in (`course_notes_targets`).
+
     Returns:
-        One target per language.
+        One target per language, then the course notes' if asked.
     """
+    langs = tuple(langs)
+    if course_notes:
+        notes = course_notes_targets(settings, langs, required=False)
+        if built := {target.lang for target in notes}:
+            if skipped := [lang for lang in langs if lang not in built]:
+                _logger.warning("No course notes chapter in %s yet", ", ".join(skipped))
+        else:
+            _logger.warning("No course notes chapter yet: only the slides are built")
+        return [*deck_targets(settings, langs, parts), *notes]
     parts = None if parts is None else tuple(parts)
     targets = []
     for lang in langs:
@@ -319,15 +349,24 @@ def section_targets(
     ]
 
 
-def decks_targets(directory: Path, langs: Iterable[Lang]) -> list[BuildTarget]:
+def decks_targets(
+    directory: Path, langs: Iterable[Lang], *, course_notes: bool = False
+) -> list[BuildTarget]:
     """Every deck of the repository containing `directory`.
 
     All are parsed up front, in every language, so a broken deck fails the \
     command before any compilation starts.
 
+    Args:
+        directory: A directory of the repository.
+        langs: The languages to build the decks in.
+        course_notes: Add each deck's course notes, in the languages it has \
+            chapters in (`course_notes_targets`).
+
     Returns:
-        One target per deck and language.
+        One target per deck and language, then the course notes' if asked.
     """
+    langs = tuple(langs)
     git_dir = GlobalSettings.from_yaml(directory).paths.git_dir
     all_settings = list(all_deck_settings(git_dir))
     targets = []
@@ -337,6 +376,17 @@ def decks_targets(directory: Path, langs: Iterable[Lang]) -> list[BuildTarget]:
             deck = parser.from_deck_definition(settings.paths.deck_definition)
             label = str(settings.paths.current_dir.relative_to(git_dir))
             targets.append(BuildTarget(deck, settings, lang, label))
+    if course_notes:
+        notes = [
+            target
+            for settings in all_settings
+            for target in course_notes_targets(settings, langs, required=False)
+        ]
+        _logger.info(
+            "Course notes of the %d deck(s) with chapters",
+            len({target.label for target in notes}),
+        )
+        targets.extend(notes)
     return targets
 
 
@@ -346,17 +396,22 @@ COURSE_NOTES = OutputKinds(
 
 
 def course_notes_targets(
-    settings: DeckSettings, langs: Iterable[Lang]
+    settings: DeckSettings, langs: Iterable[Lang], *, required: bool = True
 ) -> list[BuildTarget]:
     """The course notes of the deck of `settings` (`course_notes.chapters_deck`).
 
-    Build them with `COURSE_NOTES`.
+    Args:
+        settings: The deck's settings.
+        langs: The languages to build them in.
+        required: Fail on a language with no chapter written at all; else \
+            leave it out.
 
     Returns:
         One target per language.
 
     Raises:
-        CourseNotesError: If a language has no chapter written at all.
+        CourseNotesError: If `required` and a language has no chapter written \
+            at all.
     """
     from .course_notes import chapters_deck
 
@@ -371,10 +426,14 @@ def course_notes_targets(
                 f"{deck.name} has no course notes chapter in {lang} yet, under "
                 f"{paths.course_notes_dir.relative_to(paths.git_dir)}"
             )
-            raise CourseNotesError(msg)
+            if required:
+                raise CourseNotesError(msg)
+            continue
         basedirs = (paths.course_notes_dir, paths.assets_dir, paths.current_dir)
         label = f"{deck.name} course notes"
-        targets.append(BuildTarget(chapters, settings, lang, label, basedirs))
+        targets.append(
+            BuildTarget(chapters, settings, lang, label, basedirs, course_notes=True)
+        )
     return targets
 
 
@@ -427,7 +486,8 @@ def run(
     parts: Iterable[PartName] | None = None,
     progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
-    build(deck_targets(settings, langs, parts), outputs, progress)
+    targets = deck_targets(settings, langs, parts, course_notes=outputs.course_notes)
+    build(targets, outputs, progress)
 
 
 def run_file(
@@ -457,7 +517,8 @@ def run_decks(
     outputs: OutputKinds,
     progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
-    build(decks_targets(directory, langs), outputs, progress)
+    targets = decks_targets(directory, langs, course_notes=outputs.course_notes)
+    build(targets, outputs, progress)
 
 
 def run_shared(

@@ -258,3 +258,64 @@ def test_no_course_notes_directory_means_no_problem(tmp_path: Path) -> None:
 
     assert course_notes_files(_global(tmp_path)) == []
     assert course_notes_pairs(_global(tmp_path)) == []
+
+
+_NOTES_PDF = Path("pdf") / "course-notes" / "abc-course-notes.pdf"
+_HANDOUT_ONLY = ("--no-presentation", "--no-print", "--no-part-handouts")
+
+
+def test_run_with_course_notes_builds_both(repo: Path) -> None:
+    _chapter(repo, "greeting/hello", "# Hello\n\nThe written-out greeting.\n")
+    deck = repo / "company" / "abc"
+
+    main(("run", *_HANDOUT_ONLY, "--course-notes"))
+
+    assert "Hi there" in _pdf_text(deck / "pdf" / "abc-handout.pdf")
+    assert "The written-out greeting." in _pdf_text(deck / _NOTES_PDF)
+    # --sync (the default) keeps the deck's handout, and leaves the notes alone.
+    assert sorted(p.name for p in (deck / "pdf").glob("*.pdf")) == ["abc-handout.pdf"]
+
+
+def test_run_with_course_notes_but_no_chapter_builds_the_slides(
+    repo: Path, caplog: Any
+) -> None:
+    deck = repo / "company" / "abc"
+
+    main(("run", *_HANDOUT_ONLY, "--course-notes"))
+
+    assert (deck / "pdf" / "abc-handout.pdf").is_file()
+    assert not (deck / "pdf" / "course-notes").exists()
+    assert "No course notes chapter yet" in caplog.text
+
+
+def test_run_course_notes_only(repo: Path) -> None:
+    _chapter(repo, "greeting/hello", "# Hello\n")
+    deck = repo / "company" / "abc"
+
+    main(("run", "--no-handout", "--no-presentation", "--no-print", "--course-notes"))
+
+    assert (deck / _NOTES_PDF).is_file()
+    assert not list((deck / "pdf").glob("*.pdf"))
+
+
+def test_course_notes_default_from_the_environment(
+    repo: Path, monkeypatch: Any, capsys: CaptureFixture[str]
+) -> None:
+    _chapter(repo, "greeting/hello", "# Hello\n")
+    monkeypatch.setenv("DECKZ_RUN_COURSE_NOTES", "true")
+
+    main(("run", *_HANDOUT_ONLY, "--dry-run"))
+
+    out = capsys.readouterr().out
+    assert "company/abc/pdf/abc-handout.pdf: render all" in out
+    assert "company/abc/pdf/course-notes/abc-course-notes.pdf: render all 1" in out
+
+
+def test_run_decks_with_course_notes(repo: Path) -> None:
+    _chapter(repo, "greeting/hello", "# Hello\n")
+    deck = repo / "company" / "abc"
+
+    main(("run", "decks", "--handout", "--no-presentation", "--course-notes"))
+
+    assert (deck / "pdf" / "abc-handout.pdf").is_file()
+    assert (deck / _NOTES_PDF).is_file()

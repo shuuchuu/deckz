@@ -13,6 +13,7 @@ def run_decks(
     html: bool = False,
     part_handouts: bool = True,
     sync: bool = True,
+    course_notes: bool = False,
     langs: Langs = ("fr",),
     dry_run: bool = False,
     workdir: Path = Path(),
@@ -36,6 +37,9 @@ def run_decks(
             deck, a stray file), in the languages this run built. What
             this run merely skips (another language, presentations after
             --no-presentation, other parts with --parts) is kept
+        course_notes: Also compile the course notes of every deck that has
+            chapters, in the languages it has them in (see `deckz run
+            course-notes`)
         langs: Languages to compile every deck in, each to its own output
             paths. English is strict across the whole repository: the first
             deck missing any translation aborts the whole run, before
@@ -56,9 +60,10 @@ def run_decks(
         html=html,
         part_handouts=part_handouts,
         sync=sync,
+        course_notes=course_notes,
     )
     announce_build("every deck", langs, outputs)
-    targets = decks_targets(workdir, langs)
+    targets = decks_targets(workdir, langs, course_notes=course_notes)
     if dry_run:
         print_plan_of(targets, outputs)
     else:
