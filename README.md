@@ -762,6 +762,13 @@ PDF is `pdf/course-notes/<deck>-course-notes.pdf` (`paths.course_notes_pdf_dir`;
 alone. `deckz show course-notes` lists each content file of the deck with its
 chapter: `written`, `covered`, `skipped` or `missing`.
 
+`deckz run --course-notes` builds them along with the slides, in one command
+(`--watch` then also watches the chapters), and `deckz run decks --course-notes`
+those of every deck with chapters; the course notes are always whole, whatever
+`--parts`, and a language with no chapter is left out instead of failing.
+With `--no-handout --no-presentation --no-print`, only the course notes are
+built. `DECKZ_RUN_COURSE_NOTES=true` makes it the default.
+
 `deckz.yml`'s `course_notes` settings:
 
 ```yaml
@@ -919,6 +926,8 @@ The main commands:
   content file, a specific section flavor, or the project's assets.
   Add `--lang en` to compile the English variant, or `--lang fr en` for
   both (see [Titles, variables and `--lang`](#titles-variables-and---lang)),
+  `--course-notes` (on `run` and `run decks`) to also compile the course
+  notes (see [Course notes](#course-notes)),
   `--html` to also produce the HTML
   deck (see [HTML output](#html-output)), or `--watch` to recompile on file
   changes instead of once. With `--dry-run`, every `deckz run` command

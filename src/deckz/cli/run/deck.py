@@ -16,6 +16,7 @@ def run(
     html: bool = False,
     part_handouts: bool = True,
     sync: bool = True,
+    course_notes: bool = False,
     langs: Langs = ("fr",),
     watch: bool = False,
     dry_run: bool = False,
@@ -36,6 +37,10 @@ def run(
             deck, a stray file), in the languages this run built. What
             this run merely skips (another language, presentations after
             --no-presentation, other parts with --parts) is kept
+        course_notes: Also compile the deck's course notes, whole whatever
+            --parts, in the languages they have chapters in (see `deckz run
+            course-notes`). With --no-handout --no-presentation --no-print,
+            only them
         langs: Languages to compile, each to its own output paths
             (English under an `en/` subdirectory). English is strict: every
             resolved file, title and variable must have a complete English
@@ -48,9 +53,14 @@ def run(
 
     """
     from ...configuring.settings import DeckSettings
-    from ...pipelines import OutputKinds, build, deck_targets
+    from ...pipelines import BuildTarget, OutputKinds, build, deck_targets
     from ...pipelines import run as _run
-    from .._presentation import RichProgress, announce_build, print_plan_of
+    from .._presentation import (
+        RichProgress,
+        announce_build,
+        print_plan_of,
+        warn_missing_chapters,
+    )
 
     settings = DeckSettings.from_yaml(workdir)
     langs = unique(langs)
@@ -61,19 +71,25 @@ def run(
         html=html,
         part_handouts=part_handouts,
         sync=sync,
+        course_notes=course_notes,
     )
     announce_build(
         str(settings.paths.current_dir.relative_to(settings.paths.git_dir)),
         langs,
         outputs,
     )
+    if course_notes:
+        warn_missing_chapters(settings, langs)
+
+    def targets() -> list[BuildTarget]:
+        return deck_targets(settings, langs, parts, course_notes=course_notes)
 
     if dry_run:
-        print_plan_of(deck_targets(settings, langs, parts), outputs)
+        print_plan_of(targets(), outputs)
         return
 
     if not watch:
-        build(deck_targets(settings, langs, parts), outputs, RichProgress())
+        build(targets(), outputs, RichProgress())
         return
 
     from logging import getLogger
@@ -87,6 +103,8 @@ def run(
         settings.paths.assets_dir,
         settings.paths.current_dir,
     ]
+    if course_notes and settings.paths.course_notes_dir.is_dir():
+        to_watch.append(settings.paths.course_notes_dir)
     if settings.paths.user_config_dir.exists():
         to_watch.append(settings.paths.user_config_dir)
     _watch(

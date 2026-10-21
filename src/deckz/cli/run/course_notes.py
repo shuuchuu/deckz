@@ -31,13 +31,16 @@ def run_course_notes(
     """
     from logging import getLogger
 
-    from ...components.factory import DeckSettingsFactory
     from ...configuring.settings import DeckSettings
-    from ...course_notes import ChapterStatus, entries
     from ...models import lang_dir
     from ...pipelines import COURSE_NOTES, build, course_notes_targets
     from ...pipelines import run_course_notes as _run_course_notes
-    from .._presentation import RichProgress, announce_build, print_plan_of
+    from .._presentation import (
+        RichProgress,
+        announce_build,
+        print_plan_of,
+        warn_missing_chapters,
+    )
 
     logger = getLogger(__name__)
     settings = DeckSettings.from_yaml(workdir)
@@ -46,24 +49,7 @@ def run_course_notes(
     announce_build(
         str(paths.current_dir.relative_to(paths.git_dir)), langs, COURSE_NOTES
     )
-    for lang in langs:
-        deck = (
-            DeckSettingsFactory(settings, lang=lang)
-            .parser()
-            .from_deck_definition(paths.deck_definition)
-        )
-        missing = sum(
-            entry.status is ChapterStatus.MISSING
-            for entry in entries(settings, deck, lang)
-        )
-        if missing:
-            logger.warning(
-                "%s: %d content file(s) with no chapter yet, left out "
-                "(`deckz show course-notes --lang %s` lists them)",
-                lang,
-                missing,
-                lang,
-            )
+    warn_missing_chapters(settings, langs)
 
     if dry_run:
         print_plan_of(course_notes_targets(settings, langs), COURSE_NOTES)

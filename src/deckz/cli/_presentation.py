@@ -482,3 +482,29 @@ def print_checks(
             "don't block a commit, fix them before publishing or teaching "
             "(`deckz status` keeps showing them)"
         )
+
+
+def warn_missing_chapters(settings: "DeckSettings", langs: "Sequence[Lang]") -> None:
+    """Warn of the deck's content files with no course notes chapter yet."""
+    from ..components.factory import DeckSettingsFactory
+    from ..course_notes import ChapterStatus, entries
+
+    paths = settings.paths
+    for lang in langs:
+        deck = (
+            DeckSettingsFactory(settings, lang=lang)
+            .parser()
+            .from_deck_definition(paths.deck_definition)
+        )
+        missing = sum(
+            entry.status is ChapterStatus.MISSING
+            for entry in entries(settings, deck, lang)
+        )
+        if missing:
+            getLogger(__name__).warning(
+                "%s: %d content file(s) with no course notes chapter yet, left out "
+                "(`deckz show course-notes --lang %s` lists them)",
+                lang,
+                missing,
+                lang,
+            )

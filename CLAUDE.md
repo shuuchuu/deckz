@@ -281,7 +281,12 @@ built by `pipelines.course_notes_targets` with the deck's own settings and
 `basedirs` rooted at the course notes directory, through the deck builder's
 `CompileType.CourseNotes` (its own `Format`, so its own main template,
 `paths.jinja2_course_notes_main_template`, and output dir,
-`paths.course_notes_pdf_dir`, which `stale_pdfs` and `upload` never glob).
+`paths.course_notes_pdf_dir`, which `stale_pdfs` and `upload` never glob). Such a
+target has `BuildTarget.course_notes` set, which makes `_deck_builder` build its
+course notes PDF only, whatever the build's `OutputKinds`, so `deck_targets`/
+`decks_targets` can add the course notes to a slides build (`--course-notes`,
+`OutputKinds.course_notes`), as one `build`, without failing on a deck with no
+chapter.
 `course_notes_pairs` adds the chapters to `i18n_stale.lang_pairs`, so `i18n stale`,
 the commit-msg hook and the Stop hook follow them; `course-notes-files` and
 `course-notes-pairs` are deferred built-in checks.
