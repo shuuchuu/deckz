@@ -189,8 +189,11 @@ of the mirrors it compiles, not of the sources, so an edit racing a build
 never leaves a stale SVG stamped as up to date. `build` raises `CompilationError`, naming
 the target's label, when any PDF fails to compile, so every `run` command
 fails. A Jinja error in a content file is a `RenderError` naming the file
-and line (`render_dependencies`), whose build copy is removed so that the
-next build renders it again rather than keep its previous output. Only after every target compiled, `OutputKinds.sync` (`--sync`, on by
+and line (`render_dependencies`). Every fragment is copied before the first
+renders, so any failure there (Jinja, pandoc, Ctrl-C) removes the build copies
+of the failing fragment and of those not rendered yet: a copy matching its
+source would otherwise pass for rendered, and the next build keep its previous
+output, or none ("file not found" from Typst). Only after every target compiled, `OutputKinds.sync` (`--sync`, on by
 default) removes the `stale_pdfs`: the PDFs of the targets' output
 directories, in the languages built (`models.lang_dir`), that no build of
 the whole deck with every PDF kind would write (a `BuildTarget` keeps its
@@ -220,8 +223,8 @@ objects are never mutated after construction. `pipelines.plan` (backing
 `--dry-run`) stops before building anything, assets included: it returns
 each target's deck builder's `plan()`, a `PlannedCompile` per PDF with the
 fragments that would be re-rendered, whose freshness test
-(`utils.file_changed` on each `build_copy_path`) is the one `build_deck`
-applies. `watch()` is a generic file-watch-and-rerun
+(`needs_render`: `utils.file_changed` on each `build_copy_path`, or an
+output of its rendering missing) is the one `build_deck` applies. `watch()` is a generic file-watch-and-rerun
 wrapper, not build-specific: each of `run/deck.py`, `run/file.py`,
 `run/section.py`, and `run/assets.py` calls it directly when invoked with
 `--watch`, wrapping that same module's one-shot pipeline call instead of

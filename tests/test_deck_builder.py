@@ -10,11 +10,13 @@ from threading import Event, get_ident
 from time import sleep
 from typing import Any
 
-from pytest import MonkeyPatch, raises
+from jinja2 import TemplateSyntaxError
+from pytest import MonkeyPatch, mark, raises
 
 from deckz.components import deck_builder
 from deckz.components.deck_builder import DeckBuilder, Format, OutputFormat
 from deckz.components.progress import NullProgress
+from deckz.exceptions import DeckzError, RenderError
 from deckz.models import (
     CompileResult,
     Deck,
@@ -29,6 +31,7 @@ from deckz.models import (
 class FakeRenderer:
     def __init__(self) -> None:
         self.fragments: list[Path] = []
+        self.fail_next = False
 
     def render_to_str(self, template_path: Path, /, **_: Any) -> tuple[str, Any]:
         return template_path.read_text(encoding="utf8"), {}
@@ -38,6 +41,10 @@ class FakeRenderer:
     ) -> Any:
         if template_path.suffix == ".j2":
             self.fragments.append(template_path)
+            if self.fail_next:
+                self.fail_next = False
+                msg = "oops"
+                raise TemplateSyntaxError(msg, 1)
         text = template_path.read_text(encoding="utf8")
         if template_path.suffix == ".html":
             # An HTML main template inlines its fragments.
@@ -58,9 +65,14 @@ class FakeConverter:
     def __init__(self) -> None:
         self.version = "1"
         self.converted: list[Path] = []
+        self.fail_next = False
 
     def convert(self, source: Path, destination: Path) -> None:
         self.converted.append(source)
+        if self.fail_next:
+            self.fail_next = False
+            msg = f"pandoc failed to convert {source}"
+            raise DeckzError(msg)
         destination.write_text(source.read_text(encoding="utf8"), encoding="utf8")
 
     def fingerprint(self) -> str:
@@ -246,6 +258,47 @@ def test_variables_change_renders_everything(tmp_path: Path) -> None:
     assert len(repo.renderer.fragments) == 4
     rendered = tmp_path / "build" / "deck-handout" / "a.md"
     assert rendered.read_text(encoding="utf8") == "A{'company': 'B'}"
+
+
+@mark.parametrize("failing", ["renderer", "converter"])
+def test_a_failed_render_leaves_no_fragment_behind(
+    tmp_path: Path, failing: str
+) -> None:
+    repo = _repo(tmp_path)
+    repo.builder(repo.file("a.md"), part_handouts=False).build_deck()
+    # Two fragments to render, an edited one and a new one: the first rendered
+    # fails, whichever it is, before the second is.
+    repo.write("a.md", "A, edited")
+    repo.write("c.md", "C")
+    files = (repo.file("a.md"), repo.file("c.md"))
+    getattr(repo, failing).fail_next = True
+    with raises((RenderError, DeckzError)):
+        repo.builder(*files, part_handouts=False).build_deck()
+
+    # Once the error is fixed, with no other change, the next build renders
+    # and converts both: neither is taken as rendered.
+    assert repo.builder(*files, part_handouts=False).build_deck()
+    build_dir = tmp_path / "build" / "deck-handout"
+    assert (build_dir / "a.typ").read_text(encoding="utf8") == "A, edited{}"
+    assert (build_dir / "c.typ").read_text(encoding="utf8") == "C{}"
+
+
+def test_a_missing_fragment_is_rendered_again(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    files = (repo.file("a.md"), repo.file("b.md"))
+    repo.builder(*files, part_handouts=False).build_deck()
+    build_dir = tmp_path / "build" / "deck-handout"
+    # E.g. a build killed between a fragment's copy and its conversion.
+    (build_dir / "a.typ").unlink()
+    repo.renderer.fragments.clear()
+
+    builder = repo.builder(*files, part_handouts=False)
+    [planned] = builder.plan()
+    assert builder.build_deck()
+
+    assert planned.changed_fragments == (repo.content / "a.md",)
+    assert [p.name for p in repo.renderer.fragments] == ["a.md.j2"]
+    assert (build_dir / "a.typ").read_text(encoding="utf8") == "A{}"
 
 
 def test_html_inlines_converted_fragments_and_publishes_a_directory(
