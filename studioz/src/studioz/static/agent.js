@@ -17,12 +17,16 @@ if (panel) {
   const undo = document.getElementById("agent-undo");
   const usage = document.getElementById("agent-usage");
   const model = document.getElementById("agent-model");
+  // The file the message is about (the editor's): another file than the
+  // conversation's starts a new one (`Conversation.send`).
+  const about = document.getElementById("agent-about");
   const base = panel.dataset.base;
   let running = false;
   let asking = false;
   let undoable = 0;
   let pausedUntil = "";
   let loggedIn = false;
+  let aside = false;
 
   const atBottom = () => log.scrollHeight - log.scrollTop - log.clientHeight < 40;
 
@@ -36,6 +40,11 @@ if (panel) {
     undo.hidden = running || !undoable;
     send.disabled = running || !loggedIn;
     message.disabled = !loggedIn;
+    // Only the last one: it takes back the conversation set aside last.
+    const buttons = log.querySelectorAll("[data-agent-aside]");
+    buttons.forEach((button, i) => {
+      button.disabled = running || !aside || i < buttons.length - 1;
+    });
   }
 
   const events = new EventSource(panel.dataset.events);
@@ -44,6 +53,7 @@ if (panel) {
     const follow = atBottom();
     log.insertAdjacentHTML("beforeend", JSON.parse(event.data).html);
     if (follow) log.scrollTop = log.scrollHeight;
+    update();
   });
   events.addEventListener("state", (event) => {
     const state = JSON.parse(event.data);
@@ -52,6 +62,7 @@ if (panel) {
     asking = state.asking;
     undoable = state.undoable;
     pausedUntil = state.pausedUntil;
+    aside = state.aside;
     model.textContent = state.model;
     usage.textContent = state.usage.text;
     usage.title = state.usage.title;
@@ -112,8 +123,10 @@ if (panel) {
     update();
     const body = new FormData();
     body.set("message", text);
+    body.set("about", about.value);
     if (await post("message", body)) {
       message.value = "";
+      about.value = "";
       log.scrollTop = log.scrollHeight;
     } else {
       running = false;
@@ -126,7 +139,17 @@ if (panel) {
       form.requestSubmit();
     }
   });
+  // Emptied, the message is about nothing in particular any more.
+  message.addEventListener("input", () => {
+    if (!message.value.trim()) about.value = "";
+  });
   stop.addEventListener("click", () => post("arreter"));
+  log.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-agent-aside]");
+    if (!button) return;
+    button.disabled = true;
+    post("precedente");
+  });
 
   // A second click confirms: the conversation is forgotten.
   let confirming = null;
@@ -199,6 +222,7 @@ if (panel) {
   document.addEventListener("agent-prefill", (event) => {
     showAgent(true);
     message.value = event.detail.text + message.value;
+    about.value = event.detail.file || "";
     message.focus();
     message.setSelectionRange(event.detail.text.length, event.detail.text.length);
   });

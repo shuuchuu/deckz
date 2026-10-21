@@ -1970,12 +1970,14 @@ async def agent_events(
 
     async def stream() -> AsyncIterator[str]:
         sent = 0
+        epoch = conversation.epoch
         quiet = 0.0
         last_state: dict[str, object] | None = None
         last_question: int | None = None
         yield _event("reset", {})
         while not await studio.gone(request):
-            if len(conversation.entries) < sent:
+            if conversation.epoch != epoch or len(conversation.entries) < sent:
+                epoch = conversation.epoch
                 sent = 0
                 yield _event("reset", {})
             for entry in conversation.entries[sent:]:
@@ -1997,6 +1999,7 @@ async def agent_events(
                 "undoable": len(conversation.undoable.files)
                 if conversation.undoable
                 else 0,
+                "aside": conversation.aside,
                 "loggedIn": ok,
                 "account": account,
             }
@@ -2020,9 +2023,12 @@ async def agent_events(
 
 @router.post("/espaces/{name}/agent/message")
 async def agent_message(
-    studio: StudioDep, name: str, message: Annotated[str, Form()] = ""
+    studio: StudioDep,
+    name: str,
+    message: Annotated[str, Form()] = "",
+    about: Annotated[str, Form()] = "",
 ) -> Response:
-    """Give the agent a message.
+    """Give the agent a message, `about` the file the editor started it on.
 
     Returns:
         204, or 409 while the agent is at work or Claude Code isn't logged in.
@@ -2033,7 +2039,10 @@ async def agent_message(
         return JSONResponse({"error": why}, status_code=409)
     conversation = studio.agents.conversation(found.worktree.path)
     # A browser posts a form's text with CRLF line endings.
-    if not await conversation.send(message.replace("\r\n", "\n")):
+    sent = await conversation.send(
+        message.replace("\r\n", "\n"), about=about.strip() or None
+    )
+    if not sent:
         return JSONResponse({"error": "L'agent travaille encore"}, status_code=409)
     return Response(status_code=204)
 
@@ -2255,7 +2264,7 @@ async def _begin(
         else None
     )
     prompt, shown = workflow.message({**values, workflows.DECK: answers.deck}, report)
-    sent = await conversation.send(prompt, shown, workflow.model)
+    sent = await conversation.send(prompt, shown, workflow.model, agent.MANY)
     return None if sent else busy
 
 
@@ -2598,7 +2607,9 @@ async def report_then(
             workflows.REPORT: report.relative,
         }
     )
-    if not await studio.agents.conversation(path).send(prompt, shown, workflow.model):
+    if not await studio.agents.conversation(path).send(
+        prompt, shown, workflow.model, agent.MANY
+    ):
         return refuse("L'agent travaille encore : attendez la fin de son tour.")
     return Response(headers={"HX-Trigger": "agent-started", "HX-Reswap": "none"})
 
@@ -2621,6 +2632,20 @@ async def agent_undo(studio: StudioDep, name: str) -> Response:
 async def agent_stop(studio: StudioDep, name: str) -> Response:
     found = studio.workspace(name)
     await studio.agents.conversation(found.worktree.path).interrupt()
+    return Response(status_code=204)
+
+
+@router.post("/espaces/{name}/agent/precedente")
+async def agent_take_back(studio: StudioDep, name: str) -> Response:
+    """Take back the conversation set aside for a new one.
+
+    Returns:
+        204, or 409 with why not (the agent at work, none set aside).
+    """
+    found = studio.workspace(name)
+    refused = await studio.agents.conversation(found.worktree.path).take_back()
+    if refused:
+        return JSONResponse({"error": refused}, status_code=409)
     return Response(status_code=204)
 
 

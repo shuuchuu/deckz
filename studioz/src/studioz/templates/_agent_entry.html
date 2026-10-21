@@ -3,4 +3,5 @@
   {% if entry.kind == "text" %}<div class="agent-text markdown">{{ entry.text | markdown }}</div>
   {%- else %}<div class="agent-text">{{ entry.text }}</div>{% endif %}
   {% if entry.detail %}<pre class="agent-detail">{{ entry.detail }}</pre>{% endif %}
+  {% if entry.kind == "aside" %}<button type="button" class="secondary" data-agent-aside disabled>Reprendre la précédente</button>{% endif %}
 </div>

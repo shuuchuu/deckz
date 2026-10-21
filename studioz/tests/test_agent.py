@@ -474,8 +474,9 @@ def test_a_turn_runs_on_its_model(workspace: Path, factory: FakeFactory) -> None
 
 
 def test_each_turn_shows_its_own_cost(workspace: Path) -> None:
-    # Claude Code reports what its process spent since it started.
-    totals = iter([0.10, 0.25, 0.05])
+    # Claude Code reports what its session spent, the turns of the processes
+    # before it included when resumed; a new session starts from zero.
+    totals = iter([0.10, 0.25, 0.30, 0.05])
     clients: list[FakeClient] = []
 
     def factory(options: ClaudeAgentOptions) -> FakeClient:
@@ -485,20 +486,28 @@ def test_each_turn_shows_its_own_cost(workspace: Path) -> None:
         return clients[-1]
 
     conversation = Conversation(workspace, factory)
+    shown: list[str] = []
+
+    def costs() -> None:
+        shown.extend(
+            e.detail.removeprefix("Usage estimé : ")[:6]
+            for e in conversation.entries
+            if e.kind == "end"
+        )
 
     async def turns() -> None:
         await _send_and_wait(conversation, "un")
         await _send_and_wait(conversation, "deux")
+        # Resumed by another process (idle, a restart, taken back).
         await conversation._disconnect()
         await _send_and_wait(conversation, "trois")
+        costs()
+        await conversation.reset()
+        await _send_and_wait(conversation, "quatre")
+        costs()
 
     asyncio.run(turns())
-    costs = [e.detail for e in conversation.entries if e.kind == "end"]
-    assert [c.removeprefix("Usage estimé : ")[:6] for c in costs] == [
-        "0,10 $",
-        "0,15 $",
-        "0,05 $",
-    ]
+    assert shown == ["0,10 $", "0,15 $", "0,05 $", "0,05 $"]
 
 
 def test_one_turn_at_a_time_and_stop(
@@ -560,6 +569,121 @@ def test_a_new_conversation_forgets_the_old_one(
     assert conversation.session is None
     assert not (workspace / AGENT_DIR / "transcript.jsonl").exists()
     assert factory.clients[0].disconnected
+
+
+def test_a_message_about_another_file_starts_afresh(
+    agent_client: TestClient, workspace: Path, factory: FakeFactory
+) -> None:
+    def say(message: str, about: str = "") -> None:
+        response = agent_client.post(
+            f"{BASE}/message", data={"message": message, "about": about}, headers=ORIGIN
+        )
+        assert response.status_code == 204
+        _wait_idle(conversation)
+
+    conversation = _conversation(agent_client, workspace)
+    say("Aligne les T", "content/a.md")
+    say("merci")
+    # The same file, then a follow-up: the same conversation.
+    say("Et la ligne 3", "content/a.md")
+    assert len(factory.clients) == 1
+    assert conversation.about == "content/a.md"
+    assert not conversation.aside
+
+    say("Le schéma est moche", "content/b.md")
+
+    assert factory.clients[0].disconnected
+    assert factory.clients[1].options.resume is None
+    assert conversation.about == "content/b.md"
+    assert conversation.aside
+    assert [(e.kind, e.text) for e in conversation.entries[:2]] == [
+        ("aside", "Nouvelle conversation : autre fichier (content/b.md)"),
+        ("person", "Le schéma est moche"),
+    ]
+    assert "content/a.md" in conversation.entries[0].detail
+
+    taken = agent_client.post(f"{BASE}/precedente", headers=ORIGIN)
+
+    assert taken.status_code == 204
+    assert conversation.about == "content/a.md"
+    assert conversation.session == "session-1"
+    assert conversation.entries[0] == Entry(
+        "person", "Aligne les T", at=conversation.entries[0].at
+    )
+    taken_back = conversation.entries[-1]
+    assert taken_back.text == "Conversation précédente reprise (content/a.md)"
+    assert taken_back.detail == "Celle sur content/b.md est mise de côté."
+    say("Encore", "content/a.md")
+    assert factory.clients[2].options.resume == "session-1"
+    # And back again: the conversation about b.md was kept aside.
+    assert agent_client.post(f"{BASE}/precedente", headers=ORIGIN).status_code == 204
+    assert conversation.about == "content/b.md"
+    assert conversation.session == "session-2"
+
+
+def test_nothing_to_take_back(agent_client: TestClient) -> None:
+    response = agent_client.post(f"{BASE}/precedente", headers=ORIGIN)
+    assert response.status_code == 409
+    assert response.json() == {"error": "Aucune conversation mise de côté"}
+
+
+def test_a_workflow_conversation_is_kept(workspace: Path, factory: FakeFactory) -> None:
+    conversation = Conversation(workspace, factory)
+
+    async def turns() -> None:
+        assert await conversation.send("/qa-formation", about=agent.MANY)
+        assert conversation._task is not None
+        await conversation._task
+        assert await conversation.send("Corrige", about="content/a.md")
+        await conversation._task
+        assert await conversation.send("Et celui-ci", about="content/b.md")
+        await conversation._task
+
+    asyncio.run(turns())
+    assert len(factory.clients) == 1
+    assert conversation.about == agent.MANY
+    assert not conversation.aside
+
+
+def test_a_new_conversation_forgets_its_file(
+    workspace: Path, factory: FakeFactory
+) -> None:
+    conversation = Conversation(workspace, factory)
+
+    async def turns() -> None:
+        await _send_about(conversation, "Un", "content/a.md")
+        await conversation.reset()
+        assert conversation.about is None
+        # Nothing to set aside: the conversation adopts the file.
+        await _send_about(conversation, "Deux", "content/b.md")
+
+    asyncio.run(turns())
+    assert conversation.about == "content/b.md"
+    assert not conversation.aside
+    assert conversation.entries[0].kind == "person"
+
+
+async def _send_about(conversation: Conversation, prompt: str, about: str) -> None:
+    assert await conversation.send(prompt, about=about)
+    assert conversation._task is not None
+    await conversation._task
+
+
+def test_a_question_set_aside_with_its_conversation(
+    deferring: Callable[[], TestClient], workspace: Path
+) -> None:
+    client = deferring()
+    conversation = _ask_later(client, workspace)
+    (workspace / AGENT_DIR / "about").write_text("content/a.md", "utf8")
+    client.post(
+        f"{BASE}/message",
+        data={"message": "Autre chose", "about": "content/b.md"},
+        headers=ORIGIN,
+    )
+    _wait_idle(conversation)
+    assert conversation.question is None
+    aside = workspace / AGENT_DIR / "precedente" / "question.json"
+    assert "La personne a écrit un message" in aside.read_text("utf8")
 
 
 def test_a_failing_agent_ends_its_turn(tmp_path: Path, factory: FakeFactory) -> None:
