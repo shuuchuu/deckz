@@ -549,7 +549,7 @@ deferred: the turn then waits in `can_use_tool`). `studioz.checkpoints` snapshot
 each turn (a private index, trees under `refs/studioz/`), so that "Annuler ce
 tour" puts back what the last one changed. The panel shows the account's usage
 windows and each turn's usage (its model, and its cost: Claude Code reports what
-its process spent since it started, `Conversation._turn_cost`); a turn stopped by a usage limit pauses the
+its session spent so far, `Conversation._turn_cost`); a turn stopped by a usage limit pauses the
 conversation, which resumes by itself at the reset time. `studioz.asks` holds
 what the dialogs ask it ("Traduire avec l'agent", "Demander à l'agent de
 corriger", of resolving a conflict: prompts studioz writes from the dialog) and
@@ -560,9 +560,8 @@ message reads the whole conversation again, so a conversation is about one file:
 editor's "Demander à l'agent" names it (`about`), and a message about another file
 sets the conversation aside (`precedente/`, one, which "Reprendre la précédente"
 exchanges back) for a new one; a follow-up typed in the panel stays, and a
-workflow's conversation (`MANY`) is never set aside. Claude Code's `total_cost_usd`
-is the session's, earlier processes included: a turn's cost subtracts the total kept
-in `spent`.
+workflow's conversation (`MANY`) is never set aside. A session's total so far, which
+a turn's cost subtracts, is kept in `spent`, since a resumed session counts from it.
 `studioz.workflows` reads the workflows a workspace's own `deckz.yml` declares
 (`studioz.workflows`, its schema in studioz, refusing unknown keys; deckz ignores
 the section, which a deckz test keeps): each a form on the workspace page or a deck
