@@ -18,6 +18,10 @@ never shown to the person. A question the agent asks (`AskUserQuestion`, as
 slides' skills do) is shown as a form, and the turn waits for the answer
 (`can_use_tool`).
 
+The agent works on `DEFAULT_MODEL` unless studioz is told otherwise (`studioz
+--model`), or a workflow declares its own for its turns: on a long conversation
+Opus spent a five-hour window in an afternoon (plan, "Phase 6").
+
 Claude's usage limits are the account's (the person's other uses of Claude
 count too): the panel shows the five-hour and seven-day windows as Claude Code
 reports them, each turn's estimated usage, and a turn stopped by a limit is a
@@ -35,7 +39,7 @@ import re
 import subprocess
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import suppress
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from itertools import count
 from pathlib import Path
@@ -75,6 +79,8 @@ _SESSION = "session"
 _TRANSCRIPT = "transcript.jsonl"
 _QUESTION = "question.json"
 """The question a turn ended on (deferred), until the session resumes with it."""
+DEFAULT_MODEL = "sonnet"
+"""The agent's model, as Claude Code names it (an alias, or a model's id)."""
 _IDLE_AFTER = 15 * 60.0
 _DETAIL = 400
 
@@ -360,7 +366,25 @@ def _result(message: ResultMessage, stopped: bool, limited: bool) -> list[Entry]
         if cost
         else ""
     )
+    models = message.model_usage or {}
+    # Claude Code also calls a small model on the side: the turn's model is
+    # the one that cost the most.
+    if main := max(models, key=lambda m: models[m].get("costUSD", 0), default=""):
+        usage = f"{model_label(main)} · {usage}" if usage else model_label(main)
     return [Entry("end", f"Terminé en {seconds} s", usage)]
+
+
+def model_label(model: str) -> str:
+    """A model's name for the person: `claude-sonnet-5-5` is "Sonnet 5.5".
+
+    Returns:
+        The name, or `model` itself when it isn't one of Claude's ids.
+    """
+    pattern = r"claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?"
+    if found := re.fullmatch(pattern, model):
+        family, major, minor = found.groups()
+        return f"{family.capitalize()} {major}" + (f".{minor}" if minor else "")
+    return model.capitalize() if model.isalpha() else model
 
 
 def when(timestamp: float) -> str:
@@ -493,6 +517,8 @@ class Client(Protocol):
 
     async def query(self, prompt: str) -> None: ...
 
+    async def set_model(self, model: str | None = None) -> None: ...
+
     def receive_response(self) -> AsyncIterator[Any]: ...
 
     async def interrupt(self) -> None: ...
@@ -584,6 +610,7 @@ def options(
     can_use_tool: Callable[
         [str, dict[str, Any], ToolPermissionContext], Awaitable[PermissionResult]
     ] = _deny,
+    model: str = DEFAULT_MODEL,
 ) -> ClaudeAgentOptions:
     """The agent's options in a workspace (see the module docstring).
 
@@ -592,6 +619,7 @@ def options(
         resume: The session to resume.
         can_use_tool: What decides the tool calls the permission rules would
             ask about, and answers the agent's questions; all denied by default.
+        model: The model.
 
     Returns:
         The options, resuming `resume` if given.
@@ -611,6 +639,7 @@ def options(
     return ClaudeAgentOptions(
         cwd=workspace,
         resume=resume,
+        model=model,
         setting_sources=["project"],
         system_prompt={"type": "preset", "preset": "claude_code", "append": APPEND},
         permission_mode="auto",
@@ -679,8 +708,17 @@ class Conversation:
         workspace: Path,
         client_factory: Callable[[ClaudeAgentOptions], Client] = _sdk_client,
         account: Account | None = None,
+        model: str = DEFAULT_MODEL,
     ) -> None:
         self.workspace = workspace
+        self.model = model
+        """The model of the person's messages."""
+        self._turn_model = model
+        """The model of the turn running, or of the last one (which a question's \
+        answers and a resumption after a limit continue)."""
+        self._client_model: str | None = None
+        self._spent = 0.0
+        """What Claude Code's process reported spending, until the last turn."""
         self.account = account or Account()
         self.paused_until: float | None = None
         """When a limit stopped the agent: it resumes by itself then."""
@@ -753,13 +791,16 @@ class Conversation:
             with suppress(TimeoutError):
                 await asyncio.wait_for(self._changed.wait(), timeout)
 
-    async def send(self, prompt: str, shown: str | None = None) -> bool:
+    async def send(
+        self, prompt: str, shown: str | None = None, model: str | None = None
+    ) -> bool:
         """Give the agent a message, starting its turn.
 
         Args:
             prompt: The message.
             shown: What the transcript shows instead, if not the message (a \
                 workflow's, whose message names its skill).
+            model: The turn's model, if not the conversation's (a workflow's).
 
         Returns:
             Whether it was sent: not while the agent is still at work.
@@ -770,6 +811,7 @@ class Conversation:
         self.paused_until = None
         self._decline("La personne a écrit un message au lieu de répondre.")
         await self._add(Entry("person", (shown or prompt).strip()))
+        self._turn_model = model or self.model
         self._start(prompt.strip())
         return True
 
@@ -795,17 +837,13 @@ class Conversation:
         checked = False
         deferred: DeferredToolUse | None = None
         try:
-            if self._client is None:
-                client = self._factory(
-                    options(self.workspace, self.session, self._can_use_tool)
-                )
-                await client.connect()
-                self._client = client
-            await self._client.query(prompt)
-            async for message in self._client.receive_response():
+            client = await self._connected()
+            await client.query(prompt)
+            async for message in client.receive_response():
                 if isinstance(message, RateLimitEvent):
                     self._limited(message.rate_limit_info)
                 if isinstance(message, ResultMessage):
+                    message = self._turn_cost(message)
                     deferred = message.deferred_tool_use
                     self._keep_session(message.session_id)
                     if not checked:
@@ -835,6 +873,37 @@ class Conversation:
             self.running = False
             await self._pause_if_limited()
             await self._notify()
+
+    async def _connected(self) -> Client:
+        """Start Claude Code if needed, and put it on the turn's model.
+
+        Returns:
+            Its client.
+        """
+        if self._client is None:
+            client = self._factory(
+                options(
+                    self.workspace, self.session, self._can_use_tool, self._turn_model
+                )
+            )
+            await client.connect()
+            self._client = client
+            self._spent = 0.0
+        elif self._client_model != self._turn_model:
+            await self._client.set_model(self._turn_model)
+        self._client_model = self._turn_model
+        return self._client
+
+    def _turn_cost(self, message: ResultMessage) -> ResultMessage:
+        """`message`, with the turn's cost: Claude Code's counts since it started.
+
+        Returns:
+            The message, its `total_cost_usd` the turn's own.
+        """
+        if message.total_cost_usd is None:
+            return message
+        spent, self._spent = self._spent, message.total_cost_usd
+        return replace(message, total_cost_usd=max(message.total_cost_usd - spent, 0))
 
     async def _pause_if_limited(self) -> None:
         """Pause the conversation until the limit that stopped its turn resets."""
@@ -1070,6 +1139,7 @@ class Conversation:
 
     async def _disconnect(self) -> None:
         client, self._client = self._client, None
+        self._client_model = None
         if client is not None:
             try:
                 await client.disconnect()
@@ -1097,16 +1167,20 @@ class Agents:
     """Each workspace's conversation."""
 
     def __init__(
-        self, client_factory: Callable[[ClaudeAgentOptions], Client] = _sdk_client
+        self,
+        client_factory: Callable[[ClaudeAgentOptions], Client] = _sdk_client,
+        model: str = DEFAULT_MODEL,
     ) -> None:
         self._factory = client_factory
+        self.model = model
+        """The model of the person's messages (`studioz --model`)."""
         self._conversations: dict[Path, Conversation] = {}
         self.account = Account()
 
     def conversation(self, workspace: Path) -> Conversation:
         if workspace not in self._conversations:
             self._conversations[workspace] = Conversation(
-                workspace, self._factory, self.account
+                workspace, self._factory, self.account, self.model
             )
         return self._conversations[workspace]
 

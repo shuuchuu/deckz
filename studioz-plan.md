@@ -14,8 +14,10 @@ released (deckz 31.3.4). Phase 5 (long jobs) was planned on 2026-10-17 (under
 build), 2 (videos), 3 (labs previewed), 4 (`deckz labs gpu pass`) and 5 (GPU passes
 from studioz) are done: phase 5 is done. Then the memory guard "Risks" promised
 (2026-10-18, under "Machine load"), the `jinja-syntax` check and the Commit dialog's kept draft ("Open items").
-**Next:** phase 6 (the agent's usage, planned 2026-10-21 from the colleague's
-first afternoon), "Then, with the colleague" (below phase 5), and the open items. A GPU pass rents a machine that costs money: never
+Phase 6 (the agent's usage) was planned on 2026-10-21 from the colleague's first
+afternoon; its increment 1 (the model) is done.
+**Next:** phase 6's increment 2 (a new conversation for a new file), "Then, with the
+colleague" (below phase 5), and the open items. A GPU pass rents a machine that costs money: never
 start one without the user saying so. `git log
 origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed. Push and
@@ -1654,12 +1656,23 @@ times a cache read; the file on disk and `git diff` carry what matters).
 
 Each increment is usable on its own, in this order:
 
-1. **The model.** `options()` takes a model, `sonnet` by default (`studioz --model`,
-   the value shown in the agent panel's header), and `effort` left to Claude Code's
-   default. A workflow may declare its own `model` in `deckz.yml` (a QA pass may want
-   Opus), checked by `studioz.workflows`' schema. A resumed session keeps working on a
-   new model (its first call writes the cache again, once). Check: a turn's
-   `AssistantMessage.model` is the one chosen; the panel's usage line.
+1. **The model**: done 2026-10-21. `options()` takes a model, `agent.DEFAULT_MODEL`
+   (`sonnet`) unless `studioz --model` says otherwise; the agent panel's header names
+   it, and each turn's end names the model that cost the most (Claude Code also calls
+   Haiku on the side) as "Sonnet 5 · Usage estimé…". A workflow may declare `model`
+   (its `then` follows it), checked by the schema; its turns put the running Claude
+   Code on it (`set_model`), and the person's next message puts it back. `effort` is
+   left to Claude Code. Tried for real: a message on `studioz-dev` ran on
+   `claude-sonnet-5` (an id with no minor version, which `model_label` now reads), and
+   in a scratch repository Sonnet, Haiku, then Sonnet again in one process. Found on
+   the way: a turn's "Usage estimé" was Claude Code's `total_cost_usd`, which counts
+   what its process spent since it started (three "OK" in a row reported 0.034, 0.044
+   and 0.050 $), so each turn showed the sum of the turns before it until the process
+   stopped (15 minutes idle); the colleague's figures were inflated so. A turn now
+   shows the difference (`Conversation._turn_cost`); a turn after a restart pays the
+   cache's rewrite once (0.10 $ against 0.01 $ the next). Left: the colleague's
+   session ran 2 h 45 on one process at times, so measure the next one from Claude
+   Code's transcript, not from the panel's sums.
 2. **A new conversation for a new file.** The editor's prefill also gives the
    panel's form the file (a hidden `about` field, set by `agent-prefill`, cleared
    when the person empties the message). `Conversation` keeps the file its

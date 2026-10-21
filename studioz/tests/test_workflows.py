@@ -29,6 +29,7 @@ studioz:
       skill: qa-formation
       scope: deck
       prompt: "Fais le QA de {deck}."
+      model: opus
 """
 
 
@@ -91,6 +92,7 @@ def test_invalid_declarations_say_what_is_wrong(tmp_path: Path) -> None:
     )
     assert "une accolade s'écrit deux fois" in one("name: a, skill: s, prompt: '{'")
     assert "skill" in one("name: a, skill: '../x', prompt: p")
+    assert "workflows.0.model" in one("name: a, skill: s, prompt: p, model: 'Opus 5'")
     assert "deux workflows s'appellent « a »" in _error(
         tmp_path,
         "  workflows:\n"
@@ -115,8 +117,11 @@ class _Recorder:
 
     def __init__(self) -> None:
         self.prompts: list[str] = []
+        self.models: list[str | None] = []
+        """The model of each Claude Code started, then of each change."""
 
-    def __call__(self, _options: ClaudeAgentOptions) -> "_Recorder":
+    def __call__(self, options: ClaudeAgentOptions) -> "_Recorder":
+        self.models.append(options.model)
         return self
 
     async def connect(self) -> None:
@@ -124,6 +129,9 @@ class _Recorder:
 
     async def query(self, prompt: str) -> None:
         self.prompts.append(prompt)
+
+    async def set_model(self, model: str | None = None) -> None:
+        self.models.append(model)
 
     async def receive_response(self) -> AsyncIterator[Any]:
         yield ResultMessage("success", 1, 1, False, 1, "s")
@@ -234,6 +242,7 @@ def test_a_workflow_starts_a_turn(
     assert (workspace / ".run/studioz/fichiers/programme.pdf").read_bytes() == b"%PDF"
     assert conversation.entries[0].kind == "person"
     assert conversation.entries[0].text.startswith("Nouvelle formation : Crée")
+    assert recorder.models == ["sonnet"]
 
     # With the conversation going on, the form offers a fresh one.
     form = studio.post(
@@ -250,6 +259,13 @@ def test_a_workflow_starts_a_turn(
     assert conversation.entries[0].text == (
         "Relire la formation (QA) : Fais le QA de client/abc."
     )
+    # The QA declares its model; the person's next message is on studioz's.
+    assert recorder.models == ["sonnet", "opus"]
+    studio.post(
+        "/espaces/demo/agent/message", data={"message": "Merci"}, headers=ORIGIN
+    )
+    _wait_idle(conversation)
+    assert recorder.models == ["sonnet", "opus", "sonnet"]
 
 
 def test_a_workflow_refuses_what_is_missing(

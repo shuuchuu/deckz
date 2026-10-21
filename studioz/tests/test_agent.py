@@ -236,6 +236,28 @@ def test_options(tmp_path: Path, monkeypatch: Any) -> None:
     assert found.env["PATH"].startswith(f"{tmp_path}/.venv/bin")
     assert found.env["UV_CACHE_DIR"] == f"{tmp_path}/.run/cache/uv"
     assert found.env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] == "1"
+    assert found.model == agent.DEFAULT_MODEL == "sonnet"
+    assert agent.options(tmp_path, None, model="opus").model == "opus"
+
+
+def test_model_label() -> None:
+    assert agent.model_label("claude-sonnet-5-5") == "Sonnet 5.5"
+    assert agent.model_label("claude-haiku-4-5-20251001") == "Haiku 4.5"
+    assert agent.model_label("claude-sonnet-5") == "Sonnet 5"
+    assert agent.model_label("claude-opus-5-20260901") == "Opus 5"
+    assert agent.model_label("sonnet") == "Sonnet"
+    assert agent.model_label("glm-4.6") == "glm-4.6"
+
+
+def test_a_turn_names_its_model() -> None:
+    usage = {
+        "claude-haiku-4-5-20251001": {"costUSD": 0.001},
+        "claude-sonnet-5-5": {"costUSD": 0.42},
+    }
+    [end] = agent.entries(
+        Path(), _result(total_cost_usd=0.42, model_usage=usage), False, False
+    )
+    assert end.detail.startswith("Sonnet 5.5 · Usage estimé : 0,42 $")
 
 
 def _fake_cli(tmp_path: Path, status: dict[str, Any]) -> str:
@@ -274,6 +296,7 @@ class FakeClient:
         self.prompts: list[str] = []
         self.interrupted = False
         self.disconnected = False
+        self.models: list[str | None] = []
 
     async def connect(self) -> None:
         if self.options.cwd and "panne" in str(self.options.cwd):
@@ -327,6 +350,9 @@ class FakeClient:
             return
         for message in self._replies(self.prompts[-1]):
             yield message
+
+    async def set_model(self, model: str | None = None) -> None:
+        self.models.append(model)
 
     async def interrupt(self) -> None:
         self.interrupted = True
@@ -421,10 +447,58 @@ def test_a_turn_is_kept_and_resumed(
     assert again.session == "session-2"
 
 
-async def _send_and_wait(conversation: Conversation, prompt: str) -> None:
-    assert await conversation.send(prompt)
+async def _send_and_wait(
+    conversation: Conversation, prompt: str, model: str | None = None
+) -> None:
+    assert await conversation.send(prompt, model=model)
     assert conversation._task is not None
     await conversation._task
+
+
+def test_a_turn_runs_on_its_model(workspace: Path, factory: FakeFactory) -> None:
+    conversation = Agents(factory, model="haiku").conversation(workspace)
+
+    async def turns() -> None:
+        await _send_and_wait(conversation, "un")
+        # A workflow's turn: the same Claude Code, on another model.
+        await _send_and_wait(conversation, "deux", model="opus")
+        await _send_and_wait(conversation, "trois")
+        # Started again (idle, or a restart): on the conversation's model.
+        await conversation._disconnect()
+        await _send_and_wait(conversation, "quatre")
+
+    asyncio.run(turns())
+    assert [client.options.model for client in factory.clients] == ["haiku", "haiku"]
+    assert factory.clients[0].models == ["opus", "haiku"]
+    assert factory.clients[1].models == []
+
+
+def test_each_turn_shows_its_own_cost(workspace: Path) -> None:
+    # Claude Code reports what its process spent since it started.
+    totals = iter([0.10, 0.25, 0.05])
+    clients: list[FakeClient] = []
+
+    def factory(options: ClaudeAgentOptions) -> FakeClient:
+        clients.append(
+            FakeClient(options, lambda _: [_result(total_cost_usd=next(totals))])
+        )
+        return clients[-1]
+
+    conversation = Conversation(workspace, factory)
+
+    async def turns() -> None:
+        await _send_and_wait(conversation, "un")
+        await _send_and_wait(conversation, "deux")
+        await conversation._disconnect()
+        await _send_and_wait(conversation, "trois")
+
+    asyncio.run(turns())
+    costs = [e.detail for e in conversation.entries if e.kind == "end"]
+    assert [c.removeprefix("Usage estimé : ")[:6] for c in costs] == [
+        "0,10 $",
+        "0,15 $",
+        "0,05 $",
+    ]
 
 
 def test_one_turn_at_a_time_and_stop(
@@ -787,6 +861,9 @@ class DeferringClient:
 
     async def query(self, prompt: str) -> None:
         self.prompts.append(prompt)
+
+    async def set_model(self, model: str | None = None) -> None:
+        pass
 
     async def receive_response(self) -> AsyncIterator[Any]:
         pending = DeferringClient.pending

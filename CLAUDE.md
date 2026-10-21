@@ -534,7 +534,9 @@ it, asked first, else runs `deckz labs gpu down`. A pass that wrote outputs link
 its notification to the notebook's before/after (`Job.link`).
 `studioz.agent` backs the agent panel beside every workspace and deck page:
 one Claude Code conversation per workspace through the Agent SDK, logged in as
-the person (never an API key: studioz removes `ANTHROPIC_API_KEY`), in the
+the person (never an API key: studioz removes `ANTHROPIC_API_KEY`), on `studioz
+--model` (`sonnet`) unless a workflow declares its own model for its turns
+(`set_model` on the running process), in the
 workspace with the repository's project settings, `auto` permissions in the
 sandbox, and a `PreToolUse` hook refusing the `git` commands that commit, push
 or move a branch (the person commits from studioz), and `deckz labs gpu up|run|pass`
@@ -546,7 +548,8 @@ again through `can_use_tool` (a question alongside other tool calls can't be
 deferred: the turn then waits in `can_use_tool`). `studioz.checkpoints` snapshots the workspace's files around
 each turn (a private index, trees under `refs/studioz/`), so that "Annuler ce
 tour" puts back what the last one changed. The panel shows the account's usage
-windows and each turn's usage; a turn stopped by a usage limit pauses the
+windows and each turn's usage (its model, and its cost: Claude Code reports what
+its process spent since it started, `Conversation._turn_cost`); a turn stopped by a usage limit pauses the
 conversation, which resumes by itself at the reset time. `studioz.asks` holds
 what the dialogs ask it ("Traduire avec l'agent", "Demander à l'agent de
 corriger", of resolving a conflict: prompts studioz writes from the dialog) and

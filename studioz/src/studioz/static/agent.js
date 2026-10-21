@@ -16,6 +16,7 @@ if (panel) {
   const slot = document.getElementById("agent-question");
   const undo = document.getElementById("agent-undo");
   const usage = document.getElementById("agent-usage");
+  const model = document.getElementById("agent-model");
   const base = panel.dataset.base;
   let running = false;
   let asking = false;
@@ -51,6 +52,7 @@ if (panel) {
     asking = state.asking;
     undoable = state.undoable;
     pausedUntil = state.pausedUntil;
+    model.textContent = state.model;
     usage.textContent = state.usage.text;
     usage.title = state.usage.title;
     usage.classList.toggle("warn", state.usage.warn);

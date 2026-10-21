@@ -98,6 +98,9 @@ class _Recorder:
     async def query(self, prompt: str) -> None:
         self.prompts.append(prompt)
 
+    async def set_model(self, model: str | None = None) -> None:
+        pass
+
     async def receive_response(self) -> AsyncIterator[Any]:
         yield ResultMessage("success", 1, 1, False, 1, "s")
 
