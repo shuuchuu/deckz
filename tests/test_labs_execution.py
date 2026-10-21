@@ -97,6 +97,35 @@ def test_check_notebook_reports_a_failed_shell_command_and_runs_on(
     assert "  execution: no code cell raised" in lines
 
 
+def test_smoke_caps_a_lightning_installed_after_it(tmp_path: Path) -> None:
+    # A lab's `!pip install lightning` runs after the smoke code: it caps the
+    # Trainer when the notebook first imports it.
+    trainer = (
+        "class Trainer:\n  def __init__(self, **kwargs):\n    self.kwargs = kwargs\n"
+    )
+    path = tmp_path / "demo.ipynb"
+    _write_notebook(
+        path,
+        [
+            _code(
+                "import pathlib, sys\n"
+                f"pathlib.Path('lightning.py').write_text({trainer!r})\n"
+                "sys.path.insert(0, '.')"
+            ),
+            _code(
+                "import lightning\n"
+                "kwargs = lightning.Trainer(max_epochs=50, max_steps=9).kwargs\n"
+                "assert kwargs['max_epochs'] == 1, kwargs\n"
+                "assert 'max_steps' not in kwargs, kwargs"
+            ),
+        ],
+    )
+
+    lines = list(check_notebook(path, python=sys.executable, smoke=True, timeout=30))
+
+    assert "  execution: no code cell raised" in lines
+
+
 def test_check_notebook_flags_missing_solution_section(tmp_path: Path) -> None:
     path = tmp_path / "demo.ipynb"
     _write_notebook(path, [_code("x = 1")])

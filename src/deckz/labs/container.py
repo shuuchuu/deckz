@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from ..exceptions import LabContainerError
-from .execution import report_lines, shell_guard
+from .execution import SMOKE, report_lines, shell_guard
 
 DEVCONTAINER_JSON = Path(".devcontainer") / "devcontainer.json"
 SHELL_LOG = "/tmp/deckz-shell-failures.jsonl"
@@ -108,28 +108,6 @@ for attempt in range(2):
     except DeadKernelError:
         shell_failures(running[0])
         emit(["kernel-died", running[0] - OFFSET, attempt == 0])
-"""
-
-# Prepended as a code cell for `--smoke`: every Lightning Trainer capped to one short
-# epoch, as `labs.execution`'s runner does.
-SMOKE_CELL = """\
-def __deckz_smoke():
-  caps = {"max_epochs": 1, "limit_train_batches": 3, "limit_val_batches": 2}
-  for name in ("lightning", "pytorch_lightning"):
-    try:
-      trainer = __import__(name).Trainer
-    except ImportError:
-      continue
-    init = trainer.__init__
-
-    def capped(self, *args, _init=init, **kwargs):
-      kwargs.pop("max_steps", None)
-      _init(self, *args, **{**kwargs, **caps})
-
-    trainer.__init__ = capped
-
-
-__deckz_smoke()
 """
 
 
@@ -226,7 +204,7 @@ def runner_source(
             "cell_type": "code",
             "metadata": {},
             "outputs": [],
-            "source": SMOKE_CELL,
+            "source": SMOKE,
         }
         notebook = {**notebook, "cells": [cell, *notebook["cells"]]}
     return (

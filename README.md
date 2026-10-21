@@ -1153,7 +1153,10 @@ The main commands:
 - `deckz labs check [--smoke] [--python INTERPRETER] [--container]
   [--timeout SECONDS] NOTEBOOKS...`: structural checks (uncollapsed/empty
   solution sections, stored error outputs) plus an execution of every code
-  cell, in a throwaway directory, reporting which cells raise. Shell
+  cell, in a throwaway directory, reporting which cells raise. `--smoke`
+  caps every Lightning `Trainer` to one short epoch, a Lightning the
+  notebook installs itself (`!pip install lightning`) included: it's capped
+  when first imported. Shell
   commands other than data fetches are skipped (a lab may `pip install` or
   `git push`); `--container` runs everything, with a real kernel, in the
   published repository's dev container
