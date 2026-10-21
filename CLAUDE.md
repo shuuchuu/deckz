@@ -556,11 +556,13 @@ corriger", of resolving a conflict: prompts studioz writes from the dialog) and
 the Commit dialog's proposed message (one exchange, no tool). Its session and transcript
 are kept in `.run/studioz/agent/`, resumed after a restart; the page follows it
 through server-sent events, which end when studioz stops (`Studio.closing`). Each
-message reads the whole conversation again, so a conversation is about one file: the
-editor's "Demander à l'agent" names it (`about`), and a message about another file
-sets the conversation aside (`precedente/`, one, which "Reprendre la précédente"
-exchanges back) for a new one; a follow-up typed in the panel stays, and a
-workflow's conversation (`MANY`) is never set aside. A session's total so far, which
+message reads the whole conversation again: the panel shows the context's size (the
+last call's, kept in `context`) and suggests a new conversation past `agent.LONG`. A
+conversation is about one file: the editor's "Demander à l'agent" names it (`about`),
+and from `agent.ASIDE_FROM` a message about another file sets the conversation aside
+(`precedente/`, one, which "Reprendre la précédente" exchanges back) for a new one;
+a follow-up typed in the panel stays, and a workflow's conversation (`MANY`) is never
+set aside. A session's total so far, which
 a turn's cost subtracts, is kept in `spent`, since a resumed session counts from it.
 `studioz.workflows` reads the workflows a workspace's own `deckz.yml` declares
 (`studioz.workflows`, its schema in studioz, refusing unknown keys; deckz ignores

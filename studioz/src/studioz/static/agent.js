@@ -17,6 +17,8 @@ if (panel) {
   const undo = document.getElementById("agent-undo");
   const usage = document.getElementById("agent-usage");
   const model = document.getElementById("agent-model");
+  const context = document.getElementById("agent-context");
+  const long = document.getElementById("agent-long");
   // The file the message is about (the editor's): another file than the
   // conversation's starts a new one (`Conversation.send`).
   const about = document.getElementById("agent-about");
@@ -64,6 +66,10 @@ if (panel) {
     pausedUntil = state.pausedUntil;
     aside = state.aside;
     model.textContent = state.model;
+    context.textContent = state.context.text;
+    context.title = state.context.title;
+    context.classList.toggle("warn", state.context.long);
+    long.hidden = !state.context.long;
     usage.textContent = state.usage.text;
     usage.title = state.usage.title;
     usage.classList.toggle("warn", state.usage.warn);
@@ -150,6 +156,9 @@ if (panel) {
     button.disabled = true;
     post("precedente");
   });
+
+  // The long conversation's hint: the same as the header's button.
+  long.querySelector("[data-agent-new]").addEventListener("click", () => fresh.click());
 
   // A second click confirms: the conversation is forgotten.
   let confirming = null;

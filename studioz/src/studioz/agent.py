@@ -33,11 +33,13 @@ the next message resumes the session (`resume=`). The Claude Code process
 (about 0.5 GB) is stopped once the conversation has been idle a while.
 
 Each message reads the whole conversation again, so a long one costs more at
-every message (plan, "Phase 6"). A conversation is about the file of its
-first message from the editor; a message from the editor about another file
-starts a new one, setting the previous one aside, which the person may take
-back. A message written without the editor is a follow-up, and a workflow's
-conversation is about several files: neither starts a new one.
+every message (plan, "Phase 6"): the panel shows the context's size, and
+suggests a new conversation past `LONG`. A conversation is about the file of
+its last message from the editor; once past `ASIDE_FROM`, a message from the
+editor about another file starts a new one, setting the previous one aside,
+which the person may take back. A message written without the editor is a
+follow-up, and a workflow's conversation is about several files: neither
+starts a new one.
 """
 
 import asyncio
@@ -89,16 +91,27 @@ _QUESTION = "question.json"
 """The question a turn ended on (deferred), until the session resumes with it."""
 _ABOUT = "about"
 """The file the conversation is about, or `MANY`."""
+_CONTEXT = "context"
+"""The context's size at the conversation's last call, in tokens."""
 _SPENT = "spent"
 """What Claude Code reported its session spent, until the last turn: resuming a
 session, it counts from there."""
 _ASIDE = "precedente"
 """The conversation set aside for a new one about another file (the last one)."""
-_KEPT = (_SESSION, _TRANSCRIPT, _QUESTION, _ABOUT, _SPENT)
+_KEPT = (_SESSION, _TRANSCRIPT, _QUESTION, _ABOUT, _CONTEXT, _SPENT)
 """What a conversation set aside takes along. The last turn's checkpoints stay:
 they are the workspace's files, whichever conversation changed them."""
 MANY = "*"
 """What a workflow's conversation is about: never set aside for a file."""
+ASIDE_FROM = 60_000
+"""The context from which a message about another file starts a new conversation.
+
+A new one writes about 23 k tokens to the cache at its first call (0.10 $ on
+Sonnet, against 0.01 $ for a call reading 45 k), then saves each call what the
+old context had beyond its own 45 k: about 5.6 calls a message pay that back
+within three messages from 65 k (plan, "Phase 6", increment 2)."""
+LONG = 100_000
+"""The context from which the panel suggests a new conversation."""
 DEFAULT_MODEL = "sonnet"
 """The agent's model, as Claude Code names it (an alias, or a model's id)."""
 _IDLE_AFTER = 15 * 60.0
@@ -406,6 +419,29 @@ def model_label(model: str) -> str:
         family, major, minor = found.groups()
         return f"{family.capitalize()} {major}" + (f".{minor}" if minor else "")
     return model.capitalize() if model.isalpha() else model
+
+
+def context_summary(size: int | None) -> dict[str, object]:
+    """What the panel shows of a conversation's context.
+
+    Returns:
+        `text` (« Contexte : 45 k »), `title`, and `long` (past `LONG`); empty
+        before the conversation's first call.
+    """
+    if not size:
+        return {"text": "", "title": "", "long": False}
+    tokens = f"{size:,}".replace(",", "\u202f")
+    title = (
+        f"L'agent relit les {tokens} jetons de la conversation à chaque appel "
+        "(plusieurs par message) : plus elle est longue, plus chaque message "
+        "coûte. Un message depuis l'éditeur sur un autre fichier en commence "
+        f"une nouvelle à partir de {ASIDE_FROM // 1000} k."
+    )
+    return {
+        "text": f"Contexte : {round(size / 1000)} k",
+        "title": title,
+        "long": size >= LONG,
+    }
 
 
 def when(timestamp: float) -> str:
@@ -774,6 +810,14 @@ class Conversation:
         return self._read(_ABOUT)
 
     @property
+    def context(self) -> int | None:
+        """The context's size at the last call, in tokens, if known."""
+        try:
+            return int(self._read(_CONTEXT) or "") or None
+        except ValueError:
+            return None
+
+    @property
     def aside(self) -> bool:
         """Whether a conversation was set aside, which the person may take back."""
         return (self._directory / _ASIDE / _TRANSCRIPT).is_file()
@@ -862,7 +906,7 @@ class Conversation:
         self._decline("La personne a écrit un message au lieu de répondre.")
         current = self.about
         other = about not in {None, MANY} and current not in {None, about, MANY}
-        if other and self.entries:
+        if other and self.entries and (self.context or 0) >= ASIDE_FROM:
             await self._exchange(fresh=True)
             await self._add(
                 Entry(
@@ -873,7 +917,7 @@ class Conversation:
                 )
             )
             current = None
-        if about and (current is None or about == MANY):
+        if about and current != MANY:
             self._directory.mkdir(parents=True, exist_ok=True)
             (self._directory / _ABOUT).write_text(about, encoding="utf8")
         await self._add(Entry("person", (shown or prompt).strip()))
@@ -906,6 +950,8 @@ class Conversation:
             client = await self._connected()
             await client.query(prompt)
             async for message in client.receive_response():
+                if isinstance(message, AssistantMessage):
+                    self._keep_context(message)
                 if isinstance(message, RateLimitEvent):
                     self._limited(message.rate_limit_info)
                 if isinstance(message, ResultMessage):
@@ -996,6 +1042,22 @@ class Conversation:
                 "« Arrêter » annule la reprise ; un message de votre part la remplace.",
             )
         )
+
+    def _keep_context(self, message: AssistantMessage) -> None:
+        """Keep the context's size the call read (a subagent's has its own)."""
+        usage = message.usage or {}
+        size = sum(
+            int(usage.get(name) or 0)
+            for name in (
+                "input_tokens",
+                "cache_read_input_tokens",
+                "cache_creation_input_tokens",
+            )
+        )
+        if message.parent_tool_use_id or not size:
+            return
+        self._directory.mkdir(parents=True, exist_ok=True)
+        (self._directory / _CONTEXT).write_text(str(size), encoding="utf8")
 
     def _keep_session(self, session: str) -> None:
         if session:

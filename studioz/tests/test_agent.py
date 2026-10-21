@@ -71,8 +71,22 @@ def test_refused_git(command: str, refused: str | None) -> None:
     assert refused_git(command) == refused
 
 
-def _assistant(*blocks: Any, parent: str | None = None) -> AssistantMessage:
-    return AssistantMessage(list(blocks), "claude", parent_tool_use_id=parent)
+def _assistant(
+    *blocks: Any, parent: str | None = None, context: int = 0
+) -> AssistantMessage:
+    # As Claude Code splits a call's context: mostly read from the cache.
+    usage = {
+        "input_tokens": 2,
+        "cache_read_input_tokens": context - 1002,
+        "cache_creation_input_tokens": 1000,
+        "output_tokens": 50,
+    }
+    return AssistantMessage(
+        list(blocks),
+        "claude",
+        parent_tool_use_id=parent,
+        usage=usage if context else None,
+    )
 
 
 def _result(
@@ -364,6 +378,8 @@ class FakeClient:
 class FakeFactory:
     def __init__(self) -> None:
         self.clients: list[FakeClient] = []
+        self.context = 70_000
+        """The context's size each call reports."""
 
     def __call__(self, options: ClaudeAgentOptions) -> FakeClient:
         def replies(prompt: str) -> list[Any]:
@@ -371,6 +387,7 @@ class FakeFactory:
                 _assistant(
                     TextBlock(f"Fait : {prompt}"),
                     ToolUseBlock("1", "Edit", {"file_path": "content/a.md"}),
+                    context=self.context,
                 ),
                 _result(session=f"session-{len(self.clients)}"),
             ]
@@ -621,6 +638,73 @@ def test_a_message_about_another_file_starts_afresh(
     assert conversation.session == "session-2"
 
 
+def test_a_short_conversation_follows_the_file(
+    workspace: Path, factory: FakeFactory
+) -> None:
+    # A new conversation would cost more than it saves.
+    factory.context = agent.ASIDE_FROM - 1
+    conversation = Conversation(workspace, factory)
+
+    async def turns() -> None:
+        await _send_about(conversation, "Un", "content/a.md")
+        await _send_about(conversation, "Deux", "content/b.md")
+        assert len(factory.clients) == 1
+        assert not conversation.aside
+        assert conversation.about == "content/b.md"
+        # Grown past it: about another file, a new one.
+        factory.context = agent.ASIDE_FROM
+        await _send_about(conversation, "Trois", "content/b.md")
+        await _send_about(conversation, "Quatre", "content/a.md")
+
+    asyncio.run(turns())
+    assert len(factory.clients) == 2
+    assert conversation.aside
+    assert conversation.entries[0].kind == "aside"
+
+
+def test_the_context_size_is_kept(workspace: Path) -> None:
+    sizes = iter([45_000, 120_000])
+
+    def factory(options: ClaudeAgentOptions) -> FakeClient:
+        return FakeClient(
+            options,
+            lambda _: [
+                _assistant(TextBlock("Je lis"), context=next(sizes)),
+                # A subagent's calls read its own context.
+                _assistant(TextBlock("Sous-agent"), parent="t", context=5_000),
+                _assistant(TextBlock("Fait"), context=next(sizes)),
+                _result(),
+            ],
+        )
+
+    conversation = Conversation(workspace, factory)
+    assert conversation.context is None
+
+    async def turns() -> None:
+        await _send_and_wait(conversation, "Relis")
+        assert conversation.context == 120_000
+        assert Conversation(workspace, factory).context == 120_000
+        await conversation.reset()
+
+    asyncio.run(turns())
+    assert conversation.context is None
+
+
+def test_context_summary() -> None:
+    assert agent.context_summary(None) == {"text": "", "title": "", "long": False}
+    short = agent.context_summary(45_400)
+    assert short["text"] == "Contexte : 45 k"
+    assert "relit les 45\u202f400 jetons" in str(short["title"])
+    assert short["long"] is False
+    assert agent.context_summary(agent.LONG)["long"] is True
+
+
+def test_the_panel_suggests_a_new_conversation(agent_client: TestClient) -> None:
+    page = agent_client.get("/espaces/demo").text
+    assert 'id="agent-context"' in page
+    assert 'id="agent-long" hidden' in page
+
+
 def test_nothing_to_take_back(agent_client: TestClient) -> None:
     response = agent_client.post(f"{BASE}/precedente", headers=ORIGIN)
     assert response.status_code == 409
@@ -675,6 +759,7 @@ def test_a_question_set_aside_with_its_conversation(
     client = deferring()
     conversation = _ask_later(client, workspace)
     (workspace / AGENT_DIR / "about").write_text("content/a.md", "utf8")
+    (workspace / AGENT_DIR / "context").write_text("80000", "utf8")
     client.post(
         f"{BASE}/message",
         data={"message": "Autre chose", "about": "content/b.md"},

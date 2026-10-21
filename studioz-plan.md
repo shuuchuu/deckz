@@ -15,11 +15,11 @@ build), 2 (videos), 3 (labs previewed), 4 (`deckz labs gpu pass`) and 5 (GPU pas
 from studioz) are done: phase 5 is done. Then the memory guard "Risks" promised
 (2026-10-18, under "Machine load"), the `jinja-syntax` check and the Commit dialog's kept draft ("Open items").
 Phase 6 (the agent's usage) was planned on 2026-10-21 from the colleague's first
-afternoon; its increments 1 (the model) and 2 (a new conversation for a new file) are
-done.
-**Next:** phase 6's increment 3 (the context's size, shown, and gating the automatic
-new conversation on it), "Then, with the colleague" (below phase 5), and the open
-items. A GPU pass rents a machine that costs money: never
+afternoon; its increments 1 (the model), 2 (a new conversation for a new file) and 3
+(the context's size) are done.
+**Next:** phase 6's increment 4 (less exploring: the figure conventions written down
+in slides, with the user), then 5 (the colleague's next afternoon measured), "Then,
+with the colleague" (below phase 5), and the open items. A GPU pass rents a machine that costs money: never
 start one without the user saying so. `git log
 origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed. Push and
@@ -1707,15 +1707,24 @@ Each increment is usable on its own, in this order:
    `context − 45 k` tokens read (0.3 $ per million): with the colleague's 5.6 calls
    per message, it pays back within a message from about 100 k, within three from
    about 65 k, and not at all on a short conversation. Increment 3 gates it on that.
-3. **The context's size, shown.** Each turn's last `AssistantMessage.usage` (input
-   plus cache read and write) is the context's size; the panel's header shows it
-   ("Contexte : 180 k"), and past a threshold (100 k, say) suggests "Nouvelle
-   conversation", which it explains in one line (each message reads it all again).
-   For a long conversation the person keeps on purpose (a workflow, a discussion
-   across files). Also gate increment 2's automatic new conversation on it: below
-   about 60 k, a message about another file stays (increment 2's "Measured": a new
-   conversation costs more than it saves there); kept with the session, so a
-   conversation taken back knows its size.
+3. **The context's size, shown**: done 2026-10-21. Each top-level
+   `AssistantMessage.usage` (input plus cache read and write; a subagent's calls
+   don't count) is kept as the conversation's size (`.run/studioz/agent/context`,
+   set aside and taken back with it). The panel's header shows it ("Contexte :
+   45 k", the exact count and why it matters in its title), and from `agent.LONG`
+   (100 k) in red, with a line above the message box: "Conversation longue : l'agent
+   la relit en entier à chaque appel…", its "nouvelle conversation" the header's
+   button (still confirmed by a second click). Increment 2's automatic new
+   conversation now waits for `agent.ASIDE_FROM` (60 k): below it, a message about
+   another file stays, and the conversation is about that file from then on (the
+   last file the editor named, not the first). The header had no room left: the
+   model, the context and the account's usage now share a second line. Tried in
+   headless Chromium on `studioz-dev` with the real agent: "Contexte : 45 k" after
+   the first message (44,963 tokens), a message about another file stayed in the
+   conversation (45 k < 60 k) and the conversation followed the file; with the size
+   kept set to 183 k, the header turned red, the line showed, and its link asked
+   "Oublier la conversation ?"; the header fits at 1,100 and 1,600 px. Left: no
+   warning before a long task when a usage window is nearly full (open items).
 4. **Less exploring, in slides.** The 29 calls finding how figures are made
    (`figures/plots/`, `figures/typ/`, the `image` filter, `assets/plt/`) are what a
    fresh conversation pays again. Write that down once where the agent reads it, in
