@@ -99,15 +99,21 @@ def login() -> None:
     your credentials (Claude Code keeps them, as when run in a terminal).
 
     Raises:
-        SystemExit: With Claude Code's exit code when it fails.
+        SystemExit: With code 1 when Claude Code isn't logged in afterwards.
     """
     import subprocess
 
-    from .agent import claude_cli
+    from .agent import LOGIN, claude_cli, logged_in
 
-    code = subprocess.call([claude_cli(), "auth", "login", "--claudeai"])
-    if code:
-        raise SystemExit(code)
+    subprocess.call([claude_cli(), "auth", "login", "--claudeai"])
+    # Claude Code may say "Login successful" after a wrong code: its status
+    # says the truth.
+    ok, account = logged_in()
+    if not ok:
+        print(f"studioz: {account} ; relancez « {LOGIN} ».")
+        raise SystemExit(1)
+    who = f" ({account})" if account else ""
+    print(f"studioz: l'agent utilise votre compte Claude{who}.")
 
 
 def _open_when(started: Callable[[], bool], url: str) -> None:

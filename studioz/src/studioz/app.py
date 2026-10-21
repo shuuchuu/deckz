@@ -137,6 +137,10 @@ class Login:
             self.checked = monotonic()
         return self.ok, self.account
 
+    def forget(self) -> None:
+        """Check again at the next status: the login may have gone (a turn failed)."""
+        self.checked = -1e9
+
 
 class _Static(StaticFiles):
     """studioz's own files, checked again at each load (a 304 when unchanged).
@@ -772,6 +776,7 @@ async def commit_draft(
         except Exception as failure:
             # Whatever Claude Code says (a limit, no network): the person writes it.
             error = f"Pas de proposition : {str(failure)[:200]}"
+            studio.login.forget()
         else:
             commits.keep_draft(path, replace(draft, message=message).kept())
     return _render(
@@ -2736,6 +2741,7 @@ def create_app(
         login or Login(),
         drafter or asks.draft_message,
     )
+    studio.agents.on_failure = studio.login.forget
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:

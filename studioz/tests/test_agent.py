@@ -11,6 +11,7 @@ from claude_agent_sdk import (
     DeferredToolUse,
     PermissionResultAllow,
     PermissionResultDeny,
+    ProcessError,
     RateLimitEvent,
     RateLimitInfo,
     ResultMessage,
@@ -356,6 +357,26 @@ class FakeClient:
                 yield _assistant(TextBlock(f"Refusé : {decision.message}"))
             yield _result()
             return
+        if self.prompts[-1] == "déconnecté":
+            # As Claude Code answers once its login went (2.1.283).
+            yield AssistantMessage(
+                [TextBlock("Not logged in · Please run /login")],
+                "<synthetic>",
+                error="authentication_failed",
+            )
+            yield _result(is_error=True, result="Not logged in · Please run /login")
+            return
+        if self.prompts[-1] == "plantage":
+            # As the SDK fails when Claude Code exits: its stderr says why.
+            assert self.options.stderr is not None
+            self.options.stderr('[claude-code:diagnostic] {"a": 1}')
+            self.options.stderr("No conversation found with session ID: abc")
+            msg = "Command failed with exit code 1"
+            raise ProcessError(
+                msg,
+                exit_code=1,
+                stderr="Check stderr output for details",
+            )
         if self.prompts[-1] == "attends":
             while not self.interrupted:
                 await asyncio.sleep(0.01)
@@ -772,15 +793,80 @@ def test_a_question_set_aside_with_its_conversation(
 
 
 def test_a_failing_agent_ends_its_turn(tmp_path: Path, factory: FakeFactory) -> None:
-    conversation = Conversation(tmp_path / "panne", factory)
+    failures: list[None] = []
+    conversation = Conversation(
+        tmp_path / "panne", factory, failed=lambda: failures.append(None)
+    )
     asyncio.run(_send_and_wait(conversation, "Bonjour"))
     assert not conversation.running
     last = conversation.entries[-1]
     assert (last.kind, last.text, last.detail) == (
         "error",
-        "L'agent s'est arrêté",
+        "L'agent s'est arrêté : renvoyez votre message, il redémarre.",
         "Claude Code introuvable",
     )
+    assert failures
+
+
+def test_claude_code_stopping_shows_its_stderr(
+    tmp_path: Path, factory: FakeFactory
+) -> None:
+    conversation = Conversation(tmp_path, factory)
+    asyncio.run(_send_and_wait(conversation, "plantage"))
+    last = conversation.entries[-1]
+    assert last.kind == "error"
+    assert "Nouvelle conversation" in last.text
+    # Its meaningful line, not the SDK's constant nor a diagnostic.
+    assert last.detail == "No conversation found with session ID: abc"
+    assert factory.clients[0].disconnected
+
+
+def test_an_api_error_names_its_fix(tmp_path: Path, factory: FakeFactory) -> None:
+    failures: list[None] = []
+    conversation = Conversation(tmp_path, factory, failed=lambda: failures.append(None))
+    asyncio.run(_send_and_wait(conversation, "déconnecté"))
+    # One entry, the fix in French, Claude Code's words under it.
+    [error] = [e for e in conversation.entries if e.kind != "person"]
+    assert error.kind == "error"
+    assert "uv run studioz login" in error.text
+    assert error.detail == "Not logged in · Please run /login"
+    assert failures
+    # Unknown errors still say what to do; a limit isn't one.
+    unknown = AssistantMessage([TextBlock("Bad")], "m", error="invalid_request")
+    [entry] = agent.entries(tmp_path, unknown)
+    assert (entry.kind, entry.detail) == ("error", "Bad")
+    assert "nouvelle conversation" in entry.text
+    limit = AssistantMessage([TextBlock("Limit")], "m", error="rate_limit")
+    assert [(e.kind, e.text) for e in agent.entries(tmp_path, limit)] == [
+        ("text", "Limit")
+    ]
+
+
+def test_a_lost_login_is_checked_again(
+    workspace: Path, repository: Path, factory: FakeFactory
+) -> None:
+    checks: list[bool] = []
+
+    def check() -> tuple[bool, str]:
+        # Logged in until a turn finds it went.
+        checks.append(not checks)
+        return checks[-1], "a@b.fr" if checks[
+            -1
+        ] else "Claude Code n'est connecté à aucun compte"
+
+    app = create_app(repository, agents=Agents(factory), login=Login(check=check))
+    with TestClient(app, base_url="http://localhost:8421") as client:
+        sent = client.post(
+            f"{BASE}/message", data={"message": "déconnecté"}, headers=ORIGIN
+        )
+        assert sent.status_code == 204
+        _wait_idle(_conversation(client, workspace))
+        again = client.post(
+            f"{BASE}/message", data={"message": "Bonjour"}, headers=ORIGIN
+        )
+    assert again.status_code == 409
+    assert "aucun compte" in again.json()["error"]
+    assert len(factory.clients[0].prompts) == 1
 
 
 def test_an_idle_agent_is_stopped(
@@ -809,18 +895,38 @@ def test_the_transcript_skips_damaged_lines(tmp_path: Path) -> None:
     assert Conversation(tmp_path).entries == [Entry(**kept)]
 
 
-def test_login_runs_claude_code(tmp_path: Path, monkeypatch: Any) -> None:
+@mark.parametrize("logged", [True, False])
+def test_login_runs_claude_code(
+    tmp_path: Path, monkeypatch: Any, capsys: Any, logged: bool
+) -> None:
     called = tmp_path / "called"
+    status = json.dumps(
+        {"loggedIn": logged, "authMethod": "claude.ai", "email": "a@b.fr"}
+    )
     cli = tmp_path / "claude"
-    cli.write_text(f'#!/bin/sh\necho "$@" > {called}\nexit 3\n', encoding="utf8")
+    # Says it succeeded whatever happened, as after a wrong code.
+    cli.write_text(
+        f'#!/bin/sh\necho "$@" >> {called}\n'
+        f"[ \"$2\" = status ] && echo '{status}' || echo 'Login successful'\n",
+        encoding="utf8",
+    )
     cli.chmod(0o755)
     monkeypatch.setattr(agent, "claude_cli", lambda: str(cli))
 
-    with raises(SystemExit) as exited:
+    if logged:
         login()
-
-    assert exited.value.code == 3
-    assert called.read_text(encoding="utf8") == "auth login --claudeai\n"
+        assert "votre compte Claude (a@b.fr)" in capsys.readouterr().out
+    else:
+        with raises(SystemExit) as exited:
+            login()
+        assert exited.value.code == 1
+        out = capsys.readouterr().out
+        assert "aucun compte" in out
+        assert "relancez « uv run studioz login »" in out
+    assert called.read_text(encoding="utf8").splitlines() == [
+        "auth login --claudeai",
+        "auth status --json",
+    ]
 
 
 def _wait_question(conversation: Conversation, timeout: float = 10) -> int:
