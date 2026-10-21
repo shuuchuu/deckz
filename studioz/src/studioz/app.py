@@ -2000,6 +2000,7 @@ async def agent_events(
                 if conversation.undoable
                 else 0,
                 "aside": conversation.aside,
+                "context": agent.context_summary(conversation.context),
                 "loggedIn": ok,
                 "account": account,
             }

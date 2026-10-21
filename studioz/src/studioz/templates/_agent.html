@@ -3,15 +3,19 @@
   <header class="agent-bar">
     <h2>Agent</h2>
     <span class="agent-status" id="agent-status">Connexion…</span>
-    <span class="agent-model" id="agent-model" title="Le modèle de vos messages (studioz --model) ; un workflow peut en déclarer un autre"></span>
-    <span class="agent-usage" id="agent-usage"></span>
     <button type="button" class="secondary" id="agent-new" title="Oublier cette conversation et en commencer une nouvelle">Nouvelle conversation</button>
     <button type="button" class="secondary icon agent-fold" id="agent-fold" data-toggle="agent" title="Masquer l'agent (Ctrl+Alt+B)" aria-label="Masquer l'agent">⇥</button>
+    <div class="agent-meta">
+      <span class="agent-model" id="agent-model" title="Le modèle de vos messages (studioz --model) ; un workflow peut en déclarer un autre"></span>
+      <span class="agent-context" id="agent-context"></span>
+      <span class="agent-usage" id="agent-usage"></span>
+    </div>
   </header>
   <div class="agent-log" id="agent-log" aria-live="polite"></div>
   <div class="agent-question-slot" id="agent-question"></div>
   <p class="agent-login" id="agent-login" hidden></p>
   <p class="agent-error" id="agent-error" role="alert" hidden></p>
+  <p class="agent-long" id="agent-long" hidden>Conversation longue : l'agent la relit en entier à chaque appel. Pour passer à autre chose, une <button type="button" class="link" data-agent-new>nouvelle conversation</button> coûte bien moins.</p>
   <form class="agent-form" id="agent-form">
     <input type="hidden" name="about" id="agent-about">
     <textarea name="message" id="agent-message" rows="3"

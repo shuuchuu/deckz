@@ -315,7 +315,9 @@ dialog a.change { font-family: var(--mono); font-size: 0.9em; overflow-wrap: any
 
 /* The agent, right of the preview. */
 .agent { display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
-.agent-bar { display: flex; gap: 0.5rem; align-items: center; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--line); }
+.agent-bar { display: flex; flex-wrap: wrap; gap: 0.2rem 0.5rem; align-items: center; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--line); }
+/* The model, the context and the account's usage: a line of their own. */
+.agent-meta { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 0 0.8rem; }
 .agent-bar h2 { margin: 0; }
 .agent-bar button { padding: 0.1rem 0.5rem; font-size: 0.85em; }
 #agent-new { margin-left: auto; }
@@ -324,6 +326,10 @@ dialog a.change { font-family: var(--mono); font-size: 0.9em; overflow-wrap: any
 .agent-model { color: var(--muted); font-size: 0.78em; white-space: nowrap; cursor: help; }
 .agent-usage { color: var(--muted); font-size: 0.78em; white-space: nowrap; cursor: help; }
 .agent-usage.warn { color: var(--danger); }
+.agent-context { color: var(--muted); font-size: 0.78em; white-space: nowrap; cursor: help; }
+.agent-context.warn { color: var(--danger); }
+.agent-long { margin: 0.3rem 0.7rem; font-size: 0.85em; color: var(--muted); border-left: 3px solid var(--danger); padding-left: 0.5rem; }
+.agent-long[hidden] { display: none; }
 .agent-log { flex: 1; min-height: 0; overflow-y: auto; padding: 0.5rem 0.7rem; display: flex; flex-direction: column; gap: 0.4rem; }
 .agent-entry { font-size: 0.9em; }
 .agent-text { white-space: pre-wrap; overflow-wrap: anywhere; }
