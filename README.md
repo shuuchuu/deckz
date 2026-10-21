@@ -843,7 +843,9 @@ The main commands:
   `'{{ "{lab}" | lab("{kind}") }}'`) is printed after `labs new`, filled
   in, for the content file linking the lab.
 - `deckz setup`: set up a clone, and run it again after pulling. It
-  checks the executables deckz and the repository need (`setup.requires`
+  fetches the deckz checkout it runs from (an editable install) and
+  reports it when it's behind its upstream branch, with the `git pull`
+  to run; checks the executables deckz and the repository need (`setup.requires`
   above), saying how to install a missing one; installs the git hooks;
   runs the repository's `setup.steps` not done yet; and reports the
   videos never rendered (`--videos` renders them). `--check` only

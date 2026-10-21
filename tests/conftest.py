@@ -43,3 +43,10 @@ def _isolated_git(monkeypatch: Any, tmp_path_factory: Any) -> None:
         encoding="utf8",
     )
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(config))
+
+
+@fixture(autouse=True)
+def _offline_deckz_checkout(monkeypatch: Any) -> None:
+    # `deckz setup` fetches the deckz checkout it runs from: the tests give it
+    # their own, or none.
+    monkeypatch.setattr("deckz.setting_up._own_checkout", lambda: None)
