@@ -29,7 +29,8 @@ def run_file(
 
     Args:
         path: File to compile, relative to content/ and without its
-            extension
+            extension (`nn/intro`), or as found from here or from the
+            repository's root (`content/nn/intro.md`)
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
@@ -55,7 +56,7 @@ def run_file(
     """
     from logging import getLogger
 
-    from ...checking import preview_settings
+    from ...checking import content_relative, preview_settings
     from ...configuring.settings import DeckSettings
     from ...pipelines import OutputKinds, build, file_targets
     from ...pipelines import run_file as _run_file
@@ -67,7 +68,9 @@ def run_file(
     )
 
     logger = getLogger(__name__)
-    settings = preview_settings(DeckSettings.from_yaml(workdir), "file", path)
+    deck_settings = DeckSettings.from_yaml(workdir)
+    path = content_relative(deck_settings, path)
+    settings = preview_settings(deck_settings, "file", path)
     langs = unique(langs)
     outputs = OutputKinds(
         handout=handout,

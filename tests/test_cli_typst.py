@@ -16,7 +16,7 @@ from typing import Any
 import appdirs
 from pygit2 import init_repository
 from pypdfium2 import PdfDocument
-from pytest import CaptureFixture, fixture, mark, raises
+from pytest import CaptureFixture, LogCaptureFixture, fixture, mark, raises
 
 from deckz.cli import main
 from deckz.components.compiler import keep_warm
@@ -110,6 +110,33 @@ def test_every_run_command_has_a_dry_run(
     lines = capsys.readouterr().out.splitlines()
     assert any(line.startswith(f"{pdf}: render all ") for line in lines)
     assert not list(working_dir.parent.parent.glob("**/*.pdf"))
+
+
+@mark.parametrize(
+    ("args", "pdf"),
+    [
+        # From the deck, as editors and `git status` show it.
+        (("file", "content/about.md"), ".run/file/about/pdf/deck-handout.pdf"),
+        (
+            ("file", "../../company/abc/content/about.md"),
+            ".run/file/about/pdf/deck-handout.pdf",
+        ),
+        # From the repository's root.
+        (
+            ("section", "content/greeting", "standard"),
+            ".run/section/greeting/standard/pdf/deck-handout.pdf",
+        ),
+        # Already relative to a content directory: as given.
+        (("file", "about"), ".run/file/about/pdf/deck-handout.pdf"),
+    ],
+)
+def test_run_file_and_section_take_a_path_on_disk(
+    working_dir: Path, capsys: CaptureFixture[str], args: tuple[str, ...], pdf: str
+) -> None:
+    main(("run", *args, "--no-open", "--no-presentation", "--dry-run"))
+
+    lines = capsys.readouterr().out.splitlines()
+    assert any(line.startswith(f"{pdf}: render all ") for line in lines)
 
 
 def test_rebuild_in_same_process_sees_content_edit(working_dir: Path) -> None:
@@ -538,6 +565,31 @@ def test_check_overflow_names_a_wrapped_frame_title_s_line(
         ("frame title", "content/greeting/hello.md:1"),
         ("footer", None),
     ]
+
+
+def test_show_frames_reads_a_preview(
+    working_dir: Path, capsys: CaptureFixture[str]
+) -> None:
+    main(("run", "file", "content/about.md", "--no-open", *_NO_PDF))
+    capsys.readouterr()
+    pdf = working_dir.parent.parent / ".run/file/about/pdf/deck-handout.pdf"
+
+    main(("show", "frames", str(pdf), "--json"))
+
+    found = json.loads(capsys.readouterr().out)
+    assert [(f["title"], f["file"]) for f in found] == [
+        ("About", "company/abc/content/about.md")
+    ]
+
+
+def test_show_frames_refuses_a_pdf_of_no_build(
+    working_dir: Path, caplog: LogCaptureFixture
+) -> None:
+    stray = working_dir / "elsewhere.pdf"
+    stray.write_bytes(b"%PDF")
+    with raises(SystemExit):
+        main(("show", "frames", str(stray)))
+    assert "run `deckz show frames` from the deck that built it" in caplog.text
 
 
 def test_show_frames_needs_a_build(working_dir: Path) -> None:

@@ -57,13 +57,10 @@ def frames(settings: "DeckSettings", pdf: Path, *, query: bool = True) -> list[F
         DeckzError: If `pdf` or its build isn't there, or was built before \
             deckz marked frames (or recorded them, without `query`).
     """
-    paths = settings.paths
     pdf = pdf.resolve()
-    try:
-        language_dir = pdf.parent.relative_to(paths.pdf_dir.resolve())
-    except ValueError:
-        msg = f"{pdf} isn't in the deck's PDF directory {paths.pdf_dir}"
-        raise DeckzError(msg) from None
+    settings = _built_by(settings, pdf)
+    paths = settings.paths
+    language_dir = pdf.parent.relative_to(paths.pdf_dir.resolve())
     build_dir = paths.build_dir.resolve() / language_dir / pdf.stem
     main = build_dir / f"{pdf.stem}.typ"
     if not pdf.is_file() or not main.is_file():
@@ -90,6 +87,36 @@ def frames(settings: "DeckSettings", pdf: Path, *, query: bool = True) -> list[F
         line = lines[index] if index < len(lines) else None
         found.append(Frame(marker["page"], title, file, line))
     return sorted(found, key=lambda frame: frame.page)
+
+
+def _built_by(settings: "DeckSettings", pdf: Path) -> "DeckSettings":
+    """The settings `pdf` was built with: the deck's, or a preview's.
+
+    A `deckz run file`/`section`/`shared`/`all` preview writes under a scratch
+    tree of `<git_dir>/.run/` (`checking.preview_settings`), its PDFs in its
+    `pdf/`.
+
+    Returns:
+        `settings`, or a copy building and writing where the preview did.
+
+    Raises:
+        DeckzError: If `pdf` is in neither.
+    """
+    paths = settings.paths
+    if pdf.parent.is_relative_to(paths.pdf_dir.resolve()):
+        return settings
+    scratch = (paths.git_dir / ".run").resolve()
+    for directory in pdf.parents:
+        if not directory.is_relative_to(scratch) or directory == scratch:
+            break
+        if directory.name == "pdf":
+            tree = directory.parent
+            return settings.with_output_dirs(tree / ".build", directory, tree / "html")
+    msg = (
+        f"{pdf} isn't in the deck's PDF directory {paths.pdf_dir}, nor a preview's "
+        f"under {scratch}: run `deckz show frames` from the deck that built it"
+    )
+    raise DeckzError(msg)
 
 
 def query_markers(settings: "DeckSettings", main: Path, label: str) -> list:

@@ -945,7 +945,10 @@ The main commands:
   `--no-presentation`, other parts' PDFs under `--parts`). A failed build
   removes nothing, nor does a run producing no PDF at all; `--dry-run`
   lists what would go.
-  `run file`/`run section` write their output
+  `run file`/`run section` take their path relative to `content/`
+  (`nn/intro`, `nn/ae`), or as found from the current directory or the
+  repository's root (`content/nn/intro.md`, as editors and `git status`
+  show it). They write their output
   under `<git_dir>/.run/`, not the current deck's own `pdf`/`.build`, and
   open it once done (add `--no-open` for agentic/headless use, where only
   the printed path matters).
@@ -1064,7 +1067,8 @@ The main commands:
   deck's course notes / list its content files with their chapters (see
   [Course notes](#course-notes)).
 - `deckz show frames [PDF] [--lang] [--json]`: each page of a built deck
-  PDF (default: the deck's whole handout) with the content file and line
+  PDF (default: the deck's whole handout; also a `run file`/`run section`
+  preview's, under `.run/`) with the content file and line
   of its frame's `# Title`, and its title; title, outline and divider
   pages aren't listed. A deck build adds an invisible `<deckz-frame>`
   Typst marker after each frame heading for it (on the converted copy,
