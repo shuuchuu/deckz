@@ -15,11 +15,11 @@ build), 2 (videos), 3 (labs previewed), 4 (`deckz labs gpu pass`) and 5 (GPU pas
 from studioz) are done: phase 5 is done. Then the memory guard "Risks" promised
 (2026-10-18, under "Machine load"), the `jinja-syntax` check and the Commit dialog's kept draft ("Open items").
 Phase 6 (the agent's usage) was planned on 2026-10-21 from the colleague's first
-afternoon; its increments 1 (the model), 2 (a new conversation for a new file) and 3
-(the context's size) are done.
-**Next:** phase 6's increment 4 (less exploring: the figure conventions written down
-in slides, with the user), then 5 (the colleague's next afternoon measured), "Then,
-with the colleague" (below phase 5), and the open items. A GPU pass rents a machine that costs money: never
+afternoon; its increments 1 (the model), 2 (a new conversation for a new file), 3
+(the context's size) and 4 (slides' `docs/figures.md`, on branch `ws/figures-doc` of
+`../slides--figures-doc` until the user merges it) are done.
+**Next:** phase 6's increment 5 (the colleague's next afternoon measured), "Then, with
+the colleague" (below phase 5), and the open items. A GPU pass rents a machine that costs money: never
 start one without the user saying so. `git log
 origin/main..main` in
 `../deckz`, and in `../slides` for its `uv.lock`, lists what isn't pushed. Push and
@@ -1725,12 +1725,38 @@ Each increment is usable on its own, in this order:
    kept set to 183 k, the header turned red, the line showed, and its link asked
    "Oublier la conversation ?"; the header fits at 1,100 and 1,600 px. Left: no
    warning before a long task when a usage window is nearly full (open items).
-4. **Less exploring, in slides.** The 29 calls finding how figures are made
-   (`figures/plots/`, `figures/typ/`, the `image` filter, `assets/plt/`) are what a
-   fresh conversation pays again. Write that down once where the agent reads it, in
-   slides' `CLAUDE.md` or a `figures` skill (the shorter its listing line, the
-   better: the listing is in every call), after reading what those calls looked for
-   in the transcript. slides' side, with the user.
+4. **Less exploring, in slides**: done 2026-10-21. The colleague's transcript
+   (`~/downloads/423cbff2-….jsonl`): about 25 calls (70 k characters of results)
+   pieced together how the repository *writes* a figure: the conventions' "Graphiques",
+   a plot module and its two `.yml`, `plots/utils.py`, `_lib.typ` read in four
+   chunks (palette, nodes, edges, `sizes`), the theme's sizes, and two or three
+   existing figures each time as models. Where figures go and how they're referenced
+   was already in slides' `CLAUDE.md`. Two deckz frictions on the way, also hit in
+   the trial below: `deckz run file content/nn/x.md` failed ("unresolvable file
+   path": it wanted `nn/x`, while the editor's prefill and `git status` name
+   `content/…`), and `deckz show frames` refused a `run file` preview's PDF ("isn't
+   in the deck's PDF directory"), which the agent hid with `2>/dev/null` and replaced
+   by `pdftotext` scripts to find a page. **Done:** in deckz, `run file`/`run section`
+   take a path from the current directory or the repository's root too
+   (`checking.content_relative`), and `show frames` reads a preview's PDF under
+   `.run/` (`frames._built_by`). In slides (branch `ws/figures-doc`, not merged:
+   the user's call), `docs/figures.md`, in French for people too: the three kinds of
+   figure, a Typst and a matplotlib skeleton (both built for real), credits,
+   references and languages, Typst math (`bold(W)`, not `\vect`), the palette and
+   node styles, the helpers' signatures, a model figure per kind, the three commands
+   to see one page (tried as written), and replacing an image; one line in slides'
+   `CLAUDE.md` ("Before drawing or redrawing a figure, read `docs/figures.md`"), and
+   links from `conventions.md` and `HANDBOOK.md`. **Measured** with a headless
+   Claude Code on Sonnet in a worktree (project settings, `auto` in the sandbox), on
+   one request like the colleague's ("cette slide est trop verbeuse, fais une figure
+   de la boucle d'entraînement par mini-batchs", `content/nn/gradient-descent.md`):
+   without the guide, 15 calls, 718 k tokens read, 0.30 $, 210 s (three tries to
+   build: the `content/` path, then `vect` in Typst math); with a first version
+   naming no signatures, the same cost, the agent reading 200 lines of `_lib.typ`
+   and placing the figure in `figures/typ/nn/gradient-descent/`; with the signatures
+   and "the content file's folder, not the file", 10 calls, 465 k, 0.20 $, 101 s,
+   no `_lib.typ` read, one model figure read, built right the first time. One run
+   each: indicative.
 5. **Measured again.** The colleague's next afternoon of the same kind, measured the
    same way: tokens per message, context at the end, model. Then decide on what is
    left: a `deckz` command giving a content file's rendered pages as PNGs (build,

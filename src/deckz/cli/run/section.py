@@ -30,7 +30,8 @@ def run_section(
     directories, so repeated previews don't clutter a real deck's output.
 
     Args:
-        section: Section to compile
+        section: Section to compile, relative to content/ (`nn/ae`), or as
+            found from here or from the repository's root (`content/nn/ae`)
         flavor: Flavor of SECTION to compile
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
@@ -57,7 +58,7 @@ def run_section(
     """
     from logging import getLogger
 
-    from ...checking import preview_settings
+    from ...checking import content_relative, preview_settings
     from ...configuring.settings import DeckSettings
     from ...pipelines import OutputKinds, build, section_targets
     from ...pipelines import run_section as _run_section
@@ -69,9 +70,9 @@ def run_section(
     )
 
     logger = getLogger(__name__)
-    settings = preview_settings(
-        DeckSettings.from_yaml(workdir), "section", section, flavor
-    )
+    deck_settings = DeckSettings.from_yaml(workdir)
+    section = content_relative(deck_settings, section)
+    settings = preview_settings(deck_settings, "section", section, flavor)
     langs = unique(langs)
     outputs = OutputKinds(
         handout=handout,

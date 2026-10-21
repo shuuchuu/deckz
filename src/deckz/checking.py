@@ -104,6 +104,32 @@ def export_staged(git_dir: Path) -> Path:
     return target
 
 
+def content_relative(settings: DeckSettings, path: str) -> str:
+    """`path` as `deckz run file`/`section` take it: relative to a content directory.
+
+    A path naming something on disk, from the current directory or the
+    repository's root (`content/nn/intro.md`, as editors and `git status` show
+    it), under the deck's own content directory or the shared one, is made
+    relative to it, without a content file's `.md`. Anything else is kept as
+    given: already relative to a content directory (`nn/intro`).
+
+    Returns:
+        The path, relative to a content directory.
+    """
+    paths = settings.paths
+    for base in (Path.cwd(), paths.git_dir):
+        found = (base / path).resolve()
+        if not found.exists():
+            continue
+        for root in (paths.local_content_dir, paths.content_dir):
+            if found.is_relative_to(root.resolve()) and found != root.resolve():
+                relative = found.relative_to(root.resolve())
+                if found.is_file() and relative.suffix == ".md":
+                    relative = relative.with_suffix("")
+                return relative.as_posix()
+    return path
+
+
 def preview_settings(settings: DeckSettings, *parts: str) -> DeckSettings:
     """Copy of a deck's settings writing to a `deckz run file`/`section` scratch tree.
 

@@ -21,7 +21,8 @@ def frames(
 
     Args:
         pdf: A PDF of the WORKDIR's deck (default: its whole handout in
-            LANG), e.g. a part's presentation or the print handout
+            LANG), e.g. a part's presentation or the print handout, or of a
+            `run file`/`run section` preview run from it (under `.run/`)
         lang: Language of the default handout
         json: Print a JSON array of {page, title, file, line} instead
         workdir: Path to move into before running the command
