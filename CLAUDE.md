@@ -540,7 +540,11 @@ the person (never an API key: studioz removes `ANTHROPIC_API_KEY`), on `studioz
 workspace with the repository's project settings, `auto` permissions in the
 sandbox, and a `PreToolUse` hook refusing the `git` commands that commit, push
 or move a branch (the person commits from studioz), and `deckz labs gpu up|run|pass`
-but a dry run (a pass starts from its modal, which gives the cost); a question it asks
+but a dry run (a pass starts from its modal, which gives the cost). An API error
+Claude Code answers with (`AssistantMessage.error`: not logged in, a wrong model) is
+one entry naming its fix (`agent._API_ERRORS`), and Claude Code exiting shows its
+stderr's last lines (`options(stderr=…)`); either makes `Login` check again at once
+(`Agents.on_failure`). A question it asks
 (`AskUserQuestion`) is a form in the panel: a `PreToolUse` hook defers it, so
 the turn ends on it and it waits in `.run/studioz/agent/question.json`, across
 restarts, until the answers resume the session, where Claude Code runs the call

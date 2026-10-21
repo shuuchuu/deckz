@@ -47,6 +47,7 @@ import json
 import re
 import shutil
 import subprocess
+from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import suppress
 from dataclasses import asdict, dataclass, field, replace
@@ -116,6 +117,41 @@ DEFAULT_MODEL = "sonnet"
 """The agent's model, as Claude Code names it (an alias, or a model's id)."""
 _IDLE_AFTER = 15 * 60.0
 _DETAIL = 400
+LOGIN = "uv run studioz login"
+"""What logs Claude Code in as the person, run from the repository."""
+
+_API_ERRORS = {
+    "authentication_failed": (
+        "Claude Code n'est pas connecté à votre compte : dans un terminal, depuis "
+        f"le dépôt, lancez « {LOGIN} », puis renvoyez votre message."
+    ),
+    "billing_error": (
+        "Votre compte Claude refuse la dépense : voyez votre abonnement sur "
+        "claude.ai (Paramètres, Facturation), puis renvoyez votre message."
+    ),
+    "model_not_found": (
+        "Ce modèle n'existe pas, ou votre compte n'y a pas accès : relancez studioz "
+        "sans --model (Sonnet), ou corrigez le « model » du workflow dans deckz.yml."
+    ),
+    "server_error": (
+        "L'API de Claude a une panne : renvoyez votre message dans quelques minutes "
+        "(status.claude.com dit si un incident est en cours)."
+    ),
+}
+"""What to do about a turn ending on an API error (`AssistantMessage.error`).
+
+Claude Code doesn't stop on one: it sends its own words in English as the
+message's text ("Not logged in · Please run /login", from the SDK's client,
+seen with 2.1.283), which the entry keeps as its detail. A limit (`rate_limit`)
+isn't one: it pauses the conversation (`Conversation._limited`)."""
+_API_ERROR = (
+    "Claude Code signale une erreur (ci-dessous) : renvoyez votre message ; si "
+    "elle revient, commencez une nouvelle conversation."
+)
+_STDERR_LINES = 20
+"""Claude Code's last lines on its stderr kept, to say why it stopped."""
+_DIAGNOSTIC = re.compile(r"^\[[\w:-]+\] [{\[]")
+"""A diagnostic line on Claude Code's stderr (`[claude-code:tag] {json}`)."""
 
 APPEND = """\
 Tu travailles dans un espace de travail studioz : une copie du dépôt (un \
@@ -352,7 +388,20 @@ def _result_text(block: ToolResultBlock) -> str:
     return str(content or "")
 
 
+def _failed(message: AssistantMessage) -> bool:
+    """Whether `message` is Claude Code's word on an API error ending the turn.
+
+    Returns:
+        Whether it is: not for a limit, which pauses the conversation.
+    """
+    return message.error is not None and message.error != "rate_limit"
+
+
 def _assistant(workspace: Path, message: AssistantMessage) -> list[Entry]:
+    if _failed(message):
+        said = "\n".join(b.text for b in message.content if isinstance(b, TextBlock))
+        what = _API_ERRORS.get(str(message.error), _API_ERROR)
+        return [Entry("error", what, _short(said))]
     found = []
     for block in message.content:
         if isinstance(block, TextBlock) and block.text.strip():
@@ -380,7 +429,9 @@ def _failed_tools(workspace: Path, message: UserMessage) -> list[Entry]:
     return found
 
 
-def _result(message: ResultMessage, stopped: bool, limited: bool) -> list[Entry]:
+def _result(
+    message: ResultMessage, stopped: bool, limited: bool, failed: bool
+) -> list[Entry]:
     if message.stop_reason == "tool_deferred":
         # The question it ended on says it (`Conversation._defer`).
         return []
@@ -390,6 +441,9 @@ def _result(message: ResultMessage, stopped: bool, limited: bool) -> list[Entry]
     # An interrupted turn may end on an error result (`ede_diagnostic`).
     if stopped or message.terminal_reason in {"aborted_streaming", "aborted_tools"}:
         return [Entry("end", f"Arrêté au bout de {seconds} s")]
+    if message.is_error and failed:
+        # The API error said it, and what to do (`_assistant`).
+        return []
     if message.is_error:
         errors = "\n".join(message.errors or []) or message.result or ""
         return [Entry("error", "Le tour s'est arrêté sur une erreur", _short(errors))]
@@ -406,6 +460,30 @@ def _result(message: ResultMessage, stopped: bool, limited: bool) -> list[Entry]
     if main := max(models, key=lambda m: models[m].get("costUSD", 0), default=""):
         usage = f"{model_label(main)} · {usage}" if usage else model_label(main)
     return [Entry("end", f"Terminé en {seconds} s", usage)]
+
+
+def _stopped(error: Exception, stderr: list[str]) -> Entry:
+    """What a turn ending on an exception (Claude Code gone) says.
+
+    The SDK's own text names no cause when Claude Code exits ("Check stderr
+    output for details" is a constant): its stderr's last lines do.
+
+    Returns:
+        The error's entry, its fix first.
+    """
+    said = [line.strip() for line in stderr if line.strip()]
+    lines = [line for line in said if not _DIAGNOSTIC.match(line)] or said
+    detail = "\n".join(lines[-3:]) or str(error)
+    if "No conversation found with session ID" in detail:
+        # Its session is gone (another machine's, a cleared `~/.claude`):
+        # resuming it fails again at every message.
+        what = (
+            "Claude Code ne retrouve plus cette conversation : « Nouvelle "
+            "conversation », en haut du panneau, en commence une autre."
+        )
+    else:
+        what = "L'agent s'est arrêté : renvoyez votre message, il redémarre."
+    return Entry("error", what, _short(detail))
 
 
 def model_label(model: str) -> str:
@@ -540,7 +618,11 @@ class Account:
 
 
 def entries(
-    workspace: Path, message: object, stopped: bool = False, limited: bool = False
+    workspace: Path,
+    message: object,
+    stopped: bool = False,
+    limited: bool = False,
+    failed: bool = False,
 ) -> list[Entry]:
     """What a message adds to the transcript.
 
@@ -551,6 +633,7 @@ def entries(
         message: The Agent SDK's message.
         stopped: Whether the person stopped the turn it ends.
         limited: Whether a usage limit stopped it.
+        failed: Whether an API error ended it, already shown.
 
     Returns:
         Its entries, maybe none.
@@ -561,7 +644,7 @@ def entries(
         # Once stopped, the tools interrupted fail: "Arrêté" says it.
         return [] if stopped else _failed_tools(workspace, message)
     if isinstance(message, ResultMessage):
-        return _result(message, stopped, limited)
+        return _result(message, stopped, limited, failed)
     if isinstance(message, RateLimitEvent):
         return _rate_limit(message)
     return []
@@ -668,6 +751,7 @@ def options(
         [str, dict[str, Any], ToolPermissionContext], Awaitable[PermissionResult]
     ] = _deny,
     model: str = DEFAULT_MODEL,
+    stderr: Callable[[str], None] | None = None,
 ) -> ClaudeAgentOptions:
     """The agent's options in a workspace (see the module docstring).
 
@@ -677,6 +761,7 @@ def options(
         can_use_tool: What decides the tool calls the permission rules would
             ask about, and answers the agent's questions; all denied by default.
         model: The model.
+        stderr: What gets Claude Code's stderr, a line at a time.
 
     Returns:
         The options, resuming `resume` if given.
@@ -710,6 +795,7 @@ def options(
             ]
         },
         can_use_tool=can_use_tool,
+        stderr=stderr,
     )
 
 
@@ -766,9 +852,14 @@ class Conversation:
         client_factory: Callable[[ClaudeAgentOptions], Client] = _sdk_client,
         account: Account | None = None,
         model: str = DEFAULT_MODEL,
+        failed: Callable[[], None] | None = None,
     ) -> None:
         self.workspace = workspace
         self.model = model
+        self._failed = failed or (lambda: None)
+        """Called when a turn fails on an API error or Claude Code stopping: \
+        studioz checks the login again (`app.Login`)."""
+        self._stderr: deque[str] = deque(maxlen=_STDERR_LINES)
         """The model of the person's messages."""
         self._turn_model = model
         """The model of the turn running, or of the last one (which a question's \
@@ -778,6 +869,8 @@ class Conversation:
         self.paused_until: float | None = None
         """When a limit stopped the agent: it resumes by itself then."""
         self._limited_until: float | None = None
+        self._api_failed = False
+        """Whether an API error ended the turn running (`_API_ERRORS`)."""
         self._factory = client_factory
         self._directory = workspace / AGENT_DIR
         self.entries: list[Entry] = self._load()
@@ -929,6 +1022,8 @@ class Conversation:
         self.running = True
         self._stopped = False
         self._limited_until = None
+        self._api_failed = False
+        self._stderr.clear()
         note, self._note = self._note, None
         told = f"{note}\n\n{prompt}" if note else prompt
         self._task = asyncio.create_task(self._turn(told))
@@ -951,7 +1046,7 @@ class Conversation:
             await client.query(prompt)
             async for message in client.receive_response():
                 if isinstance(message, AssistantMessage):
-                    self._keep_context(message)
+                    self._called(message)
                 if isinstance(message, RateLimitEvent):
                     self._limited(message.rate_limit_info)
                 if isinstance(message, ResultMessage):
@@ -968,6 +1063,7 @@ class Conversation:
                         message,
                         self._stopped,
                         self._limited_until is not None,
+                        self._api_failed,
                     )
                 )
             if deferred is not None:
@@ -976,8 +1072,9 @@ class Conversation:
             raise
         except Exception as error:
             # The SDK's errors (no CLI, a crashed process) end the turn, shown.
-            await self._add(Entry("error", "L'agent s'est arrêté", _short(str(error))))
+            await self._add(_stopped(error, list(self._stderr)))
             await self._disconnect()
+            self._failed()
         finally:
             # Even a failed turn may have changed files.
             if not checked:
@@ -995,7 +1092,11 @@ class Conversation:
         if self._client is None:
             client = self._factory(
                 options(
-                    self.workspace, self.session, self._can_use_tool, self._turn_model
+                    self.workspace,
+                    self.session,
+                    self._can_use_tool,
+                    self._turn_model,
+                    self._stderr.append,
                 )
             )
             await client.connect()
@@ -1042,6 +1143,13 @@ class Conversation:
                 "« Arrêter » annule la reprise ; un message de votre part la remplace.",
             )
         )
+
+    def _called(self, message: AssistantMessage) -> None:
+        """Keep what a call's message says of the context, and of an API error."""
+        self._keep_context(message)
+        if _failed(message):
+            self._api_failed = True
+            self._failed()
 
     def _keep_context(self, message: AssistantMessage) -> None:
         """Keep the context's size the call read (a subagent's has its own)."""
@@ -1370,13 +1478,18 @@ class Agents:
         """The model of the person's messages (`studioz --model`)."""
         self._conversations: dict[Path, Conversation] = {}
         self.account = Account()
+        self.on_failure: Callable[[], None] = lambda: None
+        """Called when a turn fails on an API error or Claude Code stopping."""
 
     def conversation(self, workspace: Path) -> Conversation:
         if workspace not in self._conversations:
             self._conversations[workspace] = Conversation(
-                workspace, self._factory, self.account, self.model
+                workspace, self._factory, self.account, self.model, self._failed
             )
         return self._conversations[workspace]
+
+    def _failed(self) -> None:
+        self.on_failure()
 
     async def stop_idle(self) -> None:
         """Stop the idle agents' processes, and resume the paused ones due."""

@@ -17,9 +17,9 @@ from studioz) are done: phase 5 is done. Then the memory guard "Risks" promised
 Phase 6 (the agent's usage) was planned on 2026-10-21 from the colleague's first
 afternoon; its increments 1 (the model), 2 (a new conversation for a new file), 3
 (the context's size) and 4 (slides' `docs/figures.md`, in slides' main as `b83c29fb`)
-are done.
-**Next:** phase 7 (what the colleague's first afternoon found: logging in, links,
-the slide in view, the PDF's bookmarks; start with "Starting phase 7" below) and its
+are done. Phase 7's increment 1 (logging in, and errors naming their fix) is done.
+**Next:** phase 7's increments 2 to 4 (links in new tabs, the slide in view, the
+PDF's bookmarks; start with "Starting phase 7" below) and its
 "Also left", phase 6's increment 5
 (the colleague's next afternoon measured), "Then, with the colleague" (below
 phase 5), and the open items. A GPU pass rents a machine that costs money: never
@@ -158,56 +158,11 @@ checked for slides sessions (tell them only of a change in what deckz does), and
 pre-commit hook's two Ctrl-C timing tests fail about one run in three: retry the
 commit ("Also left" has their fix).
 
-Increment 1 (logging in and the first message), what is known (2026-10-22, Claude
-Code 2.1.283, `claude-agent-sdk` 0.2.160):
-- **Where:** `agent.py` (`logged_in`, `options`, `Conversation._turn`, whose `except
-  Exception` writes "L'agent s'est arrêté" with the exception's text), `app.py`
-  (`Login`, which keeps a "logged in" five minutes and a "not logged in" ten
-  seconds; `agent_message` refuses a message while not logged in; the event stream's
-  `loggedIn`/`account`, from which `static/agent.js` shows its "uv run studioz login"
-  paragraph), `cli.py` (`login`: `claude auth login --claudeai`, its exit code passed
-  on). Tests in `studioz/tests/test_agent.py`: `test_logged_in` (a fake `claude`
-  printing `auth status --json`), `test_not_logged_in`,
-  `test_a_failing_agent_ends_its_turn` (a workspace path containing `panne` makes the
-  fake client's `connect` raise), `test_login_runs_claude_code`.
-- **Not logged in, reproduced** with an empty config directory, which leaves the
-  person's own login alone: `CLAUDE_CONFIG_DIR=<empty dir> <the SDK's bundled
-  claude> -p "Réponds OK" --output-format stream-json --verbose` (`agent.claude_cli()`
-  gives the path). Claude Code sends an `AssistantMessage` whose `error` is
-  `"authentication_failed"` and whose text is "Not logged in · Please run /login",
-  then a `ResultMessage` with `is_error`, then exits 1. On that exit code the SDK
-  raises `ProcessError("Command failed with exit code 1 (exit code: 1)\nError
-  output: Check stderr output for details")`: the "Check stderr" is the SDK's own
-  constant text (`_internal/transport/subprocess_cli.py`), whatever Claude Code
-  wrote. That is what the colleague saw. `auth status --json` then says
-  `"loggedIn": false`.
-- **The fix, proposed:** (a) an `AssistantMessage.error` of
-  `"authentication_failed"` ends the turn on a French entry naming the fix ("Claude
-  Code n'est plus connecté à votre compte : dans un terminal, depuis le dépôt, `uv
-  run studioz login`"), and makes studioz check the login again at once (the
-  conversation doesn't know `Login`: e.g. `Agents` given a callback that sets
-  `Login.checked` back), so the panel shows its login paragraph and refuses the next
-  message; (b) `ClaudeAgentOptions(stderr=…)` (a `Callable[[str], None]`, one line
-  at a time) keeps the turn's last lines, and a turn failing on an exception shows
-  them instead of "Check stderr"; (c) `studioz login` checks with `agent.logged_in()`
-  after `claude auth login` and says in French whom it is connected as, or that it
-  failed and to run it again, exiting 1. What `claude auth login` exits with after a
-  wrong code isn't known: it's interactive, so ask the user to try it (`! uv run
-  studioz login`, a wrong code). A real error on Claude Code's stderr can be had
-  without logging anyone out: `studioz --model` with a model that doesn't exist.
-- **The terms never accepted: not reproduced.** An empty config directory gives the
-  "not logged in" above, not a terms prompt: the terms come after a login. Get the
-  colleague's exact text first (their workspace's `.run/studioz/agent/transcript.jsonl`,
-  or Claude Code's transcript under their `~/.claude/projects/`), or have the user log
-  a fresh `CLAUDE_CONFIG_DIR` in (`! CLAUDE_CONFIG_DIR=<dir> claude auth login`, never
-  with the person's own directory) and send a message through it. Then recognise
-  that error in the panel with its fix, and have `studioz login` take the person
-  through the step. deckz isn't the place: `deckz setup` has no login step (its
-  Claude step installs hooks) and the agent is studioz's.
-- **Tried for real:** on `studioz-dev`, studioz started with `CLAUDE_CONFIG_DIR`
-  pointing at an empty directory (the agent's environment and `claude auth status`
-  inherit it): the panel's login paragraph; then the stale-cache path in the tests
-  (a `Login` saying yes, the fake client sending `authentication_failed`).
+Increment 1 (logging in) is done (its entry under phase 7); next is increment 2
+(links in new tabs), whose entry names each place. Logging in on a scratch
+`CLAUDE_CONFIG_DIR` (empty) never touches the person's own login; a model that
+doesn't exist (`studioz --model claude-nonexistent-9`) and a bogus session id in a
+workspace's `.run/studioz/agent/session` give real errors at no cost.
 
 ### Starting phase 4
 
@@ -1839,30 +1794,48 @@ The user's notes from watching the colleague's first session (the one phase 6
 measured), each with what the code does today. Each increment is usable on its own;
 the first one first, since it stops a newcomer before anything else works.
 
-1. **Logging in, and the first message.** Three ways the agent's first use fails
-   with a message that doesn't say what to do:
-   - **Not logged in, the error says "check stderr".** Sending a message ends on
-     "L'agent s'est arrêté" with the SDK's exception, which only points to Claude
-     Code's stderr. Two causes to fix: `Login.status` keeps a "logged in" for five
-     minutes (`app.Login`), so the panel lets the person send after the login went;
-     and nothing collects Claude Code's stderr. `ClaudeAgentOptions(stderr=…)` takes a
-     callback: keep its last lines, show the meaningful one, and on a failed turn
-     check the login again at once (`Login.checked` reset), so the panel shows its
-     login help instead.
-   - **`studioz login` says "Login successful" after a wrong code.** That's
-     `claude auth login --claudeai`'s own output (`cli.login` only passes its exit
-     code on). Check what it really exits with on a wrong code; either way, after it
-     studioz runs `claude auth status --json` (`agent.logged_in`) and says the truth
-     in French: connected as whom, or that it failed and to run `studioz login`
-     again; exit 1 when it failed.
-   - **The terms never accepted.** A Claude Code never started in a terminal hasn't
-     had its terms accepted, and the agent's first message fails with a cryptic
-     error. Get its exact text, then: `studioz login` brings the person through it
-     (or says to run `claude` once in a terminal and accept), and the panel
-     recognises the error and names that fix.
-   Tests: the fake client failing with a stderr line, a login check returning false
-   after a failure, `studioz login` with a fake `claude`. What was reproduced, and
-   where each piece is: "Starting phase 7", near the top.
+1. **Logging in, and the first message**: done 2026-10-22. **Found:** through the
+   SDK's client (studioz's, not `-p`), Claude Code 2.1.283 doesn't stop when it isn't
+   logged in: it answers each message with an `AssistantMessage` whose `error` is
+   `authentication_failed` and whose text is "Not logged in · Please run /login",
+   then an `is_error` result, and stays up. The panel showed that English line twice
+   (as the agent's text, then as "Le tour s'est arrêté sur une erreur"). A wrong model
+   comes the same way (`model_not_found`, a value the SDK's `AssistantMessageError`
+   doesn't list) with a diagnostic line on stderr. The SDK raises its "Check stderr
+   output for details" (a constant) only when Claude Code exits non-zero without a
+   result; with a result, it raises `ResultError` naming it. One such exit found: a
+   session Claude Code doesn't have (another machine's, a cleared `~/.claude`), which
+   fails at every message, its cause on stderr only ("No conversation found with
+   session ID"). **Done:** an API error (`agent._API_ERRORS`: `authentication_failed`,
+   `billing_error`, `model_not_found`, `server_error`, a generic one for the others; a
+   limit stays a pause) is one entry, its fix in French first ("Claude Code n'est pas
+   connecté à votre compte : dans un terminal, depuis le dépôt, lancez « uv run studioz
+   login », puis renvoyez votre message"), Claude Code's words under it, and no second
+   entry from the result. `options(stderr=…)` keeps Claude Code's last 20 lines per
+   turn; a turn ending on an exception shows the last meaningful ones (diagnostics
+   `[claude-code:tag] {json}` only when nothing else), "L'agent s'est arrêté :
+   renvoyez votre message, il redémarre.", and for a lost session "« Nouvelle
+   conversation », en haut du panneau, en commence une autre". Either failure calls
+   `Agents.on_failure`, which `create_app` sets to `Login.forget`: the next status
+   checks the login again, so the panel shows its login paragraph and refuses the
+   next message instead of trusting a five-minute-old "logged in" (the commit
+   message's proposal forgets it too on a failure). `studioz login` runs `claude auth
+   login --claudeai`, then `agent.logged_in()`, and says the truth in French: the
+   account, or why not and to run it again, exiting 1. **Tried for real** on
+   `studioz-dev` (studioz from the worktree, headless Chromium): `--model
+   claude-nonexistent-9` gave the model's entry; a bogus session id in
+   `.run/studioz/agent/session`, the lost-session entry with Claude Code's line; with
+   `CLAUDE_CONFIG_DIR` an empty directory, the panel's login paragraph (shown once the
+   first `auth status` returned, between 3 and 10 s after a fresh start) and the
+   message refused (409). The `authentication_failed` path itself, from the tests only
+   (the fake client sends what the SDK repro showed): logging the person's own
+   Claude Code out was not an option, and a copy of their credentials could rotate
+   the refresh token under them. **Left:** what `claude auth login` exits with after
+   a wrong code (interactive: `! CLAUDE_CONFIG_DIR=<empty dir> uv run studioz login`,
+   a wrong code; studioz no longer depends on it); the terms never accepted, still
+   not reproduced (it needs a fresh account's first login): its words now show under
+   "L'agent s'est arrêté", so the next person to hit it can read them out, and then
+   it gets its own entry and fix.
 2. **Links open in a new tab.** Following a link today replaces studioz's page: in
    the PDF (pdf.js's `PDFLinkService` in `deck.js` is built without
    `externalLinkTarget`, so `LinkTarget.NONE`; give it `LinkTarget.BLANK` and
@@ -1893,6 +1866,8 @@ the first one first, since it stops a newcomer before anything else works.
 
 **Also left** (from the review of what's open, 2026-10-21; not the colleague's
 notes), most useful first:
+- `studioz/tests/test_agent.py::test_the_agent_asks_and_waits_for_the_answer` failed
+  once under `-n auto` (2026-10-22), then passed six runs: another timing test.
 - deckz's Ctrl-C timing tests (`test_interrupt_does_not_wait_for_running_compilations`,
   `test_ctrl_c_stops_the_build_at_once`) fail in the pre-commit hook about one run in
   three: make them wait on the event, not a fixed sleep.
