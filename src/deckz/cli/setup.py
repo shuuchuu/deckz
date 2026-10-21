@@ -15,7 +15,9 @@ def setup(
 ) -> None:
     """Set up a clone of the repository: run it once, and again after pulling.
 
-    Checks deckz's executables (git, pandoc) and those `deckz.yml` lists in
+    Reports the deckz checkout this deckz runs from, if any, when it's
+    behind its upstream branch (after fetching it); checks deckz's
+    executables (git, pandoc) and those `deckz.yml` lists in
     `setup.requires`, saying how to install a missing one; installs the git
     hooks; runs the repository's own `setup.steps` not done yet; and
     reports the videos never rendered. Safe to run any number of times.

@@ -1,7 +1,8 @@
 """Set up a clone of a deckz-managed repository: what `deckz setup` does.
 
 Every step is idempotent and reports what it found or did as a
-[`SetupItem`][deckz.setting_up.SetupItem]: deckz's own executables (git,
+[`SetupItem`][deckz.setting_up.SetupItem]: whether deckz itself, when it runs
+from a git checkout, is behind its upstream branch; deckz's own executables (git,
 pandoc), those the repository declares (`deckz.yml`'s `setup.requires`), the
 git hooks, the repository's own steps (`setup.steps`), and the videos a deck
 build needs rendered. With `check`, nothing is changed: each item only says
@@ -11,8 +12,11 @@ what's missing, and how to fix it.
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
+from os import environ
+from os.path import relpath
+from pathlib import Path
 from shutil import which
-from subprocess import run
+from subprocess import TimeoutExpired, run
 from typing import TYPE_CHECKING
 
 from .hooks_install import HOOKS, hooks_dir, install_claude_hooks, install_hooks
@@ -61,9 +65,11 @@ def setup(
         progress: Advanced while rendering videos.
 
     Returns:
-        One item per requirement, hook set, step and the videos.
+        One item for deckz, then one per requirement, hook set, step and the
+        videos.
     """
-    items = requirements(settings)
+    items = [deckz_checkout(settings)]
+    items.extend(requirements(settings))
     items.append(git_hooks(settings, check=check))
     if claude:
         items.append(claude_hooks(settings, check=check))
@@ -72,6 +78,84 @@ def setup(
         rendered_videos(settings, render=videos and not check, progress=progress)
     )
     return items
+
+
+def _git(checkout: Path, *args: str) -> str | None:
+    result = run(
+        ["git", "-C", str(checkout), *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return None if result.returncode else result.stdout.strip()
+
+
+def _own_checkout() -> Path | None:
+    """The git checkout deckz runs from, if it runs from one (an editable install).
+
+    Returns:
+        Its root, or None.
+    """
+    package = Path(__file__).resolve().parent
+    top = _git(package, "rev-parse", "--show-toplevel")
+    # From a wheel inside a repository's `.venv`, git finds that repository instead.
+    if top is None or Path(top).resolve() / "src" / "deckz" != package:
+        return None
+    return Path(top)
+
+
+def deckz_checkout(
+    settings: "GlobalSettings", checkout: Path | None = None
+) -> SetupItem:
+    """Whether the deckz checkout this deckz runs from is behind its upstream branch.
+
+    A repository installing deckz from a sibling checkout relies on fixes that \
+    may be newer than any release: an old checkout fails in ways that don't \
+    point to it. Fetches the upstream branch first (fetching only moves its \
+    remote-tracking branch, so `check` does it too); offline, compares with \
+    the last fetch. Pulling is left to the person: the checkout may hold their \
+    own work.
+
+    Args:
+        settings: The repository's settings, to name the checkout relative to it.
+        checkout: The checkout to look at; the one deckz runs from by default.
+
+    Returns:
+        Its item: ok when deckz isn't a git checkout or its branch has no upstream.
+    """
+    checkout = checkout or _own_checkout()
+    if checkout is None:
+        return SetupItem("deckz", Status.OK, "not run from a git checkout")
+    upstream = _git(
+        checkout, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"
+    )
+    if not upstream:
+        return SetupItem("deckz", Status.OK, "its branch has no upstream")
+    try:
+        fetched = not run(
+            ["git", "-C", str(checkout), "fetch", "--quiet"],
+            capture_output=True,
+            check=False,
+            timeout=60,
+            env={**environ, "GIT_TERMINAL_PROMPT": "0"},
+        ).returncode
+    except TimeoutExpired:
+        fetched = False
+    behind = int(_git(checkout, "rev-list", "--count", f"HEAD..{upstream}") or 0)
+    if not behind:
+        return SetupItem(
+            "deckz", Status.OK, "" if fetched else "compared with the last fetch"
+        )
+    # `../deckz` for the usual sibling checkout, the full path for any other.
+    path = relpath(checkout, settings.paths.git_dir)
+    if path.count("..") > 1:
+        path = str(checkout)
+    detail = (
+        f"{path} is {behind} commit{'s' if behind > 1 else ''} behind {upstream}"
+        f"{'' if fetched else ' (as of the last fetch)'}, and may lack fixes this "
+        f"repository needs: `git -C {path} pull`, then `deckz setup` again"
+    )
+    return SetupItem("deckz", Status.MISSING, detail)
 
 
 def _requirement(requirement: "SetupRequirement") -> SetupItem:

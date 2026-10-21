@@ -1,5 +1,7 @@
+from os.path import relpath
 from pathlib import Path
 from shutil import copytree
+from subprocess import run
 from typing import Any
 
 from pygit2 import init_repository
@@ -7,7 +9,7 @@ from pytest import fixture, raises
 
 from deckz.cli import main
 from deckz.configuring.settings import GlobalSettings
-from deckz.setting_up import Status, incomplete, setup
+from deckz.setting_up import Status, deckz_checkout, incomplete, setup
 
 _SETUP = """
 setup:
@@ -94,3 +96,58 @@ def test_setup_command_exits_1_while_something_is_missing(
     output = capsys.readouterr().out
     assert "missing no-such-command-deckz" in output
     assert "done    git hooks" in output
+
+
+def _git(cwd: Path, *args: str) -> None:
+    run(["git", "-C", str(cwd), *args], check=True, capture_output=True)
+
+
+@fixture
+def deckz_clone(tmp_path: Path) -> tuple[Path, Path]:
+    # A clone of a deckz "upstream", and a second clone pushing to it.
+    upstream = tmp_path / "upstream.git"
+    _git(tmp_path, "init", "--bare", "--initial-branch=main", str(upstream))
+    pusher = tmp_path / "pusher"
+    _git(tmp_path, "clone", str(upstream), str(pusher))
+    _git(pusher, "commit", "--allow-empty", "-m", "first")
+    _git(pusher, "push", "origin", "HEAD:main")
+    clone = tmp_path / "deckz"
+    _git(tmp_path, "clone", str(upstream), str(clone))
+    return clone, pusher
+
+
+def test_an_up_to_date_deckz_checkout_is_ok(
+    repo: Path, deckz_clone: tuple[Path, Path]
+) -> None:
+    clone, _ = deckz_clone
+
+    item = deckz_checkout(GlobalSettings.from_yaml(repo), clone)
+
+    assert item.status is Status.OK
+
+
+def test_a_deckz_checkout_behind_its_upstream_is_missing(
+    repo: Path, deckz_clone: tuple[Path, Path]
+) -> None:
+    clone, pusher = deckz_clone
+    for message in ("fix", "another fix"):
+        _git(pusher, "commit", "--allow-empty", "-m", message)
+    _git(pusher, "push", "origin", "HEAD:main")
+
+    item = deckz_checkout(GlobalSettings.from_yaml(repo), clone)
+
+    # Seen through the fetch: the clone itself never fetched these commits.
+    assert item.status is Status.MISSING
+    assert "2 commits behind origin/main" in item.detail
+    assert f"`git -C {relpath(clone, repo)} pull`" in item.detail
+
+
+def test_a_deckz_branch_with_no_upstream_is_ok(
+    repo: Path, deckz_clone: tuple[Path, Path]
+) -> None:
+    clone, _ = deckz_clone
+    _git(clone, "switch", "--create", "topic")
+
+    item = deckz_checkout(GlobalSettings.from_yaml(repo), clone)
+
+    assert item.status is Status.OK

@@ -284,7 +284,8 @@ as its French sibling), for `status` and `deckz show affected`.
 
 ### Setting up
 
-`setting_up.py` backs `deckz setup`: each step (executables, git hooks,
+`setting_up.py` backs `deckz setup`: each step (deckz's own checkout
+behind its upstream, executables, git hooks,
 Claude hooks, `deckz.yml`'s `setup.steps`, videos never rendered) returns a
 `SetupItem` (`ok`, `done`, `missing`, `failed`, with how to fix it) and is
 idempotent; `check=True` changes nothing. The CLI prints them

@@ -10,6 +10,9 @@
 `deckz setup` checks what deckz and the repository need, and does what can be done
 for you:
 
+- deckz itself, when it runs from a git checkout (the sibling checkout above): one
+  behind its upstream branch is reported with the `git pull` to run, since the
+  repository may rely on fixes newer than your copy;
 - the executables (git, pandoc, and those the repository lists in `deckz.yml`'s
   `setup.requires`): a missing one is reported with how to install it;
 - the git hooks, which check every commit (see [Before committing](before-you-commit.md));
