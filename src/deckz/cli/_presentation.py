@@ -398,6 +398,7 @@ def announce_build(what: str, langs: "Sequence[Lang]", outputs: "OutputKinds") -
             ("presentations", outputs.presentation),
             ("print handout", outputs.print),
             ("HTML", outputs.html),
+            ("course notes", outputs.course_notes),
         )
         if wanted
     ]

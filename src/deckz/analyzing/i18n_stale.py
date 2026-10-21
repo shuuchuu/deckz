@@ -1,8 +1,9 @@
 """Compute translation staleness from git history and `Lang-sync` trailers.
 
 No stored state (no markers, unlike the repo-side `.sync-commit` files this
-replaces): a French content file or notebook is stale when a commit changed
-it after the last commit that changed its English sibling, unless that
+replaces): a French content file, notebook or course notes chapter is stale
+when a commit changed it after the last commit that changed its English
+sibling, unless that
 commit's `Lang-sync` trailer exempts it (`fr-only`); the English side holds
 symmetrically (`en-only`). A `Lang-sync: pending` commit, or one with no
 trailer, doesn't exempt anything -- it leaves the file stale until a later
@@ -278,7 +279,7 @@ def _pair_staleness(
 def stale_files(
     settings: "GlobalSettings", targets: Sequence[Path] = ()
 ) -> list[StaleFile]:
-    """Every content file or notebook with unported changes relative to its sibling.
+    """Every content file, notebook or course notes chapter with unported changes.
 
     Args:
         settings: The repository's settings.
@@ -426,7 +427,9 @@ class OneSidedChange:
 def lang_pairs(
     settings: "GlobalSettings",
 ) -> list[tuple[PurePosixPath, PurePosixPath]]:
-    """Every fr/en pair the `Lang-sync` rule covers: content files and notebooks.
+    """Every fr/en pair the `Lang-sync` rule covers.
+
+    Content files, notebooks and course notes chapters.
 
     Slow on a large repository (finding the decks' own content directories:
     about a second for 80 decks); a caller checking several sets of paths
@@ -435,7 +438,13 @@ def lang_pairs(
     Returns:
         Each pair, French side first.
     """
-    return [*content_pairs(settings), *notebook_pairs(settings)]
+    from ..course_notes import course_notes_pairs
+
+    return [
+        *content_pairs(settings),
+        *notebook_pairs(settings),
+        *course_notes_pairs(settings),
+    ]
 
 
 def one_sided(

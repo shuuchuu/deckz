@@ -1,8 +1,9 @@
 # Translating
 
 Every content file and lab notebook exists in French and in English: `content/x/a.md`
-and `content/x/en/a.md`, `demo-fr.ipynb` and `demo-en.ipynb`. Titles in `.yml` files
-are either one string (the same in both languages) or a `{fr: ..., en: ...}` map.
+and `content/x/en/a.md`, `demo-fr.ipynb` and `demo-en.ipynb`, and so does every course
+notes chapter (`course-notes/x/a.md` and `course-notes/x/en/a.md`). Titles in `.yml`
+files are either one string (the same in both languages) or a `{fr: ..., en: ...}` map.
 
 ## Committing in one language
 

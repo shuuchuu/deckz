@@ -271,6 +271,21 @@ new`: the files a new deck, shared section or lab notebook pair needs, in
 both languages, from the repository's `templates/scaffold/` when present,
 refusing (`ScaffoldRefusedError`) to overwrite anything.
 
+### Course notes
+
+`course_notes.py` backs `deckz run course-notes` and `deckz show course-notes`: a
+deck's course notes are its own tree (`chapters_deck`), the deck's parsed tree with
+each `File` replaced by its chapter (`paths.course_notes_dir`, mirroring the content
+directory, `en/` siblings included; `deckz.yml`'s `course_notes.skip`/`same_as`),
+built by `pipelines.course_notes_targets` with the deck's own settings and
+`basedirs` rooted at the course notes directory, through the deck builder's
+`CompileType.CourseNotes` (its own `Format`, so its own main template,
+`paths.jinja2_course_notes_main_template`, and output dir,
+`paths.course_notes_pdf_dir`, which `stale_pdfs` and `upload` never glob).
+`course_notes_pairs` adds the chapters to `i18n_stale.lang_pairs`, so `i18n stale`,
+the commit-msg hook and the Stop hook follow them; `course-notes-files` and
+`course-notes-pairs` are deferred built-in checks.
+
 ### Status
 
 `status.py` backs `deckz status`: one `StatusSection` per concern (checks,

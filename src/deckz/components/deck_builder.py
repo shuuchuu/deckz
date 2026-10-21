@@ -48,10 +48,15 @@ _logger = getLogger(__name__)
 
 
 class Format(Enum):
-    """What a compilation produces: a PDF through Typst, or an HTML directory."""
+    """What a compilation produces.
+
+    A PDF through Typst, an HTML directory, or course notes, a PDF through \
+    Typst with their own main template.
+    """
 
     Typst = "typst"
     Html = "html"
+    CourseNotes = "course-notes"
 
 
 class CompileType(Enum):
@@ -59,10 +64,15 @@ class CompileType(Enum):
     Presentation = "presentation"
     PrintHandout = "print-handout"
     Html = "html"
+    CourseNotes = "course-notes"
 
     @property
     def format(self) -> Format:
-        return Format.Html if self is CompileType.Html else Format.Typst
+        if self is CompileType.Html:
+            return Format.Html
+        if self is CompileType.CourseNotes:
+            return Format.CourseNotes
+        return Format.Typst
 
 
 @dataclass(frozen=True)
@@ -181,6 +191,8 @@ class DeckBuilder(DeckBuilderProtocol):
         renderer: RendererProtocol,
         progress: ProgressReporterProtocol,
         build_part_handouts: bool = True,
+        build_course_notes: bool = False,
+        course_notes_suffix: str = CompileType.CourseNotes.value,
     ):
         self._variables = variables
         self._build_presentation = build_presentation
@@ -188,6 +200,8 @@ class DeckBuilder(DeckBuilderProtocol):
         self._build_print = build_print
         self._build_html = build_html
         self._build_part_handouts = build_part_handouts
+        self._build_course_notes = build_course_notes
+        self._course_notes_suffix = course_notes_suffix
         self._deck_name = deck.name
         self._parts_slides = _SlidesNodeVisitor(basedirs).process(deck)
         self._dependencies = PartDependenciesNodeVisitor().process(deck)
@@ -257,8 +271,8 @@ class DeckBuilder(DeckBuilderProtocol):
         items = self._list_items()
         if not items:
             self._logger.warning(
-                "Nothing to compile: handout, presentation, print and html are all "
-                "disabled"
+                "Nothing to compile: handout, presentation, print, html and course "
+                "notes are all disabled"
             )
             return True
         self._render_fingerprints = {
@@ -304,10 +318,15 @@ class DeckBuilder(DeckBuilderProtocol):
     def _name_compile_item(
         self, compile_type: CompileType, name: PartName | None = None
     ) -> str:
+        suffix = (
+            self._course_notes_suffix
+            if compile_type is CompileType.CourseNotes
+            else compile_type.value
+        )
         return (
-            f"{self._deck_name}-{name}-{compile_type.value}"
+            f"{self._deck_name}-{name}-{suffix}"
             if name
-            else f"{self._deck_name}-{compile_type.value}"
+            else f"{self._deck_name}-{suffix}"
         ).lower()
 
     def _list_items(self) -> dict[str, CompileItem]:
@@ -325,6 +344,10 @@ class DeckBuilder(DeckBuilderProtocol):
         if self._build_html:
             to_compile[self._name_compile_item(CompileType.Html)] = CompileItem(
                 all_slides, all_dependencies, CompileType.Html, True
+            )
+        if self._build_course_notes:
+            to_compile[self._name_compile_item(CompileType.CourseNotes)] = CompileItem(
+                all_slides, all_dependencies, CompileType.CourseNotes, True
             )
         for name, slides in self._parts_slides.items():
             dependencies = self._dependencies[name]

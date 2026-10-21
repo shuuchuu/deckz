@@ -380,6 +380,56 @@ def lab_urls(settings: "GlobalSettings") -> list[str]:
     return problems
 
 
+def course_notes_files(settings: "GlobalSettings") -> list[str]:
+    # Each course notes chapter writes out an existing shared content file, at
+    # its path, and `course_notes.same_as` names content files, none of which
+    # has a chapter of its own (see `deckz.course_notes`).
+    from ..course_notes import chapter_path, chapters
+
+    paths = settings.paths
+    git_dir = paths.git_dir
+    extension = settings.file_extensions[0] if settings.file_extensions else ".md"
+
+    def exists(path: str) -> bool:
+        return (paths.content_dir / f"{path}{extension}").is_file()
+
+    found = list(chapters(settings))
+    problems = [
+        f"{_rel(chapter_path(settings, path, lang), git_dir)}: no "
+        f"{_rel(paths.content_dir, git_dir)}/{path}{extension}: name a chapter "
+        "after the content file it writes out (move it after a renamed one)"
+        for path, lang in found
+        if not exists(path)
+    ]
+    written = {path for path, _ in found}
+    for path, target in settings.course_notes.same_as.items():
+        problems.extend(
+            f"deckz.yml: course_notes.same_as {path}: no content file {name}"
+            for name in (path, target)
+            if not exists(name)
+        )
+        if path in written:
+            problems.append(
+                f"{_rel(chapter_path(settings, path, 'fr'), git_dir)}: "
+                f"course_notes.same_as says {target}'s chapter covers {path}: "
+                "remove one of them"
+            )
+    return problems
+
+
+def course_notes_pairs(settings: "GlobalSettings") -> list[str]:
+    # Each course notes chapter exists in fr and en.
+    from ..course_notes import course_notes_pairs as pairs
+
+    git_dir = settings.paths.git_dir
+    problems = []
+    for fr, en in pairs(settings):
+        for path, other, lang in ((fr, en, "English"), (en, fr, "French")):
+            if (git_dir / path).is_file() and not (git_dir / other).is_file():
+                problems.append(f"{path}: no {lang} version ({other})")
+    return problems
+
+
 CHECKS: dict[str, Callable[["GlobalSettings"], list[str]]] = {
     "lab-ids": lab_ids,
     "lab-pairs": lab_pairs,
@@ -391,6 +441,8 @@ CHECKS: dict[str, Callable[["GlobalSettings"], list[str]]] = {
     "jinja-syntax": jinja_syntax,
     "deck-definitions": deck_definitions,
     "lab-urls": lab_urls,
+    "course-notes-files": course_notes_files,
+    "course-notes-pairs": course_notes_pairs,
 }
 
 DEFERRED = (
@@ -401,6 +453,8 @@ DEFERRED = (
     "asset-credits",
     "raw-latex",
     "lab-urls",
+    "course-notes-files",
+    "course-notes-pairs",
 )
 """The built-in checks whose findings don't fail `deckz check` by default.
 

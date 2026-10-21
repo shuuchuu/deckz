@@ -193,6 +193,7 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
         build_part_handouts: bool = True,
         basedirs: tuple[Path, ...] | None = None,
         progress: ProgressReporterProtocol | None = None,
+        build_course_notes: bool = False,
     ) -> DeckBuilderProtocol:
         from ..models import lang_dir
         from .deck_builder import DeckBuilder, Format, OutputFormat
@@ -227,6 +228,8 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
         }
         if build_html:
             formats[Format.Html] = self._html_format(html_dir)
+        if build_course_notes:
+            formats[Format.CourseNotes] = self._course_notes_format()
 
         return DeckBuilder(
             variables=variables,
@@ -236,6 +239,8 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
             build_print=build_print,
             build_html=build_html,
             build_part_handouts=build_part_handouts,
+            build_course_notes=build_course_notes,
+            course_notes_suffix=self._settings.course_notes.suffix,
             formats=formats,
             build_dir=build_dir,
             dirs_to_link=dirs_to_link,
@@ -244,6 +249,26 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
             else (paths.content_dir, assets_dir, paths.current_dir),
             renderer=self.renderer(),
             progress=progress if progress is not None else NullProgress(),
+        )
+
+    def _course_notes_format(self) -> "OutputFormat":
+        from ..exceptions import InvalidConfigurationError
+        from ..models import lang_dir
+        from .deck_builder import OutputFormat
+        from .frame_markers import FrameMarkingConverter
+
+        template = self._settings.paths.jinja2_course_notes_main_template
+        if not template.is_file():
+            msg = f"course notes need a main template, {template} not found"
+            raise InvalidConfigurationError(msg)
+        return OutputFormat(
+            template=template,
+            fragment_suffix=".typ",
+            markdown_converter=FrameMarkingConverter(self.markdown_converter()),
+            compiler=self.compiler(),
+            output_dir=lang_dir(self._settings.paths.course_notes_pdf_dir, self._lang),
+            artifact_suffix=".pdf",
+            output_suffix=".pdf",
         )
 
     def _html_format(self, html_dir: Path) -> "OutputFormat":

@@ -113,3 +113,7 @@ class DeckParsingError(DeckzError):
         super().__init__(f"deck parsing failed: {'; '.join(errors)}")
         self.deck = deck
         self.errors = errors
+
+
+class CourseNotesError(DeckzError):
+    """A deck's course notes can't be built, e.g. no chapter is written yet."""

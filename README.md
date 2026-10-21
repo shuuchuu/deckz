@@ -60,12 +60,18 @@ root (git repository)
 │   └── jinja2
 │       ├── main.typ
 │       ├── main.html
+│       ├── course-notes.typ
 │       └── env.py
 ├── content
 │   └── some-section
 │       ├── some-section.yml
 │       ├── intro.md
 │       └── advanced.md
+├── course-notes
+│   └── some-section
+│       ├── intro.md
+│       └── en
+│           └── intro.md
 ├── assets
 │   ├── img
 │   ├── plt
@@ -97,6 +103,9 @@ root (git repository)
 - `templates/jinja2/main.html`: optional, the Jinja2 template of every
   deck's HTML page, for `--html` builds -- see [HTML
   output](#html-output).
+- `templates/jinja2/course-notes.typ` and `course-notes`: optional, decks'
+  course notes, written-out chapters of the content files -- see [Course
+  notes](#course-notes).
 - `templates/jinja2/env.py`: the Python module that configures the Jinja2
   environment(s) used to render content files -- see [Content files and
   the Jinja2 environment](#content-files-and-the-jinja2-environment).
@@ -731,6 +740,48 @@ left alone.
 Filters can tell the two conversions apart with pandoc's `FORMAT` (e.g.
 `typst` vs `revealjs`), so one Lua filter can handle a construct for both.
 
+### Course notes
+
+A deck's course notes are its written-out reference, read during and after a
+training: a document rather than slides, which explains what the slides only
+outline. They are made of chapters, one per content file: the chapter of
+`content/<path>.md` is `course-notes/<path>.md` (`paths.course_notes_dir`),
+its English version `course-notes/<dir>/en/<name>.md`, in the same Markdown as
+the slides. A chapter is shared like the content file it writes out: every
+deck including that file gets it.
+
+`deckz run course-notes` (from a deck's directory, `--lang`, `--watch` and
+`--dry-run` as for `deckz run`) compiles the deck's course notes: its parts
+and sections, each content file replaced by its chapter -- once, where the
+first file it covers comes --, without the files that have none (it lists
+them), rendered and converted like the deck's own files, through the
+repository's own main template, `templates/jinja2/course-notes.typ`
+(`paths.jinja2_course_notes_main_template`, same context as `main.typ`). The
+PDF is `pdf/course-notes/<deck>-course-notes.pdf` (`paths.course_notes_pdf_dir`;
+`pdf/course-notes/en/` in English), which `--sync` and `deckz upload` leave
+alone. `deckz show course-notes` lists each content file of the deck with its
+chapter: `written`, `covered`, `skipped` or `missing`.
+
+`deckz.yml`'s `course_notes` settings:
+
+```yaml
+course_notes:
+  # Content files with no chapter on purpose, as patterns on their paths
+  # relative to content/, without extension (`PurePosixPath.full_match`).
+  skip: ["about/**", "**/quiz*"]
+  # A content file another one's chapter covers (a short variant).
+  same_as:
+    some-section/intro-short: some-section/intro
+  # The PDF's name: <deck>-<suffix>.pdf.
+  suffix: course-notes
+```
+
+Chapters are fr/en pairs like content files: `deckz i18n stale`, the
+`commit-msg` hook's `Lang-sync` trailer and the Claude Code hooks follow
+them. `deckz check` checks that each chapter is named after a content file
+(`course-notes-files`, which also checks `same_as`) and exists in both
+languages (`course-notes-pairs`).
+
 ### Upgrading from 31.x (`clean content`)
 
 `deckz clean content` is gone: it deleted every content file no deck
@@ -924,7 +975,10 @@ The main commands:
   file's Jinja parsing with `templates/jinja2/env.py`'s environment, its filters
   and tests known to it (`jinja-syntax`: a broken tag otherwise fails only the
   build), no hand-written
-  link to the configured lab-publishing remote (`lab-urls`) -- plus, if
+  link to the configured lab-publishing remote (`lab-urls`), course notes
+  chapters named after a content file and in both languages
+  (`course-notes-files`, `course-notes-pairs`, see [Course
+  notes](#course-notes)) -- plus, if
   `templates/checks.py` defines a `checks(settings)` function, the target
   repo's own, merged in under their own names (see
   `GlobalPaths.checks_module`). `--staged` checks the git index's staged
@@ -997,6 +1051,9 @@ The main commands:
 - `deckz show settings` / `deckz show variables` / `deckz show paths`:
   print the resolved settings/variables/file paths for the current
   directory.
+- `deckz run course-notes` / `deckz show course-notes`: compile the current
+  deck's course notes / list its content files with their chapters (see
+  [Course notes](#course-notes)).
 - `deckz show frames [PDF] [--lang] [--json]`: each page of a built deck
   PDF (default: the deck's whole handout) with the content file and line
   of its frame's `# Title`, and its title; title, outline and divider
