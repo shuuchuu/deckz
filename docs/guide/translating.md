@@ -36,4 +36,5 @@ quick.
   else, even what you've staged.
 - `deckz i18n missing-en --workdir <deck>` (`--all` for every deck) lists the files
   and titles with no English version; an English build fails on them.
-- `deckz status` shows the backlog in one line.
+- `deckz status` lists the English gaps of the decks your changes reach, and shows
+  the backlog in one line; `deckz status <deck>` lists a deck's gaps.

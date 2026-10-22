@@ -519,6 +519,15 @@ variable whose translation map has no `en` key (`i18n_coverage`), each with its 
 `deckz status DECK` lists the same for its deck. `affected_decks` is computed once,
 for this section and Built decks.
 
+**Status (2026-10-22):** done. `status.english_gap_items` groups each gap once, with
+the decks whose English build it fails, and the summary counts them. A new French file
+of a deck shows as its gap only, not also as an uncommitted one-sided change. A deck
+that doesn't parse is skipped (`deck-definitions` reports it). On slides, `deckz status
+--no-checks --since HEAD~15` reaches 40 decks, finds no gap, and takes as long as
+before (16.5 s, against 17.7 s). On a scratch worktree, a new `cv3` file and a section
+title without `en:` showed in `deckz status` and `deckz status decks/eni/cv3`, each
+with its fix.
+
 ### 9.2 The upload gate maps a problem in an asset to the decks showing it
 
 8.3 left `asset-credits` (and any plugin check naming a file under `assets/`) out of

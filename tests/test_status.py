@@ -6,11 +6,12 @@ from typing import Any
 from pytest import fixture
 
 from deckz.cli import main
-from deckz.configuring.settings import GlobalSettings
+from deckz.configuring.settings import DeckSettings, GlobalSettings
 from deckz.stamps import digest, write_stamp
 from deckz.status import (
     changed_paths,
     checks_section,
+    deck_status,
     decks_section,
     status,
     translation_section,
@@ -74,6 +75,54 @@ def test_translation_flags_an_uncommitted_one_sided_edit(repo: Path) -> None:
         "company/bilingual/content/hello.md: changed without "
         "company/bilingual/content/en/hello.md (not committed yet)"
     ]
+
+
+def _english_gaps(repo: Path) -> Path:
+    # A new French file with no English version, and a title with no `en` key.
+    deck = repo / "company" / "bilingual"
+    (deck / "content" / "bye.md").write_text("# Au revoir\n", encoding="utf8")
+    definition = deck / "deck.yml"
+    definition.write_text(
+        definition.read_text().replace("en: Part 1", "")
+        + "      - bye:\n          fr: Au revoir\n          en: Bye\n",
+        encoding="utf8",
+    )
+    return deck
+
+
+def test_translation_lists_the_english_gaps_of_the_reached_decks(repo: Path) -> None:
+    from deckz.analyzing.affected import affected_decks
+
+    _english_gaps(repo)
+    uncommitted, changed = changed_paths(repo, None)
+    decks = affected_decks(repo, [Path(path) for path in changed])
+
+    section = translation_section(_settings(repo), uncommitted, changed, decks)
+
+    assert section.summary.startswith("2 gaps failing an English build; ")
+    assert [(item.text, item.fix) for item in section.items] == [
+        (
+            "company/bilingual/content/bye.md: no English version "
+            "company/bilingual/content/en/bye.md (the English build of "
+            "company/bilingual fails)",
+            "translate it into company/bilingual/content/en/bye.md",
+        ),
+        (
+            "company/bilingual/deck.yml: parts[p1].title has no `en` translation "
+            "(the English build of company/bilingual fails)",
+            "add `en:` to parts[p1].title in company/bilingual/deck.yml",
+        ),
+    ]
+
+
+def test_deck_status_counts_the_english_gaps(repo: Path) -> None:
+    deck = _english_gaps(repo)
+
+    _, sections = deck_status(DeckSettings.from_yaml(deck), checks=False, decks=False)
+
+    translation = next(s for s in sections if s.key == "translation")
+    assert translation.summary == "2 gaps failing its English build"
+    assert len(translation.items) == 2
 
 
 def test_decks_flags_the_reached_decks_outdated_pdfs(repo: Path) -> None:

@@ -160,10 +160,72 @@ def _stale_item(stale: "StaleFile") -> StatusItem:
     )
 
 
+def english_gap_items(
+    settings: "GlobalSettings", decks: Sequence["DeckSettings"]
+) -> list[tuple[str, StatusItem]]:
+    """What fails the English build of `decks`, as `deckz i18n missing-en` says.
+
+    A French file with no `en/` sibling, a title or a variable whose
+    translation map has no `en` key. A gap several decks share is one item.
+
+    Returns:
+        Each gap's file (relative to the repository) and item: files first, \
+        then titles and variables, each by path.
+    """
+    from .analyzing.i18n_coverage import missing_en_files, title_gaps, variable_gaps
+    from .exceptions import DeckzError
+
+    git_dir = settings.paths.git_dir
+
+    def rel(path: Path) -> str:
+        resolved = path.resolve()
+        root = git_dir.resolve()
+        return str(
+            resolved.relative_to(root) if resolved.is_relative_to(root) else path
+        )
+
+    gaps: dict[tuple[int, str, str], tuple[str, str, list[str]]] = {}
+    for deck in decks:
+        where = str(deck.paths.current_dir.relative_to(git_dir))
+        try:
+            files = missing_en_files(deck)
+            titles = [gap for gap in title_gaps(deck) if gap[2] == "missing-en"]
+            variables = variable_gaps(deck)
+        except DeckzError:
+            continue  # It doesn't parse: the `deck-definitions` check says why.
+        for fr_path, en_path in files:
+            text = f"{rel(fr_path)}: no English version {rel(en_path)}"
+            fix = f"translate it into {rel(en_path)}"
+            gaps.setdefault((0, rel(fr_path), ""), (text, fix, []))[2].append(where)
+        for path, key, _ in [*titles, *variables]:
+            text = f"{rel(path)}: {key} has no `en` translation"
+            fix = f"add `en:` to {key} in {rel(path)}"
+            gaps.setdefault((1, rel(path), key), (text, fix, []))[2].append(where)
+    items = []
+    for (_, path, _), (text, fix, where) in sorted(gaps.items()):
+        shown = ", ".join(where[:3]) + (
+            f" and {len(where) - 3} more" if len(where) > 3 else ""
+        )
+        items.append(
+            (path, StatusItem(f"{text} (the English build of {shown} fails)", fix))
+        )
+    return items
+
+
 def translation_section(
-    settings: "GlobalSettings", uncommitted: set[str], changed: set[str]
+    settings: "GlobalSettings",
+    uncommitted: set[str],
+    changed: set[str],
+    decks: Sequence["DeckSettings"] = (),
 ) -> StatusSection:
     """What your changes leave to port to the other language, and the backlog.
+
+    Args:
+        settings: The repository's settings.
+        uncommitted: The files the working tree changes.
+        changed: Those, and the files the commits since the base changed.
+        decks: The decks your changes reach, whose English gaps are listed \
+            (`english_gap_items`).
 
     Returns:
         Its section.
@@ -171,6 +233,9 @@ def translation_section(
     from .analyzing.i18n_stale import lang_pairs, one_sided, stale_files
 
     git_dir = settings.paths.git_dir
+    gaps = english_gap_items(settings, decks)
+    # A new French file of a deck is a gap, said once.
+    gap_paths = {path for path, _ in gaps}
     items = [
         StatusItem(
             f"{change.changed_path}: changed without {change.other_path} "
@@ -179,7 +244,9 @@ def translation_section(
             "until ported",
         )
         for change in one_sided(uncommitted, lang_pairs(settings))
+        if str(change.changed_path) not in gap_paths
     ]
+    items += [item for _, item in gaps]
     every = stale_files(settings)
     yours = [stale for stale in every if str(stale.path) in changed]
     items += [_stale_item(stale) for stale in yours]
@@ -195,6 +262,8 @@ def translation_section(
         )
     else:
         backlog = "nothing waits for a port in the repository"
+    if gaps:
+        backlog = f"{_count(len(gaps), 'gap')} failing an English build; {backlog}"
     return StatusSection("Translation", backlog, _capped(items))
 
 
@@ -395,8 +464,17 @@ def videos_section(settings: "GlobalSettings", *, fetch: bool) -> StatusSection:
     return StatusSection("Videos", summary, _capped(items))
 
 
-def decks_section(settings: "GlobalSettings", changed: Iterable[str]) -> StatusSection:
+def decks_section(
+    settings: "GlobalSettings",
+    changed: Iterable[str],
+    decks: Sequence["DeckSettings"] | None = None,
+) -> StatusSection:
     """The built PDFs of the decks your changes reach that don't match them.
+
+    Args:
+        settings: The repository's settings.
+        changed: Your changes.
+        decks: The decks they reach, when already known.
 
     Returns:
         Its section.
@@ -406,7 +484,8 @@ def decks_section(settings: "GlobalSettings", changed: Iterable[str]) -> StatusS
     from .pipelines import deck_targets, outdated_pdfs
 
     git_dir = settings.paths.git_dir
-    decks = affected_decks(git_dir, [Path(path) for path in changed])
+    if decks is None:
+        decks = affected_decks(git_dir, [Path(path) for path in changed])
     if not decks:
         return StatusSection("Built decks", "your changes reach no deck")
     items = []
@@ -456,17 +535,20 @@ def status(
     Returns:
         `(what "your changes" means, the sections)`.
     """
+    from .analyzing.affected import affected_decks
+
     git_dir = settings.paths.git_dir
     base, scope = base_revision(git_dir, since)
     uncommitted, changed = changed_paths(git_dir, base)
+    affected = affected_decks(git_dir, [Path(path) for path in changed])
     sections = {"checks": checks_section(settings, changed)} if checks else {}
     sections |= {
-        "translation": translation_section(settings, uncommitted, changed),
+        "translation": translation_section(settings, uncommitted, changed, affected),
         "labs": labs_section(settings, uncommitted, fetch=fetch),
         "videos": videos_section(settings, fetch=fetch),
     }
     if decks:
-        sections["decks"] = decks_section(settings, changed)
+        sections["decks"] = decks_section(settings, changed, affected)
     return f"{_count(len(changed), 'changed file')}, {scope}", [
         replace(section, key=key) for key, section in sections.items()
     ]
@@ -568,14 +650,22 @@ def deck_status(
         )
     test = reaches(settings)
     stale = [stale for stale in stale_files(settings) if test(stale.path)]
+    gaps = [item for _, item in english_gap_items(settings, [settings])]
+    found = []
+    if gaps:
+        found.append(f"{_count(len(gaps), 'gap')} failing its English build")
+    if stale:
+        found.append(
+            f"{_count(len(stale), 'file')} of the deck waiting for a port to the "
+            "other language"
+        )
     summary = (
-        f"{_count(len(stale), 'file')} of the deck waiting for a port to the "
-        "other language"
-        if stale
+        ", ".join(found)
+        if found
         else "every file of the deck is in sync with its translation"
     )
     sections["translation"] = StatusSection(
-        "Translation", summary, _capped([_stale_item(s) for s in stale])
+        "Translation", summary, _capped([*gaps, *(_stale_item(s) for s in stale)])
     )
     if decks:
         items = _built_items(settings)

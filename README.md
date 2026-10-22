@@ -900,15 +900,16 @@ The main commands:
   committing, teaching or publishing. Your changes are the working tree's
   plus the commits not on the upstream branch yet (`--since REV` to count
   from elsewhere). It lists the content checks' problems (`--no-checks`
-  skips them), what your changes leave to translate and the repository's
-  backlog, lab notebooks and videos not published as committed or
+  skips them), what your changes leave to translate (the English gaps of
+  the decks they reach included, as `deckz i18n missing-en` finds them)
+  and the repository's backlog, lab notebooks and videos not published as committed or
   rendered (compared with their remotes as last fetched; `--fetch` fetches
   them first), and the built PDFs of the decks your changes reach that
   don't match them (`--no-decks` skips them). Each item says how to
   resolve it; `--json` for scripts, each section with a stable `key`.
   `deckz status DECK` reports on one deck instead, whoever made its
   changes: the checks' problems in its files (deferred ones included),
-  its files waiting for a port, and its built PDFs not matching its
+  its English gaps, its files waiting for a port, and its built PDFs not matching its
   content, with their shrunk frames and wrapping lines. `deckz show
   affected PATH...` prints the decks a change to PATHs reaches.
 - `deckz new deck DIR --name NAME --title TITLE`, `deckz new section
