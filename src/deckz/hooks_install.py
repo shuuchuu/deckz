@@ -63,27 +63,38 @@ HOOKS: dict[str, str] = {
     "commit-msg": f"#!/bin/sh\n{_MARKER}\n{deckz_command(_COMMIT_MSG_ARGUMENTS)}\n",
 }
 
-_CLAUDE_HOOKS: dict[str, dict[str, Any]] = {
-    "PreToolUse": {
+_EDIT_TOOLS = "Edit|Write|MultiEdit|NotebookEdit"
+_CLAUDE_HOOKS: list[dict[str, Any]] = [
+    {
+        "event": "PreToolUse",
         "matcher": "Bash",
         "subcommand": "pre-bash",
         "timeout": 10,
     },
-    "PostToolUse": {
-        "matcher": "Edit|Write|MultiEdit",
+    {
+        "event": "PreToolUse",
+        "matcher": _EDIT_TOOLS,
+        "subcommand": "pre-edit",
+        "timeout": 10,
+    },
+    {
+        "event": "PostToolUse",
+        "matcher": _EDIT_TOOLS,
         "subcommand": "post-edit",
         "timeout": 60,
         "statusMessage": "Checking the content file",
     },
-    "SessionStart": {
+    {
+        "event": "SessionStart",
         "subcommand": "session-start",
         "timeout": 30,
     },
-    "Stop": {
+    {
+        "event": "Stop",
         "subcommand": "stop",
-        "timeout": 30,
+        "timeout": 60,
     },
-}
+]
 
 
 def hooks_dir(git_dir: Path) -> Path:
@@ -144,13 +155,13 @@ def install_hooks(git_dir: Path, *, force: bool = False) -> list[Path]:
 def install_claude_hooks(git_dir: Path) -> Path:
     """Add deckz's generic Claude Code hooks to `git_dir`'s `.claude/settings.json`.
 
-    Adds one `{matcher, hooks: [...]}` group per event of `_CLAUDE_HOOKS`
+    Adds one `{matcher, hooks: [...]}` group per hook of `_CLAUDE_HOOKS`
     missing from the file; a hook already calling `deckz hooks <name>` (in
     any form, e.g. an older deckz's bare `deckz hooks stop`) gets the
-    current command instead, so calling this repeatedly, or after the
-    person edited the file by hand, never duplicates an entry. Every other
-    key of an existing file -- other hooks, permissions, anything else --
-    is kept untouched.
+    current command, timeout and matcher instead, so calling this
+    repeatedly, or after the person edited the file by hand, never
+    duplicates an entry. Every other key of an existing file -- other
+    hooks, permissions, anything else -- is kept untouched.
 
     Args:
         git_dir: Root of the deckz-managed repository.
@@ -163,17 +174,19 @@ def install_claude_hooks(git_dir: Path) -> Path:
         json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
     )
     hooks = settings.setdefault("hooks", {})
-    for event, spec in _CLAUDE_HOOKS.items():
-        groups = hooks.setdefault(event, [])
+    for spec in _CLAUDE_HOOKS:
+        groups = hooks.setdefault(spec["event"], [])
         command = deckz_command(f"hooks {spec['subcommand']}")
-        ours = [
-            hook
-            for group in groups
-            for hook in group.get("hooks", [])
-            if f"deckz hooks {spec['subcommand']}" in hook.get("command", "")
-        ]
-        for hook in ours:
-            hook["command"] = command
+        ours = False
+        for group in groups:
+            for hook in group.get("hooks", []):
+                if f"deckz hooks {spec['subcommand']}" not in hook.get("command", ""):
+                    continue
+                ours = True
+                hook["command"] = command
+                hook["timeout"] = spec["timeout"]
+                if "matcher" in spec:
+                    group["matcher"] = spec["matcher"]
         if ours:
             continue
         entry: dict[str, Any] = {

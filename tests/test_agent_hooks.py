@@ -1,4 +1,4 @@
-import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -10,7 +10,12 @@ from deckz.agent_hooks import (
     session_start,
     stop_report,
 )
-from deckz.configuring.settings import ChecksSettings, GlobalPaths, GlobalSettings
+from deckz.configuring.settings import (
+    ChecksSettings,
+    GlobalPaths,
+    GlobalSettings,
+    WorktreeSettings,
+)
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -293,110 +298,41 @@ def test_post_edit_report_skips_opt_in_checks(tmp_path: Path) -> None:
     assert report is None
 
 
-# -- session_start / stop_report ------------------------------------------
-
-
-def _pair(repo: Path) -> tuple[Path, Path]:
-    fr = repo / "content" / "topic" / "topic.md"
-    en = repo / "content" / "topic" / "en" / "topic.md"
-    return fr, en
-
-
-def test_stop_report_is_silent_on_the_first_call(tmp_path: Path) -> None:
+def test_post_edit_report_checks_only_the_edited_file(tmp_path: Path) -> None:
     repo = _init(tmp_path)
-    fr, en = _pair(repo)
-    _write(fr, "fr v1")
-    _write(en, "en v1")
-    _commit(repo, "Add topic")
+    path = repo / "content" / "topic" / "topic.md"
+    _write(path, "# Topic\n\nHello.\n")
+    # Another file's problem, which a repo-wide run would find too.
+    _write(repo / "content" / "other" / "other.md", _RAW_LATEX)
     settings = _settings(repo)
 
-    assert stop_report(settings, {"session_id": "s1"}) is None
-
-
-def test_stop_report_flags_a_one_sided_change(tmp_path: Path) -> None:
-    repo = _init(tmp_path)
-    fr, en = _pair(repo)
-    _write(fr, "fr v1")
-    _write(en, "en v1")
-    _commit(repo, "Add topic")
-    settings = _settings(repo)
-    session_start(settings, {"session_id": "s1"})
-
-    _write(fr, "fr v2")
-
-    report = stop_report(settings, {"session_id": "s1"})
-
-    assert report is not None
-    assert "topic/topic.md" in report
-    assert "didn't" in report
-
-
-def test_stop_report_is_silent_when_both_sides_change(tmp_path: Path) -> None:
-    repo = _init(tmp_path)
-    fr, en = _pair(repo)
-    _write(fr, "fr v1")
-    _write(en, "en v1")
-    _commit(repo, "Add topic")
-    settings = _settings(repo)
-    session_start(settings, {"session_id": "s1"})
-
-    _write(fr, "fr v2")
-    _write(en, "en v2")
-
-    assert stop_report(settings, {"session_id": "s1"}) is None
-
-
-def test_stop_report_does_not_repeat_the_same_finding(tmp_path: Path) -> None:
-    repo = _init(tmp_path)
-    fr, en = _pair(repo)
-    _write(fr, "fr v1")
-    _write(en, "en v1")
-    _commit(repo, "Add topic")
-    settings = _settings(repo)
-    session_start(settings, {"session_id": "s1"})
-    _write(fr, "fr v2")
-    first = stop_report(settings, {"session_id": "s1"})
-    assert first is not None
-
-    second = stop_report(settings, {"session_id": "s1"})
-
-    assert second is None
-
-
-def test_stop_report_respects_stop_hook_active(tmp_path: Path) -> None:
-    repo = _init(tmp_path)
-    fr, en = _pair(repo)
-    _write(fr, "fr v1")
-    _write(en, "en v1")
-    _commit(repo, "Add topic")
-    settings = _settings(repo)
-    session_start(settings, {"session_id": "s1"})
-    _write(fr, "fr v2")
-
-    report = stop_report(settings, {"session_id": "s1", "stop_hook_active": True})
+    report = post_edit_report(settings, {"tool_input": {"file_path": str(path)}})
 
     assert report is None
 
 
-def test_session_start_keeps_an_existing_snapshot(tmp_path: Path) -> None:
+def test_post_edit_report_matches_a_problem_by_its_exact_path(tmp_path: Path) -> None:
     repo = _init(tmp_path)
-    fr, en = _pair(repo)
-    _write(fr, "fr v1")
-    _write(en, "en v1")
-    _commit(repo, "Add topic")
+    path = repo / "content" / "topic.md"
+    _write(path, "# Topic\n\nHello.\n")
+    # Its path ends with the edited file's, which a substring match took for it.
+    _write(repo / "content" / "deep" / "content" / "topic.md", _RAW_LATEX)
     settings = _settings(repo)
-    session_start(settings, {"session_id": "s1"})
-    state_file = repo / ".check" / "hooks-sessions" / "s1.json"
-    before = json.loads(state_file.read_text(encoding="utf8"))
 
-    _write(fr, "fr v2")  # Changes after the snapshot shouldn't alter it.
-    session_start(settings, {"session_id": "s1"})
+    report = post_edit_report(settings, {"tool_input": {"file_path": str(path)}})
 
-    after = json.loads(state_file.read_text(encoding="utf8"))
-    assert after == before
+    assert report is None
 
+
+# -- session_start / stop_report ------------------------------------------
 
 _RAW_LATEX = "# Topic\n\n```{=latex}\nraw\n```\n"
+
+
+def _pair(repo: Path, name: str = "topic") -> tuple[Path, Path]:
+    fr = repo / "content" / name / f"{name}.md"
+    en = repo / "content" / name / "en" / f"{name}.md"
+    return fr, en
 
 
 def _both_sides_committed(repo: Path) -> tuple[GlobalSettings, Path, Path]:
@@ -407,34 +343,142 @@ def _both_sides_committed(repo: Path) -> tuple[GlobalSettings, Path, Path]:
     return _settings(repo), fr, en
 
 
-def test_stop_report_checks_a_content_file_written_without_the_edit_tool(
+def _edit(settings: GlobalSettings, path: Path, text: str) -> str | None:
+    # An edit tool's write, and its PostToolUse hook.
+    _write(path, text)
+    payload = {"session_id": "s1", "tool_input": {"file_path": str(path)}}
+    return post_edit_report(settings, payload)
+
+
+def _worktree(tmp_path: Path) -> tuple[Path, Path]:
+    """A repository with a topic pair committed, and a worktree of it.
+
+    Returns:
+        The main checkout and the worktree, next to each other.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _both_sides_committed(_init(repo))
+    worktree = tmp_path / "repo--x"
+    _git(repo, "worktree", "add", "--quiet", "-b", "ws/x", str(worktree))
+    return repo, worktree
+
+
+def _stop(settings: GlobalSettings, **payload: Any) -> str | None:
+    return stop_report(settings, {"session_id": "s1", **payload})
+
+
+def test_stop_report_flags_a_one_sided_edit(tmp_path: Path) -> None:
+    settings, fr, _ = _both_sides_committed(_init(tmp_path))
+    _edit(settings, fr, "# Topic\n\nUpdated.\n")
+
+    report = _stop(settings)
+
+    assert report is not None
+    assert "content/topic/topic.md (not content/topic/en/topic.md)" in report
+
+
+def test_stop_report_is_silent_when_both_sides_change(tmp_path: Path) -> None:
+    settings, fr, en = _both_sides_committed(_init(tmp_path))
+    _edit(settings, fr, "# Topic\n\nUpdated.\n")
+    _edit(settings, en, "# Topic\n\nUpdated.\n")
+
+    assert _stop(settings) is None
+
+
+def test_stop_report_leaves_files_the_session_did_not_edit(tmp_path: Path) -> None:
+    settings, fr, _ = _both_sides_committed(_init(tmp_path))
+    # Another session's broken, one-sided edit of the same checkout.
+    _write(fr, _RAW_LATEX)
+
+    assert _stop(settings) is None
+
+
+def test_stop_report_flags_a_one_sided_pair_once(tmp_path: Path) -> None:
+    settings, fr, _ = _both_sides_committed(_init(tmp_path))
+    _edit(settings, fr, "# Topic\n\nUpdated.\n")
+    assert _stop(settings) is not None
+
+    assert _stop(settings) is None
+    _edit(settings, fr, "# Topic\n\nUpdated again.\n")
+    assert _stop(settings) is None
+
+
+def test_stop_report_respects_stop_hook_active(tmp_path: Path) -> None:
+    settings, fr, _ = _both_sides_committed(_init(tmp_path))
+    _edit(settings, fr, "# Topic\n\nUpdated.\n")
+
+    assert _stop(settings, stop_hook_active=True) is None
+
+
+def test_stop_report_lists_ten_paths_at_most(tmp_path: Path) -> None:
+    repo = _init(tmp_path)
+    names = [f"topic{i:02}" for i in range(12)]
+    for name in names:
+        for path in _pair(repo, name):
+            _write(path, "# Topic\n")
+    _commit(repo, "Add topics")
+    settings = _settings(repo)
+    for name in names:
+        _edit(settings, _pair(repo, name)[0], "# Topic\n\nUpdated.\n")
+
+    report = _stop(settings)
+
+    assert report is not None
+    assert "topic09/topic09.md" in report
+    assert "topic10/topic10.md" not in report
+    assert "… and 2 more" in report
+
+
+def test_stop_report_checks_a_worktree_file_written_without_the_edit_tool(
     tmp_path: Path,
 ) -> None:
-    settings, fr, en = _both_sides_committed(_init(tmp_path))
-    session_start(settings, {"session_id": "s1"})
+    _, worktree = _worktree(tmp_path)
+    settings = _settings(worktree)
+    fr, en = _pair(worktree)
     # E.g. `cat >> file` from Bash: no PostToolUse hook saw it.
     _write(fr, _RAW_LATEX)
     _write(en, "# Topic\n\nUpdated.\n")
 
-    report = stop_report(settings, {"session_id": "s1"})
+    report = _stop(settings)
 
     assert report is not None
-    assert "content/topic/topic.md: raw-latex" in report
+    assert "content/topic/topic.md:\n  [raw-latex]" in report
     assert "content/topic/en/topic.md" not in report
     assert "one side only" not in report
-    # Reported once, like a one-sided change.
-    assert stop_report(settings, {"session_id": "s1"}) is None
+    # Reported once, until the file changes again.
+    assert _stop(settings) is None
+
+
+def test_stop_report_flags_a_worktree_commit_changing_one_side(tmp_path: Path) -> None:
+    _, worktree = _worktree(tmp_path)
+    fr, _ = _pair(worktree)
+    _write(fr, "# Topic\n\nUpdated.\n")
+    _commit(worktree, "Update the French topic")
+
+    report = _stop(_settings(worktree))
+
+    assert report is not None
+    assert "one side only in this worktree" in report
+
+
+def test_stop_report_leaves_the_main_checkout_changes(tmp_path: Path) -> None:
+    repo, worktree = _worktree(tmp_path)
+    fr, _ = _pair(repo)
+    _write(fr, _RAW_LATEX)  # Uncommitted in the main checkout,
+    _commit(repo, "Break the French topic")  # then committed there.
+    _write(fr, "# Topic\n\nAgain.\n")
+
+    assert _stop(_settings(worktree)) is None
 
 
 def test_stop_report_skips_what_post_edit_found_clean(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    settings, fr, en = _both_sides_committed(_init(tmp_path))
-    session_start(settings, {"session_id": "s1"})
-    for path in (fr, en):
-        _write(path, "# Topic\n\nUpdated.\n")
-        payload = {"session_id": "s1", "tool_input": {"file_path": str(path)}}
-        assert post_edit_report(settings, payload) is None
+    _, worktree = _worktree(tmp_path)
+    settings = _settings(worktree)
+    for path in _pair(worktree):
+        assert _edit(settings, path, "# Topic\n\nUpdated.\n") is None
 
     def unexpected(*_: Any) -> None:
         msg = "checked again"
@@ -442,13 +486,42 @@ def test_stop_report_skips_what_post_edit_found_clean(
 
     monkeypatch.setattr("deckz.agent_hooks._content_problems", unexpected)
 
-    assert stop_report(settings, {"session_id": "s1"}) is None
+    assert _stop(settings) is None
 
 
-def test_stop_report_leaves_other_sessions_uncommitted_files(tmp_path: Path) -> None:
+def test_stop_report_is_silent_in_a_main_checkout_agents_cannot_change(
+    tmp_path: Path,
+) -> None:
     settings, fr, _ = _both_sides_committed(_init(tmp_path))
-    # Another session's broken, uncommitted edit, there before this session.
-    _write(fr, _RAW_LATEX)
-    session_start(settings, {"session_id": "s1"})
+    _edit(settings, fr, "# Topic\n\nUpdated.\n")
+    settings = settings.model_copy(
+        update={"worktree": WorktreeSettings(required_for_agents=True)}
+    )
 
-    assert stop_report(settings, {"session_id": "s1"}) is None
+    assert _stop(settings) is None
+
+
+def test_session_start_prunes_old_states(tmp_path: Path) -> None:
+    settings, _, _ = _both_sides_committed(_init(tmp_path))
+    states = tmp_path / ".check" / "hooks-sessions"
+    _write(states / "old.json", "{}")
+    _write(states / "recent.json", "{}")
+    os.utime(states / "old.json", (0, 0))
+
+    session_start(settings, {"session_id": "s1", "cwd": str(tmp_path)})
+
+    assert sorted(path.name for path in states.iterdir()) == ["recent.json"]
+
+
+def test_session_start_tells_a_main_checkout_session_the_rule(tmp_path: Path) -> None:
+    repo, worktree = _worktree(tmp_path)
+    rule = {"worktree": WorktreeSettings(required_for_agents=True)}
+    settings = _settings(repo).model_copy(update=rule)
+
+    context = session_start(settings, {"session_id": "s1", "cwd": str(repo)})
+
+    assert context is not None
+    assert "deckz worktree add" in context
+    assert session_start(_settings(repo), {"cwd": str(repo)}) is None
+    in_worktree = _settings(worktree).model_copy(update=rule)
+    assert session_start(in_worktree, {"cwd": str(worktree)}) is None

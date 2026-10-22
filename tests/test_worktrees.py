@@ -6,7 +6,7 @@ from pytest import raises
 
 from deckz.configuring.settings import GlobalPaths, GlobalSettings, WorktreeSettings
 from deckz.exceptions import WorktreeError
-from deckz.worktrees import add, main_checkout, remove, worktrees
+from deckz.worktrees import add, land, main_checkout, remove, worktrees
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -206,3 +206,45 @@ def test_remove_refuses_an_unknown_worktree(tmp_path: Path) -> None:
 
     with raises(WorktreeError, match="no worktree named"):
         remove(_settings(main), "demo")
+
+
+def _commit_in(path: Path, name: str) -> None:
+    _write(path / "figures" / name, f"{name}\n")
+    _git(path, "add", f"figures/{name}")
+    _git(path, "commit", "-m", f"Add {name}")
+
+
+def test_land_rebases_the_branch_and_fast_forwards_the_main_checkout(
+    tmp_path: Path,
+) -> None:
+    main = _make_repo(tmp_path)
+    path = add(_settings(main), "demo").path
+    _commit_in(path, "mine.typ")
+    _commit_in(main, "theirs.typ")  # Another worktree's, landed meanwhile.
+
+    branch, count = land(_settings(path))
+
+    assert (branch, count) == ("main", 1)
+    assert (main / "figures" / "mine.typ").is_file()
+    assert _git(main, "rev-parse", "HEAD") == _git(path, "rev-parse", "HEAD")
+    assert _git(main, "rev-list", "--merges", "--count", "HEAD").strip() == "0"
+
+
+def test_land_refuses_outside_a_worktree(tmp_path: Path) -> None:
+    main = _make_repo(tmp_path)
+
+    with raises(WorktreeError, match="not in a worktree"):
+        land(_settings(main))
+
+
+def test_land_aborts_a_conflicting_rebase(tmp_path: Path) -> None:
+    main = _make_repo(tmp_path)
+    path = add(_settings(main), "demo").path
+    for checkout in (path, main):
+        _write(checkout / "figures" / "fig.typ", f"{checkout.name}\n")
+        _git(checkout, "commit", "-am", "Change the figure")
+
+    with raises(WorktreeError, match="rebase by hand"):
+        land(_settings(main), "demo")
+    assert (path / "figures" / "fig.typ").read_text(encoding="utf8") == "repo--demo\n"
+    assert _git(path, "symbolic-ref", "--short", "HEAD").strip() == "ws/demo"

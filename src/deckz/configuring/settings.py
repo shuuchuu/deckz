@@ -307,6 +307,10 @@ class WorktreeSettings(BaseModel):
     """Paths, relative to the git root, whose ignored files (the builds a \
     fresh checkout lacks, e.g. rendered figures and videos) `deckz worktree \
     add` copies from the main checkout into a new worktree."""
+    required_for_agents: bool = False
+    """Whether a Claude Code session changes the repository only from a \
+    worktree: deckz's hooks then deny it any change in the main checkout, \
+    which every session shares (see `deckz.agent_checkouts`)."""
 
 
 class CiSettings(BaseModel):

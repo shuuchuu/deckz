@@ -17,6 +17,9 @@ checkout has its own environment (`deckz setup` there, e.g. `uv sync`, takes
 a second from uv's cache), and what every checkout shares (credentials, one's
 own defaults) goes in the user's `.env` (see `deckz.cli.main`).
 
+`land` rebases a worktree's branch onto the main checkout's, then
+fast-forwards the main checkout to it: the history stays linear.
+
 `remove` refuses while the worktree holds work nothing else has:
 uncommitted changes, or commits on no other branch, local or remote.
 """
@@ -258,6 +261,64 @@ def remove(settings: "GlobalSettings", name: str, *, force: bool = False) -> boo
         return True
     _git(main, "branch", "-D", worktree.branch)
     return False
+
+
+def land(settings: "GlobalSettings", name: str | None = None) -> tuple[str, int]:
+    """Put the worktree `name`'s commits on the main checkout's branch.
+
+    Rebases its branch onto the main checkout's (linear history), then
+    fast-forwards the main checkout to it, which updates the main checkout's
+    files: git refuses if one of them has an uncommitted change there.
+
+    Args:
+        settings: The settings of any checkout of the repository.
+        name: The worktree's name; None for the one running the command.
+
+    Returns:
+        The main checkout's branch, and how many commits it gained.
+
+    Raises:
+        WorktreeError: If there's no such worktree, the rebase conflicts or \
+            the fast-forward is refused.
+    """
+    found = {w.name: w for w in worktrees(settings)}
+    if name is None:
+        here = settings.paths.git_dir.resolve()
+        name = next((n for n, w in found.items() if w.path.resolve() == here), None)
+        if name is None:
+            msg = "not in a worktree: name the one to land"
+            raise WorktreeError(msg)
+    if name not in found:
+        names = ", ".join(found) or "none"
+        msg = f"no worktree named {name!r} (worktrees: {names})"
+        raise WorktreeError(msg)
+    worktree = found[name]
+    main = main_checkout(settings.paths.git_dir)
+    target = _git(main, "symbolic-ref", "--short", "HEAD").strip()
+    try:
+        _git(worktree.path, "rebase", "--quiet", target)
+    except WorktreeError as error:
+        subprocess.run(
+            ["git", "-C", str(worktree.path), "rebase", "--abort"],
+            capture_output=True,
+            check=False,
+        )
+        msg = (
+            f"rebasing {worktree.branch} onto {target} failed ({error}): commit "
+            f"its uncommitted changes, or rebase by hand (`git rebase {target}` "
+            f"in {worktree.path}), resolve the conflicts, and land again"
+        )
+        raise WorktreeError(msg) from error
+    count = int(_git(main, "rev-list", "--count", f"HEAD..{worktree.branch}"))
+    try:
+        _git(main, "merge", "--quiet", "--ff-only", worktree.branch)
+    except WorktreeError as error:
+        msg = (
+            f"fast-forwarding {target} in {main} was refused ({error}): an "
+            "uncommitted change there touches one of the landed files"
+        )
+        raise WorktreeError(msg) from error
+    return target, count
 
 
 def _refusal(worktree: Worktree) -> str:

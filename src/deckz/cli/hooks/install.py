@@ -15,14 +15,17 @@ def install(*, force: bool = False, ci: bool = False, workdir: Path = Path()) ->
     unless `force` is passed.
 
     Also adds deckz's generic Claude Code hooks to `.claude/settings.json`
-    (`deckz hooks pre-bash`/`post-edit`/`session-start`/`stop`, see
-    `deckz.agent_hooks`): denying a Bash command that would stage
+    (`deckz hooks pre-bash`/`pre-edit`/`post-edit`/`session-start`/`stop`,
+    see `deckz.agent_hooks`): denying a Bash command that would stage
     everything or discard uncommitted work, checking an edited content
-    file, and flagging a fr/en pair changed on one language side only
-    during the session. Safe to call repeatedly: an event deckz already
-    registered is left as is, every other key of the file untouched. A
-    target repo's own `templates/hooks.py` (`GlobalPaths.hooks_module`)
-    can add further Bash denials.
+    file, and flagging a fr/en pair changed on one language side only, in
+    a worktree or by the session's edits. With `deckz.yml`'s
+    `worktree.required_for_agents`, they also keep agents from changing
+    the main checkout (see `deckz.agent_checkouts`). Safe to call
+    repeatedly: a hook deckz already registered gets the current command,
+    timeout and matcher, every other key of the file untouched. A target
+    repo's own `templates/hooks.py` (`GlobalPaths.hooks_module`) can add
+    further Bash denials.
 
     Args:
         force: Overwrite an existing git hook (or with --ci, workflow) even
