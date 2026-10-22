@@ -239,6 +239,21 @@ These rules are enforced today only by what an agent remembers (reviewed in slid
   from jsDelivr instead of inlining 3.5 MB per report. Today that step is only in a
   memory note.
 
+  **Status (2026-10-22):** done. `labs.outputs.hooks` maps a name to a `run` command
+  (no shell, from the git root, given the notebook's path as its last argument) and
+  optional `notebooks` globs, relative to the notebooks directory. `write_outputs`
+  runs the matching hooks in order, then writes the notebook back in canonical style
+  (`labs.outputs.run_hooks`), so `deckz labs outputs` and `labs gpu pass
+  --write-outputs` both run them. A failing hook raises `LabOutputsHookError`, which
+  names the command to rerun and `deckz labs fmt`; the outputs stay written. A pass
+  reports the failure and writes back the other notebooks, then exits 1. Slides
+  declares `evidently-cdn` (`tools/evidently_cdn.py`, on `**/demo-*.ipynb`). It
+  recognizes the inlined bundle by its sha256: from a table first, else by trying
+  jsDelivr's file for Evidently's latest PyPI releases. Tried on a slides worktree:
+  each demo's reports re-inlined (25 MB for `data-concept-drift`) and written back
+  through `deckz labs outputs`; both came back byte-identical to the committed
+  notebooks (8.6 MB), in 10 s and 3.5 s.
+
 ## Phase 6: CI for the managed repo
 
 **Status (2026-10-10):** done and merged, never run on GitHub
@@ -286,9 +301,9 @@ pointer, the CI workflow (its steps pass in the `shuuchuu/deckz-ci` image; deckz
 gone. Slides 71de77d0 then moved the memory-only rules into the repo (reorganization
 plan phase 7b: `docs/conventions.md`, `docs/decisions.md`, `labs/README.md`, docstrings),
 added `CLAUDE.md`'s "Agents only" section and pointed the skills at the docs and at
-`deckz status`; the `labs gpu` lessons went to this guide (f08ef47). Left: the
-acceptance test, and automating the Evidently outputs rewrite (`labs.outputs.hooks`,
-5.2, still a manual step in slides' `labs/README.md`).
+`deckz status`; the `labs gpu` lessons went to this guide (f08ef47). The Evidently
+outputs rewrite is automated too (`labs.outputs.hooks`, 5.3, 2026-10-22). Left: the
+acceptance test.
 
 Once each phase has shipped:
 

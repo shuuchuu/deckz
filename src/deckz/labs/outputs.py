@@ -7,16 +7,29 @@ copies only the outputs themselves, merging each cell's consecutive stream
 writes into one and resolving carriage returns, so a progress bar is stored
 once, as its final state, as Colab shows it. An output showing a secret
 `deckz labs gpu fetch` redacted (`deckz.labs.gpu.REDACTED`) is dropped.
+
+Then the repository's `labs.outputs.hooks` run on the notebook written, for
+what only the repository knows to do to its outputs (e.g. load a library's
+JavaScript from a CDN instead of embedding it in every report), and the
+notebook is written back in deckz's canonical style, whatever they changed.
 """
 
 import json
+import shlex
+import subprocess
+from logging import getLogger
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..exceptions import LabOutputsMismatchError
+from ..exceptions import LabOutputsHookError, LabOutputsMismatchError
 from .gpu import REDACTED
 from .images import recompress_output_images
-from .notebook import Notebook, cell_source
+from .notebook import Notebook, cell_source, fmt_notebook
+
+if TYPE_CHECKING:
+    from ..configuring.settings import GlobalSettings, LabsOutputsHook
+
+_logger = getLogger(__name__)
 
 _REDACTED_MARK = REDACTED.partition("{")[0]
 
@@ -119,21 +132,28 @@ def write_outputs(
     executed_path: Path,
     notebook_path: Path,
     *,
-    solution_heading: str = "Solution",
+    settings: "GlobalSettings | None" = None,
     recompress_images: bool = True,
     max_image_kb: int = 200,
-) -> None:
+) -> list[str]:
     """Load `notebook_path`, apply `executed_path`'s outputs, and save it.
+
+    Then run the `labs.outputs.hooks` matching it (see `run_hooks`).
 
     Args:
         executed_path: Path to the executed copy, read for its cells' outputs.
         notebook_path: Path to the notebook to update and save.
-        solution_heading: Passed to `Notebook`, to keep its collapsed \
-            sections in sync on save.
+        settings: The repository's settings, for its `labs.solution_heading` \
+            (kept in sync on save) and `labs.outputs.hooks`; none, the \
+            default heading and no hook.
         recompress_images: Passed to `apply_executed_outputs`.
         max_image_kb: Passed to `apply_executed_outputs`.
+
+    Returns:
+        The names of the hooks run.
     """
-    notebook = Notebook(notebook_path, solution_heading=solution_heading)
+    heading = settings.labs.solution_heading if settings else "Solution"
+    notebook = Notebook(notebook_path, solution_heading=heading)
     executed = json.loads(executed_path.read_text(encoding="utf-8"))
     apply_executed_outputs(
         notebook,
@@ -142,3 +162,80 @@ def write_outputs(
         max_image_kb=max_image_kb,
     )
     notebook.save()
+    return run_hooks(notebook_path, settings) if settings else []
+
+
+def _hook_applies(hook: "LabsOutputsHook", path: Path, notebooks_dir: Path) -> bool:
+    if not hook.notebooks:
+        return True
+    resolved, root = path.resolve(), notebooks_dir.resolve()
+    if not resolved.is_relative_to(root):
+        return False
+    relative = resolved.relative_to(root)
+    return any(relative.full_match(pattern) for pattern in hook.notebooks)
+
+
+def run_hooks(notebook_path: Path, settings: "GlobalSettings") -> list[str]:
+    """Run the `labs.outputs.hooks` matching a notebook, then canonicalize it.
+
+    Each hook runs from the git root, given the notebook's path (relative to
+    the git root when under it) as its last argument, in `deckz.yml`'s order.
+
+    Args:
+        notebook_path: The notebook whose outputs were just written.
+        settings: The repository's settings.
+
+    Returns:
+        The names of the hooks run.
+
+    Raises:
+        LabOutputsHookError: If a hook can't start or exits non-zero, or \
+            leaves a notebook that isn't JSON. The notebook keeps what the \
+            hooks before it did.
+    """
+    git_dir = settings.paths.git_dir
+    resolved = notebook_path.resolve()
+    argument = (
+        resolved.relative_to(git_dir.resolve()).as_posix()
+        if resolved.is_relative_to(git_dir.resolve())
+        else str(resolved)
+    )
+    ran: list[str] = []
+    for name, hook in settings.labs.outputs.hooks.items():
+        if not _hook_applies(hook, notebook_path, settings.paths.labs_notebooks_dir):
+            continue
+        command = [*hook.run, argument]
+        _logger.info("Running outputs hook %s: %s", name, shlex.join(command))
+        fix = (
+            f"fix the hook (labs.outputs.hooks in deckz.yml), then run"
+            f" `{shlex.join(command)}` and `deckz labs fmt {argument}` from"
+            f" {git_dir}, or write the outputs back again"
+        )
+        try:
+            proc = subprocess.run(
+                command, cwd=git_dir, capture_output=True, text=True, check=False
+            )
+        except OSError as error:
+            msg = f"{notebook_path}: outputs hook {name} can't run ({error}): {fix}"
+            raise LabOutputsHookError(msg) from error
+        for line in proc.stdout.splitlines():
+            _logger.info("%s: %s", name, line)
+        if proc.returncode:
+            msg = (
+                f"{notebook_path}: outputs hook {name} failed ({proc.returncode}),"
+                f" after its outputs were written: {fix}\n{proc.stdout}{proc.stderr}"
+            )
+            raise LabOutputsHookError(msg.rstrip())
+        ran.append(name)
+    if ran:
+        try:
+            fmt_notebook(notebook_path, heading=settings.labs.solution_heading)
+        except json.JSONDecodeError as error:
+            msg = (
+                f"{notebook_path}: outputs hook(s) {', '.join(ran)} left a notebook"
+                f" that isn't JSON ({error}): fix the hook (labs.outputs.hooks in"
+                " deckz.yml), then restore the notebook (`git checkout`) and write"
+                " the outputs back again"
+            )
+            raise LabOutputsHookError(msg) from error
+    return ran

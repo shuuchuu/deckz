@@ -2,6 +2,7 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import time
 from contextlib import suppress
 from pathlib import Path
@@ -22,6 +23,8 @@ from deckz.configuring.settings import (
     GlobalPaths,
     GlobalSettings,
     LabsGpuSettings,
+    LabsOutputsHook,
+    LabsOutputsSettings,
     LabsSettings,
 )
 from deckz.exceptions import GpuRunError, MissingExtraError
@@ -921,7 +924,7 @@ def _pass(repo: Path, runner: FakeRunner, **kwargs: Any) -> Any:
     kwargs.setdefault("max_hours", 1.0)
     result = gpu_pass.run(
         gpu_run,
-        _settings(repo),
+        kwargs.pop("settings", None) or _settings(repo),
         kwargs.pop("notebooks", None) or [_demo(repo)],
         interval=60,
         report=lines.append,
@@ -997,6 +1000,29 @@ def test_pass_keeps_a_notebook_whose_cell_raised_as_it_was(repo: Path) -> None:
     assert result.written == []
     assert notebook.read_text() == before
     assert f"kept {notebook} as it was: its run failed" in lines
+
+
+def test_pass_writes_every_notebook_back_when_an_outputs_hook_fails(
+    repo: Path,
+) -> None:
+    runner = PassRunner(repo / ".run" / "gpu" / "main" / "out")
+    first, second = _demo(repo), _demo(repo, "demo-en.ipynb")
+    fail_on_fr = "import sys; sys.exit('no report' if 'fr' in sys.argv[-1] else 0)"
+    hook = LabsOutputsHook(run=(sys.executable, "-c", fail_on_fr))
+    settings = GlobalSettings(
+        paths=GlobalPaths(current_dir=repo, git_dir=repo),
+        labs=LabsSettings(outputs=LabsOutputsSettings(hooks={"cdn": hook})),
+    )
+
+    _, result, lines = _pass(
+        repo, runner, notebooks=[first, second], write_outputs=True, settings=settings
+    )
+
+    assert sorted(result.written) == sorted([first, second])
+    assert json.loads(first.read_text())["cells"][0]["outputs"][0]["text"] == ["1\n"]
+    assert len(result.hook_failures) == 1
+    assert "outputs hook cdn failed (1)" in result.hook_failures[0]
+    assert f"ran outputs hook cdn on {second}" in lines
 
 
 def test_pass_destroys_the_machine_at_its_ceiling(repo: Path) -> None:

@@ -81,6 +81,10 @@ class LabOutputsMismatchError(DeckzError):
     """`deckz labs outputs` was given an executed copy with a different cell count."""
 
 
+class LabOutputsHookError(DeckzError):
+    """A `labs.outputs.hooks` command failed on a notebook just written."""
+
+
 class GpuRunError(DeckzError):
     """`deckz labs gpu` failed: no machine rented or booted, or a remote step failed."""
 

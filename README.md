@@ -272,6 +272,28 @@ typst_ignore_system_fonts: true
     `deckz labs outputs` stores no output that showed it. `hook` runs
     before the notebook is sent and once its run is done; notebooks naming
     the same hook run one at a time, even on different machines.
+  - `outputs.hooks`: commands, by name, that `deckz labs outputs` (and
+    `deckz labs gpu pass --write-outputs`) runs on a notebook once it wrote
+    its outputs back, in order, for what only the repository knows to do to
+    them, e.g. load a library's JavaScript from a CDN instead of embedding
+    it in every report:
+
+    ```yaml
+    labs:
+      outputs:
+        hooks:
+          evidently-cdn:
+            run: [uv, run, python, tools/evidently_cdn.py]
+            notebooks: ['mlops/**/demo-*.ipynb']
+    ```
+
+    `run` runs from the repository's root, with no shell, given the
+    notebook's path (relative to the root) as its last argument, and edits
+    the notebook in place; deckz then writes it back in its canonical style.
+    `notebooks` (glob patterns relative to `paths.labs_notebooks_dir`, `**`
+    for any directories; unset, every notebook) limits the hook to the
+    notebooks it applies to. A hook that fails stops the command, naming
+    its fix; the outputs stay written.
 
   The notebooks directory itself (default `{git_dir}/labs/notebooks`) is
   `paths.labs_notebooks_dir`, set like any other path under `paths:`.
@@ -1156,6 +1178,7 @@ The main commands:
   (charts and line art); `--no-recompress` disables this and needs no
   extra dependency, unlike the default, which needs Pillow
   (`deckz[labs]`) only when an image actually needs recompressing.
+  Then it runs the `labs.outputs.hooks` matching the notebook on it.
 - `deckz labs check [--smoke] [--python INTERPRETER] [--container]
   [--timeout SECONDS] NOTEBOOKS...`: structural checks (uncollapsed/empty
   solution sections, stored error outputs) plus an execution of every code
