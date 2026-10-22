@@ -238,6 +238,19 @@ def test_post_edit_report_ignores_a_non_content_extension(tmp_path: Path) -> Non
     assert report is None
 
 
+def test_post_edit_report_ignores_agent_notes(tmp_path: Path) -> None:
+    repo = _init(tmp_path)
+    path = repo / "content" / "CLAUDE.md"
+    _write(path, "# Notes\n\n```{=latex}\nraw\n```\n")
+    settings = _settings(
+        repo, pandoc_command=("pandoc", "--this-flag-does-not-exist", "-t", "typst")
+    )
+
+    report = post_edit_report(settings, {"tool_input": {"file_path": str(path)}})
+
+    assert report is None
+
+
 def test_post_edit_report_flags_a_pandoc_failure(tmp_path: Path) -> None:
     repo = _init(tmp_path)
     path = repo / "content" / "topic" / "topic.md"

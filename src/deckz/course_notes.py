@@ -29,6 +29,7 @@ from .models import (
     Section,
     UnresolvedPath,
 )
+from .utils import content_files
 
 if TYPE_CHECKING:
     from .configuring.settings import GlobalSettings
@@ -185,7 +186,7 @@ def chapters(settings: "GlobalSettings") -> Iterator[tuple[str, Lang]]:
     if not root.is_dir():
         return
     extension = _extension(settings)
-    for path in sorted(root.rglob(f"*{extension}")):
+    for path in content_files(root, (extension,)):
         rel = PurePosixPath(path.relative_to(root).as_posix())
         name = rel.name.removesuffix(extension)
         if rel.parent.name == "en":

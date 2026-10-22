@@ -340,6 +340,8 @@ def test_jinja_syntax_flags_a_broken_tag_and_an_unknown_filter(
         "# A\n\n{{ 'a.svg' | imgae }}\n{% if x is od %}{% endif %}\n",
     )
 
+    _write(tmp_path / "content" / "CLAUDE.md", "# Notes\n\n`{{ x`\n")
+
     problems = jinja_syntax(_settings(tmp_path))
 
     assert len(problems) == 3

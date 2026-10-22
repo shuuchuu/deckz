@@ -25,7 +25,7 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 from ..exceptions import CommitRefusedError, DeckzError, InvalidConfigurationError
-from ..utils import content_dirs
+from ..utils import content_dirs, content_files
 
 if TYPE_CHECKING:
     from ..configuring.settings import GlobalSettings
@@ -149,7 +149,7 @@ def content_pairs(
     for content_dir in content_dirs(git_dir, settings.paths.content_dir):
         if not content_dir.is_dir():
             continue
-        for path in content_dir.rglob("*.md"):
+        for path in content_files(content_dir, (".md",)):
             rel = PurePosixPath(path.relative_to(git_dir).as_posix())
             if "en" in rel.parts:
                 continue

@@ -6,7 +6,7 @@ from dataclasses import replace
 from logging import getLogger
 from multiprocessing import get_context
 from multiprocessing.pool import Pool
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePath, PurePosixPath
 from threading import Lock
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
@@ -377,6 +377,32 @@ def content_dirs(git_dir: Path, content_dir: Path) -> Iterator[Path]:
         [content_dir],
         (settings.paths.local_content_dir for settings in all_deck_settings(git_dir)),
     )
+
+
+# Notes for the coding agents working in their directory (e.g. a `content/CLAUDE.md`
+# telling them how sections are written), never content, wherever they are.
+AGENT_NOTES = frozenset({"AGENTS.md", "CLAUDE.md"})
+
+
+def is_content_file(path: PurePath, file_extensions: Iterable[str]) -> bool:
+    """Whether `path` names a content file, by its name only.
+
+    Returns:
+        True if it has one of `file_extensions` and isn't agent notes.
+    """
+    return path.suffix in file_extensions and path.name not in AGENT_NOTES
+
+
+def content_files(directory: Path, file_extensions: Iterable[str]) -> Iterator[Path]:
+    """Every content file under `directory`, recursively.
+
+    Yields:
+        Each file, by extension in the order of `file_extensions`, then sorted.
+    """
+    for extension in file_extensions:
+        for path in sorted(directory.rglob(f"*{extension}")):
+            if path.name not in AGENT_NOTES:
+                yield path
 
 
 def shared_section_ids(content_dir: Path) -> list[str]:

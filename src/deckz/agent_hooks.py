@@ -275,8 +275,10 @@ def _convert_errors(settings: "GlobalSettings", path: Path) -> str:
 
 
 def _is_content(settings: "GlobalSettings", path: Path) -> bool:
+    from .utils import is_content_file
+
     return (
-        path.suffix in settings.file_extensions
+        is_content_file(path, settings.file_extensions)
         and path.is_relative_to(settings.paths.git_dir)
         and path.is_file()
     )
@@ -415,6 +417,8 @@ def _write_state(state_file: Path, state: dict[str, Any]) -> None:
 
 
 def _snapshot(settings: "GlobalSettings") -> dict[str, Any]:
+    from .utils import is_content_file
+
     git_dir = settings.paths.git_dir
     paths = {str(path) for pair in _pairs(settings) for path in pair}
     # Only the dirty/untracked ones: a clean file's content is already a git
@@ -423,7 +427,8 @@ def _snapshot(settings: "GlobalSettings") -> dict[str, Any]:
     dirty = {
         path
         for path in _dirty_or_untracked(git_dir)
-        if path in paths or PurePosixPath(path).suffix in settings.file_extensions
+        if path in paths
+        or is_content_file(PurePosixPath(path), settings.file_extensions)
     }
     files = {path: _file_hash(git_dir, PurePosixPath(path)) for path in dirty}
     return {"head": _head(git_dir), "files": files, "reported": {}}
@@ -448,12 +453,16 @@ def _session_changes(
         Those paths, and the current hash of every path looked at (empty \
         for a deleted file).
     """
+    from .utils import is_content_file
+
     git_dir = settings.paths.git_dir
     start_head: str = state["head"]
     start_files: dict[str, str] = state["files"]
 
     def watched(path: str) -> bool:
-        return path in pair_of or PurePosixPath(path).suffix in settings.file_extensions
+        return path in pair_of or is_content_file(
+            PurePosixPath(path), settings.file_extensions
+        )
 
     candidates = set(start_files) | {
         path for path in _dirty_or_untracked(git_dir) if watched(path)

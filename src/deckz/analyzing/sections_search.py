@@ -12,7 +12,7 @@ from re import compile as re_compile
 from typing import TYPE_CHECKING
 
 from ..models import Deck, FlavorName, Lang, ResolvedPath, is_lang_map
-from ..utils import load_yaml, shared_section_ids
+from ..utils import AGENT_NOTES, load_yaml, shared_section_ids
 
 if TYPE_CHECKING:
     from ..configuring.settings import GlobalSettings
@@ -132,6 +132,8 @@ def _frame_title_matches(
     matches = []
     files_dir = section_dir / "en" if lang == "en" else section_dir
     for path in sorted(files_dir.glob("*.md")):
+        if path.name in AGENT_NOTES:
+            continue
         text = path.read_text(encoding="utf8")
         for match in _MARKDOWN_HEADING.finditer(text):
             frame_title = match.group(1)
