@@ -587,7 +587,9 @@ def stop_report(settings: "GlobalSettings", payload: dict[str, Any]) -> str | No
             for path in changed
         ):
             return None
-        reported: list[str] = state.setdefault("reported", [])
+        if not isinstance(state.get("reported"), list):  # An older deckz's state.
+            state["reported"] = []
+        reported: list[str] = state["reported"]
         failed: dict[str, str] = state.setdefault("failed", {})
         checked: dict[str, str] = state.setdefault("checked", {})
         pair_of: dict[str, str] = {}

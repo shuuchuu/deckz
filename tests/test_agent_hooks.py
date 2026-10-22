@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -525,3 +526,18 @@ def test_session_start_tells_a_main_checkout_session_the_rule(tmp_path: Path) ->
     assert session_start(_settings(repo), {"cwd": str(repo)}) is None
     in_worktree = _settings(worktree).model_copy(update=rule)
     assert session_start(in_worktree, {"cwd": str(worktree)}) is None
+
+
+def test_stop_report_reads_an_older_deckz_state(tmp_path: Path) -> None:
+    settings, fr, _ = _both_sides_committed(_init(tmp_path))
+    # What a session started before this deckz has: a snapshot.
+    _write(
+        tmp_path / ".check" / "hooks-sessions" / "s1.json",
+        json.dumps({"head": "abc", "files": {}, "reported": {"x.md": "h"}}),
+    )
+    _edit(settings, fr, "# Topic\n\nUpdated.\n")
+
+    report = _stop(settings)
+
+    assert report is not None
+    assert "content/topic/topic.md (not" in report
