@@ -1031,6 +1031,9 @@ The main commands:
   under `<git_dir>/.run/`. `run decks --since REV` compiles only the decks
   the changes since REV (the working tree's included) reach, as `deckz
   show affected --since REV` lists them: before pushing, or nightly in CI.
+  `run decks --report FILE` builds every deck whatever fails, then writes
+  the failures to FILE in Markdown, each with the `deckz run` command
+  reproducing it and its errors, for a person or an agent to fix.
 - `deckz check variables`: statically survey every shared section's every
   named flavor (not just the ones some deck currently uses), with the
   repository-wide `variables.yml`, plus every real deck, with its own
@@ -1121,22 +1124,33 @@ The main commands:
   `.github/workflows/deckz.yml`, a GitHub Actions workflow giving every
   contributor's commits the hooks' checks, installed or not: `deckz check`
   and `deckz hooks check-commits` (the pushed or proposed commits'
-  `Lang-sync` lines, which must be read) on every push and pull request, and `deckz.yml`'s
-  `ci.nightly_checks` every night, then the handouts of the decks the last
-  day's commits reach, in the `ci.nightly_builds` languages (`deckz run
-  decks --since`, every deck when no commit is older than a day). Its `ci`
-  settings: `deckz_repository` and `deckz_ref` (a deckz checked out next to
-  the repository, for one installing it from `../deckz`), `apt_packages`
+  `Lang-sync` lines, which must be read) on every push and pull request,
+  `deckz.yml`'s `ci.nightly_checks` every night, and, on Sundays (or every
+  night), the handouts of the decks the period's commits reach, in the
+  `ci.builds` languages (`deckz run decks --since`, every deck when no
+  commit is older than that). When those fail and `ci.report_to` names
+  someone, `deckz hooks ci-report` opens an issue labeled `deckz-ci` (or
+  comments on the open one) mentioning and assigning them, which GitHub
+  emails them: each failure with the command reproducing it and its
+  errors, written to be pasted to an agent. Its `ci` settings:
+  `deckz_repository` and `deckz_ref` (a deckz checked out next to the
+  repository, for one installing it from `../deckz`), `apt_packages`
   (system packages its dependencies, or its assets builders, need),
-  `nightly_checks`, `nightly_builds` (e.g. `[fr, en]`; none by default, no
-  build), `videos_repository` (the `owner/name` the videos are published
-  to, whose renders the nightly builds fetch first: `deckz videos fetch`),
-  `user_variables` (written as the CI machine's own `variables.yml`: what
-  each person's own file sets, such as a trainer's name, with stand-in
-  values) and `cache_paths` (directories of generated files, such as the assets
-  builders' outputs, kept from one night to the next with
+  `nightly_checks`, `builds` (e.g. `[fr, en]`; none by default, no build),
+  `builds_schedule` (`weekly`, the default, on Sundays at 04:00 UTC, or
+  `nightly`), `videos_repository` (the `owner/name` the videos are
+  published to, whose renders the builds fetch first: `deckz videos
+  fetch`), `user_variables` (written as the CI machine's own
+  `variables.yml`: what each person's own file sets, such as a trainer's
+  name, with stand-in values), `report_to` (GitHub logins) and
+  `cache_paths` (directories of generated files, such as the assets
+  builders' outputs, kept from one build to the next with
   `actions/cache`, so only the stale ones are rebuilt; never one holding
   committed files, which a restore would overwrite).
+- `deckz hooks ci-report REPORTS [--dry-run]`: the scheduled workflow's
+  last step, when its checks or builds fail: REPORTS holds their outputs
+  (`checks.txt`, `builds.md`), turned into the `deckz-ci` issue described
+  above, with the job's `GITHUB_TOKEN`. `--dry-run` prints the body.
 - `deckz show` (alias for `deckz show tree`): show the resolved tree of
   sections and files for the current deck.
 - `deckz show settings` / `deckz show variables` / `deckz show paths`:

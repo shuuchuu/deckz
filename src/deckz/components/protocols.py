@@ -95,6 +95,10 @@ class DeckBuilderProtocol(Protocol):
 
     def build_deck(self) -> bool: ...
 
+    def failures(self) -> list[tuple[str, str]]:
+        """What the last `build_deck` failed to compile: each name and errors."""
+        ...
+
 
 class AssetsBuilderProtocol(Protocol):
     def build_assets(self) -> None: ...
