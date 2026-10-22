@@ -610,8 +610,8 @@ same log lines, and the agent with a fake Agent SDK client.
 
 deckz is how people run a deckz-managed repository, with or without an AI
 agent: a contributor who never uses one must be able to do every routine
-task from `deckz --help` and the docs (`plans/operability.md` holds the
-work in progress). Keep new tooling in line with that:
+task from `deckz --help` and the docs (`plans/archive/operability.md`
+records how it got there). Keep new tooling in line with that:
 
 - **One path for people and agents.** An agent runs the same commands a
   person would. A workflow that exists only as a skill's list of steps is a
