@@ -35,7 +35,7 @@ from pathlib import Path
 from types import FrameType
 from typing import TYPE_CHECKING
 
-from ..exceptions import GpuRunError, WorktreeError
+from ..exceptions import GpuRunError, LabOutputsHookError, WorktreeError
 from .gpu import (
     STOP_SIGNALS,
     GpuRun,
@@ -143,6 +143,8 @@ class PassResult:
     ceiling_reached: bool = False
     written: list[Path] = field(default_factory=list)
     """The notebooks whose outputs were written back."""
+    hook_failures: list[str] = field(default_factory=list)
+    """Why a `labs.outputs.hooks` command failed on a notebook written back."""
 
     @property
     def failed(self) -> list[RunReport]:
@@ -476,10 +478,18 @@ def _write_back(
         if run_report in failed:
             report(f"kept {notebook} as it was: its run failed")
             continue
-        write_outputs(
-            gpu_run.directory / "out" / run_report.path.name,
-            notebook,
-            solution_heading=settings.labs.solution_heading,
-        )
+        # A failing hook mustn't lose the other notebooks' paid-for outputs.
+        try:
+            hooks = write_outputs(
+                gpu_run.directory / "out" / run_report.path.name,
+                notebook,
+                settings=settings,
+            )
+        except LabOutputsHookError as error:
+            result.hook_failures.append(str(error))
+            report(str(error))
+            hooks = None
         result.written.append(notebook)
         report(f"wrote the outputs of {run_report.path.name} into {notebook}")
+        for hook in hooks or ():
+            report(f"ran outputs hook {hook} on {notebook}")

@@ -134,6 +134,26 @@ class LabsGpuSettings(BaseModel):
     a time, across machines: the next one is held until then."""
 
 
+class LabsOutputsHook(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    run: tuple[str, ...]
+    """Command to run from the git root (no shell), given the notebook's \
+    path, relative to the git root, as its last argument. It edits the \
+    notebook in place; deckz then writes it back in its canonical style."""
+    notebooks: tuple[str, ...] = ()
+    """Glob patterns (`**` for any directories), relative to \
+    `paths.labs_notebooks_dir`, of the notebooks the hook runs on; unset, \
+    every notebook."""
+
+
+class LabsOutputsSettings(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    hooks: dict[str, LabsOutputsHook] = Field(default_factory=dict)
+    """Commands, by name, run in order on a notebook once `deckz labs \
+    outputs` (or `deckz labs gpu pass --write-outputs`) wrote its outputs \
+    back, e.g. to shrink what a library's outputs embed."""
+
+
 class LabsSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
     id_metadata_key: str = "shuuchuu.id"
@@ -159,6 +179,8 @@ class LabsSettings(BaseModel):
     `deckz.labs.Notebook` library."""
     gpu: LabsGpuSettings = Field(default_factory=LabsGpuSettings)
     """Machines `deckz labs gpu` rents to run notebooks as Colab would."""
+    outputs: LabsOutputsSettings = Field(default_factory=LabsOutputsSettings)
+    """What `deckz labs outputs` does to a notebook after writing its outputs."""
     link_snippet: str | None = None
     """How a content file links a lab, printed by `deckz labs new` with \
     `{lab}` and `{kind}` filled in, e.g. \

@@ -21,7 +21,8 @@ def outputs(
     final state, as Colab shows it. A large `image/png` output is also
     recompressed (re-encoded as JPEG, or re-saved as an optimized PNG when
     JPEG wouldn't shrink it enough), unless disabled. Then writes NOTEBOOK
-    back in deckz's canonical style.
+    back in deckz's canonical style, and runs the repository's
+    `labs.outputs.hooks` matching it on it (`deckz.yml`).
 
     Args:
         executed: Path to the executed copy, read for its cells' outputs
@@ -37,11 +38,13 @@ def outputs(
     from ...labs.outputs import write_outputs
 
     settings = GlobalSettings.from_yaml(workdir)
-    write_outputs(
+    hooks = write_outputs(
         executed,
         notebook,
-        solution_heading=settings.labs.solution_heading,
+        settings=settings,
         recompress_images=not no_recompress,
         max_image_kb=max_image_kb,
     )
     print(f"Wrote outputs from {executed} into {notebook}")
+    for hook in hooks:
+        print(f"Ran outputs hook {hook}")

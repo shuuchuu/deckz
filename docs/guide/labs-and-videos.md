@@ -20,7 +20,10 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   exits with code 1 when a notebook has a problem, and lists those notebooks last.
 - A hands-on notebook stores no outputs (trainees would see the answers); a demo
   stores those of a full run in its own language: run it, then `deckz labs outputs
-  <executed copy> <notebook>`.
+  <executed copy> <notebook>`. What the repository does to some outputs after that
+  (e.g. load a library's JavaScript from a CDN rather than embed it in every
+  report) is a `labs.outputs.hooks` command in `deckz.yml`, which `deckz labs
+  outputs` runs on each notebook it applies to: nothing to remember.
 - A demo that needs a GPU (or Colab's exact libraries) runs on a rented machine:
   `deckz labs gpu pass <notebooks> --dry-run` says what it would cost now (the GPU
   and its price, each notebook's last run time, the estimate and the ceiling);

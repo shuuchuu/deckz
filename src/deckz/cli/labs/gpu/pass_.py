@@ -47,7 +47,8 @@ def pass_(
         write_outputs: Write each run's outputs back into its notebook
             when it exited 0 with no cell raising (but those tagged
             `raises-exception`) nor shell command failing, as `deckz labs
-            outputs` does (overwrites them; full runs of demos only)
+            outputs` does (overwrites them, then runs `labs.outputs.hooks`;
+            full runs of demos only)
         dry_run: Rent nothing: print the offer it would rent now, each
             notebook's last run time (from the machines' notes) and the
             estimated cost
@@ -65,8 +66,8 @@ def pass_(
         workdir: Path to move into before running the command
 
     Raises:
-        GpuRunError: When a run failed (a cell raised included) or didn't
-            finish.
+        GpuRunError: When a run failed (a cell raised included), didn't
+            finish, or an outputs hook failed on its notebook.
 
     """
     import json as json_module
@@ -103,6 +104,12 @@ def pass_(
     )
     problems = [_failure(run) for run in result.failed]
     problems += [f"{name} didn't finish" for name in result.unfinished]
+    if result.hook_failures:
+        # Each was reported in full as it happened.
+        problems.append(
+            f"outputs hooks failed on {len(result.hook_failures)} notebook(s),"
+            " as reported above"
+        )
     if problems:
         ceiling = (
             " (ceiling reached: raise --max-hours)" if result.ceiling_reached else ""
