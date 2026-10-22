@@ -15,6 +15,7 @@ def run_decks(
     sync: bool = True,
     course_notes: bool = False,
     langs: Langs = ("fr",),
+    since: str | None = None,
     dry_run: bool = False,
     workdir: Path = Path(),
 ) -> None:
@@ -44,11 +45,16 @@ def run_decks(
             paths. English is strict across the whole repository: the first
             deck missing any translation aborts the whole run, before
             anything is compiled
+        since: Only the decks the changes since this revision reach (the
+            working tree's included), as `deckz show affected --since` lists
+            them, e.g. before pushing, or every night in CI
         dry_run: Only print the outputs that would be compiled and the content
             fragments each would re-render, without building anything
         workdir: Path to move into before running the command
 
     """
+    from logging import getLogger
+
     from ...pipelines import OutputKinds, build, decks_targets
     from .._presentation import RichProgress, announce_build, print_plan_of
 
@@ -62,8 +68,13 @@ def run_decks(
         sync=sync,
         course_notes=course_notes,
     )
-    announce_build("every deck", langs, outputs)
-    targets = decks_targets(workdir, langs, course_notes=course_notes)
+    what = "every deck" if since is None else f"the decks changed since {since}"
+    announce_build(what, langs, outputs)
+    targets = decks_targets(workdir, langs, course_notes=course_notes, since=since)
+    if not targets:
+        # Not even the assets: nothing would use them.
+        getLogger(__name__).info("No deck to build")
+        return
     if dry_run:
         print_plan_of(targets, outputs)
     else:

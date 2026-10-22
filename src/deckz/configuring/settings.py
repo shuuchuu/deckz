@@ -15,7 +15,7 @@ from pydantic import (
 
 from .. import app_name
 from ..exceptions import InvalidConfigurationError
-from ..models import SCHEMA_VERSION, SchemaVersion
+from ..models import SCHEMA_VERSION, Lang, SchemaVersion
 from ..utils import dirs_hierarchy, get_git_dir, load_all_yamls
 
 
@@ -327,6 +327,27 @@ class CiSettings(BaseModel):
     nightly_checks: tuple[str, ...] = ()
     """Checks too slow for every push (usually some of `checks.opt_in`), run \
     every night, e.g. `missing-en`."""
+    nightly_builds: tuple[Lang, ...] = ()
+    """Languages the nightly job builds the handouts of the decks the last \
+    day's commits reach in (`deckz run decks --since`), so a deck broken by a \
+    change to shared content shows the next morning; none, no build. The \
+    image has the toolchain deckz needs (pandoc, poppler); `apt_packages` \
+    adds the repository's assets builders'."""
+    videos_repository: str | None = None
+    """GitHub repository (`owner/name`) the videos are published to, which \
+    the nightly builds fetch the renders from first (`deckz videos fetch`): \
+    a deck showing a video needs its render."""
+    user_variables: dict[str, Any] = Field(default_factory=dict)
+    """Written as the CI machine's own `variables.yml` (deckz's user config \
+    directory) before the nightly builds: what each person's own file sets \
+    (a trainer's name, an email), which a template may need to render, \
+    with stand-in values."""
+    cache_paths: tuple[str, ...] = ()
+    """Directories, relative to the repository's root, of what the nightly \
+    builds generate and keep from one night to the next (`actions/cache`), \
+    e.g. the assets builders' outputs, which are only rebuilt when stale: \
+    built from nothing, they can take longer than the decks. Never a \
+    directory holding committed files, which a restore would overwrite."""
 
 
 class GlobalSettings(BaseModel):

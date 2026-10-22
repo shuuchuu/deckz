@@ -31,6 +31,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import yaml
 from pygit2 import Repository
 
 from .exceptions import HookInstallRefusedError
@@ -276,6 +277,69 @@ def ci_workflow(ci: "CiSettings") -> str:
         if ci.nightly_checks
         else ""
     )
+    nightly_event = (
+        "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"
+    )
+    videos = (
+        f"""
+      - name: Fetch the published videos
+        if: ({nightly_event}) && !cancelled()
+        run: uv run deckz videos fetch --source https://github.com/{ci.videos_repository}
+"""
+        if ci.nightly_builds and ci.videos_repository
+        else ""
+    )
+    cached = "".join(f"\n            {repo}/{path}" for path in ci.cache_paths)
+    cache = (
+        f"""
+      # Last night's generated files, rebuilt only where stale; saved again at
+      # the end of the job, under a key of its own.
+      - name: Restore what the last nightly builds generated
+        if: ({nightly_event}) && !cancelled()
+        uses: actions/cache@v6.1.0
+        with:
+          path: |{cached}
+          key: deckz-nightly-${{{{ github.run_id }}}}
+          restore-keys: deckz-nightly-
+"""
+        if ci.nightly_builds and ci.cache_paths
+        else ""
+    )
+    user_variables = "".join(
+        f"\n          {line}"
+        for line in yaml.safe_dump(
+            ci.user_variables, allow_unicode=True, sort_keys=False
+        ).splitlines()
+    )
+    variables = (
+        f"""
+      # What each person's own variables.yml sets, with stand-in values.
+      - name: Write the user variables the decks render with
+        if: ({nightly_event}) && !cancelled()
+        run: |
+          DIR="${{XDG_CONFIG_HOME:-$HOME/.config}}/deckz"
+          mkdir -p "$DIR"
+          cat > "$DIR/variables.yml" <<'EOF'{user_variables}
+          EOF
+"""
+        if ci.nightly_builds and ci.user_variables
+        else ""
+    )
+    builds = (
+        f"""{videos}{variables}{cache}
+      # The decks the last day's commits reach (the previous night built the
+      # others), every deck when no commit is older than a day. Built even
+      # when a nightly check failed: they say different things.
+      - name: Build the decks changed in the last day
+        if: ({nightly_event}) && !cancelled()
+        run: |
+          BASE=$(git rev-list -1 --before="24 hours ago" HEAD)
+          uv run deckz run decks ${{BASE:+--since "$BASE"}} --handout \\
+            --no-presentation --no-part-handouts --lang {" ".join(ci.nightly_builds)}
+"""
+        if ci.nightly_builds
+        else ""
+    )
     return f"""{_MARKER.replace("hook", "workflow", 1)}
 # Every contributor's commits get the checks the git hooks run, installed or not.
 name: deckz
@@ -332,7 +396,7 @@ jobs:
             *) RANGE="$BEFORE..HEAD" ;;
           esac
           uv run deckz hooks check-commits "$RANGE"
-{nightly}"""
+{nightly}{builds}"""
 
 
 def install_ci_workflow(

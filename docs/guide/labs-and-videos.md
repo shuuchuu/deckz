@@ -68,7 +68,10 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
 Videos are Manim scenes, rendered apart from deck builds (a render takes minutes):
 
 - `deckz videos render` renders those out of date (`--quality l` for quick drafts
-  while working on a scene);
+  while working on a scene); `deckz videos fetch` puts the published renders in
+  place of those you never rendered instead, with no Manim to install (`deckz
+  videos render` renders them again: nothing says which scene version they're
+  from);
 - `deckz videos list` shows each one's state (never rendered, stale, a draft, or
   fresh), `--json` for a script;
 - `deckz videos publish` publishes the renders (maintainers). A published video's

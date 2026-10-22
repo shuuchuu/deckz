@@ -35,7 +35,8 @@ The error names the file. Common causes:
 
 - Markdown that doesn't convert: see the repository's Markdown guide;
 - a missing English file in an English build: [Translating](translating.md);
-- a video never rendered: `deckz videos render`;
+- a video never rendered: `deckz videos fetch` (the published render) or `deckz
+  videos render`;
 - a compilation using more memory than `deckz.yml`'s `typst_memory_max`: build fewer
   PDFs at once, or raise the limit. To keep several builds at once (two checkouts, a
   `--watch` and another build) from adding up their memory, set

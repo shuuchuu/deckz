@@ -307,7 +307,8 @@ def rendered_videos(
             "videos",
             Status.MISSING,
             f"{len(missing)} never rendered, and decks using them fail to build: "
-            "`deckz setup --videos` (or `deckz videos render`; slow at the "
+            "`deckz videos fetch` puts the published ones in place, `deckz setup "
+            "--videos` (or `deckz videos render`) renders them (slow at the "
             "published quality, `--quality l` for drafts)",
         )
     from .videos.rendering import render_all

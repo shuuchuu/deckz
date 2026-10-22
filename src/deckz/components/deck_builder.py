@@ -19,7 +19,7 @@ from time import perf_counter
 from traceback import extract_tb
 from typing import Any
 
-from jinja2 import TemplateError, TemplateSyntaxError
+from jinja2 import TemplateError, TemplateSyntaxError, UndefinedError
 
 from ..exceptions import DeckzError, RenderError
 from ..models import (
@@ -428,17 +428,21 @@ class DeckBuilder(DeckBuilderProtocol):
             path = build_dir / f"{section}{output_format.fragment_suffix}"
             return path.read_text(encoding="utf8")
 
-        self._renderer.render_to_path(
-            output_format.template,
-            output_path,
-            variables=self._variables,
-            parts=item.parts,
-            handout=item.compile_type
-            in [CompileType.Handout, CompileType.PrintHandout],
-            toc=item.toc,
-            print=item.compile_type is CompileType.PrintHandout,
-            fragment=fragment,
-        )
+        try:
+            self._renderer.render_to_path(
+                output_format.template,
+                output_path,
+                variables=self._variables,
+                parts=item.parts,
+                handout=item.compile_type
+                in [CompileType.Handout, CompileType.PrintHandout],
+                toc=item.toc,
+                print=item.compile_type is CompileType.PrintHandout,
+                fragment=fragment,
+            )
+        except TemplateError as error:
+            msg = _render_message(error, output_format.template)
+            raise RenderError(msg) from error
 
 
 def publish(artifact: Path, output: Path) -> None:
@@ -573,6 +577,24 @@ def _template_line(error: TemplateError, template: Path) -> int | None:
     )
 
 
+def _render_message(
+    error: TemplateError, template: Path, source: Path | None = None
+) -> str:
+    # Named by its source (a content file's build copy renders), and line.
+    line = _template_line(error, template)
+    shown = source or template
+    where = f"{shown}:{line}" if line else str(shown)
+    msg = f"{where}: {error.message or type(error).__name__}"
+    if isinstance(error, UndefinedError) and "attribute" in msg:
+        # Most often a variable no variables.yml sets, here: the user's own
+        # file is the one a fresh checkout or a CI job doesn't have.
+        msg += (
+            " (a variable? set it in a variables.yml: the repository's, the "
+            "deck's, or your own, in deckz's user config directory)"
+        )
+    return msg
+
+
 def render_dependencies(
     renderer: RendererProtocol,
     markdown_converter: MarkdownConverterProtocol,
@@ -598,9 +620,7 @@ def render_dependencies(
             try:
                 renderer.render_to_path(item_path, rendered_path, variables=variables)
             except TemplateError as error:
-                line = _template_line(error, item_path)
-                where = f"{copied.source}:{line}" if line else str(copied.source)
-                msg = f"{where}: {error.message or type(error).__name__}"
+                msg = _render_message(error, item_path, copied.source)
                 raise RenderError(msg) from error
             if rendered_path.suffix == ".md":
                 markdown_converter.convert(

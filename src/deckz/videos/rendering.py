@@ -91,30 +91,44 @@ def render_one(render: Render, quality: str, scenes_dir: Path) -> str | None:
         # half a video, and a hard link to the previous render (studioz keeps
         # the last commit's so) keeps it.
         copy_file_if_changed(rendered, video)
-    poster = run(
-        [
-            "ffmpeg",
-            "-y",
-            "-loglevel",
-            "error",
-            "-sseof",
-            "-0.1",
-            "-i",
-            str(video),
-            "-frames:v",
-            "1",
-            "-update",
-            "1",
-            str(video.with_suffix(".png")),
-        ],
-        capture_output=True,
-        encoding="utf8",
-        check=False,
-    )
-    if poster.returncode != 0:
-        return f"{label}: no poster frame: {poster.stderr.strip()}"
+    if error := make_poster(video):
+        return f"{label}: {error}"
     video.with_suffix(".quality").write_text(quality, encoding="utf8")
     write_stamp(video, stamp)
+    return None
+
+
+def make_poster(video: Path) -> str | None:
+    """Write `video`'s last frame next to it, as its `.png` poster (ffmpeg).
+
+    Returns:
+        An error message, or None if it succeeded.
+    """
+    try:
+        poster = run(
+            [
+                "ffmpeg",
+                "-y",
+                "-loglevel",
+                "error",
+                "-sseof",
+                "-0.1",
+                "-i",
+                str(video),
+                "-frames:v",
+                "1",
+                "-update",
+                "1",
+                str(video.with_suffix(".png")),
+            ],
+            capture_output=True,
+            encoding="utf8",
+            check=False,
+        )
+    except FileNotFoundError:
+        return "no poster frame: ffmpeg isn't installed"
+    if poster.returncode != 0:
+        return f"no poster frame: {poster.stderr.strip()}"
     return None
 
 
