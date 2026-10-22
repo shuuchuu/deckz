@@ -449,3 +449,23 @@ def check_notebook(
         smoke=smoke,
         timeout=timeout,
     )
+
+
+# The `check_notebook` lines that state a fact rather than a problem: a shell line the
+# runner without `--container` skips, `nvidia-smi` failing on a CPU, a kernel death a
+# rerun recovers from (as Colab's restart would), the verdict of a clean run, and a
+# notebook without solutions (a demo).
+_FACT_RE = re.compile(
+    r"\s*(?:shell command not run|execution: no code cell raised|no .+ section at all$"
+    r"|\[\d+\] the kernel died: ran the notebook again"
+    r"|\[\d+\] shell command exited with code \d+: nvidia-smi)"
+)
+
+
+def is_problem(line: str) -> bool:
+    """Whether a `check_notebook` line reports a problem, which fails the check.
+
+    Returns:
+        False for the lines that only state a fact (see `_FACT_RE`).
+    """
+    return not _FACT_RE.match(line)

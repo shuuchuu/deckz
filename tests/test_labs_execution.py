@@ -5,7 +5,12 @@ from typing import Any
 
 from pytest import mark
 
-from deckz.labs.execution import DATASET_FETCH, check_notebook, runner_source
+from deckz.labs.execution import (
+    DATASET_FETCH,
+    check_notebook,
+    is_problem,
+    runner_source,
+)
 
 _GHSPARSE = "https://github.com/shuuchuu/datasets/raw/refs/heads/main/ghsparse.sh"
 _FETCH = f"wget -q {_GHSPARSE} -O /tmp/ghsparse.sh && bash /tmp/ghsparse.sh landscape"
@@ -173,3 +178,19 @@ def test_check_notebook_uses_the_configured_heading(tmp_path: Path) -> None:
     )
 
     assert any("Correction heading not collapsed" in line for line in lines)
+
+
+def test_is_problem_tells_failures_from_facts(tmp_path: Path) -> None:
+    clean = tmp_path / "clean.ipynb"
+    _write_notebook(
+        clean, [_code("x = 1"), _code("!rm -rf sample_data"), _code("!nvidia-smi")]
+    )
+    raising = tmp_path / "raising.ipynb"
+    _write_notebook(raising, [_code("raise ValueError('boom')")])
+
+    clean_lines = list(check_notebook(clean, python=sys.executable, timeout=30))
+    raising_lines = list(check_notebook(raising, python=sys.executable, timeout=30))
+
+    # No solution section and a skipped shell line are facts, not problems.
+    assert not any(is_problem(line) for line in clean_lines), clean_lines
+    assert any(is_problem(line) for line in raising_lines), raising_lines
