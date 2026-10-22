@@ -350,7 +350,11 @@ def section_targets(
 
 
 def decks_targets(
-    directory: Path, langs: Iterable[Lang], *, course_notes: bool = False
+    directory: Path,
+    langs: Iterable[Lang],
+    *,
+    course_notes: bool = False,
+    since: str | None = None,
 ) -> list[BuildTarget]:
     """Every deck of the repository containing `directory`.
 
@@ -362,13 +366,21 @@ def decks_targets(
         langs: The languages to build the decks in.
         course_notes: Add each deck's course notes, in the languages it has \
             chapters in (`course_notes_targets`).
+        since: Only the decks the changes since this revision (and the \
+            working tree's) reach (`affected_since`).
 
     Returns:
         One target per deck and language, then the course notes' if asked.
     """
+    from .analyzing.affected import affected_since
+
     langs = tuple(langs)
     git_dir = GlobalSettings.from_yaml(directory).paths.git_dir
-    all_settings = list(all_deck_settings(git_dir))
+    all_settings = (
+        affected_since(git_dir, since)
+        if since is not None
+        else list(all_deck_settings(git_dir))
+    )
     targets = []
     for lang in langs:
         for settings in all_settings:

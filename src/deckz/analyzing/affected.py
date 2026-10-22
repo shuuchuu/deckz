@@ -158,3 +158,23 @@ def affected_decks(git_dir: Path, paths: Iterable[Path]) -> list["DeckSettings"]
         if any(test(path) for path in paths):
             affected.append(settings)
     return affected
+
+
+def affected_since(git_dir: Path, since: str) -> list["DeckSettings"]:
+    """Every deck the changes since `since` reach, the working tree's included.
+
+    Returns:
+        The decks' settings, in directory order.
+
+    Raises:
+        DeckzError: If `since` names no commit.
+    """
+    from ..exceptions import DeckzError
+    from ..status import base_revision, changed_paths
+
+    base, _ = base_revision(git_dir, since)
+    if base is None:
+        msg = f"{since!r} names no commit of {git_dir}"
+        raise DeckzError(msg)
+    _, changed = changed_paths(git_dir, base)
+    return affected_decks(git_dir, [Path(path) for path in changed])

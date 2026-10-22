@@ -258,6 +258,49 @@ def test_install_ci_workflow_writes_a_valid_workflow(tmp_path: Path) -> None:
     install_ci_workflow(tmp_path, ci)
 
 
+def test_ci_workflow_builds_the_decks_changed_overnight() -> None:
+    import yaml
+
+    from deckz.configuring.settings import CiSettings
+    from deckz.hooks_install import ci_workflow
+
+    def runs(ci: CiSettings) -> list[str]:
+        steps = yaml.safe_load(ci_workflow(ci))["jobs"]["check"]["steps"]
+        return [step.get("run", "") for step in steps]
+
+    assert not any("run decks" in run for run in runs(CiSettings()))
+    found = runs(
+        CiSettings(nightly_builds=("fr", "en"), videos_repository="owner/videos")
+    )
+    fetch = found.index(
+        "uv run deckz videos fetch --source https://github.com/owner/videos"
+    )
+    build = next(i for i, run in enumerate(found) if "deckz run decks" in run)
+    assert fetch < build
+    assert "--lang fr en" in found[build]
+    assert '${BASE:+--since "$BASE"}' in found[build]
+    # No videos repository: no fetch.
+    assert not any(
+        "videos fetch" in run for run in runs(CiSettings(nightly_builds=("fr",)))
+    )
+
+    ci = CiSettings(nightly_builds=("fr",), user_variables={"trainer_name": "CI"})
+    found = runs(ci)
+    write = next(i for i, run in enumerate(found) if "variables.yml" in run)
+    assert "trainer_name: CI\n" in found[write]
+    assert write < next(i for i, run in enumerate(found) if "run decks" in run)
+
+    ci = CiSettings(nightly_builds=("fr",), cache_paths=("assets/plt", "assets/svg"))
+    steps = yaml.safe_load(ci_workflow(ci))["jobs"]["check"]["steps"]
+    (cache,) = [s for s in steps if s.get("uses", "").startswith("actions/cache")]
+    # Relative to the workspace, not to the job's working directory.
+    assert cache["with"]["path"].splitlines() == [
+        "${{ github.event.repository.name }}/assets/plt",
+        "${{ github.event.repository.name }}/assets/svg",
+    ]
+    assert cache["with"]["restore-keys"] == "deckz-nightly-"
+
+
 def test_install_ci_workflow_refuses_a_foreign_workflow(tmp_path: Path) -> None:
     from deckz.configuring.settings import CiSettings
     from deckz.hooks_install import install_ci_workflow

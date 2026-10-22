@@ -949,7 +949,8 @@ The main commands:
   problems in its files (deferred ones included), its English gaps, its
   files waiting for a port, and its built PDFs not matching its content,
   with their shrunk frames and wrapping lines. `deckz show affected
-  PATH...` prints the decks a change to PATHs reaches.
+  [PATH...] [--since REV]` prints the decks a change to PATHs, or the
+  changes since REV, reach.
 - `deckz new deck DIR --name NAME --title TITLE`, `deckz new section
   PATH [--title TITLE]`, `deckz labs new LAB hands-on|demo`: create the
   files of a new deck, shared section (its `.yml` with a `full` flavor, a
@@ -1027,7 +1028,9 @@ The main commands:
   plus one extra copy of a section for every deck that locally overrides one
   of its files. English is strict: the first gap in translation coverage
   aborts the run, before anything is compiled. `run shared`/`run all` write their throwaway output
-  under `<git_dir>/.run/`.
+  under `<git_dir>/.run/`. `run decks --since REV` compiles only the decks
+  the changes since REV (the working tree's included) reach, as `deckz
+  show affected --since REV` lists them: before pushing, or nightly in CI.
 - `deckz check variables`: statically survey every shared section's every
   named flavor (not just the ones some deck currently uses), with the
   repository-wide `variables.yml`, plus every real deck, with its own
@@ -1119,10 +1122,21 @@ The main commands:
   contributor's commits the hooks' checks, installed or not: `deckz check`
   and `deckz hooks check-commits` (the pushed or proposed commits'
   `Lang-sync` lines, which must be read) on every push and pull request, and `deckz.yml`'s
-  `ci.nightly_checks` every night. Its `ci` settings: `deckz_repository`
-  and `deckz_ref` (a deckz checked out next to the repository, for one
-  installing it from `../deckz`), `apt_packages` (system packages its
-  dependencies need to build), `nightly_checks`.
+  `ci.nightly_checks` every night, then the handouts of the decks the last
+  day's commits reach, in the `ci.nightly_builds` languages (`deckz run
+  decks --since`, every deck when no commit is older than a day). Its `ci`
+  settings: `deckz_repository` and `deckz_ref` (a deckz checked out next to
+  the repository, for one installing it from `../deckz`), `apt_packages`
+  (system packages its dependencies, or its assets builders, need),
+  `nightly_checks`, `nightly_builds` (e.g. `[fr, en]`; none by default, no
+  build), `videos_repository` (the `owner/name` the videos are published
+  to, whose renders the nightly builds fetch first: `deckz videos fetch`),
+  `user_variables` (written as the CI machine's own `variables.yml`: what
+  each person's own file sets, such as a trainer's name, with stand-in
+  values) and `cache_paths` (directories of generated files, such as the assets
+  builders' outputs, kept from one night to the next with
+  `actions/cache`, so only the stale ones are rebuilt; never one holding
+  committed files, which a restore would overwrite).
 - `deckz show` (alias for `deckz show tree`): show the resolved tree of
   sections and files for the current deck.
 - `deckz show settings` / `deckz show variables` / `deckz show paths`:
@@ -1329,6 +1343,14 @@ The main commands:
   language). SCENE restricts to one video (its path, as `deckz videos
   list` prints it, or its class name); `--force` re-renders even what
   looks up to date (after editing a data file a scene reads, say).
+- `deckz videos fetch [--source REMOTE_OR_URL]`: put the published
+  renders in place of those this checkout never rendered (a CI job, a
+  contributor without Manim), from `videos.publish_remote`'s
+  `videos.publish_branch` or SOURCE, each with its poster frame (needs
+  `ffmpeg`). A render already there is never replaced. A fetched render
+  has no sources stamp and is dated to the epoch, so `deckz videos render`
+  renders it again. A video never published is listed; exits 1 when a
+  render got no poster.
 - `deckz videos list`: list every registered scene's renders, one per
   line (quality stamp or `-`, path under `videos.videos_dir`, class name).
 - `deckz videos publish [--break-published-links]`: replace the videos

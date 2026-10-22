@@ -506,8 +506,8 @@ and when it must be settled.
 
 ## Phase 9: what the earlier phases left out
 
-**Status (2026-10-22):** planned. Four items the phases above left out on purpose, one
-increment each, in this order (smallest first).
+**Status (2026-10-22):** done, 9.1 to 9.4, one increment each. Left: enabling 9.4's
+nightly builds on slides, the maintainer's call on cost.
 
 ### 9.1 `deckz status`: English gaps in the decks your changes reach
 
@@ -603,4 +603,41 @@ the rest. To be worked out in the increment:
   (`deckz videos render --quick`), or fetch the published ones.
 - Time and memory on GitHub's runners (4 CPUs, 16 GB): a cap on the number of decks,
   the rest left for the next night.
+
+**Status (2026-10-22):** done in deckz, off on slides until the maintainer decides (the
+minutes are billed: slides is private). `ci.nightly_builds` (languages) adds the build
+step: `deckz run decks --since <the last commit older than a day>` (every deck without
+one), handouts only, whole decks. It runs even when a nightly check failed. Other new
+settings, which a fresh CI machine needs:
+
+- `ci.videos_repository`, for `deckz videos fetch`: the published renders and their
+  posters, never replacing one. A fetched render is dated to the epoch, so `videos
+  render` takes it for stale, since nobody knows which sources it was made from. It's
+  also a contributor's way to get the videos without Manim.
+- `ci.user_variables`, written as the machine's own `variables.yml`. The first trial
+  failed on `trainer_name`, which only the maintainer's own file sets.
+- `ci.cache_paths`, kept by `actions/cache` with a rolling key.
+
+New commands for it: `deckz show affected --since` and `deckz run decks --since`.
+`run decks --since` with no deck reached builds nothing, not even the assets. A Jinja
+error in the main template is now a `RenderError` naming its line, like a content
+file's, and an undefined variable's message says where it can be set. The trial on
+slides ran in the CI image (plus slides' `apt_packages`, `--cpus 4 --memory 16g`, as
+the runner):
+
+- `uv sync`: 24 s.
+- `videos fetch`: 9 renders in 10 s.
+- The assets from nothing: 11 min (143 plots, 422 Typst figures, 172 PDF figures to
+  SVG).
+- `orsys/pyi` in French and English: 29 s.
+- The 35 decks `HEAD~12` reaches, 70 handouts: 26.5 min, warm.
+
+A busy day reaches about every deck (the previous day's commits: 45), so a full night
+takes about 35 min warm, plus 11 min on a cache miss. A quiet night takes about 3 min.
+That's 600 to 1,200 runner minutes a month, against GitHub Free's 2,000 for private
+repositories, which the push checks already use about half of. Without a cap, a build
+that slows down shows as a longer job, not a silent skip. Enabling it on slides is a
+`deckz.yml` edit (`ci.nightly_builds: [fr, en]`, `videos_repository`,
+`user_variables`, `cache_paths: [assets/plt, assets/plotly, assets/typ, assets/svg]`),
+then `deckz hooks install --ci`.
 

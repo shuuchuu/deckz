@@ -1,17 +1,20 @@
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from pytest import raises
 
-from deckz.exceptions import VideoPublishRefusedError
+from deckz.exceptions import VideoFetchError, VideoPublishRefusedError
 from deckz.videos.publishing import (
+    FetchResult,
     fetch_published,
+    fetch_renders,
     publish,
     publishable,
     published_blobs,
     unpublished_reason,
 )
-from deckz.videos.scenes import Scene
+from deckz.videos.scenes import Render, Scene, state
 
 QUALITY = "h"
 MAX_SIZE = 100_000_000
@@ -253,3 +256,82 @@ def test_unpublished_reason_follows_the_render_and_its_published_blob(
     assert _reason(work, published) == "nn/demo.mp4 differs from its published version"
     _fake_render(work, quality="l")
     assert _reason(work, published) == "nn/demo.mp4 is a draft render"
+
+
+def _fetch(work: Path, source: str = "videos") -> FetchResult:
+    return fetch_renders(
+        work,
+        work / "assets" / "videos",
+        [_scene(work)],
+        source=source,
+        branch="main",
+        quality=QUALITY,
+    )
+
+
+def _poster(video: Path) -> None:
+    video.with_suffix(".png").write_bytes(b"poster")
+
+
+def test_fetch_renders_puts_a_published_render_in_place(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    from deckz.videos import rendering
+
+    monkeypatch.setattr(rendering, "make_poster", _poster)
+    remote, work = _make_repos(tmp_path)
+    video = _fake_render(work, size=10)
+    _publish(work, _preview(work))
+    for suffix in (".mp4", ".png", ".quality"):
+        video.with_suffix(suffix).unlink()
+
+    result = _fetch(work, str(remote))  # A URL works as well as a remote.
+
+    assert result.fetched == (video,)
+    assert video.read_bytes() == b"\0" * 10
+    assert video.with_suffix(".png").read_bytes() == b"poster"
+    assert video.with_suffix(".quality").read_text() == QUALITY
+    # No sources stamp: `deckz videos render` takes it for stale.
+    assert state(Render(_scene(work), None, video), QUALITY) == "stale"
+
+
+def test_fetch_renders_never_replaces_a_render(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    from deckz.videos import rendering
+
+    monkeypatch.setattr(rendering, "make_poster", _poster)
+    _, work = _make_repos(tmp_path)
+    video = _fake_render(work, size=10)
+    _publish(work, _preview(work))
+    video.write_bytes(b"mine")
+
+    assert _fetch(work) == FetchResult((), (), ())
+    assert video.read_bytes() == b"mine"
+
+
+def test_fetch_renders_lists_what_was_never_published(tmp_path: Path) -> None:
+    _, work = _make_repos(tmp_path)
+    _fake_render(work)
+    _publish(work, _preview(work))
+    other = Scene(
+        module=_scene(work).module, name="Other", video="nn/other", languages=()
+    )
+
+    result = fetch_renders(
+        work,
+        work / "assets" / "videos",
+        [_scene(work), other],
+        source="videos",
+        branch="main",
+        quality=QUALITY,
+    )
+
+    assert result.unpublished == ("nn/other.mp4",)
+
+
+def test_fetch_renders_names_the_fix_when_it_cant_fetch(tmp_path: Path) -> None:
+    _, work = _make_repos(tmp_path)
+
+    with raises(VideoFetchError, match=r"videos\.publish_remote"):
+        _fetch(work, str(tmp_path / "nowhere"))

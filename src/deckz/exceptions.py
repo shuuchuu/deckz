@@ -93,6 +93,10 @@ class VideoSceneError(DeckzError):
     """A `@register_scene` class is declared in a way deckz can't parse."""
 
 
+class VideoFetchError(DeckzError):
+    """`deckz videos fetch` can't fetch the published renders."""
+
+
 class VideoPublishRefusedError(DeckzError):
     """`deckz videos publish` refuses to publish.
 

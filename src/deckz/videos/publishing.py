@@ -17,11 +17,12 @@ read-only repository discovery.
 import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from os import environ
+from os import environ, utime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from ..exceptions import VideoPublishRefusedError
+from ..exceptions import VideoFetchError, VideoPublishRefusedError
+from ..stamps import stamp_path
 from .scenes import Scene, out_of_date, quality, renders
 
 
@@ -269,3 +270,100 @@ def publish(
         capture_output=True,
     )
     return True
+
+
+@dataclass(frozen=True)
+class FetchResult:
+    """What `fetch_renders` put in place, and what it couldn't."""
+
+    fetched: tuple[Path, ...]
+    """The renders written, each with its poster."""
+    unpublished: tuple[str, ...]
+    """The site paths of the missing renders nothing published yet."""
+    failed: tuple[str, ...]
+    """Why a render was written without its poster."""
+
+
+def fetch_renders(
+    git_dir: Path,
+    videos_dir: Path,
+    found: list[Scene],
+    *,
+    source: str,
+    branch: str,
+    quality: str,
+) -> FetchResult:
+    """Put the published renders in place of the missing ones.
+
+    For a checkout that never rendered them (a CI job, a contributor
+    without Manim): each render missing from `videos_dir` is written from
+    `source`'s `branch` (a remote's name or a repository's URL), with its
+    poster frame (ffmpeg) and its `quality` stamp, the published one. A
+    render already there is never replaced. Nothing knows which sources a
+    published render was made from, so a fetched one carries no sources
+    stamp, and is dated to the epoch: `deckz videos render` takes it for
+    stale and renders it again.
+
+    Args:
+        git_dir: The repository, whose object store receives the fetch.
+        videos_dir: `GlobalPaths.videos_dir`.
+        found: Every registered scene (`scenes(settings)`).
+        source: The remote, or URL, to fetch from.
+        branch: The branch the renders are published on.
+        quality: `videos.published_quality`.
+
+    Returns:
+        What was fetched, and what wasn't.
+
+    Raises:
+        VideoFetchError: If `source` can't be fetched.
+    """
+    from .rendering import make_poster
+
+    missing = [
+        render
+        for scene in found
+        for render in renders(videos_dir, scene)
+        if not render.file.is_file()
+    ]
+    if not missing:
+        return FetchResult((), (), ())
+    fetched = subprocess.run(
+        ["git", "-C", str(git_dir), "fetch", "--quiet", source, branch],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if fetched.returncode:
+        msg = (
+            f"can't fetch {branch} from {source}: {fetched.stderr.strip()}"
+            " (`videos.publish_remote` names the remote, or pass its URL)"
+        )
+        raise VideoFetchError(msg)
+    published = published_blobs(git_dir, _git(git_dir, "rev-parse", "FETCH_HEAD"))
+    written, unpublished, failed = [], [], []
+    for render in missing:
+        path = site_path(videos_dir, render.file)
+        if (blob := published.get(path)) is None:
+            unpublished.append(path)
+            continue
+        content = subprocess.run(
+            ["git", "-C", str(git_dir), "cat-file", "blob", blob],
+            capture_output=True,
+            check=True,
+        ).stdout
+        render.file.parent.mkdir(parents=True, exist_ok=True)
+        temporary = render.file.with_name(f".{render.file.name}.part")
+        temporary.write_bytes(content)
+        # Dated to the epoch: `is_fresh` takes an unstamped render newer than
+        # its sources for up to date, which a fetched one may not be.
+        utime(temporary, (0, 0))
+        # A stamp left by a render since deleted isn't about this one.
+        stamp_path(render.file).unlink(missing_ok=True)
+        temporary.replace(render.file)  # Never half a video.
+        if error := make_poster(render.file):
+            failed.append(f"{path}: {error}")
+            continue
+        render.file.with_suffix(".quality").write_text(quality, encoding="utf8")
+        written.append(render.file)
+    return FetchResult(tuple(written), tuple(unpublished), tuple(failed))

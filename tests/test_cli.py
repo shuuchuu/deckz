@@ -963,3 +963,23 @@ def test_help_lists_the_commands_by_task(capsys: Any) -> None:
     positions = [output.index(f"─ {group} ") for group in groups]
     assert positions == sorted(positions)
     assert output.index("setup ") > output.index("─ Setting up ")
+
+
+def test_run_names_the_main_template_line_a_variable_breaks(
+    working_dir: Path, caplog: Any
+) -> None:
+    # A variable only the user's own variables.yml sets, as on a CI machine.
+    main_template = working_dir.parents[1] / "templates" / "jinja2" / "main.typ"
+    main_template.write_text(
+        main_template.read_text().replace(
+            "{{ variables.user_name }}", "{{ variables.trainer.name }}"
+        )
+    )
+
+    with raises(SystemExit) as exc_info:
+        main(("run", "--handout", "--no-presentation", "--no-part-handouts"))
+
+    assert exc_info.value.code == 1
+    assert f"{main_template}:6: " in caplog.text
+    assert "deckz's user config directory" in caplog.text
+    assert "Traceback" not in caplog.text
