@@ -209,6 +209,9 @@ _CHANGING = {
 # deckz's own command making a commit (an empty one): the person makes it from
 # the "À traduire" panel.
 _MARK_SYNCED = re.compile(r"\bdeckz\b[^;&|\n]*\si18n\s+mark-synced\b")
+# Its twin for a demo's outputs, which studioz has no panel for yet: the person
+# runs it in a terminal.
+_MARK_CURRENT = re.compile(r"\bdeckz\b[^;&|\n]*\slabs\s+mark-current\b")
 
 # deckz's commands renting a GPU machine, or running on one: it bills, so the
 # person starts a pass from studioz's modal, which gives the cost first. A
@@ -697,6 +700,13 @@ async def _refuse_git(  # ruff: ignore[unused-async]
             "`deckz i18n mark-synced` committe : refusé dans studioz. Dis à la "
             "personne qu'il n'y a rien à porter, et pourquoi : elle le note "
             "depuis le panneau « À traduire » (« Rien à porter… »)."
+        )
+    elif _MARK_CURRENT.search(command):
+        reason = (
+            "`deckz labs mark-current` committe : refusé dans studioz. Dis à la "
+            "personne quelles démos n'ont pas besoin d'être réexécutées, et "
+            "pourquoi : elle le note avec `deckz labs mark-current <notebook> "
+            '--reason "<pourquoi>"` dans un terminal.'
         )
     else:
         return {}

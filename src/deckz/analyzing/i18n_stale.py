@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
+from ..commits import commit_empty, trailer_lines, trailer_values
 from ..exceptions import CommitRefusedError, DeckzError, InvalidConfigurationError
 from ..utils import content_dirs, content_files
 
@@ -33,7 +34,6 @@ if TYPE_CHECKING:
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 """git's well-known empty tree object, to diff a file against nothing."""
 
-_TRAILER_LINE = re.compile(r"^[A-Za-z][\w-]*:\s?.*$")
 _LANG_SYNC_KIND = re.compile(r"^(fr-only|en-only|pending)\b")
 _LANG_SYNC_LINE = re.compile(r"^\s*lang-sync\s*:.*$", re.IGNORECASE | re.MULTILINE)
 _SCISSORS = re.compile(r"^\S{1,8} -+ >8 -+$", re.MULTILINE)
@@ -69,32 +69,8 @@ class StaleFile:
     """The qualifying commits, oldest first."""
 
 
-def _trailer_lines(message: str) -> list[tuple[str, str]]:
-    """The trailers of a commit message's last paragraph, in order.
-
-    That's its body, not the subject line.
-
-    Returns:
-        Each trailer's key and value, or `[]` if the body's last paragraph \
-        isn't trailer-shaped (every line `Key: value`).
-    """
-    _subject, _, body = message.partition("\n")
-    body = body.strip()
-    if not body:
-        return []
-    paragraphs = re.split(r"\n\n+", body)
-    lines = [line for line in paragraphs[-1].splitlines() if line.strip()]
-    if not lines or not all(_TRAILER_LINE.match(line) for line in lines):
-        return []
-    found = []
-    for line in lines:
-        key, _, value = line.partition(":")
-        found.append((key.strip(), value.strip()))
-    return found
-
-
 def _parse_trailers(message: str) -> dict[str, str]:
-    return dict(_trailer_lines(message))
+    return dict(trailer_lines(message))
 
 
 def lang_synced_paths(message: str) -> list[str]:
@@ -103,7 +79,7 @@ def lang_synced_paths(message: str) -> list[str]:
     Returns:
         Each one, repository-relative, in order.
     """
-    return [value for key, value in _trailer_lines(message) if key == LANG_SYNCED]
+    return trailer_values(message, LANG_SYNCED)
 
 
 def lang_sync_kind(message: str) -> str | None:
@@ -338,8 +314,6 @@ def mark_synced(
         DeckzError: If `reason` is empty, a path isn't in `deckz i18n stale` \
             or git refuses the commit.
     """
-    from subprocess import run
-
     reason = reason.strip()
     if not reason:
         msg = 'say why nothing needs porting: --reason "<why>"'
@@ -372,37 +346,7 @@ def mark_synced(
         else f"Nothing to port from {len(relative)} files"
     )
     trailers = "\n".join(f"{LANG_SYNCED}: {path}" for path in relative)
-    message = f"{subject}\n\n{reason}\n\n{trailers}\n"
-    # `--only` with no path commits none of what's staged. `--no-verify`: the
-    # commit changes no file, so the pre-commit hook would only check HEAD's
-    # tree again (seconds, and failing on problems that aren't this commit's),
-    # and the commit-msg hook's rule is about files changed.
-    result = run(
-        [
-            "git",
-            "commit",
-            "--allow-empty",
-            "--only",
-            "--no-verify",
-            "--cleanup=whitespace",
-            "--file=-",
-        ],
-        cwd=git_dir,
-        input=message,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode:
-        msg = f"git commit: {(result.stderr or result.stdout).strip()}"
-        raise DeckzError(msg)
-    sha = run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=git_dir,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
+    sha = commit_empty(git_dir, f"{subject}\n\n{reason}\n\n{trailers}\n")
     return sha, settled
 
 

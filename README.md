@@ -902,16 +902,18 @@ The main commands:
   from elsewhere). It lists the content checks' problems (`--no-checks`
   skips them), what your changes leave to translate (the English gaps of
   the decks they reach included, as `deckz i18n missing-en` finds them)
-  and the repository's backlog, lab notebooks and videos not published as committed or
-  rendered (compared with their remotes as last fetched; `--fetch` fetches
-  them first), and the built PDFs of the decks your changes reach that
-  don't match them (`--no-decks` skips them). Each item says how to
-  resolve it; `--json` for scripts, each section with a stable `key`.
-  `deckz status DECK` reports on one deck instead, whoever made its
-  changes: the checks' problems in its files (deferred ones included),
-  its English gaps, its files waiting for a port, and its built PDFs not matching its
-  content, with their shrunk frames and wrapping lines. `deckz show
-  affected PATH...` prints the decks a change to PATHs reaches.
+  and the repository's backlog, lab notebooks and videos not published as
+  committed or rendered (compared with their remotes as last fetched;
+  `--fetch` fetches them first), the demos you changed whose code changed
+  since their outputs (`deckz labs stale`, the others counted), and the
+  built PDFs of the decks your changes reach that don't match them
+  (`--no-decks` skips them). Each item says how to resolve it; `--json`
+  for scripts, each section with a stable `key`. `deckz status DECK`
+  reports on one deck instead, whoever made its changes: the checks'
+  problems in its files (deferred ones included), its English gaps, its
+  files waiting for a port, and its built PDFs not matching its content,
+  with their shrunk frames and wrapping lines. `deckz show affected
+  PATH...` prints the decks a change to PATHs reaches.
 - `deckz new deck DIR --name NAME --title TITLE`, `deckz new section
   PATH [--title TITLE]`, `deckz labs new LAB hands-on|demo`: create the
   files of a new deck, shared section (its `.yml` with a `full` flavor, a
@@ -1181,6 +1183,18 @@ The main commands:
   extra dependency, unlike the default, which needs Pillow
   (`deckz[labs]`) only when an image actually needs recompressing.
   Then it runs the `labs.outputs.hooks` matching the notebook on it.
+- `deckz labs stale [NOTEBOOKS...] [--plain] [--json]`: list the demos
+  whose code cells changed after their outputs were written, computed
+  from git history alone: the outputs were written by the last commit (or
+  the working tree) changing them, and the code changed since (blank and
+  comment-only lines aside). Exits 1 when it lists one. Each state's
+  digests are cached by blob id in `.run/lab-outputs.json`, since a demo
+  can weigh megabytes.
+- `deckz labs mark-current NOTEBOOKS... --reason TEXT`: record that what
+  `deckz labs stale` lists for these demos needs no rerun (a comment, a
+  download line): an empty commit with the reason and a
+  `Lab-outputs-current: <path>` trailer per demo, which a commit making
+  such a change can also carry itself. Nothing staged goes into it.
 - `deckz labs check [--smoke] [--python INTERPRETER] [--container]
   [--timeout SECONDS] NOTEBOOKS...`: structural checks (uncollapsed/empty
   solution sections, stored error outputs) plus an execution of every code

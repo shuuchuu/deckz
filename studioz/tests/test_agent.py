@@ -182,6 +182,9 @@ def test_the_hook_refuses_commits() -> None:
         output = decision(command)["hookSpecificOutput"]
         assert "« Rien à porter… »" in output["permissionDecisionReason"]
     assert decision("deckz i18n stale --plain") == {}
+    output = decision("uv run deckz labs mark-current a/demo-fr.ipynb --reason x")
+    assert "`deckz labs mark-current` committe" in str(output)
+    assert decision("deckz labs stale --plain") == {}
     for command in (
         "deckz labs gpu up",
         "uv run deckz labs gpu run --timeout 600",

@@ -24,6 +24,13 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   (e.g. load a library's JavaScript from a CDN rather than embed it in every
   report) is a `labs.outputs.hooks` command in `deckz.yml`, which `deckz labs
   outputs` runs on each notebook it applies to: nothing to remember.
+- A demo whose code changed after its outputs were written shows what the code no
+  longer does: `deckz labs stale` lists them (and `deckz status` those you
+  changed). Rerun it and write its outputs back; when the change alters no output
+  that matters (a comment, a download line), `deckz labs mark-current <notebook>
+  --reason "<why>"` takes it off the list instead, in an empty commit. A commit
+  making such a change across many demos can carry the `Lab-outputs-current:
+  <path>` trailers itself.
 - A demo that needs a GPU (or Colab's exact libraries) runs on a rented machine:
   `deckz labs gpu pass <notebooks> --dry-run` says what it would cost now (the GPU
   and its price, each notebook's last run time, the estimate and the ceiling);
