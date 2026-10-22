@@ -2,6 +2,7 @@ import re
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from functools import cached_property
+from inspect import signature
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
@@ -48,6 +49,19 @@ class Finding:
         return path is not None and path.is_relative_to(directory)
 
 
+def run_check(
+    check: Callable[..., list[str]], paths: Collection[Path] | None = None
+) -> list[str]:
+    """Run `check`, on `paths` if it takes them, else on the whole repository.
+
+    Returns:
+        Its problems.
+    """
+    if paths is None or "paths" not in signature(check).parameters:
+        return check()
+    return check(paths=paths)
+
+
 class ChecksRunner(ChecksRunnerProtocol):
     """Merge deckz's own content checks with a target repo's own ones.
 
@@ -59,11 +73,15 @@ class ChecksRunner(ChecksRunnerProtocol):
 
         def checks(
             settings: GlobalSettings
-        ) -> Mapping[str, Callable[[], list[str]]]: ...
+        ) -> Mapping[str, Callable[..., list[str]]]: ...
 
     called once, with the repository's own settings, to obtain every extra
     check to run, each returning its problems the same way deckz's built-in
-    ones do. See [`hooks`][deckz.components.hooks] for the contract's
+    ones do. A check may take a `paths` keyword argument (absolute paths, or
+    None for the whole repository), as the built-in ones do: given files, it
+    reports only about them, and returns at once when none is of a kind it
+    reads. A check without one always checks the whole repository. See
+    [`hooks`][deckz.components.hooks] for the contract's
     versioning and trust boundary. The module is optional: a repo with
     nothing of its own simply doesn't have one.
     """
@@ -72,12 +90,16 @@ class ChecksRunner(ChecksRunnerProtocol):
         self._settings = settings
         self._checks_module_path = checks_module
 
-    def checks(self) -> Mapping[str, Callable[[], list[str]]]:
+    def checks(self) -> Mapping[str, Callable[..., list[str]]]:
         from ..analyzing.content_checks import CHECKS
 
         settings = self._settings
-        builtin: dict[str, Callable[[], list[str]]] = {
-            name: (lambda settings=settings, check=check: check(settings))
+        builtin: dict[str, Callable[..., list[str]]] = {
+            name: (
+                lambda paths=None, settings=settings, check=check: check(
+                    settings, paths
+                )
+            )
             for name, check in CHECKS.items()
         }
         plugin = self._plugin_checks
@@ -89,8 +111,17 @@ class ChecksRunner(ChecksRunnerProtocol):
             raise HookError(msg)
         return {**builtin, **plugin}
 
-    def findings(self, names: Collection[str] | None = None) -> list[Finding]:
+    def findings(
+        self,
+        names: Collection[str] | None = None,
+        paths: Collection[Path] | None = None,
+    ) -> list[Finding]:
         """Run the checks `deckz check` runs, or `names`, and gather their problems.
+
+        Args:
+            names: The checks to run; None for those `deckz check` runs.
+            paths: The files (absolute) the checks taking `paths` are limited \
+                to; None for the whole repository.
 
         Returns:
             Every problem, check by check, in `checks()`'s order.
@@ -104,7 +135,7 @@ class ChecksRunner(ChecksRunnerProtocol):
                 if names is not None
                 else name not in settings.checks.opt_in
             )
-            for problem in check()
+            for problem in run_check(check, paths)
         ]
 
     @cached_property
