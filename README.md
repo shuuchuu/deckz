@@ -261,7 +261,10 @@ typst_ignore_system_fonts: true
     opens to each language (default `fr: main`, `en: main-en`), and
     `statement` (default true) says whether their READMEs give the lab's
     statement yet, for the repository's templating to decide where its lab
-    links point. `deckz labs repos` reports on them, and `lab-urls` refuses a
+    links point, and `colab: false` that the lab has no Colab version (a
+    desktop GUI, say), so no notebook is expected. A repository with several
+    starting points has an entry per lab, each with its own branches and
+    `start`, a base possibly another entry's branch (e.g. `gui: solution`). `deckz labs repos` reports on them, and `lab-urls` refuses a
     hand-written link to one, suggesting `repo_link_hint` (with `{lab}`
     filled in) when it's set.
   - `gpu`: the machines `deckz labs gpu` rents: `image` (default Colab's

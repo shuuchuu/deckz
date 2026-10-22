@@ -38,8 +38,11 @@ def repos(*names: str, fetch: bool = True, workdir: Path = Path()) -> None:
         print(f"not in labs.repos: {', '.join(unknown)}")
         sys_exit(2)
     failed = False
+    fetched: set[str] = set()
     for repo in chosen:
-        found = report(settings, repo, fetch=fetch)
+        # Labs sharing a repository: one fetch.
+        found = report(settings, repo, fetch=fetch and repo.repo not in fetched)
+        fetched.add(repo.repo)
         print(f"{repo.repo} ({repo.lab})")
         for problem in found.problems:
             print(f"  {problem}")

@@ -191,7 +191,9 @@ class LabRepoSettings(BaseModel):
     """Every branch, and the one it stacks on (none for the root): a branch \
     holds every commit of its base, so a change to the base is rebased into \
     it. The default is a starting point (`main`) and a solution, each with \
-    its English translation."""
+    its English translation. A repository with several labs (several \
+    starting points) has an entry per lab, each with its own branches, whose \
+    base may be another entry's branch."""
     start: dict[str, str] = Field(
         default_factory=lambda: {"fr": "main", "en": "main-en"}
     )
@@ -201,16 +203,15 @@ class LabRepoSettings(BaseModel):
     """Whether those READMEs give the lab's statement yet. Until then, \
     `deckz labs repos` reports it, and a repository's templating can keep \
     the lab's links off the repository."""
+    colab: bool = True
+    """Whether the lab has a Colab version (its hands-on notebooks). False \
+    for a lab Colab can't run, such as a desktop GUI: its README is then its \
+    only statement, and `deckz labs repos` expects no notebook."""
 
     @model_validator(mode="after")
-    def _known_branches(self) -> Self:
-        unknown = sorted(
-            {base for base in self.branches.values() if base is not None}.union(
-                self.start.values()
-            ).difference(self.branches)
-        )
-        if unknown:
-            msg = f"labs.repos {self.repo}: {', '.join(unknown)} not in its branches"
+    def _known_start(self) -> Self:
+        if unknown := sorted(set(self.start.values()).difference(self.branches)):
+            msg = f"labs.repos {self.lab}: {', '.join(unknown)} not in its branches"
             raise ValueError(msg)
         return self
 
@@ -268,7 +269,34 @@ class LabsSettings(BaseModel):
         if duplicates := sorted({lab for lab in labs if labs.count(lab) > 1}):
             msg = f"labs.repos: several repositories for {', '.join(duplicates)}"
             raise ValueError(msg)
+        for repo in {repo.repo for repo in self.repos}:
+            branches: dict[str, str | None] = {}
+            for entry in self.repos:
+                if entry.repo != repo:
+                    continue
+                for branch, base in entry.branches.items():
+                    if branches.get(branch, base) != base:
+                        msg = f"labs.repos {repo}: {branch} stacks on two branches"
+                        raise ValueError(msg)
+                    branches[branch] = base
+            bases = {base for base in branches.values() if base is not None}
+            if unknown := sorted(bases.difference(branches)):
+                msg = f"labs.repos {repo}: {', '.join(unknown)} not in its branches"
+                raise ValueError(msg)
         return self
+
+    def repo_branches(self, repo: str) -> dict[str, str | None]:
+        """Every branch of a repository, over the entries of its labs.
+
+        Returns:
+            Each branch and the one it stacks on.
+        """
+        return {
+            branch: base
+            for entry in self.repos
+            if entry.repo == repo
+            for branch, base in entry.branches.items()
+        }
 
     def repo_of(self, lab: str) -> LabRepoSettings | None:
         """The repository of `lab`, if it has one.

@@ -195,9 +195,57 @@ def test_report_without_fetch_needs_a_mirror(tmp_path: Path) -> None:
         report(_settings(git_dir, repo), repo, fetch=False)
 
 
+def test_settings_refuse_an_unknown_start_branch() -> None:
+    with raises(ValidationError, match="main-en not in its branches"):
+        LabRepoSettings(repo="acme/lab", lab=LAB, branches={"main": None})
+
+
 def test_settings_refuse_an_unknown_base_branch() -> None:
-    with raises(ValidationError, match="dev, main-en not in its branches"):
-        LabRepoSettings(repo="acme/lab", lab=LAB, branches={"main": None, "x": "dev"})
+    repo = LabRepoSettings(
+        repo="acme/lab", lab=LAB, branches={"main": None, "main-en": "dev"}
+    )
+
+    with raises(ValidationError, match="dev not in its branches"):
+        LabsSettings(repos=(repo,))
+
+
+def _gui_lab(**fields: object) -> LabRepoSettings:
+    # A second starting point of the same repository, on its solution.
+    return LabRepoSettings.model_validate(
+        {
+            "repo": "acme/lab",
+            "lab": "topic/gui",
+            "branches": {"gui": "solution", "gui-en": "gui"},
+            "start": {"fr": "gui", "en": "gui-en"},
+            **fields,
+        }
+    )
+
+
+def test_settings_accept_labs_sharing_a_repository() -> None:
+    labs = LabsSettings(repos=(LabRepoSettings(repo="acme/lab", lab=LAB), _gui_lab()))
+
+    assert labs.repo_branches("acme/lab")["gui"] == "solution"
+
+
+def test_report_merges_the_branches_of_labs_sharing_a_repository(
+    tmp_path: Path,
+) -> None:
+    upstream = _lab_repo(tmp_path)
+    _git(upstream, "switch", "--quiet", "-c", "gui", "solution")
+    _commit(upstream, {"README.md": "GUI\n"}, "Start the GUI")
+    _git(upstream, "switch", "--quiet", "-c", "gui-en", "gui")
+    _commit(upstream, {"README.md": "GUI, in English\n"}, "Translate")
+    git_dir = _content_repo(tmp_path)
+    cli = LabRepoSettings(repo="acme/lab", lab=LAB, url=str(upstream))
+    gui = _gui_lab(url=str(upstream), colab=False)
+    settings = GlobalSettings(
+        paths=GlobalPaths(current_dir=git_dir, git_dir=git_dir),
+        labs=LabsSettings(repos=(cli, gui)),
+    )
+
+    assert report(settings, cli).problems == []
+    assert report(settings, gui, fetch=False).problems == []
 
 
 def test_settings_refuse_two_repositories_for_a_lab() -> None:

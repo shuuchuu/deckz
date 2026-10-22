@@ -10,7 +10,8 @@ worktrees), and reports:
 - a declared branch missing, or one the declaration lacks;
 - a branch behind the one it stacks on (it lacks some of its commits);
 - a README that doesn't give the statement yet (`statement: false`);
-- a lab with no hands-on notebook in a start branch's language;
+- a lab with no hands-on notebook in a start branch's language (unless
+  `colab: false`);
 - a README whose Colab links name no notebook's ID, or not its own
   notebook's;
 
@@ -23,6 +24,7 @@ Git runs as a subprocess, as in `deckz.labs.publishing`.
 import json
 import re
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -114,7 +116,11 @@ def _branches(path: Path) -> set[str]:
     return set(out.splitlines())
 
 
-def _branch_problems(path: Path, repo: "LabRepoSettings") -> list[str]:
+def _branch_problems(
+    path: Path, repo: "LabRepoSettings", declared: Iterable[str]
+) -> list[str]:
+    # `declared`: the branches of every lab of the repository, which none
+    # of them reports as undeclared.
     present = _branches(path)
     problems = [
         f"{branch}: missing" for branch in repo.branches if branch not in present
@@ -122,7 +128,7 @@ def _branch_problems(path: Path, repo: "LabRepoSettings") -> list[str]:
     problems += [
         f"{branch}: not in its declared branches: declare it, with the branch "
         "it stacks on, or delete it"
-        for branch in sorted(present - set(repo.branches))
+        for branch in sorted(present - set(declared))
     ]
     for branch, base in repo.branches.items():
         if base is None or not {branch, base} <= present:
@@ -168,7 +174,7 @@ def _readme_problems(
         )
         where = notebook.relative_to(git_dir)
         own_id = _notebook_id(notebook, key) if notebook.is_file() else None
-        if not notebook.is_file():
+        if repo.colab and not notebook.is_file():
             problems.append(f"no {where}: the lab's Colab version in {lang}")
         if branch not in present:
             continue
@@ -181,11 +187,11 @@ def _readme_problems(
             f"{branch}'s {_README} links Colab notebook {lab_id}, an ID no notebook has"
             for lab_id in sorted(linked - ids)
         ]
-        if own_id and own_id not in linked:
+        if repo.colab and own_id and own_id not in linked:
             problems.append(
                 f"{branch}'s {_README} doesn't link its Colab version, {own_id}"
             )
-        if not (repo.statement and notebook.is_file()):
+        if not (repo.colab and repo.statement and notebook.is_file()):
             continue
         readme_date = _git(path, "log", "-1", "--format=%at", branch, "--", _README)
         since = _git(
@@ -217,7 +223,8 @@ def report(
     ids = _notebook_ids(
         settings.paths.labs_notebooks_dir, settings.labs.id_metadata_key
     )
-    problems = _branch_problems(path, repo)
+    declared = settings.labs.repo_branches(repo.repo) or repo.branches
+    problems = _branch_problems(path, repo, declared)
     if not repo.statement:
         problems.append(
             "its READMEs don't give the lab's statement yet (statement: false)"
