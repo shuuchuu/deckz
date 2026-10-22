@@ -43,10 +43,15 @@ def check(
         timeout: Seconds bounding the whole notebook's execution
         workdir: Path to move into before running the command
 
+    Raises:
+        SystemExit: With code 1 when a notebook has a problem: a structural
+            one, a cell that raises, a shell command that fails, a timeout
+            or a crash.
+
     """
     from ...configuring.settings import GlobalSettings
     from ...labs.container import dev_container
-    from ...labs.execution import check_notebook
+    from ...labs.execution import check_notebook, is_problem
     from ...labs.notebook import notebook_paths
     from ...labs.publishing import notebook_id, repository_name
 
@@ -62,6 +67,7 @@ def check(
         if container
         else None
     )
+    failed = []
     for path in notebook_paths(notebooks):
         print(f"#### {path}")
         lab_id = notebook_id(path, settings.labs.id_metadata_key)
@@ -75,4 +81,10 @@ def check(
             name=f"{lab_id}.ipynb" if lab_id else None,
         ):
             print(line)
+            if is_problem(line) and (not failed or failed[-1] != path):
+                failed.append(path)
         print()
+    if failed:
+        print(f"{len(failed)} notebook(s) with problems:")
+        print("\n".join(f"  {path}" for path in failed))
+        raise SystemExit(1)

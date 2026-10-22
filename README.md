@@ -1157,7 +1157,9 @@ The main commands:
 - `deckz labs check [--smoke] [--python INTERPRETER] [--container]
   [--timeout SECONDS] NOTEBOOKS...`: structural checks (uncollapsed/empty
   solution sections, stored error outputs) plus an execution of every code
-  cell, in a throwaway directory, reporting which cells raise. `--smoke`
+  cell, in a throwaway directory, reporting which cells raise; it exits
+  with code 1 on any problem, a failed shell command included (but
+  `nvidia-smi` on a CPU), and lists the notebooks that have one. `--smoke`
   caps every Lightning `Trainer` to one short epoch, a Lightning the
   notebook installs itself (`!pip install lightning`) included: it's capped
   when first imported. Shell
