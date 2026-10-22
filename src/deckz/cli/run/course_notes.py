@@ -20,6 +20,9 @@ def run_course_notes(
     into `paths.course_notes_pdf_dir` (`pdf/course-notes/` by default). The
     files with no chapter written yet are listed, and left out.
 
+    A chapter no deck includes builds on its own: `deckz run file
+    <chapter path>`.
+
     Args:
         langs: Languages to compile, each to its own output paths
             (English under an `en/` subdirectory), from each language's chapters

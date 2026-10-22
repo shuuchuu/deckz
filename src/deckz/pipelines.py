@@ -420,14 +420,26 @@ def deck_targets(
 
 
 def file_targets(
-    path: str, settings: DeckSettings, langs: Iterable[Lang]
+    path: str,
+    settings: DeckSettings,
+    langs: Iterable[Lang],
+    *,
+    course_notes: bool = False,
+    required: bool = False,
 ) -> list[BuildTarget]:
     """A synthetic deck holding the single content file `path`.
 
+    Args:
+        path: The content file, relative to a content directory.
+        settings: The settings to build it with (`checking.preview_settings`).
+        langs: The languages to build it in.
+        course_notes: Add its course notes chapter (`chapters_targets`).
+        required: With `course_notes`, fail on a language with no chapter.
+
     Returns:
-        One target per language.
+        One target per language, then its chapter's if asked.
     """
-    return [
+    targets = [
         BuildTarget(
             DeckSettingsFactory(settings, lang=lang).parser().from_file(path),
             settings,
@@ -436,17 +448,34 @@ def file_targets(
         )
         for lang in langs
     ]
+    if course_notes:
+        targets.extend(chapters_targets(targets, required=required))
+    return targets
 
 
 def section_targets(
-    section: str, flavor: FlavorName, settings: DeckSettings, langs: Iterable[Lang]
+    section: str,
+    flavor: FlavorName,
+    settings: DeckSettings,
+    langs: Iterable[Lang],
+    *,
+    course_notes: bool = False,
+    required: bool = False,
 ) -> list[BuildTarget]:
     """A synthetic deck holding `flavor` of `section`.
 
+    Args:
+        section: The shared section.
+        flavor: Its flavor.
+        settings: The settings to build it with (`checking.preview_settings`).
+        langs: The languages to build it in.
+        course_notes: Add its course notes chapters (`chapters_targets`).
+        required: With `course_notes`, fail on a language with no chapter.
+
     Returns:
-        One target per language.
+        One target per language, then its chapters' if asked.
     """
-    return [
+    targets = [
         BuildTarget(
             DeckSettingsFactory(settings, lang=lang)
             .parser()
@@ -457,6 +486,9 @@ def section_targets(
         )
         for lang in langs
     ]
+    if course_notes:
+        targets.extend(chapters_targets(targets, required=required))
+    return targets
 
 
 def decks_targets(
@@ -517,6 +549,16 @@ COURSE_NOTES = OutputKinds(
 )
 
 
+def chapters_required(outputs: OutputKinds) -> bool:
+    """Whether a preview building `outputs` fails on a language with no chapter.
+
+    Returns:
+        True when the course notes are all it builds: else, the slides are \
+        built all the same.
+    """
+    return outputs.course_notes and not (outputs.pdfs or outputs.html)
+
+
 def course_notes_targets(
     settings: DeckSettings, langs: Iterable[Lang], *, required: bool = True
 ) -> list[BuildTarget]:
@@ -535,15 +577,13 @@ def course_notes_targets(
         CourseNotesError: If `required` and a language has no chapter written \
             at all.
     """
-    from .course_notes import chapters_deck
-
     paths = settings.paths
     targets = []
     for lang in langs:
         parser = DeckSettingsFactory(settings, lang=lang).parser()
         deck = parser.from_deck_definition(paths.deck_definition)
-        chapters = chapters_deck(settings, deck, lang)
-        if not chapters.parts:
+        notes = _chapters_target(BuildTarget(deck, settings, lang, deck.name))
+        if notes is None:
             msg = (
                 f"{deck.name} has no course notes chapter in {lang} yet, under "
                 f"{paths.course_notes_dir.relative_to(paths.git_dir)}"
@@ -551,12 +591,66 @@ def course_notes_targets(
             if required:
                 raise CourseNotesError(msg)
             continue
-        basedirs = (paths.course_notes_dir, paths.assets_dir, paths.current_dir)
-        label = f"{deck.name} course notes"
-        targets.append(
-            BuildTarget(chapters, settings, lang, label, basedirs, course_notes=True)
-        )
+        targets.append(notes)
     return targets
+
+
+def _chapters_target(target: BuildTarget) -> BuildTarget | None:
+    # `target`'s course notes, if any of its files has a chapter written.
+    from .course_notes import chapters_deck
+
+    settings = target.settings
+    paths = settings.paths
+    chapters = chapters_deck(settings, target.deck, target.lang)
+    if not chapters.parts:
+        return None
+    basedirs = (paths.course_notes_dir, paths.assets_dir, paths.current_dir)
+    label = f"{target.label} course notes"
+    return BuildTarget(
+        chapters, settings, target.lang, label, basedirs, course_notes=True
+    )
+
+
+def chapters_targets(
+    targets: Iterable[BuildTarget], *, required: bool = False
+) -> list[BuildTarget]:
+    """The course notes of `targets`' decks: their chapters (`chapters_deck`).
+
+    For a `run file`/`run section` preview: a chapter builds with the course \
+    notes' main template, whether a deck includes its content file or not.
+
+    Args:
+        targets: The previews' targets, one per language.
+        required: Fail on a language with no chapter; else leave it out, \
+            with a warning.
+
+    Returns:
+        One target per language with a chapter.
+
+    Raises:
+        CourseNotesError: If `required` and a language has no chapter.
+    """
+    notes = []
+    for target in targets:
+        if (chapters := _chapters_target(target)) is not None:
+            notes.append(chapters)
+            continue
+        paths = target.settings.paths
+        where = paths.course_notes_dir.relative_to(paths.git_dir)
+        if required:
+            msg = (
+                f"{target.label} has no course notes chapter in {target.lang} "
+                f"yet, under {where}"
+            )
+            raise CourseNotesError(msg)
+        _logger.warning(
+            "%s has no course notes chapter in %s yet, under %s: only its slides "
+            "are built",
+            target.label,
+            target.lang,
+            where,
+        )
+    return notes
 
 
 def run_course_notes(
@@ -619,7 +713,14 @@ def run_file(
     outputs: OutputKinds,
     progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
-    build(file_targets(path, settings, langs), outputs, progress)
+    targets = file_targets(
+        path,
+        settings,
+        langs,
+        course_notes=outputs.course_notes,
+        required=chapters_required(outputs),
+    )
+    build(targets, outputs, progress)
 
 
 def run_section(
@@ -630,7 +731,15 @@ def run_section(
     outputs: OutputKinds,
     progress: ProgressReporterProtocol = _NULL_PROGRESS,
 ) -> None:
-    build(section_targets(section, flavor, settings, langs), outputs, progress)
+    targets = section_targets(
+        section,
+        flavor,
+        settings,
+        langs,
+        course_notes=outputs.course_notes,
+        required=chapters_required(outputs),
+    )
+    build(targets, outputs, progress)
 
 
 def run_decks(

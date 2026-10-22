@@ -36,7 +36,9 @@ deckz run course-notes --watch
 
 recompiles the course notes PDF (`pdf/course-notes/`) on each change (`deckz run
 --watch --course-notes` rebuilds the slides along with it). A chapter serves every
-deck that includes its file. See the README's "Course notes".
+deck that includes its file. A chapter no deck includes yet builds on its own:
+`deckz run file course-notes/topic/subject/intro.md` (`--watch` to keep it
+building). See the README's "Course notes".
 
 ## A lab
 

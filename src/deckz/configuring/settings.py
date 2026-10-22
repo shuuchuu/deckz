@@ -512,9 +512,22 @@ class DeckSettings(GlobalSettings):
             html_dir: Absolute path of the new HTML directory.
 
         Returns:
-            The copy. These settings are left untouched.
+            The copy. These settings are left untouched. The course notes' \
+            PDF directory moves with the PDF one when it's under it (by \
+            default), else to its `course-notes/`.
         """
+        old_pdf_dir, notes_dir = self.paths.pdf_dir, self.paths.course_notes_pdf_dir
+        notes_dir = pdf_dir / (
+            notes_dir.relative_to(old_pdf_dir)
+            if notes_dir.is_relative_to(old_pdf_dir)
+            else "course-notes"
+        )
         paths = self.paths.model_copy(
-            update={"build_dir": build_dir, "pdf_dir": pdf_dir, "html_dir": html_dir}
+            update={
+                "build_dir": build_dir,
+                "pdf_dir": pdf_dir,
+                "course_notes_pdf_dir": notes_dir,
+                "html_dir": html_dir,
+            }
         )
         return self.model_copy(update={"paths": paths})
