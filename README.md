@@ -1153,7 +1153,8 @@ The main commands:
   It refuses too while the content checks report a problem in the deck's
   files (deferred checks included: the upload is when they're due; a
   problem is the deck's when the file it starts with is under the deck's
-  directory or one the deck resolves), unless `--skip-checks`.
+  directory, one the deck resolves, or an asset its content shows, found
+  by rendering it as `deckz asset search` does), unless `--skip-checks`.
 - `deckz extras issue TITLE [BODY]`: create a GitHub issue.
 - `deckz extras random REASON`: roll a dice and email the result (handy for
   arbitrary decision-making, e.g. picking who does a task).
