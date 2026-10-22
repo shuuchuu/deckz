@@ -3,9 +3,12 @@
 Nothing here depends on a repo's theme or content conventions.
 
 
-Each check is a `(settings) -> list[str]` function, its problems already
-formatted as a human-readable line (commonly `"<path>: <message>"` or
-`"<path>:<line>: <message>"`). `CHECKS` maps every built-in check's name to
+Each check is a `(settings, paths=None) -> list[str]` function, its problems
+already formatted as a human-readable line (commonly `"<path>: <message>"` or
+`"<path>:<line>: <message>"`). Given `paths` (absolute paths, e.g. the files a
+Claude Code hook checks), a check reports only about them, and returns at once
+when none is of a kind it reads; without, it checks the whole repository.
+`CHECKS` maps every built-in check's name to
 its function, and `DEFERRED` those whose findings don't block a commit by
 default. `deckz check content` is the CLI for this; a target repo can add
 its own checks, in the
@@ -21,7 +24,7 @@ Markdown-to-Typst/HTML pipeline, asset metadata yaml files).
 
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Iterable, Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -29,7 +32,7 @@ from ..exceptions import LabIdConflictError
 from ..labs.comparison import compare_pairs, missing_notebooks
 from ..labs.ids import assign_ids
 from ..labs.notebook import notebook_paths
-from ..utils import content_dirs, content_files
+from ..utils import content_dirs, content_files, is_content_file
 
 if TYPE_CHECKING:
     from ..configuring.settings import DeckSettings, GlobalSettings
@@ -42,13 +45,63 @@ def _rel(path: Path, git_dir: Path) -> str:
     return path.relative_to(git_dir).as_posix()
 
 
-def lab_ids(settings: "GlobalSettings") -> list[str]:
+Paths = Collection[Path] | None
+"""The files a check is limited to, or None for the whole repository."""
+
+
+def _any(paths: Paths, wanted: Callable[[Path], bool]) -> bool:
+    # Whether a check reading the files `wanted` accepts has anything to do.
+    return paths is None or any(wanted(path) for path in paths)
+
+
+def _under(path: Path, directory: Path) -> bool:
+    return path.is_relative_to(directory)
+
+
+def _is_notebook(settings: "GlobalSettings", path: Path) -> bool:
+    return path.suffix == ".ipynb" and _under(path, settings.paths.labs_notebooks_dir)
+
+
+def _in_content_dir(settings: "GlobalSettings", path: Path) -> bool:
+    # In the shared content directory, or in a deck's own (a `content/` next
+    # to a `deck.yml`, `DeckPaths`' defaults): what `content_dirs` walks,
+    # without parsing every deck.
+    if _under(path, settings.paths.content_dir):
+        return True
+    return any(
+        _under(parent, settings.paths.git_dir)
+        and parent.name == "content"
+        and (parent.parent / "deck.yml").is_file()
+        for parent in path.parents
+    )
+
+
+def _content_files(settings: "GlobalSettings", paths: Paths) -> Iterator[Path]:
+    # Every content file, or those of `paths` (existing, in a content directory).
+    if paths is not None:
+        yield from (
+            path
+            for path in sorted(paths)
+            if is_content_file(path, settings.file_extensions)
+            and path.is_file()
+            and _in_content_dir(settings, path)
+        )
+        return
+    git_dir = settings.paths.git_dir
+    for a_content_dir in content_dirs(git_dir, settings.paths.content_dir):
+        if a_content_dir.is_dir():
+            yield from content_files(a_content_dir, settings.file_extensions)
+
+
+def lab_ids(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
     # Every lab notebook has a valid, unique ID (see `deckz labs ids`).
-    paths = settings.paths
+    if not _any(paths, lambda path: _is_notebook(settings, path)):
+        return []
+    dirs = settings.paths
     try:
         missing = assign_ids(
-            paths.labs_notebooks_dir,
-            paths.content_dir,
+            dirs.labs_notebooks_dir,
+            dirs.content_dir,
             id_metadata_key=settings.labs.id_metadata_key,
             id_pattern=settings.labs.id_pattern,
             dry_run=True,
@@ -56,13 +109,15 @@ def lab_ids(settings: "GlobalSettings") -> list[str]:
     except LabIdConflictError as error:
         return [str(error)]
     return [
-        f"{_rel(path, paths.git_dir)}: no valid ID (run `deckz labs ids`)"
+        f"{_rel(path, dirs.git_dir)}: no valid ID (run `deckz labs ids`)"
         for _, path in missing
     ]
 
 
-def lab_pairs(settings: "GlobalSettings") -> list[str]:
+def lab_pairs(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
     # Every lab notebook exists in fr and en, and each pair stays in sync.
+    if not _any(paths, lambda path: _is_notebook(settings, path)):
+        return []
     notebooks_dir = settings.paths.labs_notebooks_dir
     git_dir = settings.paths.git_dir
     problems = [
@@ -82,15 +137,14 @@ def lab_pairs(settings: "GlobalSettings") -> list[str]:
     return problems
 
 
-def lab_outputs(settings: "GlobalSettings") -> list[str]:
+def lab_outputs(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
     # A hands-on notebook never carries stored outputs (every learner runs
     # it); a demo always does, each language's from its own run, unless it
     # has no code to run, and never sets Colab's private outputs ("Omit code
     # cell output when saving"), which also hides them when Colab opens it.
-    notebooks_dir = settings.paths.labs_notebooks_dir
     git_dir = settings.paths.git_dir
     problems = []
-    for path in notebook_paths([notebooks_dir]):
+    for path in _notebooks(settings, paths):
         kind, _, _lang = path.stem.rpartition("-")
         if kind not in {"hands-on", "demo"}:
             continue
@@ -159,20 +213,26 @@ def _blank_text_output(output: dict[str, Any]) -> bool:
     )
 
 
-def _notebooks(settings: "GlobalSettings") -> list[Path]:
+def _notebooks(settings: "GlobalSettings", paths: Paths = None) -> list[Path]:
     # A repository may have no labs at all.
+    if paths is not None:
+        return [
+            path
+            for path in sorted(paths)
+            if _is_notebook(settings, path) and path.is_file()
+        ]
     notebooks_dir = settings.paths.labs_notebooks_dir
     return list(notebook_paths([notebooks_dir])) if notebooks_dir.is_dir() else []
 
 
-def lab_secrets(settings: "GlobalSettings") -> list[str]:
+def lab_secrets(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
     # The labs are published to a public repository: no token in a cell's
     # source, nor printed in its stored outputs.
     from ..labs.secrets import find_secrets
 
     git_dir = settings.paths.git_dir
     problems = []
-    for path in _notebooks(settings):
+    for path in _notebooks(settings, paths):
         notebook = json.loads(path.read_text(encoding="utf-8"))
         problems += [
             f"{_rel(path, git_dir)}: {finding}: remove it, revoke it if it was "
@@ -182,7 +242,7 @@ def lab_secrets(settings: "GlobalSettings") -> list[str]:
     return problems
 
 
-def lab_format(settings: "GlobalSettings") -> list[str]:
+def lab_format(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
     # Every notebook is in deckz's canonical JSON style, so that a small edit
     # stays a small diff (a notebook saved from Colab comes back compact).
     from ..labs.notebook import fmt_notebook
@@ -191,17 +251,27 @@ def lab_format(settings: "GlobalSettings") -> list[str]:
     return [
         f"{_rel(path, git_dir)}: not in deckz's notebook format: run "
         f"`deckz labs fmt {_rel(path, git_dir)}`"
-        for path in _notebooks(settings)
+        for path in _notebooks(settings, paths)
         if fmt_notebook(path, heading=settings.labs.solution_heading, dry_run=True)
     ]
 
 
-def asset_credits(settings: "GlobalSettings") -> list[str]:
+def asset_credits(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
     # Asset credit lines (title/author/license, and their _en) are Markdown,
     # rendered through the same pipeline as content, which drops LaTeX.
     git_dir = settings.paths.git_dir
+    assets_dir = settings.paths.assets_dir
+    found: Iterable[Path] = (
+        assets_dir.rglob("*.yml")
+        if paths is None
+        else (
+            path
+            for path in paths
+            if path.suffix == ".yml" and _under(path, assets_dir) and path.is_file()
+        )
+    )
     problems = []
-    for path in sorted(settings.paths.assets_dir.rglob("*.yml")):
+    for path in sorted(found):
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if _CREDIT_LINE.match(line):
                 where = f"{_rel(path, git_dir)}:{lineno}"
@@ -212,33 +282,41 @@ def asset_credits(settings: "GlobalSettings") -> list[str]:
     return problems
 
 
-def raw_latex(settings: "GlobalSettings") -> list[str]:
+def raw_latex(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
     # No .tex content file, no {=latex} block: the Markdown pipeline drops both.
     git_dir = settings.paths.git_dir
-    content_dir = settings.paths.content_dir
-    problems = []
-    for a_content_dir in content_dirs(git_dir, content_dir):
-        if not a_content_dir.is_dir():
-            continue
-        for path in sorted(a_content_dir.rglob("*.tex")):
+    if paths is None:
+        tex = [
+            path
+            for a_content_dir in content_dirs(git_dir, settings.paths.content_dir)
+            if a_content_dir.is_dir()
+            for path in sorted(a_content_dir.rglob("*.tex"))
+        ]
+    else:
+        tex = [
+            path
+            for path in sorted(paths)
+            if path.suffix == ".tex" and _in_content_dir(settings, path)
+        ]
+    problems = [
+        f"{_rel(path, git_dir)}: .tex content (only "
+        f"{', '.join(settings.file_extensions)} is compiled): convert "
+        "it to Markdown"
+        for path in tex
+    ]
+    for path in _content_files(settings, paths):
+        text = path.read_text(encoding="utf-8")
+        for match in _LATEX_BLOCK.finditer(text):
+            lineno = text.count("\n", 0, match.start()) + 1
+            where = f"{_rel(path, git_dir)}:{lineno}"
             problems.append(
-                f"{_rel(path, git_dir)}: .tex content (only "
-                f"{', '.join(settings.file_extensions)} is compiled): convert "
-                "it to Markdown"
+                f"{where}: {{=latex}} block (dropped by the Markdown "
+                "pipeline): rewrite it in Markdown, or as a {=typst} block"
             )
-        for path in content_files(a_content_dir, settings.file_extensions):
-            text = path.read_text(encoding="utf-8")
-            for match in _LATEX_BLOCK.finditer(text):
-                lineno = text.count("\n", 0, match.start()) + 1
-                where = f"{_rel(path, git_dir)}:{lineno}"
-                problems.append(
-                    f"{where}: {{=latex}} block (dropped by the Markdown "
-                    "pipeline): rewrite it in Markdown, or as a {=typst} block"
-                )
     return problems
 
 
-def jinja_syntax(settings: "GlobalSettings") -> list[str]:
+def jinja_syntax(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
     # Every content file parses with the repository's own Jinja environment
     # (`templates/jinja2/env.py`), the one a build renders it with, its
     # filters and tests known to it: a broken tag (`{{ x`) or a misspelt
@@ -250,40 +328,40 @@ def jinja_syntax(settings: "GlobalSettings") -> list[str]:
     from ..components.factory import GlobalSettingsFactory
     from ..exceptions import HookError
 
-    paths = settings.paths
-    if not paths.jinja2_env_module.is_file():
+    if not settings.paths.jinja2_env_module.is_file():
         return []  # Nothing renders without one.
+    files = list(_content_files(settings, paths))
+    if not files:
+        return []
+    git_dir = settings.paths.git_dir
     renderer = GlobalSettingsFactory(settings).renderer()
     problems = []
-    for a_content_dir in content_dirs(paths.git_dir, paths.content_dir):
-        if not a_content_dir.is_dir():
+    for path in files:
+        where = _rel(path, git_dir)
+        try:
+            env = renderer.environment_for(path.suffix)
+            ast = env.parse(path.read_text(encoding="utf-8"))
+        except HookError as error:
+            return [str(error)]
+        except TemplateSyntaxError as error:
+            problems.append(
+                f"{where}:{error.lineno}: {error.message}: fix the Jinja"
+                " tag, or put it inside {% raw %}…{% endraw %} if it's"
+                " meant as text"
+            )
             continue
-        for path in content_files(a_content_dir, settings.file_extensions):
-            where = _rel(path, paths.git_dir)
-            try:
-                env = renderer.environment_for(path.suffix)
-                ast = env.parse(path.read_text(encoding="utf-8"))
-            except HookError as error:
-                return [str(error)]
-            except TemplateSyntaxError as error:
+        for node in ast.find_all((nodes.Filter, nodes.Test)):
+            kind, known = (
+                ("filter", env.filters)
+                if isinstance(node, nodes.Filter)
+                else ("test", env.tests)
+            )
+            if node.name not in known:
                 problems.append(
-                    f"{where}:{error.lineno}: {error.message}: fix the Jinja"
-                    " tag, or put it inside {% raw %}…{% endraw %} if it's"
-                    " meant as text"
+                    f"{where}:{node.lineno}: no {kind} named"
+                    f" {node.name!r} in templates/jinja2/env.py's"
+                    f" environment: fix its name"
                 )
-                continue
-            for node in ast.find_all((nodes.Filter, nodes.Test)):
-                kind, known = (
-                    ("filter", env.filters)
-                    if isinstance(node, nodes.Filter)
-                    else ("test", env.tests)
-                )
-                if node.name not in known:
-                    problems.append(
-                        f"{where}:{node.lineno}: no {kind} named"
-                        f" {node.name!r} in templates/jinja2/env.py's"
-                        f" environment: fix its name"
-                    )
     return problems
 
 
@@ -312,16 +390,19 @@ def _deck_problems(settings: "DeckSettings") -> list[str]:
     return []
 
 
-def deck_definitions(settings: "GlobalSettings") -> list[str]:
+def deck_definitions(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
     # Every deck parses in French, as its build would: its deck.yml, the
     # sections it includes and their flavors, the files they name, its
     # variables.yml. A deleted shared file still included, or a section
     # .yml that doesn't parse, fails here rather than in every build of
     # the decks using it. English is `missing-en`'s (a plugin's, slow).
-    # About a second for 43 decks, in deckz's process pool.
+    # About a second for 43 decks, in deckz's process pool. Of `paths`,
+    # only a YAML file changes what parses: an existing content file can't.
     from ..exceptions import DeckzError
     from ..utils import all_deck_settings, create_pool
 
+    if not _any(paths, lambda path: path.suffix in {".yml", ".yaml"}):
+        return []
     git_dir = settings.paths.git_dir
     try:
         decks = list(all_deck_settings(git_dir))
@@ -349,7 +430,7 @@ def _published_notebooks_slug(settings: "GlobalSettings") -> str | None:
     return match.group(1) if match else None
 
 
-def lab_urls(settings: "GlobalSettings") -> list[str]:
+def lab_urls(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
     # No hand-written link to the published notebooks repo: a notebook's
     # published URL depends on its ID (deckz labs publish), which can be
     # reassigned, so a repo rendering it should do so through its own
@@ -359,41 +440,49 @@ def lab_urls(settings: "GlobalSettings") -> list[str]:
         return []
     pattern = re.compile(re.escape(slug) + r"\b")
     git_dir = settings.paths.git_dir
-    content_dir = settings.paths.content_dir
     problems = []
-    for a_content_dir in content_dirs(git_dir, content_dir):
-        if not a_content_dir.is_dir():
-            continue
-        for path in content_files(a_content_dir, settings.file_extensions):
-            text = path.read_text(encoding="utf-8")
-            for lineno, line in enumerate(text.splitlines(), 1):
-                if pattern.search(line):
-                    where = f"{_rel(path, git_dir)}:{lineno}"
-                    problems.append(
-                        f"{where}: hand-written link to the "
-                        "published notebooks repo: link the lab through the "
-                        "repository's own templating, which follows its ID"
-                    )
+    for path in _content_files(settings, paths):
+        text = path.read_text(encoding="utf-8")
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if pattern.search(line):
+                where = f"{_rel(path, git_dir)}:{lineno}"
+                problems.append(
+                    f"{where}: hand-written link to the "
+                    "published notebooks repo: link the lab through the "
+                    "repository's own templating, which follows its ID"
+                )
     return problems
 
 
-def course_notes_files(settings: "GlobalSettings") -> list[str]:
+def _course_notes_touched(settings: "GlobalSettings", paths: Paths) -> bool:
+    # A chapter, or deckz.yml (`course_notes.same_as`), among `paths`.
+    return _any(
+        paths,
+        lambda path: (
+            _under(path, settings.paths.course_notes_dir) or path.name == "deckz.yml"
+        ),
+    )
+
+
+def course_notes_files(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
     # Each course notes chapter writes out an existing shared content file, at
     # its path, and `course_notes.same_as` names content files, none of which
     # has a chapter of its own (see `deckz.course_notes`).
     from ..course_notes import chapter_path, chapters
 
-    paths = settings.paths
-    git_dir = paths.git_dir
+    if not _course_notes_touched(settings, paths):
+        return []
+    content_dir = settings.paths.content_dir
+    git_dir = settings.paths.git_dir
     extension = settings.file_extensions[0] if settings.file_extensions else ".md"
 
     def exists(path: str) -> bool:
-        return (paths.content_dir / f"{path}{extension}").is_file()
+        return (content_dir / f"{path}{extension}").is_file()
 
     found = list(chapters(settings))
     problems = [
         f"{_rel(chapter_path(settings, path, lang), git_dir)}: no "
-        f"{_rel(paths.content_dir, git_dir)}/{path}{extension}: name a chapter "
+        f"{_rel(content_dir, git_dir)}/{path}{extension}: name a chapter "
         "after the content file it writes out (move it after a renamed one)"
         for path, lang in found
         if not exists(path)
@@ -414,10 +503,12 @@ def course_notes_files(settings: "GlobalSettings") -> list[str]:
     return problems
 
 
-def course_notes_pairs(settings: "GlobalSettings") -> list[str]:
+def course_notes_pairs(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
     # Each course notes chapter exists in fr and en.
     from ..course_notes import course_notes_pairs as pairs
 
+    if not _course_notes_touched(settings, paths):
+        return []
     git_dir = settings.paths.git_dir
     problems = []
     for fr, en in pairs(settings):
@@ -427,7 +518,7 @@ def course_notes_pairs(settings: "GlobalSettings") -> list[str]:
     return problems
 
 
-CHECKS: dict[str, Callable[["GlobalSettings"], list[str]]] = {
+CHECKS: dict[str, Callable[["GlobalSettings", Paths], list[str]]] = {
     "lab-ids": lab_ids,
     "lab-pairs": lab_pairs,
     "lab-outputs": lab_outputs,

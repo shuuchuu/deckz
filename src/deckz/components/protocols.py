@@ -157,9 +157,13 @@ class AssetsAnalyzerProtocol(Protocol):
 class ChecksRunnerProtocol(Protocol):
     """Every content check to run: deckz's own, merged with the target repo's."""
 
-    def checks(self) -> Mapping[str, Callable[[], list[str]]]: ...
+    def checks(self) -> Mapping[str, Callable[..., list[str]]]: ...
 
-    def findings(self, names: Collection[str] | None = None) -> list["Finding"]: ...
+    def findings(
+        self,
+        names: Collection[str] | None = None,
+        paths: Collection[Path] | None = None,
+    ) -> list["Finding"]: ...
 
 
 class GlobalFactoryProtocol(Protocol):

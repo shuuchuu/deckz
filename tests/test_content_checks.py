@@ -404,3 +404,38 @@ def test_deck_definitions_flags_what_a_build_would_fail_on(tmp_path: Path) -> No
     )
     assert other.startswith("other/deck.yml is not valid YAML")
     assert str(tmp_path) not in "".join(problems)
+
+
+def test_a_check_given_paths_reports_only_about_them(tmp_path: Path) -> None:
+    init_repository(str(tmp_path))
+    block = "```{=latex}\nraw\n```\n"
+    shared = tmp_path / "content" / "topic" / "topic.md"
+    local = tmp_path / "decks" / "d" / "content" / "about" / "description.md"
+    other = tmp_path / "content" / "other" / "other.md"
+    for path in (shared, local, other):
+        _write(path, block)
+    _write(tmp_path / "decks" / "d" / "deck.yml", "name: d\n")
+    _write(tmp_path / "docs" / "notes.md", block)  # Not content: never checked.
+
+    problems = raw_latex(
+        _settings(tmp_path), paths=[shared, local, tmp_path / "docs" / "notes.md"]
+    )
+
+    assert [problem.split(":")[0] for problem in problems] == [
+        "content/topic/topic.md",
+        "decks/d/content/about/description.md",
+    ]
+
+
+def test_a_check_given_no_file_of_its_kind_does_nothing(tmp_path: Path) -> None:
+    init_repository(str(tmp_path))
+    _write(
+        tmp_path / "labs" / "notebooks" / "topic" / "demo-fr.ipynb",
+        '{"metadata": {}, "cells": []}',
+    )
+    markdown = tmp_path / "content" / "topic" / "topic.md"
+    _write(markdown, "# Topic\n")
+
+    assert lab_ids(_settings(tmp_path), paths=[markdown]) == []
+    assert lab_format(_settings(tmp_path), paths=[markdown]) == []
+    assert deck_definitions(_settings(tmp_path), paths=[markdown]) == []
