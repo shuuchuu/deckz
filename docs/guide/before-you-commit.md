@@ -9,7 +9,9 @@ deckz status
 says where your work stands, item by item, each with what to do:
 
 - the content checks' problems (`--no-checks` skips them, the slow part);
-- what your changes leave to translate, and the repository's translation backlog;
+- what your changes leave to translate, what fails the English build of the decks
+  they reach (a file with no `en/` version, a title with no `en:`), and the
+  repository's translation backlog;
 - lab notebooks and videos not published as committed or rendered (compared with
   the published ones as last fetched; `--fetch` fetches them first);
 - the PDFs of the decks your changes reach that don't match them anymore.
@@ -22,8 +24,9 @@ deckz status <deck>
 ```
 
 says instead what's left before teaching or uploading one deck, whoever made it: the
-checks' problems in its files (deferred ones included: they're due now), its files
-waiting for a port to the other language, and its built PDFs that don't match its
+checks' problems in its files (deferred ones included: they're due now), what fails
+its English build, its files waiting for a port to the other language, and its built
+PDFs that don't match its
 content, with their shrunk frames and header or footer lines that wrap.
 
 ## Committing
