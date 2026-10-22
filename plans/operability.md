@@ -302,8 +302,9 @@ gone. Slides 71de77d0 then moved the memory-only rules into the repo (reorganiza
 plan phase 7b: `docs/conventions.md`, `docs/decisions.md`, `labs/README.md`, docstrings),
 added `CLAUDE.md`'s "Agents only" section and pointed the skills at the docs and at
 `deckz status`; the `labs gpu` lessons went to this guide (f08ef47). The Evidently
-outputs rewrite is automated too (`labs.outputs.hooks`, 5.3, 2026-10-22). Left: the
-acceptance test.
+outputs rewrite is automated too (`labs.outputs.hooks`, 5.3, 2026-10-22). The
+acceptance test with the colleague is under way (2026-10-22), outside this plan: its
+findings go into a new plan if they call for one.
 
 Once each phase has shipped:
 
@@ -320,9 +321,6 @@ Once each phase has shipped:
   subagents, questions for the user.
 - Delete the doit tasks that `deckz setup` replaces, and the `systemd-run` and `--sync`
   warnings.
-- **Acceptance test**: the colleague does three real tasks with only the handbook and
-  `deckz --help` (fix a slide in both languages, add a lab, get a deck ready to teach on
-  Monday), and we note every place they got stuck.
 
 ## Decisions (2026-10-10)
 
@@ -491,8 +489,7 @@ them, plus `lab-frames`, `lab-hands-on`, `lab-cpu`, `lab-portable`, `lab-typogra
 no gate catches them) and `lab-codespace` stay blocking. Tried on a scratch worktree:
 a staged wrong quiz answer and a French notebook's missing non-breaking space, all
 deferred, exit 0; the commit went through marked `Lang-sync: pending`, and `bdm`'s
-upload dry run listed the quiz's two problems. Left: the acceptance test with the
-colleague ("Then, in slides").
+upload dry run listed the quiz's two problems.
 
 The guide's translating and checks pages, then slides' `HANDBOOK.md`: commit as you
 like; what blocks a commit and why; where the debt shows (`deckz status`, studioz),
@@ -506,3 +503,71 @@ and when it must be settled.
    checks are deferred to `upload`, `labs publish` and `deckz status <deck>`.
 3. The colleague commits; the maintainer settles the debt (as decision 5 above already
    has it for translation).
+
+## Phase 9: what the earlier phases left out
+
+**Status (2026-10-22):** planned. Four items the phases above left out on purpose, one
+increment each, in this order (smallest first).
+
+### 9.1 `deckz status`: English gaps in the decks your changes reach
+
+Phase 3 left out `missing-en` for the affected decks because it took about a minute.
+Since the libyaml loader (8.2), `deckz i18n missing-en --all` takes 4 s on slides' 43
+decks. The Translation section adds, for each deck your changes reach, what would
+block `deckz run --lang en`: a French file with no `en/` sibling, and a title or
+variable whose translation map has no `en` key (`i18n_coverage`), each with its fix.
+`deckz status DECK` lists the same for its deck. `affected_decks` is computed once,
+for this section and Built decks.
+
+### 9.2 The upload gate maps a problem in an asset to the decks showing it
+
+8.3 left `asset-credits` (and any plugin check naming a file under `assets/`) out of
+`deck_findings`, because nothing knew which decks show an asset. The renderer already
+records each asset a fragment looks up (`AssetsMetadataRetriever`). For the deck at
+hand, `deck_findings` renders its fragments, French and English, and keeps a problem
+whose path is the metadata file of one of the assets they show. Only when some problem
+names an asset: rendering a deck costs seconds. `deckz show affected` stays as it is.
+Rendering every deck to map a changed asset would be `deckz asset search`'s work, and
+too slow for `status`.
+
+### 9.3 Demos whose code changed after their outputs were written
+
+Phase 3 left this out. A demo's stored outputs come from a run (`deckz labs outputs`),
+and a later edit to its code cells can leave them showing what the code no longer
+does. Like translation, this is a fact about history. The tree can't show it, so it's
+recomputed from git, and nothing is stored.
+
+- For each demo with outputs, the last commit (or the working tree) whose outputs
+  differ from the state before it is when they were *written*. The demo is stale when
+  its code cells differ between that state and now. Blank lines and comment-only lines
+  don't count.
+- A prototype on slides flags 44 of 90 demos. Most of them come from sweeping,
+  mechanical commits (each lab's dataset download line, typography) that change no
+  output that matters. A rerun is GPU time, so such a change needs a way out, as
+  translation has `mark-synced`: a `Lab-outputs-current: <path>` trailer makes its
+  commit the demo's new written point. `deckz labs mark-current <notebook>...
+  --reason "<why>"` records one in an empty commit, and a sweeping commit can carry
+  the trailers itself.
+- `deckz labs stale [notebooks] [--json]` lists them, each with the commits that
+  changed the code. `deckz status` itemizes your changes' and counts the rest, as the
+  Translation section does. Each item says to rerun the demo (`deckz labs gpu pass
+  --write-outputs`, or a local run and `deckz labs outputs`), or to `mark-current` it.
+- Blobs are parsed once: a demo can weigh 8 MB, and the prototype took 12 s on
+  slides. Their code and outputs digests are cached by blob sha under `.run/`.
+- No check and no gate. Whether stale outputs mislead is a judgment call, so the
+  maintainer settles it from the list.
+
+### 9.4 Nightly CI builds of the decks changed that day
+
+Phase 6 left these out because they need the assets toolchain. The nightly job
+builds the French and English handouts of the decks that the day's commits reach
+(`deckz show affected` over `git diff --name-only <yesterday's last commit>..HEAD`),
+with `typst_memory_max`. It fails, naming the deck, when one doesn't build. What the
+toolchain needs comes from `deckz.yml`, as `ci.apt_packages` does, and the image gets
+the rest. To be worked out in the increment:
+
+- Videos: a deck showing an unrendered video fails. Render them at draft quality
+  (`deckz videos render --quick`), or fetch the published ones.
+- Time and memory on GitHub's runners (4 CPUs, 16 GB): a cap on the number of decks,
+  the rest left for the next night.
+
