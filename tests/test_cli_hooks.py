@@ -144,8 +144,11 @@ def test_hooks_install_also_writes_claude_settings(repo: Path) -> None:
     assert set(settings["hooks"]) == {
         "PreToolUse",
         "PostToolUse",
+        "PostToolUseFailure",
         "SessionStart",
         "Stop",
+        "WorktreeCreate",
+        "WorktreeRemove",
     }
 
 

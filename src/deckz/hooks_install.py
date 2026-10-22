@@ -64,6 +64,12 @@ HOOKS: dict[str, str] = {
 }
 
 _EDIT_TOOLS = "Edit|Write|MultiEdit|NotebookEdit"
+# `deckz hooks post-bash` has nothing to do unless `pre-bash` left a snapshot
+# (`agent_checkouts`): this skips its Python start-up after every other command.
+_PENDING_SNAPSHOT = (
+    '[ -n "$(ls -A "$(git rev-parse --git-common-dir 2>/dev/null)'
+    '/deckz-bash-snapshots" 2>/dev/null)" ] || exit 0; '
+)
 _CLAUDE_HOOKS: list[dict[str, Any]] = [
     {
         "event": "PreToolUse",
@@ -85,6 +91,20 @@ _CLAUDE_HOOKS: list[dict[str, Any]] = [
         "statusMessage": "Checking the content file",
     },
     {
+        "event": "PostToolUse",
+        "matcher": "Bash",
+        "subcommand": "post-bash",
+        "timeout": 30,
+        "guard": _PENDING_SNAPSHOT,
+    },
+    {
+        "event": "PostToolUseFailure",
+        "matcher": "Bash",
+        "subcommand": "post-bash",
+        "timeout": 30,
+        "guard": _PENDING_SNAPSHOT,
+    },
+    {
         "event": "SessionStart",
         "subcommand": "session-start",
         "timeout": 30,
@@ -92,6 +112,16 @@ _CLAUDE_HOOKS: list[dict[str, Any]] = [
     {
         "event": "Stop",
         "subcommand": "stop",
+        "timeout": 60,
+    },
+    {
+        "event": "WorktreeCreate",
+        "subcommand": "worktree-create",
+        "timeout": 600,
+    },
+    {
+        "event": "WorktreeRemove",
+        "subcommand": "worktree-remove",
         "timeout": 60,
     },
 ]
@@ -176,7 +206,7 @@ def install_claude_hooks(git_dir: Path) -> Path:
     hooks = settings.setdefault("hooks", {})
     for spec in _CLAUDE_HOOKS:
         groups = hooks.setdefault(spec["event"], [])
-        command = deckz_command(f"hooks {spec['subcommand']}")
+        command = spec.get("guard", "") + deckz_command(f"hooks {spec['subcommand']}")
         ours = False
         for group in groups:
             for hook in group.get("hooks", []):

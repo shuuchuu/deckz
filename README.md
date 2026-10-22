@@ -659,8 +659,9 @@ checks:
 
 `deckz hooks install` also adds deckz's own Claude Code hooks to
 `.claude/settings.json` (Claude Code is treated as a requirement of a
-deckz-managed repository, like git): `deckz hooks pre-bash`/`pre-edit`/
-`post-edit`/`session-start`/`stop`, backed by `deckz.agent_hooks` and
+deckz-managed repository, like git): `deckz hooks pre-bash`/`post-bash`/
+`pre-edit`/`post-edit`/`session-start`/`stop`/`worktree-create`/
+`worktree-remove`, backed by `deckz.agent_hooks` and
 `deckz.agent_checkouts`. The generic rules they enforce need no
 repo-specific knowledge:
 
@@ -685,17 +686,30 @@ repo-specific knowledge:
   branch doesn't have. Elsewhere, it is the files the session's edit
   tools changed: never another session's work. A one-sided pair is
   reported once per session, at most ten paths per list.
-- With `worktree.required_for_agents`, the main checkout is for reading
-  only: **PreToolUse/Edit,Write,MultiEdit,NotebookEdit** denies an edit
-  of one of its files (or of a worktree's from a session still in the
-  main checkout); **PreToolUse/Bash** lets a command run there, or on its
-  files, only if it reads (a short list of programs, git's and deckz's
-  read-only subcommands, `git merge --ff-only`, `git worktree`, `deckz
-  worktree`) and doesn't redirect into it; **SessionStart** tells a
-  session starting there to create its worktree (`deckz worktree add`,
-  then Claude Code's EnterWorktree with its path) and to land its commits
-  with `deckz worktree land`. These are guard rails against an agent's
-  mistakes, not a sandbox.
+- **WorktreeCreate**/**WorktreeRemove**: the worktrees Claude Code makes
+  (`claude --worktree <name>`, EnterWorktree with a name, a subagent's
+  worktree isolation) are `deckz worktree add`'s, `../<repo>--<name>`
+  with the builds copied and `deckz setup` run, and are removed by
+  `deckz worktree remove`, which keeps one holding work nothing else has.
+- With `worktree.required_for_agents`, the main checkout is the user's:
+  agents change files only in a worktree of their own.
+  **PreToolUse/Edit,Write,MultiEdit,NotebookEdit** denies an edit of one
+  of its files (or of a worktree's from a session still in the main
+  checkout). **PreToolUse/Bash** refuses there what is clearly a change:
+  git and deckz commands other than read-only ones (`git merge
+  --ff-only`, `git worktree` and `deckz worktree` are allowed), a
+  redirection into it, `cp`/`mv`/`rm`/`sed -i`/`find -delete`… writing
+  one of its files, `uv sync`/`pip`/`npm install`. Anything else runs (a
+  script, a report written to `/tmp`), after a snapshot of the main
+  checkout's `git status`; **PostToolUse/Bash** compares, and reports
+  what the command changed there, which the session may then put back
+  (`git restore`, `rm`) and only that. A shell test skips that hook's
+  start-up when no snapshot is pending, i.e. in a worktree.
+  **SessionStart** tells a session starting in the main checkout to
+  create its worktree, and `deckz worktree land` puts a worktree's
+  commits on the main checkout's branch. These are guard rails against an
+  agent's mistakes, not a sandbox: a change git ignores (a virtual
+  environment, a build) or outside the repository isn't seen.
 
 A repo can add its own Bash denials (e.g. never publish, never push to a
 themed remote) from an optional `templates/hooks.py` module exposing:

@@ -1,8 +1,8 @@
 import subprocess
 from pathlib import Path
 
-from deckz.agent_checkouts import edit_denial
-from deckz.agent_hooks import bash_denial, commands
+from deckz.agent_checkouts import create_worktree, edit_denial, remove_worktree
+from deckz.agent_hooks import bash_denial, commands, post_bash_report
 from deckz.configuring.settings import GlobalPaths, GlobalSettings, WorktreeSettings
 
 
@@ -122,6 +122,11 @@ def test_bash_denial_allows_reading_the_main_checkout(tmp_path: Path) -> None:
         "deckz worktree add y",
         "git -C ../repo--x commit -m x",
         "cd ../repo--x && python3 script.py > out.txt",
+        "python3 script.py",  # Watched instead: see post_bash_report.
+        "uv run python tools/report.py --out /tmp/report.txt",
+        "sed -i s/a/b/ /tmp/notes.md",
+        "cp a.md /tmp/a.md",
+        "tar -czf /tmp/a.tgz a.md",
     ):
         assert bash_denial(settings, _bash(command, main)) is None, command
 
@@ -135,9 +140,13 @@ def test_bash_denial_denies_changing_the_main_checkout(tmp_path: Path) -> None:
         "git add a.md",
         "git checkout -b other",
         "git merge ws/x",
-        "python3 script.py",
-        "uv run python script.py",
+        "uv sync",
+        "pip install requests",
+        "npm install",
         "sed -i s/a/b/ a.md",
+        "perl -pi -e s/a/b/ a.md",
+        "cp /tmp/a.md a.md",
+        "tar -xzf /tmp/a.tgz",
         "echo x > a.md",
         "echo x >> a.md",
         "find . -name '*.pyc' -delete",
@@ -178,3 +187,83 @@ def test_bash_denial_leaves_the_main_checkout_alone_by_default(tmp_path: Path) -
     settings = _settings(main, required=False)
 
     assert bash_denial(settings, _bash("python3 script.py > a.md", main)) is None
+
+
+# -- the snapshot around a command in the main checkout --------------------
+
+
+def _run(settings: GlobalSettings, command: str, cwd: Path, **extra: str) -> dict:
+    """Run `command` the way Claude Code would, between the Bash hooks.
+
+    Returns:
+        The PostToolUse payload, for `post_bash_report`.
+    """
+    payload = {"session_id": "s1", "tool_use_id": "t1", **_bash(command, cwd), **extra}
+    assert bash_denial(settings, payload) is None
+    subprocess.run(command, shell=True, cwd=cwd, check=False)
+    return payload
+
+
+def test_post_bash_report_flags_what_a_command_changed(tmp_path: Path) -> None:
+    main, _ = _checkouts(tmp_path)
+    settings = _settings(main)
+    (main / "b.md").write_text("user's\n", encoding="utf8")  # The user's own edit.
+
+    payload = _run(settings, "python3 -c \"open('a.md', 'w').write('x')\"", main)
+    report = post_bash_report(settings, payload)
+
+    assert report is not None
+    assert "- a.md" in report
+    assert "b.md" not in report
+    assert not list((main / ".git" / "deckz-bash-snapshots").iterdir())
+
+
+def test_post_bash_report_is_silent_on_a_command_writing_elsewhere(
+    tmp_path: Path,
+) -> None:
+    main, _ = _checkouts(tmp_path)
+    settings = _settings(main)
+    out = tmp_path / "out.txt"
+
+    payload = _run(settings, f"python3 -c \"open('{out}', 'w').write('x')\"", main)
+
+    assert post_bash_report(settings, payload) is None
+    assert out.is_file()
+
+
+def test_a_session_may_restore_what_it_changed_only(tmp_path: Path) -> None:
+    main, _ = _checkouts(tmp_path)
+    settings = _settings(main)
+    (main / "b.md").write_text("user's\n", encoding="utf8")
+    payload = _run(
+        settings,
+        "python3 -c \"open('a.md', 'w').write('x'); open('c.md', 'w').write('x')\"",
+        main,
+    )
+    assert post_bash_report(settings, payload) is not None
+
+    user = {"session_id": "s1", **_bash("git restore b.md", main)}
+    assert bash_denial(settings, user) is not None
+    restore = _run(settings, "git restore -- a.md && rm c.md", main, tool_use_id="t2")
+
+    assert post_bash_report(settings, restore) is None
+    assert (main / "a.md").read_text(encoding="utf8") == "a\n"
+    assert not (main / "c.md").exists()
+    # Back to HEAD: no longer the session's to discard.
+    (main / "a.md").write_text("user's\n", encoding="utf8")
+    later = {"session_id": "s1", **_bash("git restore a.md", main)}
+    assert bash_denial(settings, later) is not None
+
+
+# -- WorktreeCreate / WorktreeRemove --------------------------------------
+
+
+def test_create_worktree_makes_a_deckz_worktree(tmp_path: Path) -> None:
+    main, _ = _checkouts(tmp_path)
+
+    path = create_worktree(_settings(main, required=False), "feature/x.y")
+
+    assert path == tmp_path / "repo--feature-x-y"
+    assert (path / "a.md").is_file()
+    remove_worktree(_settings(main), path)
+    assert not path.exists()

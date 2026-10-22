@@ -3,104 +3,79 @@
 Several Claude Code sessions sharing one checkout see each other's
 uncommitted edits, commit them by mistake, and get each other's hook
 reports. When `deckz.yml` sets `worktree.required_for_agents`, the main
-checkout is for reading, and each session works in its own worktree
-(`deckz worktree add <name>`, then Claude Code's EnterWorktree with its
-path), from which `deckz worktree land` puts its commits on the main
-checkout's branch. The hooks enforce it as strictly as they can:
+checkout is the user's, and each session works in its own worktree
+(`claude --worktree <name>`, or `deckz worktree add <name>` then Claude
+Code's EnterWorktree with its path), from which `deckz worktree land` puts
+its commits on the main checkout's branch. The hooks enforce it:
 
 - `edit_denial` (PreToolUse on the edit tools): no edit of a file of the
   main checkout, nor of a worktree's file from a session still in the main
   checkout, whose hooks would run in the wrong checkout;
-- `main_checkout_denial` (called by `agent_hooks.bash_denial`): a command
-  run in the main checkout, or naming one of its paths, must be read-only:
-  a program of `_READ_ONLY` (minus its writing options), a read-only git
-  or deckz subcommand, `git merge --ff-only` (landing), `git worktree`,
-  `deckz worktree`; and no redirection may write into it;
+- `main_checkout_verdict` (PreToolUse on Bash, through
+  `agent_hooks.bash_denial`): refuses what is clearly a change of the main
+  checkout -- git and deckz commands other than read-only ones (`git merge
+  --ff-only` and `deckz worktree` are), a redirection into it, a program
+  of `_WRITERS` writing one of its files, a change of its environment
+  (`uv sync`, `pip`, `npm install`) -- and lets everything else run, after
+  a snapshot of its `git status` (`take_snapshot`);
+- `main_changes_report` (PostToolUse on Bash): compares the main
+  checkout's `git status` with the snapshot, and reports what the command
+  changed, which the session may then restore (`git restore`, `rm`) and
+  only that;
 - `session_start_context` (SessionStart): tells a session starting in the
-  main checkout to create its worktree first.
+  main checkout to create its worktree first;
+- `create_worktree`/`remove_worktree` (WorktreeCreate/WorktreeRemove):
+  Claude Code's own worktrees (`claude --worktree`, EnterWorktree, a
+  subagent's isolation) are `deckz worktree`'s, builds included.
 
-A command can still write through a program the allowlist trusts (`sed`'s
-`w` command, say): these are guard rails against an agent's mistakes, not a
-sandbox.
+A change the snapshot can't see (an ignored file, a file outside the
+repository) goes through: these are guard rails against an agent's
+mistakes, not a sandbox.
 """
 
+import hashlib
+import json
 import os
 import re
 import subprocess
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from time import time
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .configuring.settings import GlobalSettings
 
-_READ_ONLY = frozenset(
+# Programs that change the files they name: refused when one is in the main
+# checkout. Every non-option argument is one, except where `_targets` says.
+_WRITERS = frozenset(
     {
-        "[",
-        "basename",
-        "cat",
-        "cd",
-        "cmp",
-        "column",
-        "comm",
-        "cut",
-        "date",
-        "df",
-        "diff",
-        "dirname",
-        "du",
-        "echo",
-        "egrep",
-        "false",
-        "fgrep",
-        "file",
-        "find",
-        "grep",
-        "head",
-        "jq",
-        "less",
-        "ls",
-        "md5sum",
-        "nl",
-        "pdffonts",
-        "pdfinfo",
-        "printf",
-        "pwd",
-        "readlink",
-        "realpath",
-        "rg",
-        "sed",
-        "sha1sum",
-        "sha256sum",
-        "sort",
-        "stat",
-        "tail",
-        "test",
-        "tree",
-        "true",
-        "type",
-        "uniq",
-        "wc",
-        "which",
+        "chmod",
+        "chown",
+        "cp",
+        "install",
+        "ln",
+        "mkdir",
+        "mv",
+        "patch",
+        "rm",
+        "rmdir",
+        "rsync",
+        "tar",
+        "tee",
+        "touch",
+        "truncate",
+        "unlink",
+        "unzip",
     }
 )
-# Options that make a program of `_READ_ONLY` write or run something.
-_WRITING_OPTIONS = {
-    "find": (
-        "-delete",
-        "-exec",
-        "-execdir",
-        "-ok",
-        "-okdir",
-        "-fprint",
-        "-fprint0",
-        "-fprintf",
-        "-fls",
-    ),
-    "sed": ("-i", "--in-place"),
-    "sort": ("-o", "--output"),
-}
+# In-place editors: writers only with one of these options.
+_IN_PLACE = {"sed": ("-i", "--in-place"), "perl": ("-i",)}
+# `find` writes (or runs anything) with these; `sort` writes with -o.
+_FIND_ACTIONS = frozenset(
+    {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fls"}
+)
 _GIT_READ_ONLY = frozenset(
     {
         "blame",
@@ -149,6 +124,10 @@ _DECKZ_READ_ONLY_PAIRS = {
     "setup": {"--check"},
 }
 _REDIRECTION = re.compile(r"^\d*>>?(.*)$")
+_SNAPSHOTS = "deckz-bash-snapshots"
+"""Directory, in the git common directory, of the snapshots of the Bash
+calls running in the main checkout."""
+_SHOWN = 10
 
 
 @dataclass(frozen=True)
@@ -195,10 +174,11 @@ def checkouts(git_dir: Path) -> Checkouts:
 
 def _how_to(main: Path) -> str:
     return (
-        f"`deckz worktree add <name>` creates one ({main.parent}/{main.name}--<name>,"
-        " on branch ws/<name>); switch into it with EnterWorktree (its path), work"
-        " and commit there, and `deckz worktree land` puts the commits on the main"
-        " checkout's branch."
+        "EnterWorktree with a name creates one and moves the session into it"
+        f" ({main.parent}/{main.name}--<name>, branch ws/<name>, made by `deckz"
+        " worktree add`; EnterWorktree with the path of an existing one moves into"
+        " it); work and commit there, and `deckz worktree land` puts the commits on"
+        " the main checkout's branch."
     )
 
 
@@ -296,6 +276,94 @@ def _names_path_in(words: Iterable[str], cwd: Path, found: Checkouts) -> bool:
     return False
 
 
+def _option_value(args: list[str], *names: str) -> str | None:
+    for i, arg in enumerate(args):
+        if arg in names and i + 1 < len(args):
+            return args[i + 1]
+        for name in names:
+            if name.startswith("--") and arg.startswith(f"{name}="):
+                return arg.partition("=")[2]
+    return None
+
+
+def _positionals(args: list[str]) -> list[str]:
+    if "--" in args:
+        i = args.index("--")
+        return [a for a in args[:i] if not a.startswith("-")] + args[i + 1 :]
+    return [a for a in args if not a.startswith("-")]
+
+
+def _find_targets(_: str, args: list[str], cwd: Path) -> list[Path]:
+    if not set(args) & _FIND_ACTIONS:
+        return []
+    starts = []
+    for arg in args:
+        if arg.startswith(("-", "(", "!")):
+            break
+        starts.append(_resolve(arg, cwd))
+    return starts or [cwd]
+
+
+def _sort_targets(_: str, args: list[str], cwd: Path) -> list[Path]:
+    output = _option_value(args, "-o", "--output")
+    return [_resolve(output, cwd)] if output else []
+
+
+def _in_place_targets(program: str, args: list[str], cwd: Path) -> list[Path]:
+    if not any(a.startswith(_IN_PLACE[program]) or a == "-pi" for a in args):
+        return []
+    # The script is the first word, unless -e/-f give it.
+    rest = [a for a in args if not a.startswith("-")]
+    if script := _option_value(args, "-e", "-f", "--expression", "--file"):
+        return [_resolve(a, cwd) for a in rest if a != script]
+    return [_resolve(a, cwd) for a in rest[1:]]
+
+
+def _extracted_targets(program: str, args: list[str], cwd: Path) -> list[Path]:
+    if program == "tar" and not _extracts(args):
+        return []
+    directory = _option_value(args, "-d", "-C", "--directory")
+    return [_resolve(directory, cwd) if directory else cwd]
+
+
+_SPECIAL_TARGETS = {
+    "find": _find_targets,
+    "sort": _sort_targets,
+    "sed": _in_place_targets,
+    "perl": _in_place_targets,
+    "patch": _extracted_targets,
+    "tar": _extracted_targets,
+    "unzip": _extracted_targets,
+}
+
+
+def _targets(program: str, args: list[str], cwd: Path) -> list[Path]:
+    """The files a writer (`_WRITERS`, an in-place editor, `find`, `sort`) changes.
+
+    Returns:
+        Their paths; empty for a program run without its writing option.
+    """
+    if program in _SPECIAL_TARGETS:
+        return _SPECIAL_TARGETS[program](program, args, cwd)
+    positionals = _positionals(args)
+    if program in {"cp", "install", "ln", "rsync"}:
+        if directory := _option_value(args, "-t", "--target-directory"):
+            return [_resolve(directory, cwd)]
+        return [_resolve(positionals[-1], cwd)] if positionals else []
+    if program in {"chmod", "chown"}:
+        positionals = positionals[1:]  # The mode or owner.
+    return [_resolve(a, cwd) for a in positionals]
+
+
+def _extracts(args: list[str]) -> bool:
+    first = args[0] if args else ""
+    return (
+        "--extract" in args
+        or "-x" in args
+        or (not first.startswith("--") and "x" in first.lstrip("-"))
+    )
+
+
 def _git_read_only(args: list[str]) -> bool:
     i = 0
     while i < len(args) and args[i].startswith("-"):
@@ -316,6 +384,28 @@ def _git_read_only(args: list[str]) -> bool:
     return False
 
 
+def _git_restores(args: list[str], cwd: Path, main: Path, own: set[str]) -> bool:
+    # `git restore`/`checkout -- <paths>` putting back files of `own` only.
+    i = 0
+    while i < len(args) and args[i].startswith("-"):
+        i += 2 if args[i] in {"-C", "-c", "--git-dir", "--work-tree"} else 1
+    if i >= len(args) or args[i] not in {"restore", "checkout"}:
+        return False
+    rest = args[i + 1 :]
+    if args[i] == "checkout" and "--" not in rest:
+        return False
+    paths = _positionals(rest)
+    return bool(paths) and _all_own(paths, cwd, main, own)
+
+
+def _all_own(words: list[str], cwd: Path, main: Path, own: set[str]) -> bool:
+    paths = [_resolve(word, cwd) for word in words]
+    return all(
+        path.is_relative_to(main) and path.relative_to(main).as_posix() in own
+        for path in paths
+    )
+
+
 def _deckz_read_only(args: list[str]) -> bool:
     if {"--help", "-h", "--version"} & set(args):
         return True
@@ -329,80 +419,281 @@ def _deckz_read_only(args: list[str]) -> bool:
     )
 
 
-def _read_only(words: list[str]) -> bool:
-    while words and re.fullmatch(r"\w+=.*", words[0]):  # VAR=value prefixes
-        words = words[1:]
-    if not words:
+def _changes_environment(program: str, args: list[str]) -> bool:
+    # Its virtual environment or node_modules: ignored by git, so the
+    # snapshot wouldn't see the change, which every session in the checkout
+    # would run with.
+    positionals = _positionals(args)
+    sub = positionals[0] if positionals else ""
+    if program == "uv":
+        return bool(sub) and sub not in {"run", "help", "version", "tree"}
+    if program in {"pip", "pip3"} or (program.startswith("python") and "pip" in args):
         return True
-    program, args = Path(words[0]).name, words[1:]
-    if program == "git":
-        return _git_read_only(args)
-    if program == "deckz":
-        return _deckz_read_only(args)
-    if program == "uv" and args[:1] == ["run"]:
-        rest = args[1:]
-        while rest and rest[0].startswith("-"):
-            rest = rest[1:]
-        return bool(rest) and Path(rest[0]).name == "deckz" and _read_only(rest)
-    if program == "command":
-        return args[:1] in (["-v"], ["-V"])
-    if program not in _READ_ONLY:
-        return False
-    writing = _WRITING_OPTIONS.get(program, ())
-    return not any(
-        arg == option
-        or (option == "-i" and arg.startswith("-i"))
-        or arg.startswith(f"{option}=")
-        for arg in args
-        for option in writing
+    return program in {"npm", "pnpm", "yarn"} and sub in {
+        "install",
+        "i",
+        "ci",
+        "add",
+        "update",
+        "remove",
+        "uninstall",
+    }
+
+
+def _refusal(shown: str, what: str, main: Path) -> str:
+    shown = shown if len(shown) <= 80 else shown[:77] + "..."
+    return (
+        f"`{shown}` {what}, in the main checkout ({main}), which is the user's: agents"
+        " change files only in a worktree of their own. " + _how_to(main)
     )
 
 
-def main_checkout_denial(
-    settings: "GlobalSettings", script: list[list[str]], cwd: Path
-) -> str | None:
-    """Why a Bash command may not run, if it changes the main checkout.
+def _unwrapped(words: list[str]) -> list[str]:
+    # The command itself: without `VAR=value` prefixes, nor `uv run [options]`.
+    while words and re.fullmatch(r"\w+=.*", words[0]):
+        words = words[1:]
+    if len(words) > 2 and Path(words[0]).name == "uv" and words[1] == "run":
+        rest = words[2:]
+        while rest and rest[0].startswith("-"):
+            rest = rest[1:]
+        return _unwrapped(rest) if rest else words
+    return words
 
+
+def _git_verdict(
+    shown: str, args: list[str], cwd: Path, found: Checkouts, own: set[str]
+) -> str | None:
+    here = cwd
+    if "-C" in args and args.index("-C") + 1 < len(args):
+        here = _resolve(args[args.index("-C") + 1], cwd)
+    if not found.in_main(here):
+        return None
+    if _git_read_only(args) or _git_restores(args, here, found.main, own):
+        return None
+    return _refusal(shown, "changes the repository", found.main)
+
+
+def _simple_verdict(
+    words: list[str], cwd: Path, found: Checkouts, own: set[str]
+) -> tuple[str | None, bool]:
+    """Whether one simple command may run, and whether it may touch the main checkout.
+
+    Returns:
+        The refusal (None if it may run), and whether to take a snapshot.
+    """
+    words = _unwrapped(words)
+    if not words:
+        return None, False
+    program, args = Path(words[0]).name, words[1:]
+    main = found.main
+    shown = " ".join(words)
+    if program == "git":
+        return _git_verdict(shown, args, cwd, found, own), False
+    in_main = found.in_main(cwd)
+    names_main = _names_path_in(args, cwd, found)
+    if program == "deckz":
+        if (in_main or names_main) and not _deckz_read_only(args):
+            what = "builds or changes files" if "run" in args else "changes files"
+            return _refusal(shown, what, main), False
+        return None, False
+    if in_main and _changes_environment(program, args):
+        return _refusal(shown, "changes the Python or Node environment", main), False
+    if program in _WRITERS or program in _SPECIAL_TARGETS:
+        targets = [t for t in _targets(program, args, cwd) if found.in_main(t)]
+        if targets and not (
+            program == "rm" and _all_own(_positionals(args), cwd, main, own)
+        ):
+            return _refusal(shown, f"writes {targets[0]}", main), False
+    return None, in_main or names_main
+
+
+def main_checkout_verdict(
+    settings: "GlobalSettings", script: list[list[str]], cwd: Path, own: set[str]
+) -> tuple[str | None, Path | None]:
+    """Whether a Bash command may run, and whether to watch the main checkout.
+
+    Refuses what is clearly a change of the main checkout (see the module
+    docstring), and lets the rest run, with a snapshot when one of its
+    simple commands runs in the main checkout or names one of its paths.
     Follows `cd` from one simple command to the next, and git's `-C`.
 
     Args:
         settings: The settings of the checkout the session runs in.
         script: The command's simple commands, as `agent_hooks.commands` splits them.
         cwd: The directory the command starts in.
+        own: The main checkout's files the session changed (`main_changes_report`):
+            it may restore those.
 
     Returns:
-        The reason, or None.
+        The refusal (None if it may run), and the main checkout to take a \
+        snapshot of, if any.
     """
     if not _required(settings):
-        return None
+        return None, None
     found = checkouts(settings.paths.git_dir)
     cwd = cwd.resolve()
+    watch = False
     for raw in script:
-        words, targets = _strip_redirections(raw, cwd)
-        if into := [t for t in targets if found.in_main(t)]:
-            return (
-                f"This command writes {into[0]}, in the main checkout, which every"
-                " agent session shares: agents change files only in a worktree of"
-                " their own. " + _how_to(found.main)
-            )
-        if not words:
-            continue
-        program = Path(words[0]).name
-        here = cwd
-        if program == "git" and "-C" in words:
-            here = _resolve(words[words.index("-C") + 1], cwd)
-        touches_main = found.in_main(here) or _names_path_in(words[1:], here, found)
-        if touches_main and not _read_only(words):
-            shown = " ".join(words)
-            shown = shown if len(shown) <= 80 else shown[:77] + "..."
-            return (
-                f"`{shown}` runs in the main checkout ({found.main}), or on its"
-                " files, which every agent session shares: there, only read-only"
-                " commands run. Run it in a worktree of your own: "
-                + _how_to(found.main)
-            )
+        words, redirected = _strip_redirections(raw, cwd)
+        if into := [t for t in redirected if found.in_main(t)]:
+            return _refusal(" ".join(raw), f"writes {into[0]}", found.main), None
+        reason, touches = _simple_verdict(words, cwd, found, own)
+        if reason:
+            return reason, None
+        watch = watch or touches
+        program = Path(words[0]).name if words else ""
         if program in {"cd", "pushd"} and len(words) > 1 and words[1] != "-":
             cwd = _resolve(words[1], cwd)
         elif program == "cd" and len(words) == 1:
             cwd = Path.home()
-    return None
+    return None, found.main if watch else None
+
+
+def _main_status(main: Path) -> dict[str, str]:
+    """Every file of the main checkout that differs from its HEAD, with its hash.
+
+    Changed or untracked (not ignored), from `git status`; a deleted
+    file's hash is empty.
+
+    Returns:
+        The hashes, by path relative to `main`.
+    """
+    status = subprocess.run(
+        ["git", "-C", str(main), "status", "--porcelain", "-z", "-uall"],
+        capture_output=True,
+        check=False,
+    ).stdout.decode()
+    entries = iter(status.split("\0"))
+    paths = set()
+    for entry in entries:
+        if len(entry) > 3:
+            paths.add(entry[3:])
+            if entry[0] in "RC":  # The source path follows, with no status.
+                paths.add(next(entries, ""))
+    found = {}
+    # deckz's own scratch directory, e.g. the hooks' session states.
+    for path in {p for p in paths if p and not p.startswith(".check/")}:
+        full = main / path
+        found[path] = (
+            hashlib.sha256(full.read_bytes()).hexdigest() if full.is_file() else ""
+        )
+    return found
+
+
+def _snapshot_path(git_dir: Path, payload: dict[str, Any]) -> Path:
+    common = subprocess.run(
+        ["git", "-C", str(git_dir), "rev-parse", "--git-common-dir"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    key = (
+        payload.get("tool_use_id")
+        or hashlib.sha256(
+            json.dumps([payload.get("session_id"), payload.get("tool_input")]).encode()
+        ).hexdigest()
+    )
+    directory = (git_dir / common) / _SNAPSHOTS
+    return directory / f"{re.sub(r'[^\w-]', '_', key)}.json"
+
+
+def take_snapshot(
+    settings: "GlobalSettings", payload: dict[str, Any], main: Path
+) -> None:
+    """Record the main checkout's `git status`, for `main_changes_report`."""
+    path = _snapshot_path(settings.paths.git_dir, payload)
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(json.dumps({"main": str(main), "files": _main_status(main)}))
+
+
+def main_changes_report(
+    settings: "GlobalSettings", payload: dict[str, Any], own: list[str]
+) -> str | None:
+    """What a Bash command changed in the main checkout, from its snapshot.
+
+    A file of `own` (reported already) isn't reported again, and leaves
+    `own` once back to its HEAD version; a new change joins it.
+
+    Args:
+        settings: The settings of the checkout the session runs in.
+        payload: The PostToolUse payload.
+        own: The main checkout's files the session changed, updated in place.
+
+    Returns:
+        The report, or None if the command changed nothing there.
+    """
+    path = _snapshot_path(settings.paths.git_dir, payload)
+    for stale in path.parent.glob("*.json"):  # A command interrupted, say.
+        if stale.stat().st_mtime < time() - 3600:
+            stale.unlink(missing_ok=True)
+    if not path.is_file():
+        return None
+    snapshot = json.loads(path.read_text())
+    path.unlink(missing_ok=True)
+    main = Path(snapshot["main"])
+    before: dict[str, str] = snapshot["files"]
+    after = _main_status(main)
+    changed = sorted(
+        p for p in before.keys() | after.keys() if before.get(p) != after.get(p)
+    )
+    new = [p for p in changed if p not in own]
+    # Still changed: a file back to its HEAD version is no longer the session's.
+    own[:] = [p for p in [*own, *new] if p in after]
+    if not new:
+        return None
+    lines = [f"- {p}" for p in new[:_SHOWN]]
+    if len(new) > _SHOWN:
+        lines.append(f"… and {len(new) - _SHOWN} more")
+    return (
+        f"Your command changed files in the main checkout ({main}), which is the"
+        " user's:\n" + "\n".join(lines) + "\nMove each change to your worktree"
+        " (create one if needed: " + _how_to(main) + "), then put the main"
+        " checkout's file back: `git restore -- <path>` there for a tracked file,"
+        " `rm <path>` for a new one (the hooks allow it for these files only). If"
+        " a change isn't yours (the user may be editing there), say so instead."
+    )
+
+
+def create_worktree(settings: "GlobalSettings", name: str) -> Path:
+    """Create the worktree Claude Code asks for, the `deckz worktree add` way.
+
+    Its name is `name` with what `deckz worktree` doesn't take turned to
+    `-` (Claude Code's may hold `/` and `.`); then `deckz setup` runs in it.
+
+    Returns:
+        Its path.
+
+    Raises:
+        WorktreeError: If its setup leaves something missing (`deckz worktree \
+            add`'s own errors propagate too).
+    """
+    from .configuring.settings import GlobalSettings
+    from .exceptions import WorktreeError
+    from .setting_up import incomplete, setup
+    from .worktrees import add
+
+    added = add(settings, re.sub(r"[^A-Za-z0-9_-]", "-", name).strip("-") or "agent")
+    if incomplete(setup(GlobalSettings.from_yaml(added.path))):
+        msg = f"`deckz setup` left something missing in {added.path}"
+        raise WorktreeError(msg)
+    return added.path
+
+
+def remove_worktree(settings: "GlobalSettings", path: Path) -> None:
+    """Remove the worktree at `path`, as `deckz worktree remove` would.
+
+    Refuses, as it does, while the worktree holds work nothing else has.
+
+    Raises:
+        WorktreeError: If `path` isn't one of `deckz worktree`'s.
+    """
+    from .exceptions import WorktreeError
+    from .worktrees import remove, worktrees
+
+    resolved = path.resolve()
+    for worktree in worktrees(settings):
+        if worktree.path.resolve() == resolved:
+            remove(settings, worktree.name)
+            return
+    msg = f"{path} isn't a `deckz worktree`"
+    raise WorktreeError(msg)
