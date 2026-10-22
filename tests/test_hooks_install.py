@@ -107,7 +107,11 @@ def test_install_claude_hooks_keeps_other_settings_and_hooks(tmp_path: Path) -> 
         for group in settings["hooks"]["PreToolUse"]
         for hook in group["hooks"]
     }
-    assert commands == {"my-own-hook", deckz_command("hooks pre-bash")}
+    assert commands == {
+        "my-own-hook",
+        deckz_command("hooks pre-bash"),
+        deckz_command("hooks pre-edit"),
+    }
 
 
 def test_install_hooks_writes_into_core_hooks_path(tmp_path: Path) -> None:
@@ -182,9 +186,34 @@ def test_install_claude_hooks_updates_an_older_deckz_command(tmp_path: Path) -> 
     install_claude_hooks(tmp_path)
 
     settings = json.loads(path.read_text(encoding="utf-8"))
+    # The current command, and the current timeout.
     assert settings["hooks"]["Stop"] == [
-        {"hooks": [{"type": "command", "command": deckz_command("hooks stop")}]}
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": deckz_command("hooks stop"),
+                    "timeout": 60,
+                }
+            ]
+        }
     ]
+
+
+def test_install_claude_hooks_updates_an_older_matcher(tmp_path: Path) -> None:
+    path = tmp_path / ".claude" / "settings.json"
+    path.parent.mkdir(parents=True)
+    group = {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [{"type": "command", "command": "deckz hooks post-edit"}],
+    }
+    path.write_text(json.dumps({"hooks": {"PostToolUse": [group]}}), encoding="utf-8")
+
+    install_claude_hooks(tmp_path)
+
+    settings = json.loads(path.read_text(encoding="utf-8"))
+    [updated] = settings["hooks"]["PostToolUse"]
+    assert updated["matcher"] == "Edit|Write|MultiEdit|NotebookEdit"
 
 
 def test_install_ci_workflow_writes_a_valid_workflow(tmp_path: Path) -> None:

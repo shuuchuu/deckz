@@ -5,11 +5,11 @@ from . import app, read_payload, report_error
 
 @app.command(name="stop")
 def stop(*, workdir: Path = Path()) -> None:
-    """Flag the session's one-sided fr/en changes, and content failing the checks.
+    """Flag one-sided fr/en changes, and content failing the checks.
 
     Wired as Claude Code's Stop hook by `deckz hooks install` (see
-    `deckz.agent_hooks.stop_report`), comparing the working tree against
-    the snapshot `deckz hooks session-start` took. Never fails loudly: an
+    `deckz.agent_hooks.stop_report`): a worktree's changes, or outside one
+    the files the session's edit tools changed. Never fails loudly: an
     unreadable payload or an internal error just lets the session stop,
     same as finding nothing to report.
 

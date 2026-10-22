@@ -356,6 +356,7 @@ typst_ignore_system_fonts: true
   ```yaml
   worktree:
     seed: [assets/typ, assets/svg, assets/web/vendor, assets/videos]
+    required_for_agents: true
   ```
 
   `seed`: paths whose ignored files (the builds a fresh checkout lacks)
@@ -364,7 +365,9 @@ typst_ignore_system_fonts: true
   Nothing is shared by a link: each worktree gets its own environment
   from `setup.steps` (e.g. `uv sync`, a second from uv's cache), and
   what every checkout shares goes in the user's `.env` (see
-  [Usage](#usage)).
+  [Usage](#usage)). `required_for_agents` (default false): a Claude Code
+  session changes nothing in the main checkout, only in a worktree of
+  its own (see [Claude Code hooks](#claude-code-hooks)).
 
 `deckz.yml` files are merged, in order, from the git root, from the user's
 config directory (XDG-compliant, e.g.
@@ -612,14 +615,19 @@ from collections.abc import Callable, Mapping
 from deckz.configuring.settings import GlobalSettings
 
 
-def checks(settings: GlobalSettings) -> Mapping[str, Callable[[], list[str]]]:
+def checks(settings: GlobalSettings) -> Mapping[str, Callable[..., list[str]]]:
     ...
 ```
 
 called once, with the repository's settings, to obtain every extra check
-to run, each a zero-argument callable returning its problems (empty if
-none) the same way deckz's built-in checks do. A name colliding with a
-built-in check's is rejected.
+to run, each a callable returning its problems (empty if none) the same
+way deckz's built-in checks do. A name colliding with a built-in check's
+is rejected. A check may take a `paths` keyword argument, as the built-in
+ones do: the Claude Code hooks pass the files they check (absolute
+paths), and the check reports only about those, returning at once when
+none is of a kind it reads; `deckz check` passes none, for the whole
+repository. A check without the parameter always checks everything,
+which makes the hooks wait for it.
 
 Checks too slow, networked or not yet passing to run on every commit can
 be listed in `deckz.yml`, by name, under `checks.opt_in`: `deckz check`
@@ -651,9 +659,10 @@ checks:
 
 `deckz hooks install` also adds deckz's own Claude Code hooks to
 `.claude/settings.json` (Claude Code is treated as a requirement of a
-deckz-managed repository, like git): `deckz hooks pre-bash`/`post-edit`/
-`session-start`/`stop`, backed by `deckz.agent_hooks`. The generic rules
-they enforce need no repo-specific knowledge:
+deckz-managed repository, like git): `deckz hooks pre-bash`/`pre-edit`/
+`post-edit`/`session-start`/`stop`, backed by `deckz.agent_hooks` and
+`deckz.agent_checkouts`. The generic rules they enforce need no
+repo-specific knowledge:
 
 - **PreToolUse/Bash**: deny staging everything (`git add -A`/`.`/`-u`),
   `git commit -a`, `git clean` without `--dry-run`, and anything that
@@ -662,18 +671,31 @@ they enforce need no repo-specific knowledge:
   Code sessions may share one checkout. Also deny skipping the git hooks
   (`--no-verify`, `git commit -n`, `git -c core.hooksPath=...`): they run
   the repository's checks.
-- **PostToolUse/Edit,Write,MultiEdit**: convert an edited content file
-  with this repo's own `pandoc_command` and run deckz's content checks
-  (built-ins plus `templates/checks.py`'s) against it, reporting any
-  problem back to the agent right away.
-- **SessionStart**/**Stop**: snapshot the repo's fr/en content and lab
-  notebook pairs (and its uncommitted content files) when the session
-  starts. At `Stop`, flag any pair changed on one language side only
-  since then (same pairing as `deckz i18n stale`, but for the live
-  session, not git history), and run the PostToolUse checks on every
-  content file the session changed that they haven't passed as it is
-  now: one a shell command wrote, which no PostToolUse hook sees. Each
-  finding is reported once.
+- **PostToolUse/Edit,Write,MultiEdit,NotebookEdit**: record the edited
+  file; convert a content file with this repo's own `pandoc_command` and
+  run deckz's content checks (built-ins plus `templates/checks.py`'s) on
+  it alone, reporting any problem back to the agent right away (about a
+  second: a check taking `paths` reads only that file).
+- **Stop**: flag a fr/en content or lab notebook pair changed on one
+  language side only (same pairing as `deckz i18n stale`), and run the
+  PostToolUse checks on every changed content file they haven't passed
+  as it is now: one a shell command wrote, which no PostToolUse hook
+  sees. In a linked worktree, what changed is the worktree's own work:
+  `git status`, and the commits on its branch that the main checkout's
+  branch doesn't have. Elsewhere, it is the files the session's edit
+  tools changed: never another session's work. A one-sided pair is
+  reported once per session, at most ten paths per list.
+- With `worktree.required_for_agents`, the main checkout is for reading
+  only: **PreToolUse/Edit,Write,MultiEdit,NotebookEdit** denies an edit
+  of one of its files (or of a worktree's from a session still in the
+  main checkout); **PreToolUse/Bash** lets a command run there, or on its
+  files, only if it reads (a short list of programs, git's and deckz's
+  read-only subcommands, `git merge --ff-only`, `git worktree`, `deckz
+  worktree`) and doesn't redirect into it; **SessionStart** tells a
+  session starting there to create its worktree (`deckz worktree add`,
+  then Claude Code's EnterWorktree with its path) and to land its commits
+  with `deckz worktree land`. These are guard rails against an agent's
+  mistakes, not a sandbox.
 
 A repo can add its own Bash denials (e.g. never publish, never push to a
 themed remote) from an optional `templates/hooks.py` module exposing:
@@ -944,9 +966,11 @@ The main commands:
   the builds `worktree.seed` lists (see above), then runs `deckz setup`
   there. `deckz worktree list [--json]`
   lists the worktrees with their uncommitted changes and their commits no
-  other branch has; `deckz worktree remove NAME` removes one, and its
-  branch, refusing while it holds either (`--force` loses the uncommitted
-  changes and keeps the branch).
+  other branch has; `deckz worktree land [NAME]` rebases a worktree's
+  branch (by default, the one the command runs in) onto the main
+  checkout's and fast-forwards the main checkout to it; `deckz worktree
+  remove NAME` removes one, and its branch, refusing while it holds
+  either (`--force` loses the uncommitted changes and keeps the branch).
 - `deckz run` (alias for `deckz run deck`, optionally restricted with
   `--parts`) / `deckz run file PATH` / `deckz run section SECTION FLAVOR` /
   `deckz run assets`: compile the deck in the current directory, a single

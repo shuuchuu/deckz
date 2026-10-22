@@ -12,11 +12,15 @@ Two events need no repository-specific knowledge: PreToolUse/Bash (deny
 skipping the git hooks, and staging everything or discarding uncommitted
 changes -- several Claude Code sessions may share one checkout) and Stop
 (flag a content file or lab notebook pair changed on one language side
-only during the session, reusing `analyzing.i18n_stale`'s pairing, and
-check the content files the session changed by other means than the edit
-tools).
+only, reusing `analyzing.i18n_stale`'s pairing, and check the content
+files changed by other means than the edit tools). What changed is a
+worktree's own changes, in a worktree; elsewhere, the files the session's
+edit tools changed: never another session's work.
 PostToolUse/Edit converts an edited content file with the repo's own
-`pandoc_command` and runs deckz's content checks against it. A target
+`pandoc_command` and runs deckz's content checks on it alone. When
+`deckz.yml` sets `worktree.required_for_agents`, PreToolUse/Edit,
+PreToolUse/Bash and SessionStart also keep agents from changing the main
+checkout (`agent_checkouts`). A target
 repo's own `templates/hooks.py` (`GlobalPaths.hooks_module`) can add
 further Bash denials -- the repo rules analogue of `templates/checks.py`
 -- by exposing:
@@ -35,6 +39,8 @@ import json
 import os
 import re
 import shlex
+from collections.abc import Generator
+from contextlib import contextmanager
 from itertools import pairwise
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
@@ -45,6 +51,7 @@ if TYPE_CHECKING:
 _HEREDOC_RE = re.compile(
     r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n.*?\n\s*\2\s*(?=\n|$)", re.DOTALL
 )
+_FD_DUPLICATION_RE = re.compile(r"\d*>&(?:\d+|-)")
 _SEPARATORS = {";", "&&", "||", "|", "&", "\n", "(", ")"}
 _GIT_OPTIONS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
 # `git commit` short options taking a value: in a cluster such as `-nm`, the
@@ -96,13 +103,17 @@ def commands(script: str) -> list[list[str]]:
     """Split a shell script into its simple commands' words.
 
     Heredoc bodies (e.g. a commit message) are dropped first: they're data,
-    not commands.
+    not commands. So are duplications of a file descriptor (`2>&1`), whose
+    `&` isn't a separator; `&>file` becomes `>file`. Other redirections
+    stay words (`>`, `2>>log`, `>file`…).
 
     Returns:
         Each simple command's words.
     """
+    script = _HEREDOC_RE.sub("", script)
+    script = _FD_DUPLICATION_RE.sub(" ", script).replace("&>", ">")
     lexer = shlex.shlex(
-        _HEREDOC_RE.sub("", script).replace("\n", " ; "),
+        script.replace("\n", " ; "),
         posix=True,
         punctuation_chars=";&|()",
     )
@@ -228,19 +239,22 @@ def bash_denial(settings: "GlobalSettings", payload: dict[str, Any]) -> str | No
 
     Runs deckz's own built-in denials, then the target repo's own
     `deny_bash` from `templates/hooks.py` if it has one (see the module
-    docstring).
+    docstring), then the main checkout's (`agent_checkouts`).
 
     Returns:
         The first denial reason found, or None if the command may run.
     """
+    from .agent_checkouts import main_checkout_denial
+
     cwd = Path(payload.get("cwd") or settings.paths.git_dir)
     plugin = _deny_bash_plugin(settings)
-    for words in commands(payload.get("tool_input", {}).get("command", "")):
+    script = commands(payload.get("tool_input", {}).get("command", ""))
+    for words in script:
         if reason := _builtin_denial(words, cwd):
             return reason
         if plugin is not None and (reason := plugin(words, cwd, settings)):
             return reason
-    return None
+    return main_checkout_denial(settings, script, cwd)
 
 
 def _deny_bash_plugin(settings: "GlobalSettings"):
@@ -274,6 +288,17 @@ def _convert_errors(settings: "GlobalSettings", path: Path) -> str:
     return ""
 
 
+def _pandoc_error(error: str) -> str:
+    # pandoc's own message: without deckz's "failed to convert <path> to
+    # <scratch file>" line, nor a Lua filter's stack traceback.
+    lines = error.strip().splitlines()
+    if lines and lines[0].startswith("pandoc failed to convert"):
+        lines = lines[1:]
+    if traceback := [i for i, line in enumerate(lines) if line == "stack traceback:"]:
+        lines = lines[: traceback[0]]
+    return "\n".join(line for line in lines if line.strip())
+
+
 def _is_content(settings: "GlobalSettings", path: Path) -> bool:
     from .utils import is_content_file
 
@@ -287,61 +312,131 @@ def _is_content(settings: "GlobalSettings", path: Path) -> bool:
 def _content_problems(
     settings: "GlobalSettings", paths: list[Path]
 ) -> dict[str, list[str]]:
-    """Convert each of `paths` and run deckz's content checks once for them all.
+    """Convert each of `paths` and run deckz's content checks on them.
 
-    Runs every check `deckz check` runs by default, i.e. not those listed \
-    under `checks.opt_in`, and keeps the problems naming one of `paths`.
+    The conversions run in parallel. Each check runs once, on `paths` alone
+    when it takes them (see `ChecksRunner`), the whole repository otherwise;
+    those under `checks.opt_in` don't run. A problem is kept when its leading
+    path (`Finding.path`) is one of `paths`.
 
     Returns:
-        Each problem, by the path (relative to the git root) it names.
+        Each problem, as `[check] problem`, by the path (relative to the git \
+        root) it is about.
     """
+    from concurrent.futures import ThreadPoolExecutor
+
     from .components.factory import GlobalSettingsFactory
 
     git_dir = settings.paths.git_dir
     rels = [path.relative_to(git_dir).as_posix() for path in paths]
     problems: dict[str, list[str]] = {}
-    for path, rel in zip(paths, rels, strict=True):
-        if errors := _convert_errors(settings, path):
+    with ThreadPoolExecutor(max_workers=min(len(paths), 8) or 1) as pool:
+        errors = list(pool.map(lambda path: _convert_errors(settings, path), paths))
+    for rel, error in zip(rels, errors, strict=True):
+        if error:
             problems.setdefault(rel, []).append(
-                f"pandoc (this repo's `pandoc_command`) fails:\n{errors}"
+                f"[pandoc] this repo's `pandoc_command` fails: {_pandoc_error(error)}"
             )
-    checks = GlobalSettingsFactory(settings).checks_runner().checks()
-    for name, check in checks.items():
-        if name in settings.checks.opt_in:
-            continue
-        found = check()
-        for rel in rels:
-            if matches := [problem for problem in found if rel in problem]:
-                problems.setdefault(rel, []).append(f"{name}:\n" + "\n".join(matches))
+    runner = GlobalSettingsFactory(settings).checks_runner()
+    for finding in runner.findings(paths=paths):
+        if finding.path is not None and (rel := finding.path.as_posix()) in rels:
+            problems.setdefault(rel, []).append(f"[{finding.check}] {finding.text}")
     return problems
 
 
-def post_edit_report(settings: "GlobalSettings", payload: dict[str, Any]) -> str | None:
-    """Convert an edited content file and run deckz's content checks on it.
+_SHOWN = 10
+"""How many paths a hook's report lists, and problems per path."""
 
-    Does nothing for a file that isn't one of `settings.file_extensions`,
-    or that doesn't exist (e.g. later deleted in the same tool call batch).
-    A file found clean is recorded in the session's state, so that
+
+def _shown(lines: list[str], more: str) -> list[str]:
+    if len(lines) <= _SHOWN:
+        return lines
+    return [*lines[:_SHOWN], f"… and {len(lines) - _SHOWN} more{more}"]
+
+
+def _problems_message(problems: dict[str, list[str]]) -> str:
+    lines = []
+    for path, found in list(problems.items())[:_SHOWN]:
+        lines.append(f"{path}:")
+        lines.extend(f"  {problem}" for problem in _shown(found, ""))
+    if len(problems) > _SHOWN:
+        lines.append(f"… and {len(problems) - _SHOWN} more files (`deckz check`)")
+    return "\n".join(lines)
+
+
+def _session_state_file(settings: "GlobalSettings", payload: dict[str, Any]) -> Path:
+    session = re.sub(r"[^\w-]", "_", payload.get("session_id") or "unknown")
+    scratch = settings.paths.git_dir / ".check" / "hooks-sessions"
+    scratch.mkdir(parents=True, exist_ok=True)
+    return scratch / f"{session}.json"
+
+
+@contextmanager
+def _session_state(state_file: Path) -> Generator[dict[str, Any]]:
+    """The session's state, saved back on exit, unless the block raises.
+
+    Locked meanwhile: the hooks of parallel tool calls update it at once.
+
+    Yields:
+        The state, a new one if the session has none yet.
+    """
+    import fcntl
+
+    with state_file.with_name(f".{state_file.name}.lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        state: dict[str, Any] = (
+            json.loads(state_file.read_text(encoding="utf-8"))
+            if state_file.is_file()
+            else {}
+        )
+        yield state  # ruff: ignore[fallible-context-manager] (a failed hook leaves the state as it was)
+        scratch = state_file.with_name(f".{state_file.name}.{os.getpid()}")
+        scratch.write_text(json.dumps(state), encoding="utf-8")
+        scratch.replace(state_file)
+
+
+def _edited_path(settings: "GlobalSettings", payload: dict[str, Any]) -> Path | None:
+    tool_input = payload.get("tool_input", {})
+    target = tool_input.get("file_path") or tool_input.get("notebook_path")
+    if not target:
+        return None
+    cwd = Path(payload.get("cwd") or settings.paths.git_dir)
+    path = (cwd / target).resolve()
+    return path if path.is_relative_to(settings.paths.git_dir) else None
+
+
+def post_edit_report(settings: "GlobalSettings", payload: dict[str, Any]) -> str | None:
+    """Record an edited file, and check it if it's a content file.
+
+    Records the file in the session's state, for `stop_report` outside a
+    worktree; converts a content file and runs deckz's content checks on it
+    (`_content_problems`), recording it as checked when it passes, so that
     `stop_report` doesn't check it again.
 
     Returns:
         A report to block the edit with, or None if nothing was found.
     """
-    path = Path(payload.get("tool_input", {}).get("file_path", "")).resolve()
-    if not _is_content(settings, path):
+    path = _edited_path(settings, payload)
+    if path is None:
         return None
-    rel = path.relative_to(settings.paths.git_dir).as_posix()
-    problems = _content_problems(settings, [path]).get(rel)
-    if not problems:
-        state_file = _session_state_file(settings, payload)
-        if state_file.exists():
-            state = json.loads(state_file.read_text(encoding="utf-8"))
+    git_dir = settings.paths.git_dir
+    rel = path.relative_to(git_dir).as_posix()
+    problems = (
+        _content_problems(settings, [path]).get(rel)
+        if _is_content(settings, path)
+        else None
+    )
+    with _session_state(_session_state_file(settings, payload)) as state:
+        edited: list[str] = state.setdefault("edited", [])
+        if rel not in edited:
+            edited.append(rel)
+        if _is_content(settings, path) and not problems:
             state.setdefault("checked", {})[rel] = _file_hash(
-                settings.paths.git_dir, PurePosixPath(rel)
+                git_dir, PurePosixPath(rel)
             )
-            _write_state(state_file, state)
+    if not problems:
         return None
-    return f"{rel}: " + "\n".join(problems)
+    return _problems_message({rel: problems})
 
 
 def _pairs(settings: "GlobalSettings") -> list[tuple[PurePosixPath, PurePosixPath]]:
@@ -355,28 +450,15 @@ def _file_hash(git_dir: Path, path: PurePosixPath) -> str:
     return hashlib.sha256(full.read_bytes()).hexdigest() if full.is_file() else ""
 
 
-def _head_hash(git_dir: Path, path: PurePosixPath, rev: str) -> str:
-    from subprocess import run
-
-    blob = run(
-        ["git", "show", f"{rev}:{path.as_posix()}"],
-        cwd=git_dir,
-        capture_output=True,
-        check=False,
-    )
-    return hashlib.sha256(blob.stdout).hexdigest() if blob.returncode == 0 else ""
-
-
-def _head(git_dir: Path) -> str:
+def _git_out(git_dir: Path, *args: str) -> str:
     from subprocess import run
 
     return run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=git_dir,
+        ["git", "-C", str(git_dir), *args],
         capture_output=True,
         text=True,
         check=False,
-    ).stdout.strip()
+    ).stdout
 
 
 def _dirty_or_untracked(git_dir: Path) -> set[str]:
@@ -384,194 +466,160 @@ def _dirty_or_untracked(git_dir: Path) -> set[str]:
 
     Unlike `_changed_files` (used for Bash denials, where an untracked file
     is irrelevant: nothing can discard it), a new content file or notebook
-    not yet committed is exactly what `_snapshot` must capture, so it isn't
-    mistaken for having "always been there" -- a bare `_head_hash` lookup
-    would find no blob for it and read it as unchanged.
+    not yet committed is one the session changed.
 
     Returns:
-        Each such path, as `git status --porcelain` prints it.
+        Each such path, relative to the git root; both sides of a rename.
     """
-    from subprocess import run
-
-    status = run(
-        ["git", "status", "--porcelain", "-z", "--untracked-files=all"],
-        cwd=git_dir,
-        capture_output=True,
-        check=False,
-    ).stdout.decode()
-    return {entry[3:] for entry in status.split("\0") if len(entry) > 3}
-
-
-def _session_state_file(settings: "GlobalSettings", payload: dict[str, Any]) -> Path:
-    session = re.sub(r"[^\w-]", "_", payload.get("session_id") or "unknown")
-    scratch = settings.paths.git_dir / ".check" / "hooks-sessions"
-    scratch.mkdir(parents=True, exist_ok=True)
-    return scratch / f"{session}.json"
+    entries = iter(
+        _git_out(git_dir, "status", "--porcelain", "-z", "-uall").split("\0")
+    )
+    found = set()
+    for entry in entries:
+        if len(entry) > 3:
+            found.add(entry[3:])
+            if entry[0] in "RC":  # The source path follows, with no status.
+                found.add(next(entries, ""))
+    return found - {""}
 
 
-def _write_state(state_file: Path, state: dict[str, Any]) -> None:
-    # Atomic: hooks of parallel tool calls may read it while it's written.
-    scratch = state_file.with_name(f".{state_file.name}.{os.getpid()}")
-    scratch.write_text(json.dumps(state), encoding="utf-8")
-    scratch.replace(state_file)
+def _worktree_changes(git_dir: Path, main: Path) -> set[str]:
+    """What a worktree changed: uncommitted, or committed on its own branch.
 
-
-def _snapshot(settings: "GlobalSettings") -> dict[str, Any]:
-    from .utils import is_content_file
-
-    git_dir = settings.paths.git_dir
-    paths = {str(path) for pair in _pairs(settings) for path in pair}
-    # Only the dirty/untracked ones: a clean file's content is already a git
-    # blob, _head_hash reads it from there on demand instead. Content files
-    # too, paired or not: `stop_report` checks those the session changed.
-    dirty = {
-        path
-        for path in _dirty_or_untracked(git_dir)
-        if path in paths
-        or is_content_file(PurePosixPath(path), settings.file_extensions)
-    }
-    files = {path: _file_hash(git_dir, PurePosixPath(path)) for path in dirty}
-    return {"head": _head(git_dir), "files": files, "reported": {}}
-
-
-def session_start(settings: "GlobalSettings", payload: dict[str, Any]) -> None:
-    """Snapshot the repo's paired files, for `stop_report` to diff against.
-
-    A resumed or compacted session keeps its existing snapshot.
-    """
-    state_file = _session_state_file(settings, payload)
-    if not state_file.exists():
-        _write_state(state_file, _snapshot(settings))
-
-
-def _session_changes(
-    settings: "GlobalSettings", state: dict[str, Any], pair_of: dict[str, str]
-) -> tuple[set[str], dict[str, str]]:
-    """The paired or content files changed since the session's snapshot.
+    Its own branch: what the main checkout's branch doesn't have, since
+    their merge base.
 
     Returns:
-        Those paths, and the current hash of every path looked at (empty \
-        for a deleted file).
+        The paths, relative to the git root.
     """
-    from .utils import is_content_file
+    branch = _git_out(main, "symbolic-ref", "--short", "HEAD").strip()
+    base = _git_out(git_dir, "merge-base", branch or "HEAD", "HEAD").strip()
+    committed = _git_out(git_dir, "diff", "--name-only", base, "HEAD").splitlines()
+    return _dirty_or_untracked(git_dir) | set(committed)
 
-    git_dir = settings.paths.git_dir
-    start_head: str = state["head"]
-    start_files: dict[str, str] = state["files"]
 
-    def watched(path: str) -> bool:
-        return path in pair_of or is_content_file(
-            PurePosixPath(path), settings.file_extensions
-        )
+def session_start(settings: "GlobalSettings", payload: dict[str, Any]) -> str | None:
+    """Prune old session states, and tell a session in the main checkout the rule.
 
-    candidates = set(start_files) | {
-        path for path in _dirty_or_untracked(git_dir) if watched(path)
-    }
-    head = _head(git_dir)
-    if head != start_head:
-        from subprocess import run
+    Returns:
+        The context to give the session (`agent_checkouts`), or None.
+    """
+    from time import time
 
-        moved = run(
-            ["git", "diff", "--name-only", start_head, head],
-            cwd=git_dir,
-            capture_output=True,
-            text=True,
-            check=False,
-        ).stdout.splitlines()
-        candidates |= {path for path in moved if watched(path)}
+    from .agent_checkouts import session_start_context
 
-    def start_hash(path: str) -> str:
-        return (
-            start_files[path]
-            if path in start_files
-            else _head_hash(git_dir, PurePosixPath(path), start_head)
-        )
-
-    current = {path: _file_hash(git_dir, PurePosixPath(path)) for path in candidates}
-    return {path for path in candidates if current[path] != start_hash(path)}, current
+    month_ago = time() - 30 * 24 * 3600
+    for state in _session_state_file(settings, payload).parent.iterdir():
+        if state.stat().st_mtime < month_ago:
+            state.unlink(missing_ok=True)
+    cwd = Path(payload.get("cwd") or settings.paths.git_dir)
+    return session_start_context(settings, cwd)
 
 
 def _stop_message(
-    problems: dict[str, list[str]], unpaired: list[str], pair_of: dict[str, str]
+    problems: dict[str, list[str]],
+    unpaired: list[str],
+    pair_of: dict[str, str],
+    where: str,
 ) -> str | None:
     sections = []
     if problems:
         sections.append(
-            "Content files changed this session fail the checks (fix them, as "
-            "an edit's post-edit check would have said):\n"
-            + "\n".join(
-                f"{path}: " + "\n".join(found) for path, found in problems.items()
-            )
+            f"Content files changed {where} fail deckz's checks:\n"
+            + _problems_message(problems)
         )
     if unpaired:
-        lines = [f"- {path} changed, {pair_of[path]} didn't" for path in unpaired]
+        lines = _shown(
+            [f"- {path} (not {pair_of[path]})" for path in unpaired],
+            " (`deckz i18n stale`)",
+        )
         sections.append(
-            "fr/en pairs changed on one side only this session (port each change"
-            " to the other language in the same session):\n"
+            f"fr/en pairs changed on one side only {where}:\n"
             + "\n".join(lines)
-            + "\nPort them, or, if a change is language-specific (a typo, a"
-            " phrasing fix) or another session's, say so and stop."
+            + "\nPort each change to the other language, or say why it is"
+            " one-sided (a typo, a phrasing fix) and stop."
         )
     return "\n\n".join(sections) or None
 
 
 def stop_report(settings: "GlobalSettings", payload: dict[str, Any]) -> str | None:
-    """Flag the session's changes to content files: one-sided, or failing checks.
+    """Flag the changes to content files: one-sided, or failing the checks.
 
-    Compares the current working tree against the snapshot `session_start`
-    took (or takes one now, if missing, reporting nothing this time). Flags
-    a content file or lab notebook changed on one language side only, and
-    runs the post-edit checks (`post_edit_report`) on every content file
-    the session changed that they haven't passed as it is now: written by a
-    shell command, say, which no PostToolUse hook sees.
+    In a linked worktree, the changes are the worktree's: whatever `git
+    status` reports, and the commits on its branch the main checkout's
+    branch doesn't have, whichever session made them. Elsewhere, they are
+    the files the session's edit tools changed (`post_edit_report`), and
+    none when `worktree.required_for_agents` keeps agents from changing the
+    main checkout. Flags a content file or lab notebook changed on one
+    language side only (once per session), and runs the post-edit checks
+    on each changed content file they haven't passed as it is now (written
+    by a shell command, say, which no PostToolUse hook sees).
 
     Returns:
         A report to block the stop with, or None if nothing new was found.
     """
+    from .agent_checkouts import checkouts
+    from .utils import is_content_file
+
+    if payload.get("stop_hook_active"):
+        return None
     git_dir = settings.paths.git_dir
-    state_file = _session_state_file(settings, payload)
-    if not state_file.exists():
-        _write_state(state_file, _snapshot(settings))
+    main = checkouts(git_dir).main
+    in_worktree = git_dir.resolve() != main
+    if not in_worktree and settings.worktree.required_for_agents:
         return None
-    state = json.loads(state_file.read_text(encoding="utf-8"))
-    reported: dict[str, str] = state.setdefault("reported", {})
-    checked: dict[str, str] = state.setdefault("checked", {})
-    pair_of: dict[str, str] = {}
-    for a, b in _pairs(settings):
-        pair_of[str(a)] = str(b)
-        pair_of[str(b)] = str(a)
-    changed, current = _session_changes(settings, state, pair_of)
+    with _session_state(_session_state_file(settings, payload)) as state:
+        changed = (
+            _worktree_changes(git_dir, main)
+            if in_worktree
+            else set(state.get("edited", []))
+        )
+        current = {path: _file_hash(git_dir, PurePosixPath(path)) for path in changed}
+        fingerprint = hashlib.sha256(
+            json.dumps(sorted(current.items())).encode()
+        ).hexdigest()
+        if state.get("fingerprint") == fingerprint:
+            return None
+        state["fingerprint"] = fingerprint
+        if not any(
+            is_content_file(PurePosixPath(path), settings.file_extensions)
+            or path.endswith(".ipynb")
+            for path in changed
+        ):
+            return None
+        reported: list[str] = state.setdefault("reported", [])
+        failed: dict[str, str] = state.setdefault("failed", {})
+        checked: dict[str, str] = state.setdefault("checked", {})
+        pair_of: dict[str, str] = {}
+        for a, b in _pairs(settings):
+            pair_of[str(a)] = str(b)
+            pair_of[str(b)] = str(a)
 
-    def current_hash(path: str) -> str:
-        if path in current:
-            return current[path]
-        return _file_hash(git_dir, PurePosixPath(path))
+        def exists(path: str) -> bool:
+            return (git_dir / path).is_file()
 
-    unpaired = sorted(
-        path
-        for path in changed & set(pair_of)
-        if pair_of[path] not in changed
-        and reported.get(path) != current_hash(path)
-        # A file deleted with no sibling left behind is no gap.
-        and (current_hash(path) or current_hash(pair_of[path]))
-    )
-    unchecked = sorted(
-        path
-        for path in changed
-        if current[path]
-        and checked.get(path) != current[path]
-        and reported.get(f"checks:{path}") != current[path]
-        and _is_content(settings, git_dir / path)
-    )
-    if payload.get("stop_hook_active") or not (unpaired or unchecked):
-        return None
-    problems = _content_problems(settings, [git_dir / path for path in unchecked])
-    for path in unchecked:
-        if path in problems:
-            reported[f"checks:{path}"] = current[path]
-        else:
-            checked[path] = current[path]
-    for path in unpaired:
-        reported[path] = current_hash(path)
-    _write_state(state_file, state)
-    return _stop_message(problems, unpaired, pair_of)
+        unpaired = sorted(
+            path
+            for path in changed & set(pair_of)
+            if pair_of[path] not in changed
+            and path not in reported
+            # A file deleted with no sibling left behind is no gap.
+            and (exists(path) or exists(pair_of[path]))
+        )
+        unchecked = sorted(
+            path
+            for path in changed
+            if current[path]
+            and current[path] not in {checked.get(path), failed.get(path)}
+            and _is_content(settings, git_dir / path)
+        )
+        problems = (
+            _content_problems(settings, [git_dir / path for path in unchecked])
+            if unchecked
+            else {}
+        )
+        for path in unchecked:
+            (failed if path in problems else checked)[path] = current[path]
+        reported.extend(unpaired)
+    where = "in this worktree" if in_worktree else "this session"
+    return _stop_message(problems, unpaired, pair_of, where)
