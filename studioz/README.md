@@ -3,7 +3,7 @@
 A local web UI to work on a deckz repository: workspaces (`deckz worktree`), live
 previews of the material, editing, committing and syncing, and a Claude agent in
 each workspace. It runs on each person's machine, for that person,
-and its pages are in French. `studioz-plan.md`, at the root of the deckz repository,
+and its pages are in French. `plans/studioz.md`, in the deckz repository,
 is the plan it follows.
 
 studioz is a member of the uv workspace rooted at the deckz repository, released with
