@@ -198,7 +198,7 @@ are gone). studioz pins `claude-agent-sdk==0.2.160` (bundling Claude Code
 
 ## Why
 
-The operability plan (`operability-plan.md`) made shuuchuu/slides runnable without an
+The operability plan (`plans/operability.md`) made shuuchuu/slides runnable without an
 agent: task-level deckz commands, findings that name their fix, a manual for people.
 What still needs an agent is the judgment work: writing a deck from a program, QA and
 its fixes, translation, figures, videos, labs. Today that means a Claude Code terminal

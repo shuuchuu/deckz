@@ -35,6 +35,9 @@ Dependency management and running: this project uses `uv`; run tools via
   `uv.lock` in the same commit as the version bump) — it's not a git hook
   and isn't affected by `install_hooks`.
 - Docs: built with `mkdocs` from docstrings (see `mkdocs.yml`, `docs/`).
+- Plans: a plan for a multi-step change goes in `plans/`, and moves to
+  `plans/archive/` once finished (what is left is only the user's to do:
+  push, release).
 - Version bumps: `bumpver` (see `[bumpver]` in `pyproject.toml`); do not hand-edit
   the version strings it manages in `pyproject.toml` / `src/deckz/__init__.py`, and
   studioz's (`studioz/pyproject.toml`, its pin on deckz, `studioz/src/studioz/__init__.py`).
@@ -430,7 +433,7 @@ dependency, backing the top-level `labs` sub-app (`cli/labs/`).
 
 `studioz/` is a second package, studioz: a local web UI to work on a
 deckz-managed repository (workspaces, previews, editing, commit and sync, and later
-agents), on each person's machine. `studioz-plan.md` is its plan, with what is done.
+agents), on each person's machine. `plans/studioz.md` is its plan, with what is done.
 The repository is a uv workspace for it (`[tool.uv.workspace]`, a deliberate
 divergence from the Copier template): one `uv.lock`, studioz depends on deckz through
 `{ workspace = true }`, pinned to the same version, and the `dev` group installs it
@@ -607,7 +610,7 @@ same log lines, and the agent with a fake Agent SDK client.
 
 deckz is how people run a deckz-managed repository, with or without an AI
 agent: a contributor who never uses one must be able to do every routine
-task from `deckz --help` and the docs (`operability-plan.md` holds the
+task from `deckz --help` and the docs (`plans/operability.md` holds the
 work in progress). Keep new tooling in line with that:
 
 - **One path for people and agents.** An agent runs the same commands a
