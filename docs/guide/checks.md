@@ -4,9 +4,12 @@
 `deckz check <name>` runs one. Each problem it reports ends with how to fix it.
 Checks a repository lists under `deckz.yml`'s `checks.opt_in` only run when named (or
 nightly in CI): they're slow, or need the network.
-No check compiles a deck: when `ci.nightly_builds` is set, CI builds every night the
-handouts of the decks the day's commits reach, and fails naming the deck that doesn't
-build (`deckz run decks --since <rev>` does the same before you push).
+No check compiles a deck: when `ci.builds` is set, CI builds every Sunday (or every
+night) the handouts of the decks the period's commits reach, and fails naming the deck
+that doesn't build (`deckz run decks --since <rev>` does the same before you push).
+With `ci.report_to`, the failures land in a `deckz-ci` GitHub issue, which GitHub
+emails: each with the command that reproduces it and its errors, ready to paste to an
+agent.
 
 ## What blocks a commit
 

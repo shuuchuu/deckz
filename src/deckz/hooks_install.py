@@ -239,6 +239,14 @@ def install_claude_hooks(git_dir: Path) -> Path:
 _CI_PATH = Path(".github") / "workflows" / "deckz.yml"
 
 
+_REPORTS = "../deckz-reports"
+"""Where the scheduled steps write what failed, for `deckz hooks ci-report`."""
+_NIGHTLY_CRON = "0 3 * * *"
+_WEEKLY_CRON = "0 4 * * 0"
+"""Sundays, an hour after the nightly checks: `github.event.schedule` tells \
+the two runs apart."""
+
+
 def ci_workflow(ci: "CiSettings") -> str:
     """The GitHub Actions workflow `install_ci_workflow` writes.
 
@@ -268,41 +276,55 @@ def ci_workflow(ci: "CiSettings") -> str:
         if ci.apt_packages
         else ""
     )
+    dispatched = "github.event_name == 'workflow_dispatch'"
+    checks_command = f"uv run deckz check --plain {' '.join(ci.nightly_checks)}"
+    checks_run = (
+        f"""|
+          # Their output is the report when they fail.
+          {checks_command} > checks.txt && cat checks.txt || {{
+            cat checks.txt; mkdir -p {_REPORTS}; mv checks.txt {_REPORTS}/; exit 1
+          }}"""
+        if ci.report_to
+        else checks_command
+    )
     nightly = (
         f"""
       - name: Nightly checks
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        run: uv run deckz check --plain {" ".join(ci.nightly_checks)}
+        if: github.event.schedule == '{_NIGHTLY_CRON}' || {dispatched}
+        run: {checks_run}
 """
         if ci.nightly_checks
         else ""
     )
-    nightly_event = (
-        "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"
-    )
+    weekly = ci.builds_schedule == "weekly"
+    build_cron = _WEEKLY_CRON if weekly else _NIGHTLY_CRON
+    build_event = f"github.event.schedule == '{build_cron}' || {dispatched}"
+    period, before = ("week", "7 days ago") if weekly else ("day", "24 hours ago")
+    report = f" \\\n            --report {_REPORTS}/builds.md" if ci.report_to else ""
+    weekly_cron = f'\n    - cron: "{_WEEKLY_CRON}"' if ci.builds and weekly else ""
     videos = (
         f"""
       - name: Fetch the published videos
-        if: ({nightly_event}) && !cancelled()
+        if: ({build_event}) && !cancelled()
         run: uv run deckz videos fetch --source https://github.com/{ci.videos_repository}
 """
-        if ci.nightly_builds and ci.videos_repository
+        if ci.builds and ci.videos_repository
         else ""
     )
     cached = "".join(f"\n            {repo}/{path}" for path in ci.cache_paths)
     cache = (
         f"""
-      # Last night's generated files, rebuilt only where stale; saved again at
-      # the end of the job, under a key of its own.
-      - name: Restore what the last nightly builds generated
-        if: ({nightly_event}) && !cancelled()
+      # The last build's generated files, rebuilt only where stale; saved
+      # again at the end of the job, under a key of its own.
+      - name: Restore what the last builds generated
+        if: ({build_event}) && !cancelled()
         uses: actions/cache@v6.1.0
         with:
           path: |{cached}
-          key: deckz-nightly-${{{{ github.run_id }}}}
-          restore-keys: deckz-nightly-
+          key: deckz-builds-${{{{ github.run_id }}}}
+          restore-keys: deckz-builds-
 """
-        if ci.nightly_builds and ci.cache_paths
+        if ci.builds and ci.cache_paths
         else ""
     )
     user_variables = "".join(
@@ -315,29 +337,49 @@ def ci_workflow(ci: "CiSettings") -> str:
         f"""
       # What each person's own variables.yml sets, with stand-in values.
       - name: Write the user variables the decks render with
-        if: ({nightly_event}) && !cancelled()
+        if: ({build_event}) && !cancelled()
         run: |
           DIR="${{XDG_CONFIG_HOME:-$HOME/.config}}/deckz"
           mkdir -p "$DIR"
           cat > "$DIR/variables.yml" <<'EOF'{user_variables}
           EOF
 """
-        if ci.nightly_builds and ci.user_variables
+        if ci.builds and ci.user_variables
         else ""
     )
     builds = (
         f"""{videos}{variables}{cache}
-      # The decks the last day's commits reach (the previous night built the
-      # others), every deck when no commit is older than a day. Built even
-      # when a nightly check failed: they say different things.
-      - name: Build the decks changed in the last day
-        if: ({nightly_event}) && !cancelled()
+      # The decks the last {period}'s commits reach (the previous build built
+      # the others), every deck when no commit is older than that. Built even
+      # when a check failed: they say different things.
+      - name: Build the decks changed in the last {period}
+        if: ({build_event}) && !cancelled()
         run: |
-          BASE=$(git rev-list -1 --before="24 hours ago" HEAD)
+          BASE=$(git rev-list -1 --before="{before}" HEAD)
           uv run deckz run decks ${{BASE:+--since "$BASE"}} --handout \\
-            --no-presentation --no-part-handouts --lang {" ".join(ci.nightly_builds)}
+            --no-presentation --no-part-handouts --lang {" ".join(ci.builds)}{report}
 """
-        if ci.nightly_builds
+        if ci.builds
+        else ""
+    )
+    reporting = (
+        f"""
+      # An issue GitHub emails to `ci.report_to`, to paste to an agent.
+      - name: Report the problems in an issue
+        if: failure() && (github.event_name == 'schedule' || {dispatched})
+        env:
+          GITHUB_TOKEN: ${{{{ github.token }}}}
+        run: uv run deckz hooks ci-report {_REPORTS}
+"""
+        if ci.report_to and (ci.builds or ci.nightly_checks)
+        else ""
+    )
+    permissions = (
+        """
+    permissions:
+      contents: read
+      issues: write"""
+        if reporting
         else ""
     )
     return f"""{_MARKER.replace("hook", "workflow", 1)}
@@ -349,13 +391,13 @@ on:
     branches: [main]
   pull_request:
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "{_NIGHTLY_CRON}"{weekly_cron}
   workflow_dispatch:
 
 jobs:
   check:
     runs-on: ubuntu-latest
-    container: shuuchuu/deckz-ci:latest
+    container: shuuchuu/deckz-ci:latest{permissions}
     # apt brings in Debian's Python, without its headers: uv would build the
     # dependencies with no wheel (manimpango, pycairo) against it and fail.
     env:
@@ -396,7 +438,7 @@ jobs:
             *) RANGE="$BEFORE..HEAD" ;;
           esac
           uv run deckz hooks check-commits "$RANGE"
-{nightly}{builds}"""
+{nightly}{builds}{reporting}"""
 
 
 def install_ci_workflow(

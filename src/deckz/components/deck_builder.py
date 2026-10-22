@@ -195,6 +195,7 @@ class DeckBuilder(DeckBuilderProtocol):
         course_notes_suffix: str = CompileType.CourseNotes.value,
     ):
         self._variables = variables
+        self._failures: list[tuple[str, str]] = []
         self._build_presentation = build_presentation
         self._build_handout = build_handout
         self._build_print = build_print
@@ -268,7 +269,11 @@ class DeckBuilder(DeckBuilderProtocol):
             )
         return planned
 
+    def failures(self) -> list[tuple[str, str]]:
+        return list(self._failures)
+
     def build_deck(self) -> bool:
+        self._failures = []
         items = self._list_items()
         if not items:
             self._logger.warning(
@@ -311,6 +316,7 @@ class DeckBuilder(DeckBuilderProtocol):
                 self._logger.warning(
                     "Captured %s diagnostics\n%s", item_name, result.diagnostics
                 )
+                self._failures.append((item_name, result.diagnostics))
         return all(result.ok for _, result in results)
 
     def _build_item_pair(self, pair: tuple[str, CompileItem]) -> CompileResult:

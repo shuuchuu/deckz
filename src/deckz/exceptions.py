@@ -1,3 +1,6 @@
+from collections.abc import Sequence
+from dataclasses import dataclass
+
 from .models import Deck
 
 
@@ -51,6 +54,25 @@ class CommitRefusedError(DeckzError):
 
 class CompilationError(DeckzError):
     pass
+
+
+@dataclass(frozen=True)
+class BuildFailure:
+    """A deck that failed to build in a language, and why."""
+
+    label: str
+    lang: str
+    errors: tuple[tuple[str, str], ...]
+    """Each failure: the compilation's name and the compiler's errors, or \
+    the step that failed (a content file's render) and its message."""
+
+
+class BuildsFailedError(CompilationError):
+    """Decks of a `keep_going` build failed: `failures` says how, each."""
+
+    def __init__(self, message: str, failures: Sequence[BuildFailure]) -> None:
+        super().__init__(message)
+        self.failures = tuple(failures)
 
 
 class RenderError(DeckzError):

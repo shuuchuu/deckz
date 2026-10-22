@@ -506,8 +506,8 @@ and when it must be settled.
 
 ## Phase 9: what the earlier phases left out
 
-**Status (2026-10-22):** done, 9.1 to 9.4, one increment each. Left: enabling 9.4's
-nightly builds on slides, the maintainer's call on cost.
+**Status (2026-10-22):** done, 9.1 to 9.5, one increment each, and on for slides
+(weekly builds, problems reported by email).
 
 ### 9.1 `deckz status`: English gaps in the decks your changes reach
 
@@ -640,4 +640,32 @@ that slows down shows as a longer job, not a silent skip. Enabling it on slides 
 `deckz.yml` edit (`ci.nightly_builds: [fr, en]`, `videos_repository`,
 `user_variables`, `cache_paths: [assets/plt, assets/plotly, assets/typ, assets/svg]`),
 then `deckz hooks install --ci`.
+
+### 9.5 Weekly builds, and problems reported by email
+
+The maintainer chose weekly builds (2026-10-22), and asked for an email when they find
+problems, with a report to paste to an agent.
+
+**Status (2026-10-22):** done.
+
+- `ci.nightly_builds` became `ci.builds` (languages), with `ci.builds_schedule`:
+  `weekly` (the default) or `nightly`. A weekly build runs on a cron of its own
+  (Sundays at 04:00 UTC) and covers the last 7 days' commits. The nightly checks keep
+  their 03:00 cron, and `github.event.schedule` tells the two runs apart.
+- `deckz run decks --report FILE` builds every deck whatever fails
+  (`pipelines.build(keep_going=True)`, which raises `BuildsFailedError` with each
+  `BuildFailure`). It writes a Markdown report: each deck and language, the `deckz
+  run` command reproducing it, and the errors. Those are Typst's, which the deck
+  builder now keeps (`DeckBuilderProtocol.failures`), or a render error's, each cut
+  at 6,000 characters.
+- With `ci.report_to` (GitHub logins), the nightly checks keep their output when they
+  fail. The last step, on a failed scheduled run, is `deckz hooks ci-report`
+  (`ci_report.py`). It opens an issue labeled `deckz-ci`, mentioning and assigning
+  them, or comments on the one still open. GitHub emails it, body included. The job
+  token is granted `issues: write`, so no mail server or secret is needed. It calls
+  the API through urllib, since the image has no `gh`.
+- Slides sets `builds: [fr, en]`, `videos_repository: shuuchuu/videos`, stand-in
+  `user_variables` (`trainer: ci` builds the content no trainer skips), the assets
+  builders' directories as `cache_paths`, and `report_to: [m09]`. Expect about 45
+  minutes for a week reaching every deck, about 3 for a quiet one.
 

@@ -16,6 +16,7 @@ def run_decks(
     course_notes: bool = False,
     langs: Langs = ("fr",),
     since: str | None = None,
+    report: Path | None = None,
     dry_run: bool = False,
     workdir: Path = Path(),
 ) -> None:
@@ -48,14 +49,22 @@ def run_decks(
         since: Only the decks the changes since this revision reach (the
             working tree's included), as `deckz show affected --since` lists
             them, e.g. before pushing, or every night in CI
+        report: Build every deck whatever fails, then write the failures to
+            this file, in Markdown, each with the command reproducing it and
+            its errors (for a person or an agent to fix); nothing is written
+            when every deck builds
         dry_run: Only print the outputs that would be compiled and the content
             fragments each would re-render, without building anything
         workdir: Path to move into before running the command
 
+    Raises:
+        BuildsFailedError: When a deck failed to build, with --report.
+
     """
     from logging import getLogger
 
-    from ...pipelines import OutputKinds, build, decks_targets
+    from ...exceptions import BuildsFailedError
+    from ...pipelines import OutputKinds, build, decks_targets, failure_report
     from .._presentation import RichProgress, announce_build, print_plan_of
 
     langs = unique(langs)
@@ -77,5 +86,14 @@ def run_decks(
         return
     if dry_run:
         print_plan_of(targets, outputs)
-    else:
-        build(targets, outputs, RichProgress())
+        return
+    try:
+        build(targets, outputs, RichProgress(), keep_going=report is not None)
+    except BuildsFailedError as error:
+        if report is not None:
+            report.parent.mkdir(parents=True, exist_ok=True)
+            report.write_text(
+                failure_report(error.failures, outputs, what), encoding="utf8"
+            )
+            getLogger(__name__).info("Wrote the failures to %s", report)
+        raise

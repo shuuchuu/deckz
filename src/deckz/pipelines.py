@@ -25,7 +25,13 @@ from .components.progress import NullProgress, PrefixedProgress
 from .components.protocols import DeckBuilderProtocol, ProgressReporterProtocol
 from .configuring.settings import DeckSettings, GlobalSettings
 from .configuring.variables import get_variables
-from .exceptions import CompilationError, CourseNotesError, DeckzError
+from .exceptions import (
+    BuildFailure,
+    BuildsFailedError,
+    CompilationError,
+    CourseNotesError,
+    DeckzError,
+)
 from .models import Deck, FlavorName, Lang, PartName, lang_dir
 from .utils import all_deck_settings, file_lock
 
@@ -115,15 +121,121 @@ def _deck_builder(
     )
 
 
+def _compile_target(
+    target: BuildTarget,
+    outputs: OutputKinds,
+    progress: ProgressReporterProtocol,
+    *,
+    keep_going: bool,
+) -> BuildFailure | None:
+    """Build one target.
+
+    Returns:
+        With `keep_going`, how it failed, if it did.
+
+    Raises:
+        CompilationError: When it fails to compile, without `keep_going`.
+        DeckzError: When it fails before compiling (a content file's \
+            render), without `keep_going`.
+    """
+    slides = outputs.pdfs or outputs.html
+    if outputs.course_notes and not slides and not target.course_notes:
+        return None  # Only the course notes were asked for.
+    builder = _deck_builder(target, outputs, progress)
+    with deck_lock(target.settings.paths.build_dir, target.label):
+        try:
+            built = builder.build_deck()
+        except DeckzError as error:
+            if not keep_going:
+                raise
+            return BuildFailure(target.label, target.lang, (("render", str(error)),))
+    if built:
+        return None
+    if keep_going:
+        return BuildFailure(target.label, target.lang, tuple(builder.failures()))
+    msg = f"{target.label} failed to compile in {target.lang}, see the errors above"
+    raise CompilationError(msg)
+
+
+_REPORT_ERRORS_MAX = 6000
+"""Characters of each failure's errors a report keeps: Typst's can run long."""
+
+
+def _run_options(outputs: OutputKinds) -> str:
+    # The `deckz run` options building what `outputs` asks for.
+    flags = [
+        "--handout" if outputs.handout else "--no-handout",
+        "--presentation" if outputs.presentation else "--no-presentation",
+        "--print" if outputs.print else "--no-print",
+    ]
+    if outputs.handout and not outputs.part_handouts:
+        flags.append("--no-part-handouts")
+    if outputs.html:
+        flags.append("--html")
+    return " ".join(flags)
+
+
+def failure_report(
+    failures: Sequence[BuildFailure], outputs: OutputKinds, what: str
+) -> str:
+    """A Markdown report of failed builds, for a person or an agent to fix.
+
+    Args:
+        failures: Each deck and language that failed, and why.
+        outputs: What was built, to say how to build it again.
+        what: What was built, e.g. "the decks changed since abc123".
+
+    Returns:
+        The report: each failure with the command reproducing it, from the \
+        repository's root, and its errors (cut past `_REPORT_ERRORS_MAX` \
+        characters).
+    """
+    lines = [
+        f"# {len(failures)} deck build(s) failed",
+        "",
+        f"`deckz run decks` built {what}. Fix each build below so that its command"
+        " succeeds, from the repository's root. Each error is the compiler's"
+        " (Typst) or a content file's render, naming the file and line.",
+    ]
+    for failure in failures:
+        lines += [
+            "",
+            f"## {failure.label}, in {failure.lang}",
+            "",
+            "```sh",
+            f"deckz run --workdir {failure.label} --lang {failure.lang} "
+            f"{_run_options(outputs)}",
+            "```",
+        ]
+        for name, errors in failure.errors or (("build", "no error recorded"),):
+            text = errors.strip()
+            if len(text) > _REPORT_ERRORS_MAX:
+                text = text[:_REPORT_ERRORS_MAX] + "\n[... cut: rerun the command]"
+            lines += ["", f"{name}:", "", "```text", text, "```"]
+    return "\n".join(lines) + "\n"
+
+
 def build(
     targets: Sequence[BuildTarget],
     outputs: OutputKinds,
     progress: ProgressReporterProtocol = _NULL_PROGRESS,
+    *,
+    keep_going: bool = False,
 ) -> None:
     """Build the assets, then compile every target, stopping at the first failure.
 
     A target failing to compile raises a `CompilationError` naming it. Only \
     once every target compiled, `outputs.sync` removes the stale PDFs.
+
+    Args:
+        targets: What to build.
+        outputs: The kinds of outputs to build.
+        progress: Reports the decks' progress.
+        keep_going: Build every target whatever fails, then raise a \
+            `BuildsFailedError` with each failure (for a report of them all).
+
+    Raises:
+        BuildsFailedError: With `keep_going`, when some target failed.
     """
     if not targets:
         return
@@ -135,24 +247,18 @@ def build(
     several_langs = len({target.lang for target in targets}) > 1
 
     def compile_target(target: BuildTarget) -> None:
-        slides = outputs.pdfs or outputs.html
-        if outputs.course_notes and not slides and not target.course_notes:
-            return  # Only the course notes were asked for.
         target_progress = (
             PrefixedProgress(progress, f"{target.lang}: ")
             if several_langs
             else progress
         )
-        builder = _deck_builder(target, outputs, target_progress)
-        with deck_lock(target.settings.paths.build_dir, target.label):
-            built = builder.build_deck()
-        if not built:
-            msg = (
-                f"{target.label} failed to compile in {target.lang}, see the "
-                "errors above"
-            )
-            raise CompilationError(msg)
+        failure = _compile_target(
+            target, outputs, target_progress, keep_going=keep_going
+        )
+        if failure is not None:
+            failures.append(failure)
 
+    failures: list[BuildFailure] = []
     # One deck, if in several languages, shows its compilations one language
     # after the other.
     if len({target.label for target in targets}) == 1:
@@ -163,6 +269,10 @@ def build(
             for target in targets:
                 compile_target(target)
                 advance()
+    if failures:
+        failed = ", ".join(f"{f.label} ({f.lang})" for f in failures)
+        msg = f"{len(failures)} build(s) failed: {failed}, see the errors above"
+        raise BuildsFailedError(msg, failures)
 
     if outputs.sync:
         for pdf in stale_pdfs(targets, outputs):

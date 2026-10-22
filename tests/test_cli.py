@@ -983,3 +983,37 @@ def test_run_names_the_main_template_line_a_variable_breaks(
     assert f"{main_template}:6: " in caplog.text
     assert "deckz's user config directory" in caplog.text
     assert "Traceback" not in caplog.text
+
+
+def test_run_decks_report_builds_every_deck_and_reports_the_failures(
+    working_dir: Path, tmp_path: Path
+) -> None:
+    hello = working_dir.parent / "bilingual" / "content" / "hello.md"
+    hello.write_text("# Hello\n\n{{ oops( }}\n")
+    report = tmp_path / "reports" / "builds.md"
+
+    with raises(SystemExit) as exc_info:
+        main(
+            (
+                "run",
+                "decks",
+                "--handout",
+                "--no-presentation",
+                "--no-part-handouts",
+                "--report",
+                str(report),
+            )
+        )
+
+    assert exc_info.value.code == 1
+    text = report.read_text()
+    assert text.startswith("# 1 deck build(s) failed\n")
+    assert "## company/bilingual, in fr\n" in text
+    command = (
+        "deckz run --workdir company/bilingual --lang fr --handout "
+        "--no-presentation --no-print --no-part-handouts"
+    )
+    assert command in text
+    assert f"{hello}:3: " in text
+    # The other deck built all the same.
+    assert (working_dir / "pdf" / "abc-handout.pdf").is_file()

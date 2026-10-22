@@ -1,6 +1,7 @@
 import json
 import shlex
 from pathlib import Path
+from typing import Any
 
 from pygit2 import init_repository
 from pytest import raises
@@ -258,7 +259,7 @@ def test_install_ci_workflow_writes_a_valid_workflow(tmp_path: Path) -> None:
     install_ci_workflow(tmp_path, ci)
 
 
-def test_ci_workflow_builds_the_decks_changed_overnight() -> None:
+def test_ci_workflow_builds_the_decks_changed_in_the_week() -> None:
     import yaml
 
     from deckz.configuring.settings import CiSettings
@@ -269,9 +270,7 @@ def test_ci_workflow_builds_the_decks_changed_overnight() -> None:
         return [step.get("run", "") for step in steps]
 
     assert not any("run decks" in run for run in runs(CiSettings()))
-    found = runs(
-        CiSettings(nightly_builds=("fr", "en"), videos_repository="owner/videos")
-    )
+    found = runs(CiSettings(builds=("fr", "en"), videos_repository="owner/videos"))
     fetch = found.index(
         "uv run deckz videos fetch --source https://github.com/owner/videos"
     )
@@ -279,18 +278,17 @@ def test_ci_workflow_builds_the_decks_changed_overnight() -> None:
     assert fetch < build
     assert "--lang fr en" in found[build]
     assert '${BASE:+--since "$BASE"}' in found[build]
+    assert '--before="7 days ago"' in found[build]  # Weekly by default.
     # No videos repository: no fetch.
-    assert not any(
-        "videos fetch" in run for run in runs(CiSettings(nightly_builds=("fr",)))
-    )
+    assert not any("videos fetch" in run for run in runs(CiSettings(builds=("fr",))))
 
-    ci = CiSettings(nightly_builds=("fr",), user_variables={"trainer_name": "CI"})
+    ci = CiSettings(builds=("fr",), user_variables={"trainer_name": "CI"})
     found = runs(ci)
     write = next(i for i, run in enumerate(found) if "variables.yml" in run)
     assert "trainer_name: CI\n" in found[write]
     assert write < next(i for i, run in enumerate(found) if "run decks" in run)
 
-    ci = CiSettings(nightly_builds=("fr",), cache_paths=("assets/plt", "assets/svg"))
+    ci = CiSettings(builds=("fr",), cache_paths=("assets/plt", "assets/svg"))
     steps = yaml.safe_load(ci_workflow(ci))["jobs"]["check"]["steps"]
     (cache,) = [s for s in steps if s.get("uses", "").startswith("actions/cache")]
     # Relative to the workspace, not to the job's working directory.
@@ -298,7 +296,55 @@ def test_ci_workflow_builds_the_decks_changed_overnight() -> None:
         "${{ github.event.repository.name }}/assets/plt",
         "${{ github.event.repository.name }}/assets/svg",
     ]
-    assert cache["with"]["restore-keys"] == "deckz-nightly-"
+    assert cache["with"]["restore-keys"] == "deckz-builds-"
+
+
+def test_ci_workflow_runs_weekly_builds_apart_from_the_nightly_checks() -> None:
+    import yaml
+
+    from deckz.configuring.settings import CiSettings
+    from deckz.hooks_install import ci_workflow
+
+    def workflow(**kwargs: Any) -> dict[Any, Any]:
+        return yaml.safe_load(ci_workflow(CiSettings(**kwargs)))
+
+    weekly = workflow(nightly_checks=("missing-en",), builds=("fr",))
+    # PyYAML reads `on` as True.
+    assert [s["cron"] for s in weekly[True]["schedule"]] == ["0 3 * * *", "0 4 * * 0"]
+    steps = {s["name"]: s for s in weekly["jobs"]["check"]["steps"]}
+    assert "'0 3 * * *'" in steps["Nightly checks"]["if"]
+    assert "'0 4 * * 0'" in steps["Build the decks changed in the last week"]["if"]
+    nightly = workflow(builds=("fr",), builds_schedule="nightly")
+    assert [s["cron"] for s in nightly[True]["schedule"]] == ["0 3 * * *"]
+    steps = {s["name"]: s for s in nightly["jobs"]["check"]["steps"]}
+    build = steps["Build the decks changed in the last day"]
+    assert '--before="24 hours ago"' in build["run"]
+
+
+def test_ci_workflow_reports_problems_in_an_issue_only_when_asked() -> None:
+    import yaml
+
+    from deckz.configuring.settings import CiSettings
+    from deckz.hooks_install import ci_workflow
+
+    def job(**kwargs: Any) -> dict[str, Any]:
+        return yaml.safe_load(ci_workflow(CiSettings(**kwargs)))["jobs"]["check"]
+
+    quiet = job(nightly_checks=("missing-en",), builds=("fr",))
+    assert "permissions" not in quiet
+    assert not any("ci-report" in s.get("run", "") for s in quiet["steps"])
+
+    reporting = job(nightly_checks=("missing-en",), builds=("fr",), report_to=("me",))
+    assert reporting["permissions"] == {"contents": "read", "issues": "write"}
+    steps = {s["name"]: s for s in reporting["steps"]}
+    report = steps["Report the problems in an issue"]
+    assert report["if"].startswith("failure() && ")
+    assert report["env"] == {"GITHUB_TOKEN": "${{ github.token }}"}
+    assert report["run"] == "uv run deckz hooks ci-report ../deckz-reports"
+    assert "../deckz-reports/checks.txt" not in steps["Nightly checks"]["run"]
+    assert "mv checks.txt ../deckz-reports/" in steps["Nightly checks"]["run"]
+    build = steps["Build the decks changed in the last week"]["run"]
+    assert "--report ../deckz-reports/builds.md" in build
 
 
 def test_install_ci_workflow_refuses_a_foreign_workflow(tmp_path: Path) -> None:
