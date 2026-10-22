@@ -16,7 +16,7 @@ from ..models import (
     SectionDefinition,
     UnresolvedPath,
 )
-from ..utils import all_decks, content_dirs, load_yaml
+from ..utils import all_decks, content_dirs, content_files, load_yaml
 
 
 class SectionsAnalyzer:
@@ -45,8 +45,7 @@ class SectionsAnalyzer:
         return frozenset(
             path
             for content_dir in content_dirs(self._git_dir, self._shared_content_dir)
-            for file_extension in self._file_extensions
-            for path in content_dir.rglob(f"*{file_extension}")
+            for path in content_files(content_dir, self._file_extensions)
             if ResolvedPath(path.resolve()) not in self._used_files
         )
 

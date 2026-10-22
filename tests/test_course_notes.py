@@ -253,6 +253,21 @@ def test_chapters_are_lang_sync_pairs(tmp_path: Path) -> None:
     ]
 
 
+def test_agent_notes_are_neither_chapters_nor_pairs(tmp_path: Path) -> None:
+    init_repository(str(tmp_path))
+    _write(tmp_path / "content" / "topic" / "a.md", "# A\n")
+    _write(tmp_path / "content" / "topic" / "en" / "a.md", "# A\n")
+    for notes in ("content/CLAUDE.md", "content/topic/AGENTS.md"):
+        _write(tmp_path / notes, "# Notes\n")
+    _write(tmp_path / "course-notes" / "CLAUDE.md", "# Notes\n")
+
+    assert course_notes_files(_global(tmp_path)) == []
+    assert course_notes_pairs(_global(tmp_path)) == []
+    assert [str(fr) for fr, _ in lang_pairs(_global(tmp_path))] == [
+        "content/topic/a.md"
+    ]
+
+
 def test_no_course_notes_directory_means_no_problem(tmp_path: Path) -> None:
     init_repository(str(tmp_path))
 

@@ -27,7 +27,7 @@ from ..models import (
     SectionInclude,
     UnresolvedPath,
 )
-from ..utils import load_yaml
+from ..utils import is_content_file, load_yaml
 from .protocols import ParserProtocol
 
 
@@ -170,7 +170,7 @@ class Parser(ParserProtocol):
             {
                 path.stem
                 for path in section_dir.iterdir()
-                if path.is_file() and path.suffix in self._file_extensions
+                if path.is_file() and is_content_file(path, self._file_extensions)
             }
         )
         nodes = tuple(

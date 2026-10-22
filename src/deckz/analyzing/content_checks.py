@@ -29,7 +29,7 @@ from ..exceptions import LabIdConflictError
 from ..labs.comparison import compare_pairs, missing_notebooks
 from ..labs.ids import assign_ids
 from ..labs.notebook import notebook_paths
-from ..utils import content_dirs
+from ..utils import content_dirs, content_files
 
 if TYPE_CHECKING:
     from ..configuring.settings import DeckSettings, GlobalSettings
@@ -226,16 +226,15 @@ def raw_latex(settings: "GlobalSettings") -> list[str]:
                 f"{', '.join(settings.file_extensions)} is compiled): convert "
                 "it to Markdown"
             )
-        for extension in settings.file_extensions:
-            for path in sorted(a_content_dir.rglob(f"*{extension}")):
-                text = path.read_text(encoding="utf-8")
-                for match in _LATEX_BLOCK.finditer(text):
-                    lineno = text.count("\n", 0, match.start()) + 1
-                    where = f"{_rel(path, git_dir)}:{lineno}"
-                    problems.append(
-                        f"{where}: {{=latex}} block (dropped by the Markdown "
-                        "pipeline): rewrite it in Markdown, or as a {=typst} block"
-                    )
+        for path in content_files(a_content_dir, settings.file_extensions):
+            text = path.read_text(encoding="utf-8")
+            for match in _LATEX_BLOCK.finditer(text):
+                lineno = text.count("\n", 0, match.start()) + 1
+                where = f"{_rel(path, git_dir)}:{lineno}"
+                problems.append(
+                    f"{where}: {{=latex}} block (dropped by the Markdown "
+                    "pipeline): rewrite it in Markdown, or as a {=typst} block"
+                )
     return problems
 
 
@@ -259,33 +258,32 @@ def jinja_syntax(settings: "GlobalSettings") -> list[str]:
     for a_content_dir in content_dirs(paths.git_dir, paths.content_dir):
         if not a_content_dir.is_dir():
             continue
-        for extension in settings.file_extensions:
-            for path in sorted(a_content_dir.rglob(f"*{extension}")):
-                where = _rel(path, paths.git_dir)
-                try:
-                    env = renderer.environment_for(path.suffix)
-                    ast = env.parse(path.read_text(encoding="utf-8"))
-                except HookError as error:
-                    return [str(error)]
-                except TemplateSyntaxError as error:
+        for path in content_files(a_content_dir, settings.file_extensions):
+            where = _rel(path, paths.git_dir)
+            try:
+                env = renderer.environment_for(path.suffix)
+                ast = env.parse(path.read_text(encoding="utf-8"))
+            except HookError as error:
+                return [str(error)]
+            except TemplateSyntaxError as error:
+                problems.append(
+                    f"{where}:{error.lineno}: {error.message}: fix the Jinja"
+                    " tag, or put it inside {% raw %}…{% endraw %} if it's"
+                    " meant as text"
+                )
+                continue
+            for node in ast.find_all((nodes.Filter, nodes.Test)):
+                kind, known = (
+                    ("filter", env.filters)
+                    if isinstance(node, nodes.Filter)
+                    else ("test", env.tests)
+                )
+                if node.name not in known:
                     problems.append(
-                        f"{where}:{error.lineno}: {error.message}: fix the Jinja"
-                        " tag, or put it inside {% raw %}…{% endraw %} if it's"
-                        " meant as text"
+                        f"{where}:{node.lineno}: no {kind} named"
+                        f" {node.name!r} in templates/jinja2/env.py's"
+                        f" environment: fix its name"
                     )
-                    continue
-                for node in ast.find_all((nodes.Filter, nodes.Test)):
-                    kind, known = (
-                        ("filter", env.filters)
-                        if isinstance(node, nodes.Filter)
-                        else ("test", env.tests)
-                    )
-                    if node.name not in known:
-                        problems.append(
-                            f"{where}:{node.lineno}: no {kind} named"
-                            f" {node.name!r} in templates/jinja2/env.py's"
-                            f" environment: fix its name"
-                        )
     return problems
 
 
@@ -366,17 +364,16 @@ def lab_urls(settings: "GlobalSettings") -> list[str]:
     for a_content_dir in content_dirs(git_dir, content_dir):
         if not a_content_dir.is_dir():
             continue
-        for extension in settings.file_extensions:
-            for path in sorted(a_content_dir.rglob(f"*{extension}")):
-                text = path.read_text(encoding="utf-8")
-                for lineno, line in enumerate(text.splitlines(), 1):
-                    if pattern.search(line):
-                        where = f"{_rel(path, git_dir)}:{lineno}"
-                        problems.append(
-                            f"{where}: hand-written link to the "
-                            "published notebooks repo: link the lab through the "
-                            "repository's own templating, which follows its ID"
-                        )
+        for path in content_files(a_content_dir, settings.file_extensions):
+            text = path.read_text(encoding="utf-8")
+            for lineno, line in enumerate(text.splitlines(), 1):
+                if pattern.search(line):
+                    where = f"{_rel(path, git_dir)}:{lineno}"
+                    problems.append(
+                        f"{where}: hand-written link to the "
+                        "published notebooks repo: link the lab through the "
+                        "repository's own templating, which follows its ID"
+                    )
     return problems
 
 

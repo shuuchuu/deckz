@@ -212,7 +212,9 @@ typst_ignore_system_fonts: true
   frame, whose `# Title` line deckz then names) -- measuring them stays
   your theme's.
 - `file_extensions`: the extensions tried, in order, when resolving a file
-  include. Defaults to `[".md"]`.
+  include. Defaults to `[".md"]`. A `CLAUDE.md` or `AGENTS.md` is never a
+  content file, wherever it is: a content or course notes directory can hold
+  notes for the coding agents working in it.
 - `labs`: settings for the `deckz labs` commands, e.g.:
 
   ```yaml
