@@ -61,9 +61,15 @@ def test_install_claude_hooks_writes_every_event(tmp_path: Path) -> None:
     assert set(settings["hooks"]) == {
         "PreToolUse",
         "PostToolUse",
+        "PostToolUseFailure",
         "SessionStart",
         "Stop",
+        "WorktreeCreate",
+        "WorktreeRemove",
     }
+    post_bash = settings["hooks"]["PostToolUseFailure"][0]["hooks"][0]["command"]
+    assert post_bash.endswith(deckz_command("hooks post-bash"))
+    assert post_bash.startswith("[ -n ")  # Skipped unless pre-bash left a snapshot.
     pre_bash = settings["hooks"]["PreToolUse"][0]
     assert pre_bash["matcher"] == "Bash"
     assert pre_bash["hooks"][0]["command"] == deckz_command("hooks pre-bash")
@@ -212,7 +218,7 @@ def test_install_claude_hooks_updates_an_older_matcher(tmp_path: Path) -> None:
     install_claude_hooks(tmp_path)
 
     settings = json.loads(path.read_text(encoding="utf-8"))
-    [updated] = settings["hooks"]["PostToolUse"]
+    updated = settings["hooks"]["PostToolUse"][0]
     assert updated["matcher"] == "Edit|Write|MultiEdit|NotebookEdit"
 
 

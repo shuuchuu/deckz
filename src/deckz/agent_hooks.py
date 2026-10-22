@@ -19,8 +19,9 @@ edit tools changed: never another session's work.
 PostToolUse/Edit converts an edited content file with the repo's own
 `pandoc_command` and runs deckz's content checks on it alone. When
 `deckz.yml` sets `worktree.required_for_agents`, PreToolUse/Edit,
-PreToolUse/Bash and SessionStart also keep agents from changing the main
-checkout (`agent_checkouts`). A target
+PreToolUse/Bash, PostToolUse/Bash and SessionStart also keep agents from
+changing the main checkout, and WorktreeCreate/WorktreeRemove make Claude
+Code's worktrees `deckz worktree`'s (`agent_checkouts`). A target
 repo's own `templates/hooks.py` (`GlobalPaths.hooks_module`) can add
 further Bash denials -- the repo rules analogue of `templates/checks.py`
 -- by exposing:
@@ -196,8 +197,16 @@ def _discards(sub: str, args: list[str], cwd: Path) -> list[str]:
     return []
 
 
-def _builtin_denial(words: list[str], cwd: Path) -> str | None:
+def _builtin_denial(
+    words: list[str], cwd: Path, own: frozenset[str] = frozenset()
+) -> str | None:
     """Why a simple command must never run in a deckz-managed repository.
+
+    Args:
+        words: The simple command's words.
+        cwd: The directory it runs in.
+        own: Files the session changed in the main checkout, which it may
+            discard (`agent_checkouts.main_changes_report`).
 
     Returns:
         The reason, or None if it may run.
@@ -225,7 +234,7 @@ def _builtin_denial(words: list[str], cwd: Path) -> str | None:
             "No `git clean`: untracked files may be another session's work. Delete"
             " your own files by name."
         )
-    if lost := _discards(sub, args, cwd):
+    if lost := [path for path in _discards(sub, args, cwd) if path not in own]:
         return (
             f"`git {sub}` would discard uncommitted changes, possibly another"
             f" session's: {', '.join(lost[:10])}. Undo your own edits by editing them"
@@ -239,22 +248,48 @@ def bash_denial(settings: "GlobalSettings", payload: dict[str, Any]) -> str | No
 
     Runs deckz's own built-in denials, then the target repo's own
     `deny_bash` from `templates/hooks.py` if it has one (see the module
-    docstring), then the main checkout's (`agent_checkouts`).
+    docstring), then the main checkout's (`agent_checkouts`), which takes
+    a snapshot of it when the command may change it.
 
     Returns:
         The first denial reason found, or None if the command may run.
     """
-    from .agent_checkouts import main_checkout_denial
+    from .agent_checkouts import main_checkout_verdict, take_snapshot
 
     cwd = Path(payload.get("cwd") or settings.paths.git_dir)
     plugin = _deny_bash_plugin(settings)
     script = commands(payload.get("tool_input", {}).get("command", ""))
+    state_file = _session_state_file(settings, payload)
+    own = frozenset(
+        json.loads(state_file.read_text(encoding="utf-8")).get("main_changes", [])
+        if state_file.is_file()
+        else []
+    )
     for words in script:
-        if reason := _builtin_denial(words, cwd):
+        if reason := _builtin_denial(words, cwd, own):
             return reason
         if plugin is not None and (reason := plugin(words, cwd, settings)):
             return reason
-    return main_checkout_denial(settings, script, cwd)
+    reason, watched = main_checkout_verdict(settings, script, cwd, set(own))
+    if watched is not None:
+        take_snapshot(settings, payload, watched)
+    return reason
+
+
+def post_bash_report(settings: "GlobalSettings", payload: dict[str, Any]) -> str | None:
+    """What a Bash command changed in the main checkout, if it was watched.
+
+    See `agent_checkouts.main_changes_report`; the files it reports join
+    the session's state, so that it may restore them.
+
+    Returns:
+        A report to give the agent, or None.
+    """
+    from .agent_checkouts import main_changes_report
+
+    with _session_state(_session_state_file(settings, payload)) as state:
+        own: list[str] = state.setdefault("main_changes", [])
+        return main_changes_report(settings, payload, own)
 
 
 def _deny_bash_plugin(settings: "GlobalSettings"):
