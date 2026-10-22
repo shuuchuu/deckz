@@ -25,7 +25,7 @@ Markdown-to-Typst/HTML pipeline, asset metadata yaml files).
 import json
 import re
 from collections.abc import Callable, Collection, Iterable, Iterator
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from ..exceptions import LabIdConflictError
@@ -504,18 +504,56 @@ def course_notes_files(settings: "GlobalSettings", paths: Paths = None) -> list[
 
 
 def course_notes_pairs(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
-    # Each course notes chapter exists in fr and en.
+    # Each course notes chapter exists in fr and en. A directory with French
+    # chapters and no English one at all is a unit still being written or not
+    # translated yet, not a forgotten file: it gets one line, about the
+    # directory, and none with `paths` (the post-edit hook's, on each edit of
+    # a chapter being drafted). Once the directory has an English chapter, each
+    # missing one is a line of its own, `paths` or not.
     from ..course_notes import course_notes_pairs as pairs
 
     if not _course_notes_touched(settings, paths):
         return []
     git_dir = settings.paths.git_dir
+    touched = (
+        None
+        if paths is None or any(path.name == "deckz.yml" for path in paths)
+        else {path.resolve() for path in paths}
+    )
     problems = []
+    untranslated: dict[PurePosixPath, list[PurePosixPath]] = {}
     for fr, en in pairs(settings):
-        for path, other, lang in ((fr, en, "English"), (en, fr, "French")):
-            if (git_dir / path).is_file() and not (git_dir / other).is_file():
-                problems.append(f"{path}: no {lang} version ({other})")
-    return problems
+        if (
+            touched is not None
+            and not {
+                (git_dir / fr).resolve(),
+                (git_dir / en).resolve(),
+            }
+            & touched
+        ):
+            continue
+        if (git_dir / en).is_file() and not (git_dir / fr).is_file():
+            problems.append(f"{en}: no French version ({fr})")
+        elif (git_dir / fr).is_file() and not (git_dir / en).is_file():
+            if _has_chapter(settings, git_dir / en.parent):
+                problems.append(f"{fr}: no English version ({en})")
+            else:
+                untranslated.setdefault(fr.parent, []).append(fr)
+    if touched is None:
+        problems.extend(
+            f"{directory}: {len(chapters)} French chapter(s) and no English one "
+            f"yet ({', '.join(chapter.name for chapter in chapters)}): translate "
+            f"them into {directory / 'en'}"
+            for directory, chapters in untranslated.items()
+        )
+    return sorted(problems)
+
+
+def _has_chapter(settings: "GlobalSettings", directory: Path) -> bool:
+    # Whether `directory` (a chapters' `en/`) holds a chapter.
+    return directory.is_dir() and any(
+        content_files(directory, settings.file_extensions)
+    )
 
 
 CHECKS: dict[str, Callable[["GlobalSettings", Paths], list[str]]] = {

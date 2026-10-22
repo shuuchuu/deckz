@@ -829,6 +829,15 @@ those of every deck with chapters; the course notes are always whole, whatever
 With `--no-handout --no-presentation --no-print`, only the course notes are
 built. `DECKZ_RUN_COURSE_NOTES=true` makes it the default.
 
+`deckz run file` and `deckz run section` take `--course-notes` too: the
+chapters of the file or of the flavor's files, built under `.run/` with the
+course notes' main template, whether a deck includes them or not. Given a
+chapter's own path (`deckz run file course-notes/nn/intro.md`, or its `en/`
+version, in the languages `--lang` asks), `run file` builds that chapter
+alone: the way to look at a chapter no deck includes yet, with the course
+notes' theme and page layout. With the course notes alone, a language with no
+chapter fails; along with the slides, it is left out with a warning.
+
 `deckz.yml`'s `course_notes` settings:
 
 ```yaml
@@ -847,7 +856,11 @@ Chapters are fr/en pairs like content files: `deckz i18n stale`, the
 `commit-msg` hook's `Lang-sync` trailer and the Claude Code hooks follow
 them. `deckz check` checks that each chapter is named after a content file
 (`course-notes-files`, which also checks `same_as`) and exists in both
-languages (`course-notes-pairs`).
+languages (`course-notes-pairs`). A directory with French chapters and no
+English one at all is still being written or translated: `course-notes-pairs`
+reports it as one line, and not at all on the files of a post-edit hook
+(`deckz check` given paths), while each chapter missing from a directory that
+has English ones is a line of its own.
 
 ### Upgrading from 31.x (`clean content`)
 
@@ -992,8 +1005,9 @@ The main commands:
   content file, a specific section flavor, or the project's assets.
   Add `--lang en` to compile the English variant, or `--lang fr en` for
   both (see [Titles, variables and `--lang`](#titles-variables-and---lang)),
-  `--course-notes` (on `run` and `run decks`) to also compile the course
-  notes (see [Course notes](#course-notes)),
+  `--course-notes` (on `run`, `run decks`, `run file` and `run section`)
+  to also compile the course notes, or the chapters of the file or section
+  (see [Course notes](#course-notes)),
   `--html` to also produce the HTML
   deck (see [HTML output](#html-output)), or `--watch` to recompile on file
   changes instead of once. With `--dry-run`, every `deckz run` command
@@ -1014,7 +1028,8 @@ The main commands:
   `run file`/`run section` take their path relative to `content/`
   (`nn/intro`, `nn/ae`), or as found from the current directory or the
   repository's root (`content/nn/intro.md`, as editors and `git status`
-  show it). They write their output
+  show it); `run file` also takes a course notes chapter's path, and
+  builds that chapter alone. They write their output
   under `<git_dir>/.run/`, not the current deck's own `pdf`/`.build`, and
   open it once done (add `--no-open` for agentic/headless use, where only
   the printed path matters).

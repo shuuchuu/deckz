@@ -17,6 +17,7 @@ def run_section(
     html: bool = False,
     part_handouts: bool = True,
     sync: bool = True,
+    course_notes: bool = False,
     langs: Langs = ("fr",),
     watch: bool = False,
     open: bool = True,  # ruff: ignore[builtin-argument-shadowing]
@@ -44,6 +45,11 @@ def run_section(
             deck, a stray file), in the languages this run built. What
             this run merely skips (another language, presentations after
             --no-presentation, other parts with --parts) is kept
+        course_notes: Also compile the course notes chapters of the
+            flavor's files (as `deckz run course-notes` would, into the
+            scratch directory's `pdf/course-notes/`), in the languages they
+            are written in. With --no-handout --no-presentation --no-print,
+            only them, and a language with no chapter fails
         langs: Languages to compile, each to its own output paths
             (English under an `en/` subdirectory). English is strict: every
             resolved file, title and variable must have a complete English
@@ -56,11 +62,12 @@ def run_section(
         workdir: Path to move into before running the command
 
     """
+    from functools import partial
     from logging import getLogger
 
     from ...checking import content_relative, preview_settings
     from ...configuring.settings import DeckSettings
-    from ...pipelines import OutputKinds, build, section_targets
+    from ...pipelines import OutputKinds, build, chapters_required, section_targets
     from ...pipelines import run_section as _run_section
     from .._presentation import (
         RichProgress,
@@ -81,11 +88,22 @@ def run_section(
         html=html,
         part_handouts=part_handouts,
         sync=sync,
+        course_notes=course_notes,
     )
     announce_build(f"{section}@{flavor}", langs, outputs)
 
+    targets = partial(
+        section_targets,
+        section,
+        flavor,
+        settings,
+        langs,
+        course_notes=course_notes,
+        required=chapters_required(outputs),
+    )
+
     if dry_run:
-        print_plan_of(section_targets(section, flavor, settings, langs), outputs)
+        print_plan_of(targets(), outputs)
         return
 
     if watch:
@@ -98,6 +116,8 @@ def run_section(
             settings.paths.assets_dir,
             settings.paths.current_dir,
         ]
+        if course_notes and settings.paths.course_notes_dir.is_dir():
+            to_watch.append(settings.paths.course_notes_dir)
         if settings.paths.user_config_dir.exists():
             to_watch.append(settings.paths.user_config_dir)
         _watch(
@@ -119,5 +139,5 @@ def run_section(
         )
         return
 
-    build(section_targets(section, flavor, settings, langs), outputs, RichProgress())
+    build(targets(), outputs, RichProgress())
     show_output_dirs(settings, langs, outputs, open_dir=open)

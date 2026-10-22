@@ -12,7 +12,10 @@ alive. Add `--course-notes` to rebuild the deck's course notes too, on a change 
 chapter as of a slide.
 
 To look at one file or one section on its own: `deckz run file <file>`, `deckz run
-section <section> <flavor>` (they build under `.run/` and open the result).
+section <section> <flavor>` (they build under `.run/` and open the result). Add
+`--course-notes` for their course notes chapters too; given a chapter's path
+(`deckz run file course-notes/topic/intro.md`), `run file` builds that chapter alone,
+with the course notes' layout, even when no deck includes it.
 
 ## A real build
 

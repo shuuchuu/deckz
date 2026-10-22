@@ -184,14 +184,17 @@ def show_output_dirs(
         settings: The preview's settings.
         langs: The languages the preview builds, each written apart.
         outputs: What the preview builds.
-        open_dir: Open the first output directory: an HTML one when only \
-            HTML is built.
+        open_dir: Open the first output directory: an HTML or course notes \
+            one when only that is built.
     """
     logger = getLogger(__name__)
     pdfs = outputs.handout or outputs.presentation or outputs.print
-    bases = [settings.paths.pdf_dir] if pdfs or not outputs.html else []
+    others = outputs.html or outputs.course_notes
+    bases = [settings.paths.pdf_dir] if pdfs or not others else []
     if outputs.html:
         bases.append(settings.paths.html_dir)
+    if outputs.course_notes:
+        bases.append(settings.paths.course_notes_pdf_dir)
     dirs = [lang_dir(base, lang) for base in bases for lang in langs]
     for directory in dirs:
         logger.info(

@@ -292,9 +292,15 @@ course notes PDF only, whatever the build's `OutputKinds`, so `deck_targets`/
 `decks_targets` can add the course notes to a slides build (`--course-notes`,
 `OutputKinds.course_notes`), as one `build`, without failing on a deck with no
 chapter.
+`pipelines.chapters_targets` turns `run file`/`run section` preview targets into
+their chapters' (`--course-notes`; `run file` given a chapter's path,
+`checking.chapter_relative`, builds it alone): a chapter no deck includes builds
+too.
 `course_notes_pairs` adds the chapters to `i18n_stale.lang_pairs`, so `i18n stale`,
 the commit-msg hook and the Stop hook follow them; `course-notes-files` and
-`course-notes-pairs` are deferred built-in checks.
+`course-notes-pairs` are deferred built-in checks (the latter reports a directory
+with no English chapter at all as one line, and not with `paths`: it's being
+drafted).
 
 ### Status
 

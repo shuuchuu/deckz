@@ -42,6 +42,7 @@ def test_with_output_dirs_leaves_the_original_untouched(tmp_path: Path) -> None:
         tmp_path / "build", tmp_path / "pdf", tmp_path / "html"
     )
     assert copy.paths.pdf_dir == tmp_path / "pdf"
+    assert copy.paths.course_notes_pdf_dir == tmp_path / "pdf" / "course-notes"
     assert copy.paths.html_dir == tmp_path / "html"
     assert settings.paths.pdf_dir != tmp_path / "pdf"
     assert settings.paths.html_dir == settings.paths.current_dir / "html"

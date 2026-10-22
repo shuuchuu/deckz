@@ -130,6 +130,31 @@ def content_relative(settings: DeckSettings, path: str) -> str:
     return path
 
 
+def chapter_relative(settings: DeckSettings, path: str) -> str | None:
+    """The content file whose course notes chapter `path` names, if it names one.
+
+    `path` names a chapter when it's a file of the course notes directory, \
+    from the current directory or the repository's root \
+    (`course-notes/nn/intro.md`, or its English version \
+    `course-notes/nn/en/intro.md`).
+
+    Returns:
+        The content file it writes out, as `deckz run file` takes it \
+        (`nn/intro`), or None.
+    """
+    paths = settings.paths
+    root = paths.course_notes_dir.resolve()
+    for base in (Path.cwd(), paths.git_dir):
+        found = (base / path).resolve()
+        if not found.is_file() or not found.is_relative_to(root):
+            continue
+        relative = found.relative_to(root).with_suffix("")
+        if relative.parent.name == "en":
+            relative = relative.parent.parent / relative.name
+        return relative.as_posix()
+    return None
+
+
 def preview_settings(settings: DeckSettings, *parts: str) -> DeckSettings:
     """Copy of a deck's settings writing to a `deckz run file`/`section` scratch tree.
 

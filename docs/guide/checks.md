@@ -40,7 +40,7 @@ a repository's own checks block unless it lists them.
 | `raw-latex` | no | no LaTeX left in the content | rewrite it in Markdown |
 | `lab-urls` | no | labs linked through the repository's templating, not a pasted URL | use the repository's lab link |
 | `course-notes-files` | no | each course notes chapter is named after a content file; `course_notes.same_as` names content files with no chapter of their own | move the chapter after its renamed file; fix `same_as` |
-| `course-notes-pairs` | no | each course notes chapter exists in French and English | translate the missing one |
+| `course-notes-pairs` | no | each course notes chapter exists in French and English (a directory with no English chapter yet: one line, and none in the post-edit hook) | translate the missing one |
 
 A repository adds its own checks in `templates/checks.py`; `deckz check --help` lists
 them all.

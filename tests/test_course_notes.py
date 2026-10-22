@@ -334,3 +334,137 @@ def test_run_decks_with_course_notes(repo: Path) -> None:
 
     assert (deck / "pdf" / "abc-handout.pdf").is_file()
     assert (deck / _NOTES_PDF).is_file()
+
+
+def test_course_notes_pairs_groups_an_untranslated_directory(tmp_path: Path) -> None:
+    init_repository(str(tmp_path))
+    _write(tmp_path / "course-notes" / "topic" / "a.md", "# A\n")
+    _write(tmp_path / "course-notes" / "topic" / "b.md", "# B\n")
+    _write(tmp_path / "course-notes" / "topic" / "en" / "CLAUDE.md", "# Notes\n")
+
+    problems = course_notes_pairs(_global(tmp_path))
+
+    assert problems == [
+        "course-notes/topic: 2 French chapter(s) and no English one yet (a.md, "
+        "b.md): translate them into course-notes/topic/en"
+    ]
+    # The post-edit hook, on a chapter being drafted: nothing to say yet.
+    edited = [tmp_path / "course-notes" / "topic" / "a.md"]
+    assert course_notes_pairs(_global(tmp_path), edited) == []
+
+
+def test_course_notes_pairs_in_a_translated_directory(tmp_path: Path) -> None:
+    init_repository(str(tmp_path))
+    notes = tmp_path / "course-notes" / "topic"
+    _write(notes / "a.md", "# A\n")
+    _write(notes / "en" / "a.md", "# A\n")
+    _write(notes / "b.md", "# B\n")
+    _write(notes / "c.md", "# C\n")
+
+    missing = [
+        "course-notes/topic/b.md: no English version (course-notes/topic/en/b.md)",
+        "course-notes/topic/c.md: no English version (course-notes/topic/en/c.md)",
+    ]
+    assert course_notes_pairs(_global(tmp_path)) == missing
+    # Given paths, only theirs.
+    assert course_notes_pairs(_global(tmp_path), [notes / "b.md"]) == missing[:1]
+    assert course_notes_pairs(_global(tmp_path), [notes / "a.md"]) == []
+    assert course_notes_pairs(_global(tmp_path), [tmp_path / "deckz.yml"]) == missing
+
+
+def _lone(repo: Path) -> Path:
+    # A content file no deck includes, and its chapter in both languages.
+    _write(repo / "content" / "topic" / "lone.md", "# Lone\n\nThe lone slide.\n")
+    _write(repo / "content" / "topic" / "en" / "lone.md", "# Lone\n\nThe slide.\n")
+    _chapter(repo, "topic/lone", "# Seul\n\nLe chapitre seul.\n")
+    _chapter(repo, "topic/en/lone", "# Lone\n\nThe lone chapter.\n")
+    return repo / ".run" / "file" / "topic" / "lone" / "pdf"
+
+
+def test_run_file_of_a_chapter_builds_it_alone(repo: Path) -> None:
+    pdf_dir = _lone(repo)
+
+    main(("run", "file", "course-notes/topic/lone.md", "--no-open"))
+
+    text = _pdf_text(pdf_dir / "course-notes" / "deck-course-notes.pdf")
+    assert "Course notes of fr" in text
+    assert "Le chapitre seul." in text
+    assert not list(pdf_dir.glob("*.pdf"))
+
+
+def test_run_file_of_an_english_chapter(repo: Path) -> None:
+    pdf_dir = _lone(repo)
+
+    main(("run", "file", "course-notes/topic/en/lone.md", "--lang", "en", "--no-open"))
+
+    text = _pdf_text(pdf_dir / "course-notes" / "en" / "deck-course-notes.pdf")
+    assert "The lone chapter." in text
+
+
+def test_run_file_of_a_chapter_missing_in_a_language_fails(
+    repo: Path, caplog: Any
+) -> None:
+    _lone(repo)
+    (repo / "course-notes" / "topic" / "en" / "lone.md").unlink()
+
+    with raises(SystemExit) as error:
+        main(("run", "file", "course-notes/topic/lone.md", "--lang", "fr", "en"))
+
+    assert error.value.code == 1
+    assert "topic/lone has no course notes chapter in en yet" in caplog.text
+
+
+def test_run_file_with_course_notes_builds_both(repo: Path) -> None:
+    pdf_dir = _lone(repo)
+
+    main(("run", "file", "topic/lone", *_HANDOUT_ONLY, "--course-notes", "--no-open"))
+
+    assert "The lone slide." in _pdf_text(pdf_dir / "deck-handout.pdf")
+    notes = _pdf_text(pdf_dir / "course-notes" / "deck-course-notes.pdf")
+    assert "Le chapitre seul." in notes
+
+
+def test_run_file_with_course_notes_but_no_chapter(repo: Path, caplog: Any) -> None:
+    pdf_dir = repo / ".run" / "file" / "greeting" / "hello" / "pdf"
+
+    main(
+        (
+            "run",
+            "file",
+            "greeting/hello",
+            *_HANDOUT_ONLY,
+            "--course-notes",
+            "--no-open",
+        )
+    )
+
+    assert (pdf_dir / "deck-handout.pdf").is_file()
+    assert not (pdf_dir / "course-notes").exists()
+    assert "greeting/hello has no course notes chapter in fr yet" in caplog.text
+
+
+def test_run_section_with_course_notes_dry_run(
+    repo: Path, capsys: CaptureFixture[str]
+) -> None:
+    _chapter(repo, "greeting/hello", "# Hello\n")
+
+    main(
+        (
+            "run",
+            "section",
+            "greeting",
+            "standard",
+            "--no-handout",
+            "--no-presentation",
+            "--no-print",
+            "--course-notes",
+            "--dry-run",
+        )
+    )
+
+    out = capsys.readouterr().out
+    assert (
+        ".run/section/greeting/standard/pdf/course-notes/deck-course-notes.pdf: "
+        "render all 1" in out
+    )
+    assert "handout" not in out
