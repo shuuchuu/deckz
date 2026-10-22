@@ -122,6 +122,13 @@ no variables of its own: every file of a deck renders with the same
   When a listed file's changes need no port after all, `deckz i18n
   mark-synced PATH... --reason "<why>"` records it in an empty commit
   (a commit: only where committing is yours to do).
+- `deckz labs stale [NOTEBOOKS...]` -- demos whose code cells changed
+  after their outputs were written, from git history alone. Rerunning
+  one costs a run (GPU time for some): when a listed change alters no
+  output that matters, `deckz labs mark-current NOTEBOOK... --reason
+  "<why>"` records it in an empty commit (same rule as `mark-synced`),
+  or the commit making the change carries `Lab-outputs-current: <path>`
+  trailers itself.
 - Most analysis commands above (`check content`, `check variables`, `i18n
   stale`, `search-sections`, ...) take `--plain` for a compact, stable,
   colorless report meant for a script or an agent to parse, and some take

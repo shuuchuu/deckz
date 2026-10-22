@@ -13,7 +13,8 @@ says where your work stands, item by item, each with what to do:
   they reach (a file with no `en/` version, a title with no `en:`), and the
   repository's translation backlog;
 - lab notebooks and videos not published as committed or rendered (compared with
-  the published ones as last fetched; `--fetch` fetches them first);
+  the published ones as last fetched; `--fetch` fetches them first), and the demos
+  you changed whose code no longer matches their outputs;
 - the PDFs of the decks your changes reach that don't match them anymore.
 
 "Your changes" are your uncommitted files plus the commits you haven't pushed

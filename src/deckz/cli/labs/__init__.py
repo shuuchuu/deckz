@@ -8,6 +8,7 @@ app = App(
     name="labs",
     help="Manage lab notebooks: normalize their Colab metadata, reformat "
     "them canonically, assign IDs, check/compare/dump them, write back "
-    "executed outputs, and publish them.",
+    "executed outputs (and find the demos whose code changed since), and "
+    "publish them.",
 )
 _parent_app.command(app)

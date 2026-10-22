@@ -575,6 +575,21 @@ recomputed from git, and nothing is stored.
 - No check and no gate. Whether stale outputs mislead is a judgment call, so the
   maintainer settles it from the list.
 
+**Status (2026-10-22):** done. It's in `labs/stale_outputs.py`, with `deckz labs stale`
+and `deckz labs mark-current`. The trailers and the empty commit moved from
+`i18n_stale` to a new `commits.py` that both use. The history comes from git's own
+log, limited to the notebooks directory (0.07 s on slides). pygit2's per-commit tree
+diffs took 12 s. Each demo is parsed from now back to its outputs' last change only.
+On slides it finds the prototype's 44 demos, in 11.8 s with a cold cache (once per
+clone) and 0.2 s warm. In the working tree, `git status` says which demos to hash.
+studioz's agent refuses `labs mark-current`, as it refuses `i18n mark-synced`; studioz
+has no panel for it yet, so the person runs it in a terminal. On a scratch worktree:
+a code change to `nlp/word-embeddings/demo-fr` showed in `deckz status`, which counted
+the 43 others (6.5 s with `--no-checks --no-decks`). Once committed, `mark-current`
+took it off the list and refused a second mark. The 44 are the maintainer's to settle:
+most come from the commits that ruff-formatted every lab, or changed each lab's
+dataset download.
+
 ### 9.4 Nightly CI builds of the decks changed that day
 
 Phase 6 left these out because they need the assets toolchain. The nightly job

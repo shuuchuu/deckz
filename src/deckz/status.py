@@ -331,10 +331,49 @@ def _published_files_items(
     ]
 
 
+def _stale_demo_items(
+    settings: "GlobalSettings", changed: Collection[str]
+) -> list[StatusItem]:
+    # Your changes' demos whose code changed since their outputs, then a
+    # count of the others: the maintainer's queue of reruns.
+    from .labs.stale_outputs import stale_demos
+
+    found = stale_demos(settings)
+    yours = [demo for demo in found if str(demo.path) in changed]
+    items = [
+        StatusItem(
+            f"{demo.path}: code changed since its outputs were written "
+            f"({_count(len(demo.commits), 'commit')}"
+            f"{', and the working tree' if demo.uncommitted else ''})",
+            "rerun it and write its outputs back (`deckz labs gpu pass "
+            "--write-outputs`, or `deckz labs outputs`), or `deckz labs "
+            f'mark-current {demo.path} --reason "<why>"` if nothing to rerun',
+        )
+        for demo in yours
+    ]
+    if others := len(found) - len(yours):
+        items.append(
+            StatusItem(
+                f"{_count(others, 'other demo')} in the repository whose code "
+                "changed since their outputs were written",
+                "`deckz labs stale` lists them",
+            )
+        )
+    return items
+
+
 def labs_section(
-    settings: "GlobalSettings", uncommitted: set[str], *, fetch: bool
+    settings: "GlobalSettings",
+    uncommitted: set[str],
+    *,
+    fetch: bool,
+    changed: Collection[str] = (),
 ) -> StatusSection:
-    """Lab notebooks not committed, or committed but not published.
+    """Lab notebooks not committed, committed but not published, or stale.
+
+    A demo is stale when its code changed since its outputs were written
+    (`deckz.labs.stale_outputs`): those of `changed` are listed, the others
+    counted.
 
     Returns:
         Its section.
@@ -350,6 +389,7 @@ def labs_section(
     published_dir = settings.paths.labs_published_dir
     published_rel = published_dir.relative_to(git_dir).as_posix()
     items = _uncommitted_lab_items(settings, uncommitted)
+    items += _stale_demo_items(settings, changed)
     if fetch:
         _git(git_dir, "fetch", "--quiet", labs.publish_remote, labs.publish_branch)
     ref = f"{labs.publish_remote}/{labs.publish_branch}"
@@ -544,7 +584,7 @@ def status(
     sections = {"checks": checks_section(settings, changed)} if checks else {}
     sections |= {
         "translation": translation_section(settings, uncommitted, changed, affected),
-        "labs": labs_section(settings, uncommitted, fetch=fetch),
+        "labs": labs_section(settings, uncommitted, fetch=fetch, changed=changed),
         "videos": videos_section(settings, fetch=fetch),
     }
     if decks:
