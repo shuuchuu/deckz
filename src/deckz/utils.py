@@ -283,7 +283,17 @@ def deck_name_from_dir(current_dir: Path) -> str:
     return str(load_yaml(config)["name"]).lower()
 
 
-def _parse_deck(settings: "DeckSettings", lang: "Lang") -> tuple[Path, "ParsedDeck"]:
+def parse_deck(settings: "DeckSettings", lang: "Lang") -> tuple[Path, "ParsedDeck"]:
+    """Parse a deck with its variables as in a build, as `all_decks` does.
+
+    In English, a file with no `en/` version is left out (see `all_decks`).
+
+    Returns:
+        The deck's directory relative to the repository, and the parsed deck.
+
+    Raises:
+        DeckParsingError: If the deck doesn't parse in French.
+    """
     from .components.factory import DeckSettingsFactory
     from .configuring.variables import get_variables
     from .exceptions import DeckParsingError
@@ -339,7 +349,7 @@ def all_decks(git_dir: Path, lang: "Lang" = "fr") -> dict[Path, "ParsedDeck"]:
 
     with create_pool() as pool:
         return dict(
-            pool.map(partial(_parse_deck, lang=lang), list(all_deck_settings(git_dir)))
+            pool.map(partial(parse_deck, lang=lang), list(all_deck_settings(git_dir)))
         )
 
 

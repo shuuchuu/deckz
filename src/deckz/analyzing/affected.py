@@ -3,6 +3,9 @@
 A deck is affected by a file it resolves (in French; an English file counts
 as its French sibling, which every English build mirrors), or by any file
 under its own directory (`deck.yml`, `variables.yml`, its local content).
+Which assets a deck shows is only known by rendering its content
+(`deck_assets`): `deck_findings` does it, `reaches` and `affected_decks`
+don't.
 """
 
 from collections.abc import Callable, Iterable
@@ -63,17 +66,75 @@ def reaches(settings: "DeckSettings") -> Callable[[PurePath], bool]:
     return test
 
 
+def deck_assets(settings: "DeckSettings") -> set[Path]:
+    """The metadata files of the assets the deck of `settings` shows.
+
+    Its content files are rendered, in French and English, as a build
+    renders them: an asset counts when a fragment looks up its metadata
+    (`<assets_dir>/<asset>.yml`, as `deckz asset search` finds it), whether
+    or not the file exists.
+
+    Returns:
+        Their resolved paths; a fragment that doesn't render shows none.
+    """
+    from jinja2 import TemplateError
+
+    from ..components.deck_builder import PartDependenciesNodeVisitor
+    from ..components.factory import GlobalSettingsFactory
+    from ..exceptions import DeckzError
+    from ..models import LANGS
+    from ..utils import parse_deck
+
+    renderer = GlobalSettingsFactory(settings).renderer()
+    assets_dir = settings.paths.assets_dir
+    found: set[Path] = set()
+    for lang in LANGS:
+        try:
+            _, parsed = parse_deck(settings, lang)
+        except DeckzError:
+            continue  # It doesn't parse: the `deck-definitions` check says why.
+        for part in PartDependenciesNodeVisitor().process(parsed.deck).values():
+            for dependency in part:
+                try:
+                    _, usage = renderer.render_to_str(
+                        dependency, variables=parsed.variables
+                    )
+                except (TemplateError, DeckzError, OSError):
+                    continue  # `jinja-syntax` reports what doesn't render.
+                found |= {(assets_dir / a).with_suffix(".yml").resolve() for a in usage}
+    return found
+
+
 def deck_findings(
     settings: "DeckSettings", findings: Iterable["Finding"]
 ) -> list["Finding"]:
-    """The checks' problems about the deck of `settings`' files (`reaches`).
+    """The checks' problems about the deck of `settings`' files.
+
+    A file the deck `reaches`, or an asset it shows (`deck_assets`, an
+    asset's file and its metadata file alike: rendered only when some
+    problem is about an asset).
 
     Returns:
-        Them, in order. A problem naming no path is about no deck, nor one
-        naming an asset (`asset-credits`): which decks show it isn't mapped.
+        Them, in order. A problem naming no path is about no deck.
     """
     test = reaches(settings)
-    return [f for f in findings if f.path is not None and test(f.path)]
+    assets_dir = settings.paths.assets_dir.resolve()
+    git_dir = settings.paths.git_dir
+    shown: set[Path] | None = None
+    kept = []
+    for finding in findings:
+        if finding.path is None:
+            continue
+        if test(finding.path):
+            kept.append(finding)
+            continue
+        path = (git_dir / finding.path).resolve()
+        if path.is_relative_to(assets_dir):
+            if shown is None:
+                shown = deck_assets(settings)
+            if path.with_suffix(".yml") in shown:
+                kept.append(finding)
+    return kept
 
 
 def affected_decks(git_dir: Path, paths: Iterable[Path]) -> list["DeckSettings"]:

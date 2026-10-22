@@ -539,6 +539,15 @@ names an asset: rendering a deck costs seconds. `deckz show affected` stays as i
 Rendering every deck to map a changed asset would be `deckz asset search`'s work, and
 too slow for `status`.
 
+**Status (2026-10-22):** done. `affected.deck_assets` renders the deck's fragments in
+French and English, as `AssetsSearcher` does, and returns the metadata files of what
+they look up. `deck_findings` keeps a problem under `assets/` (the metadata file, or
+the asset file itself, for a plugin's check) when the deck shows it. `deckz upload`
+and `deckz status DECK` both use it. `utils.parse_deck` is public for this. On slides,
+`cv3` renders in 2.2 s (130 assets). On a scratch worktree, a `\emph{}` planted in
+`assets/img/biological-neuron.yml` showed in `cv3`'s upload dry run (it shows the
+diagram) and not in `bda`'s. Each run takes 24 s, almost all of it the checks.
+
 ### 9.3 Demos whose code changed after their outputs were written
 
 Phase 3 left this out. A demo's stored outputs come from a run (`deckz labs outputs`),
