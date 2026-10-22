@@ -14,7 +14,12 @@ from deckz.analyzing.content_checks import (
     lab_urls,
     raw_latex,
 )
-from deckz.configuring.settings import GlobalPaths, GlobalSettings
+from deckz.configuring.settings import (
+    GlobalPaths,
+    GlobalSettings,
+    LabRepoSettings,
+    LabsSettings,
+)
 
 
 def _settings(git_dir: Path) -> GlobalSettings:
@@ -439,3 +444,64 @@ def test_a_check_given_no_file_of_its_kind_does_nothing(tmp_path: Path) -> None:
     assert lab_ids(_settings(tmp_path), paths=[markdown]) == []
     assert lab_format(_settings(tmp_path), paths=[markdown]) == []
     assert deck_definitions(_settings(tmp_path), paths=[markdown]) == []
+
+
+def _repo_settings(git_dir: Path, hint: str | None = None) -> GlobalSettings:
+    return GlobalSettings(
+        paths=GlobalPaths(current_dir=git_dir, git_dir=git_dir),
+        labs=LabsSettings(
+            repos=(LabRepoSettings(repo="acme/linting", lab="topic/linting"),),
+            repo_link_hint=hint,
+        ),
+    )
+
+
+def test_lab_urls_flags_a_link_to_a_lab_repository(tmp_path: Path) -> None:
+    init_repository(str(tmp_path))
+    _write(
+        tmp_path / "content" / "topic" / "tp.md",
+        "[Linting](https://github.com/acme/linting/tree/main-en)\n"
+        "<https://codespaces.new/acme/linting>\n",
+    )
+    _write(
+        tmp_path / "course-notes" / "topic" / "tp.md",
+        "A [lab](https://github.com/acme/linting).\n",
+    )
+
+    problems = lab_urls(_repo_settings(tmp_path, '{{ "{lab}" | lab_repo }}'))
+
+    assert [problem.split(":")[1] for problem in problems] == ["1", "2", "1"]
+    assert problems[0].endswith(
+        "hand-written link to acme/linting, the repository of lab topic/linting: "
+        '{{ "topic/linting" | lab_repo }}'
+    )
+
+
+def test_lab_urls_accepts_a_lab_repository_in_code_or_another_one(
+    tmp_path: Path,
+) -> None:
+    init_repository(str(tmp_path))
+    _write(
+        tmp_path / "content" / "topic" / "git.md",
+        "`git clone https://github.com/acme/linting.git`\n"
+        "[Other](https://github.com/acme/linting-extra)\n",
+    )
+
+    assert lab_urls(_repo_settings(tmp_path)) == []
+
+
+def test_lab_urls_given_paths_reports_only_about_them(tmp_path: Path) -> None:
+    init_repository(str(tmp_path))
+    link = "[Linting](https://github.com/acme/linting)\n"
+    content = tmp_path / "content" / "topic" / "tp.md"
+    notes = tmp_path / "course-notes" / "topic" / "tp.md"
+    other = tmp_path / "content" / "other" / "tp.md"
+    for path in (content, notes, other):
+        _write(path, link)
+
+    problems = lab_urls(_repo_settings(tmp_path), paths=[content, notes])
+
+    assert [problem.split(":")[0] for problem in problems] == [
+        "content/topic/tp.md",
+        "course-notes/topic/tp.md",
+    ]

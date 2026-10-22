@@ -71,6 +71,12 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   those the repository lists in `deckz.yml`'s `setup.remotes`. Pushing needs your
   GitHub account to have write access to the published repositories: a refused push
   fails with git's own message (`git ls-remote <remote>` tests the connection).
+- A lab whose project lives in a repository of its own (`labs.repos`: a notebook as
+  its Colab version, the repository's README as the same statement for a Codespace
+  or a clone): `deckz labs repos` fetches each and reports a branch missing or behind
+  the one it stacks on, a README that doesn't link its notebook, and a README last
+  changed before its notebook was. Content links such a repository through the
+  repository's templating, never by hand (`lab-urls`).
 
 ## Videos
 

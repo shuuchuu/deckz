@@ -42,7 +42,7 @@ a repository's own checks block unless it lists them.
 | `lab-format` | no | notebooks in deckz's JSON style | `deckz labs fmt <notebook>` |
 | `asset-credits` | no | image credit lines in Markdown, not LaTeX | rewrite the line in Markdown |
 | `raw-latex` | no | no LaTeX left in the content | rewrite it in Markdown |
-| `lab-urls` | no | labs linked through the repository's templating, not a pasted URL | use the repository's lab link |
+| `lab-urls` | no | labs and lab repositories (`labs.repos`) linked through the repository's templating, not a pasted URL, in content and course notes | use the repository's lab link (`labs.repo_link_hint` names it for a lab repository) |
 | `course-notes-files` | no | each course notes chapter is named after a content file; `course_notes.same_as` names content files with no chapter of their own | move the chapter after its renamed file; fix `same_as` |
 | `course-notes-pairs` | no | each course notes chapter exists in French and English (a directory with no English chapter yet: one line, and none in the post-edit hook) | translate the missing one |
 | `course-notes-code` | no, and opt-in | each course notes chapter's Python code runs, and prints what the chapter shows (see below) | show what it prints; mark the block `.output-varies` or `.no-run` |

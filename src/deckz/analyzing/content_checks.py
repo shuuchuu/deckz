@@ -430,26 +430,71 @@ def _published_notebooks_slug(settings: "GlobalSettings") -> str | None:
     return match.group(1) if match else None
 
 
+def _lab_repo_link(repo: str) -> re.Pattern[str]:
+    # A Markdown link (`](url)`, `<url>`) to a lab's repository, on GitHub
+    # or as a Codespace: a URL in a code span or block (`git clone ...`) is
+    # an example, not a link.
+    return re.compile(
+        r"(?:\]\(|<)\s*https?://(?:www\.)?(?:github\.com|codespaces\.new)/"
+        + re.escape(repo)
+        + r"(?:\.git)?(?=[/?#)>\s]|$)",
+        re.IGNORECASE,
+    )
+
+
+def _course_notes_files(settings: "GlobalSettings", paths: Paths) -> Iterator[Path]:
+    # Every course notes chapter, or those of `paths`.
+    notes_dir = settings.paths.course_notes_dir
+    if paths is not None:
+        yield from (
+            path
+            for path in sorted(paths)
+            if is_content_file(path, settings.file_extensions)
+            and path.is_file()
+            and _under(path, notes_dir)
+        )
+    elif notes_dir.is_dir():
+        yield from content_files(notes_dir, settings.file_extensions)
+
+
 def lab_urls(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
     # No hand-written link to the published notebooks repo: a notebook's
     # published URL depends on its ID (deckz labs publish), which can be
     # reassigned, so a repo rendering it should do so through its own
-    # templating, not a literal, rot-prone URL.
+    # templating, not a literal, rot-prone URL. Nor to a lab's own repository
+    # (`labs.repos`): the branch a trainee opens depends on the content's
+    # language, and the repository's templating knows it. Course notes too:
+    # they render through the same templating.
+    labs = settings.labs
     slug = _published_notebooks_slug(settings)
-    if slug is None:
+    published = re.compile(re.escape(slug) + r"\b") if slug else None
+    repos = [(repo, _lab_repo_link(repo.repo)) for repo in labs.repos]
+    if published is None and not repos:
         return []
-    pattern = re.compile(re.escape(slug) + r"\b")
     git_dir = settings.paths.git_dir
     problems = []
-    for path in _content_files(settings, paths):
+    files = [*_content_files(settings, paths), *_course_notes_files(settings, paths)]
+    for path in files:
         text = path.read_text(encoding="utf-8")
         for lineno, line in enumerate(text.splitlines(), 1):
-            if pattern.search(line):
-                where = f"{_rel(path, git_dir)}:{lineno}"
+            where = f"{_rel(path, git_dir)}:{lineno}"
+            if published is not None and published.search(line):
                 problems.append(
                     f"{where}: hand-written link to the "
                     "published notebooks repo: link the lab through the "
                     "repository's own templating, which follows its ID"
+                )
+            for repo, pattern in repos:
+                if not pattern.search(line):
+                    continue
+                fix = (
+                    labs.repo_link_hint.replace("{lab}", repo.lab)
+                    if labs.repo_link_hint
+                    else "link it through the repository's own templating"
+                )
+                problems.append(
+                    f"{where}: hand-written link to {repo.repo}, the "
+                    f"repository of lab {repo.lab}: {fix}"
                 )
     return problems
 

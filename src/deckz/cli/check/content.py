@@ -28,7 +28,8 @@ def content(
     (`lab-outputs`), nothing credential-like in a notebook (`lab-secrets`),
     notebooks in deckz's canonical JSON (`lab-format`),
     asset credit lines free of LaTeX (`asset-credits`), no raw LaTeX in
-    content (`raw-latex`, `lab-urls`), content files' Jinja tags
+    content (`raw-latex`), no hand-written link to the published notebooks
+    or a lab's repository (`lab-urls`), content files' Jinja tags
     (`jinja-syntax`), every deck parsing in French (`deck-definitions`),
     with `review.dir`, review reports' front matter well formed and
     naming existing files (`review-headers`), course notes chapters

@@ -240,6 +240,30 @@ typst_ignore_system_fonts: true
   - `not_secrets`: values the `lab-secrets` check (and `deckz labs
     publish`, which refuses a notebook holding a credential) would take for
     one but aren't, e.g. a public dataset's read-only key.
+  - `repos`: the labs whose project lives in a repository of its own, the
+    hands-on notebooks being its Colab version and the repository's README
+    the same statement for a Codespace or a clone, e.g.:
+
+    ```yaml
+    repos:
+      - repo: shuuchuu/caesar-cipher
+        lab: python/testing/encryption-algorithm-testing
+      - repo: shuuchuu/ghcli
+        lab: python/production/cli/github-issues-cli
+        statement: false
+        branches: {main: null, main-en: main, gui: main, solution: gui, solution-en: solution}
+    ```
+
+    `repo` is the GitHub `owner/name` (`url` overrides where it's fetched
+    from), `lab` a path under `paths.labs_notebooks_dir`. `branches` maps each
+    branch to the one it stacks on (default `main`, `main-en` and `solution`
+    on `main`, `solution-en` on `solution`), `start` the branch a trainee
+    opens to each language (default `fr: main`, `en: main-en`), and
+    `statement` (default true) says whether their READMEs give the lab's
+    statement yet, for the repository's templating to decide where its lab
+    links point. `deckz labs repos` reports on them, and `lab-urls` refuses a
+    hand-written link to one, suggesting `repo_link_hint` (with `{lab}`
+    filled in) when it's set.
   - `gpu`: the machines `deckz labs gpu` rents: `image` (default Colab's
     runtime image), `gpus` (names in order of preference, default
     `[Tesla_T4, RTX_A4000]`), `offer_filter` (a Vast.ai offer query),
@@ -1216,7 +1240,8 @@ The main commands:
   file's Jinja parsing with `templates/jinja2/env.py`'s environment, its filters
   and tests known to it (`jinja-syntax`: a broken tag otherwise fails only the
   build), no hand-written
-  link to the configured lab-publishing remote (`lab-urls`), course notes
+  link to the configured lab-publishing remote or to a lab's own repository
+  (`labs.repos`), in content and course notes (`lab-urls`), course notes
   chapters named after a content file and in both languages
   (`course-notes-files`, `course-notes-pairs`, see [Course
   notes](#course-notes)) -- plus, if
@@ -1471,6 +1496,15 @@ The main commands:
 - `deckz labs compare [LAB_DIRS...]`: structural differences between
   fr/en notebook pairs beyond what a translation changes.
 - `deckz labs missing`: every notebook present in only one language.
+- `deckz labs repos [NAMES...] [--no-fetch]`: fetch each repository of
+  `labs.repos` (or those named, as `owner/name` or `name`) into a bare mirror
+  under the git directory (`deckz/lab-repos/`, shared by worktrees), and
+  report a branch missing, undeclared or lacking commits of the one it stacks
+  on, a README that doesn't give the statement yet (`statement: false`), a
+  lab with no hands-on notebook in a start branch's language, a README whose
+  Colab links name no notebook's ID or not its own notebook's, and, as notes,
+  a README last changed before its notebook was, with the notebook's commits
+  since. Exits 1 on a problem, notes aside.
 - `deckz labs dump NOTEBOOKS...`: a compact, readable view of one or more
   notebooks.
 - `deckz labs publish [--break-published-links] [--replace-unknown]

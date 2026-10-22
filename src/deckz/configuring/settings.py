@@ -11,6 +11,7 @@ from pydantic import (
     Field,
     ValidationError,
     ValidationInfo,
+    model_validator,
 )
 
 from .. import app_name
@@ -160,6 +161,64 @@ class LabsOutputsSettings(BaseModel):
     back, e.g. to shrink what a library's outputs embed."""
 
 
+class LabRepoSettings(BaseModel):
+    """A lab whose project lives in a repository of its own.
+
+    The lab's hands-on notebooks are its Colab version; the repository's \
+    README, on the branch a trainee opens in their language, gives the same \
+    statement for a GitHub Codespace or a local clone. `deckz labs repos` \
+    reports where the branches and the READMEs drift from the notebooks.
+    """
+
+    model_config = ConfigDict(frozen=True)
+    repo: str
+    """The repository on GitHub, as `owner/name`."""
+    lab: str
+    """The lab, as a path under `paths.labs_notebooks_dir`: its notebooks \
+    are `<lab>/hands-on-<lang>.ipynb` (and `demo-<lang>`), the hands-on ones \
+    the README's Colab version."""
+    url: str | None = None
+    """Where `deckz labs repos` fetches it from; unset, \
+    `https://github.com/<repo>.git`."""
+    branches: dict[str, str | None] = Field(
+        default_factory=lambda: {
+            "main": None,
+            "main-en": "main",
+            "solution": "main",
+            "solution-en": "solution",
+        }
+    )
+    """Every branch, and the one it stacks on (none for the root): a branch \
+    holds every commit of its base, so a change to the base is rebased into \
+    it. The default is a starting point (`main`) and a solution, each with \
+    its English translation."""
+    start: dict[str, str] = Field(
+        default_factory=lambda: {"fr": "main", "en": "main-en"}
+    )
+    """The branch a trainee opens, by language: its README is the lab's \
+    statement in that language."""
+    statement: bool = True
+    """Whether those READMEs give the lab's statement yet. Until then, \
+    `deckz labs repos` reports it, and a repository's templating can keep \
+    the lab's links off the repository."""
+
+    @model_validator(mode="after")
+    def _known_branches(self) -> Self:
+        unknown = sorted(
+            {base for base in self.branches.values() if base is not None}.union(
+                self.start.values()
+            ).difference(self.branches)
+        )
+        if unknown:
+            msg = f"labs.repos {self.repo}: {', '.join(unknown)} not in its branches"
+            raise ValueError(msg)
+        return self
+
+    @property
+    def fetch_url(self) -> str:
+        return self.url or f"https://github.com/{self.repo}.git"
+
+
 class LabsSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
     id_metadata_key: str = "shuuchuu.id"
@@ -195,6 +254,29 @@ class LabsSettings(BaseModel):
     not_secrets: tuple[str, ...] = ()
     """Values the `lab-secrets` check (and `deckz labs publish`) would take \
     for a credential but aren't, e.g. a public dataset's read-only key."""
+    repos: tuple[LabRepoSettings, ...] = ()
+    """The labs with a repository of their own, which the `lab-urls` check \
+    keeps content from linking by hand, and `deckz labs repos` reports on."""
+    repo_link_hint: str | None = None
+    """What the `lab-urls` check says to write instead of a hand-written \
+    link to a lab's repository, with `{lab}` filled in, e.g. the call of a \
+    repository's own Jinja filter."""
+
+    @model_validator(mode="after")
+    def _one_repo_per_lab(self) -> Self:
+        labs = [repo.lab for repo in self.repos]
+        if duplicates := sorted({lab for lab in labs if labs.count(lab) > 1}):
+            msg = f"labs.repos: several repositories for {', '.join(duplicates)}"
+            raise ValueError(msg)
+        return self
+
+    def repo_of(self, lab: str) -> LabRepoSettings | None:
+        """The repository of `lab`, if it has one.
+
+        Returns:
+            Its settings, or None.
+        """
+        return next((repo for repo in self.repos if repo.lab == lab), None)
 
 
 class I18nSettings(BaseModel):
