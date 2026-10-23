@@ -155,9 +155,11 @@ Found along the way, not done (each increment's "Left" has the rest):
   `outdated` is.
 - ~~The sandbox fails on the colleague's machine~~ Done 2026-10-23: phase 6,
   increment 7. The colleague fixed AppArmor on their machine the same day, with
-  Claude's help (how isn't recorded here). Left: their studioz's probe confirming
-  it once they update, and, if their fix differs from the README's profile, the
-  README taking the one that worked.
+  Claude's help: the README's profile, the same to the line, installed by hand in a
+  terminal (`sudo` fails under Claude Code's `!`: no terminal for the password,
+  now said in the README); `kernel.apparmor_restrict_unprivileged_userns` stays 1,
+  and studioz's probe command prints 0 there (Ubuntu 24.04.5). Left: seeing once
+  that it survives a reboot (the apparmor service loads `/etc/apparmor.d/` at boot).
 
 ### Starting phase 7
 
@@ -1851,9 +1853,9 @@ Each increment is usable on its own, in this order:
    system, no file); with the probe made to fail as on the colleague's machine,
    headless Chromium showed the panel's line, the box disabled, and a message got a
    409 naming the fix. The tests replace the probe (`conftest`): CI's Ubuntu runner
-   may lack bubblewrap. **Not tried:** the AppArmor profile itself (this machine is
-   Debian, without the restriction): `apparmor_parser -Q` parses it, the
-   colleague's machine will tell.
+   may lack bubblewrap. The AppArmor profile, which this machine (Debian, without
+   the restriction) could only parse, fixed the colleague's Ubuntu 24.04.5 (open
+   items).
 
 ### Phase 7: what the colleague's first afternoon found (noted 2026-10-21)
 

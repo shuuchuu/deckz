@@ -70,7 +70,10 @@ EOF
 sudo apparmor_parser -r /etc/apparmor.d/bwrap
 ```
 
-The panel sees the fix within a minute. Turning the restriction off for every
+Run them in a terminal of your own: `sudo` needs one to ask for your password, which
+Claude Code's `!` prefix doesn't give it. The profile is loaded again at every boot.
+`bwrap --ro-bind / / --unshare-net true; echo $?` then prints 0, and the panel sees
+the fix within a minute (this fixed it on Ubuntu 24.04). Turning the restriction off for every
 program (`kernel.apparmor_restrict_unprivileged_userns=0`) works too, but weakens
 the whole machine.
 
