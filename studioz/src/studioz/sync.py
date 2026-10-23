@@ -115,8 +115,16 @@ def conflicts(workspace: Path) -> tuple[str, ...]:
     return tuple(path for path in (found or "").split("\0") if path)
 
 
-def state(workspace: Path, up: Upstream) -> State:
+def state(
+    workspace: Path, up: Upstream, fetched_elsewhere: datetime | None = None
+) -> State:
     """Where the workspace stands against the upstream branch, without fetching.
+
+    Args:
+        workspace: The workspace.
+        up: The upstream branch.
+        fetched_elsewhere: When studioz last fetched it for every workspace \
+            (`studioz.updates`, which writes no `FETCH_HEAD`), if it did.
 
     Returns:
         Its commits to publish, how far behind, and its rebase's conflicts.
@@ -134,6 +142,10 @@ def state(workspace: Path, up: Upstream) -> State:
         if fetch_head.is_file()
         else None
     )
+    if fetched_elsewhere is not None and (
+        fetched is None or fetched_elsewhere > fetched
+    ):
+        fetched = fetched_elsewhere
     return State(
         up,
         ahead,

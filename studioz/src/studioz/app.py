@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from functools import partial
 from importlib.resources import files
 from pathlib import Path
-from threading import Event
+from threading import Event, Thread
 from time import monotonic
 from typing import Annotated, Any
 from urllib.parse import quote
@@ -60,6 +60,7 @@ from . import (
     problems,
     sources,
     sync,
+    updates,
     videos,
     workflows,
     workspaces,
@@ -94,6 +95,8 @@ class Studio:
     login: "Login"
     drafter: Callable[[Path, list[str]], Awaitable[str]] = asks.draft_message
     """Writes a commit message (tests replace it)."""
+    fetcher: updates.Fetcher = field(default_factory=updates.Fetcher)
+    """The upstream branch's fetches, for every workspace (`studioz.updates`)."""
     closing: Event = field(default_factory=Event)
     """Set when studioz stops: the pages' server-sent events end."""
 
@@ -243,6 +246,7 @@ templates.env.filters["deck_tree"] = workspaces.deck_tree
 
 @router.get("/", response_class=HTMLResponse)
 def home(request: Request, studio: StudioDep) -> Response:
+    _fetch_soon(studio)
     return _render(
         request,
         "home.html",
@@ -269,6 +273,7 @@ def create(
 def workspace(request: Request, studio: StudioDep, name: str) -> Response:
     found = studio.workspace(name)
     workspaces.mark_used(found.worktree.path)
+    _fetch_soon(studio)
     return _render(
         request,
         "workspace.html",
@@ -881,7 +886,7 @@ def sync_panel(
     """
     found = studio.workspace(name)
     up = sync.upstream(studio.main)
-    state = sync.state(found.worktree.path, up) if up else None
+    state = sync.state(found.worktree.path, up, studio.fetcher.fetched) if up else None
     return _render(
         request, "_sync_panel.html", workspace=found, state=state, deck=formation
     )
@@ -899,6 +904,7 @@ def _sync_dialog(
     deck: str,
     *,
     moved: bool = False,
+    update_from: str | None = None,
 ) -> Response:
     """The Synchronisation dialog, after `action`.
 
@@ -911,6 +917,9 @@ def _sync_dialog(
         deck: The deck on screen, if any: its page opens a conflict's file.
         moved: Whether `action` may have moved the workspace's HEAD, which \
             the other panels and the before/after view follow.
+        update_from: For an action updating the workspace, the revision its \
+            update counts from (`HEAD`, or `ORIG_HEAD` ending a rebase): a \
+            completed update runs the workspace's `deckz setup`.
 
     Returns:
         The dialog's content.
@@ -923,8 +932,21 @@ def _sync_dialog(
     up = sync.upstream(studio.main)
     if up is None:
         raise HTTPException(409, "Pas de branche amont avec laquelle synchroniser")
+    before = (
+        background.git(path, "rev-parse", "--verify", "--quiet", update_from)
+        if update_from
+        else None
+    )
     outcome = action(path, up)
-    state = sync.state(path, up)
+    state = sync.state(path, up, studio.fetcher.fetched)
+    if before and state.conflicts is None:
+        # Updated: its `deckz setup`, as after a pull, and the banner says so.
+        Thread(
+            target=updates.after_update,
+            args=(path, before, up.tracking),
+            kwargs={"automatic": False},
+            daemon=True,
+        ).start()
     response = _render(
         request,
         "_sync.html",
@@ -962,7 +984,9 @@ def sync_update(
     Returns:
         The dialog, with how it went (a conflict to fix, typically).
     """
-    return _sync_dialog(request, studio, name, sync.update, formation, moved=True)
+    return _sync_dialog(
+        request, studio, name, sync.update, formation, moved=True, update_from="HEAD"
+    )
 
 
 @router.post("/espaces/{name}/synchronisation/verifier", response_class=HTMLResponse)
@@ -974,7 +998,9 @@ def sync_check(
     Returns:
         The dialog, offering to publish the commit checked if it passes.
     """
-    return _sync_dialog(request, studio, name, sync.prepare, formation, moved=True)
+    return _sync_dialog(
+        request, studio, name, sync.prepare, formation, moved=True, update_from="HEAD"
+    )
 
 
 @router.post("/espaces/{name}/synchronisation/publier", response_class=HTMLResponse)
@@ -1006,6 +1032,7 @@ def sync_continue(
         lambda path, _: sync.continue_rebase(path),
         formation,
         moved=True,
+        update_from="ORIG_HEAD",
     )
 
 
@@ -1016,6 +1043,51 @@ def sync_abort(
     return _sync_dialog(
         request, studio, name, lambda path, _: sync.abort(path), formation, moved=True
     )
+
+
+@router.get("/espaces/{name}/mise-a-jour", response_class=HTMLResponse)
+def currency(
+    request: Request, studio: StudioDep, name: str, avis: bool = False
+) -> Response:
+    """Whether the workspace is current with the upstream branch.
+
+    Args:
+        request: The request.
+        studio: studioz.
+        name: The workspace.
+        avis: The notice of a build or upload dialog, rather than the top \
+            bar's banner: only a workspace behind.
+
+    Returns:
+        The top bar's banner: the last update (studioz's fast-forward or \
+        the person's) and its `deckz setup`, else how far behind the \
+        workspace is, with its Update; or a dialog's notice.
+    """
+    found = studio.workspace(name)
+    path = found.worktree.path
+    up = sync.upstream(studio.main)
+    state = sync.state(path, up, studio.fetcher.fetched) if up else None
+    update = updates.applied(path)
+    return _render(
+        request,
+        "_currency.html",
+        workspace=found,
+        state=state,
+        update=update if updates.recent(update) and not avis else None,
+        notice=avis,
+        error=studio.fetcher.error,
+    )
+
+
+@router.post("/espaces/{name}/mise-a-jour/vu", response_class=HTMLResponse)
+def currency_seen(request: Request, studio: StudioDep, name: str) -> Response:
+    """Close the last update's banner.
+
+    Returns:
+        The banner without it.
+    """
+    updates.mark_seen(studio.workspace(name).worktree.path)
+    return currency(request, studio, name)
 
 
 @router.get("/espaces/{name}/taches/resume", response_class=HTMLResponse)
@@ -1330,7 +1402,7 @@ def _publication(studio: Studio, name: str) -> dict[str, Any]:
     report = studio.statuses.report(path)
     groups = {group.key: group for group in report.result or ()}
     up = sync.upstream(studio.main)
-    state = sync.state(path, up) if up else None
+    state = sync.state(path, up, studio.fetcher.fetched) if up else None
     return {
         "workspace": found,
         "report": report,
@@ -2715,6 +2787,41 @@ def close(
     return _render(request, "_closed.html", workspace=found, kept=kept)
 
 
+def _busy(studio: Studio, workspace: Path) -> bool:
+    """Whether a job or an agent turn runs in the workspace: no update under it.
+
+    Returns:
+        True if one does.
+    """
+    return studio.agents.busy(workspace) or any(
+        not job.finished for job in studio.jobs.jobs(workspace)
+    )
+
+
+def _keep_current(studio: Studio) -> None:
+    """Fetch the upstream branch, then fast-forward the workspaces it can."""
+    up = sync.upstream(studio.main)
+    if up is None:
+        return
+    studio.fetcher.fetch(studio.main, up)
+    for found in workspaces.workspaces(studio.settings):
+        path = found.worktree.path
+        if updates.fast_forwardable(path, up) and not _busy(studio, path):
+            updates.fast_forward(path, up)
+
+
+def _fetch_soon(studio: Studio) -> None:
+    """Keep the workspaces current in the background, unless done a minute ago."""
+    if studio.fetcher.due(updates.FETCH_ON_OPEN):
+        Thread(target=_keep_current, args=(studio,), daemon=True).start()
+
+
+async def _keep_current_every(studio: Studio, every: float) -> None:
+    while True:
+        await asyncio.to_thread(_keep_current, studio)
+        await asyncio.sleep(every)
+
+
 async def _stop_idle(studio: Studio) -> None:
     while True:
         await asyncio.sleep(5)
@@ -2733,6 +2840,8 @@ def create_app(
     drafter: Callable[[Path, list[str]], Awaitable[str]] | None = None,
     backlog: Backlog | None = None,
     jobs: Jobs | None = None,
+    fetcher: updates.Fetcher | None = None,
+    fetch_every: float | None = updates.FETCH_EVERY,
 ) -> FastAPI:
     """The studioz application for the deckz repository `repository`.
 
@@ -2748,6 +2857,9 @@ def create_app(
         backlog: The workspaces' `deckz i18n stale` runs (same).
         jobs: The jobs, holding back those needing memory under their \
             threshold (`studioz --min-free-memory`; tests replace the memory).
+        fetcher: The upstream branch's fetches (tests replace git's).
+        fetch_every: Seconds between two fetches, the first at startup; \
+            None for none but those pages opening start (tests).
 
     Returns:
         The application.
@@ -2773,18 +2885,22 @@ def create_app(
         agents or agent.Agents(),
         login or Login(),
         drafter or asks.draft_message,
+        fetcher or updates.Fetcher(),
     )
     studio.agents.on_failure = studio.login.forget
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
-        reaper = asyncio.create_task(_stop_idle(studio))
+        tasks = [asyncio.create_task(_stop_idle(studio))]
+        if fetch_every is not None:
+            tasks.append(asyncio.create_task(_keep_current_every(studio, fetch_every)))
         try:
             yield
         finally:
-            reaper.cancel()
-            with suppress(asyncio.CancelledError):
-                await reaper
+            for task in tasks:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
             await asyncio.to_thread(studio.watches.stop_all)
             studio.statuses.stop_all()
             studio.affected.stop_all()

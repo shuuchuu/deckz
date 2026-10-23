@@ -32,6 +32,9 @@ def _isolated(tmp_path: Path, monkeypatch: Any, tmp_path_factory: Any) -> None:
     # Nor the machine's memory: a loaded machine would hold the jobs back.
     plenty = Memory(64 << 30, 32 << 30)
     monkeypatch.setattr("studioz.memory.read", lambda *_: plenty)
+    # Nor a page opening: it would fetch and fast-forward in the background
+    # (`studioz.updates`), which its own tests do in the foreground.
+    monkeypatch.setattr("studioz.app._fetch_soon", lambda _: None)
 
 
 def _git(cwd: Path, *args: str) -> str:

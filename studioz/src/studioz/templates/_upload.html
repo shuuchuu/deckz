@@ -4,6 +4,7 @@
     <h2>Envoyer {{ deck }} sur Google Drive</h2>
     <button type="button" class="secondary" onclick="this.closest('dialog').close()">Fermer</button>
   </header>
+  <div hx-get="/espaces/{{ workspace.name }}/mise-a-jour?avis=true" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
   {% if plan.error %}
   <p class="error">deckz n'a pas pu lister les PDF : {{ plan.error }}</p>
   {% elif not plan.pdfs %}

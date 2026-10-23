@@ -20,8 +20,8 @@ afternoon; its increments 1 (the model), 2 (a new conversation for a new file), 
 are done. Phase 7's increments 1 (logging in, and errors naming their fix), 2
 (links in new tabs), 3 (the slide in view) and 4 (the PDF's outline) are done.
 **Next:** phase 8 (planned 2026-10-23 after a publish from a stale workspace
-rolled the labs back, its decisions taken the same day; increment 1 done, next
-its increment 2), phase 7's "Also left" (start with "Starting phase 7" below), phase 6's
+rolled the labs back, its decisions taken the same day; increments 1 and 2 done,
+next its increment 3), phase 7's "Also left" (start with "Starting phase 7" below), phase 6's
 increment 5
 (the colleague's next afternoon measured), "Then, with the colleague" (below
 phase 5), and the open items. A GPU pass rents a machine that costs money: never
@@ -2020,21 +2020,48 @@ phase 7".
    notebooks into the stand-in); a chained "Synchroniser puis publier" (one dialog
    doing the Sync's check and push then the publish) if "Synchroniser d'abord" turns
    out to be a step too many.
-2. **Workspaces stay current.** studioz fetches the upstream branch at startup, when
-   a workspace's page opens, and every 15 minutes while one is open (one `git fetch`
-   for the repository: the refs are shared by every worktree), and the Problems'
-   `deckz status` is run again after a fetch that moved it. A workspace behind it
-   gets a banner on its page and its row on the home page ("origin/main a 4 commits
-   que l'espace n'a pas — Mettre à jour"), which opens the existing Update
-   (`sync.update`, `--autostash`). After an update, studioz runs what slides'
-   handbook says to run after each pull: `deckz setup` (it does `uv sync` when
-   `uv.lock` changed and the `setup.steps`; `--force` when `package.json` changed),
-   and shows `deckz setup`'s report that `../deckz` is behind its upstream. Building,
-   uploading and publishing from a workspace behind it ask first ("Mettre à jour
-   d'abord", the default, or go on). **Decided** (2026-10-23): an update that is
-   only a fast-forward (no commits of the workspace's own, nothing uncommitted) is
-   applied without asking, the banner then saying what it brought; any other
-   update is proposed.
+2. **Workspaces stay current**: done 2026-10-23. `studioz.updates`: a `Fetcher`
+   fetches the upstream branch's remote from the main checkout with
+   `--no-write-fetch-head` (the remote-tracking refs are shared by every worktree,
+   and nothing else changes there; `sync.state` takes its time, so "récupéré il y a"
+   stays true), at startup and every 15 minutes (a lifespan task,
+   `create_app(fetch_every=…)`, None in tests) and when the home page or a workspace's
+   page opens, at most once a minute (in a thread: the page doesn't wait). After each
+   fetch, every workspace behind it with no commit of its own, nothing uncommitted
+   (untracked files included), no rebase, and no job nor agent turn running
+   (`Conversation.busy`, new) is fast-forwarded (`git merge --ff-only`). After any
+   update, studioz's or the person's from the Sync dialog (Mettre à jour, Mettre à
+   jour et vérifier, and Continuer ending a rebase, counted from `ORIG_HEAD`), the
+   workspace's `deckz setup` runs in a thread, as `workspaces.create` runs it
+   (`--force` when `package.json` changed; slides' `uv sync` step runs every time),
+   and `.run/studioz/update.json` keeps what the update brought (the upstream's
+   commits the old HEAD lacked, not the rewritten own ones) and what the setup
+   reported missing or failed. The top bar's banner beside the workspace's name
+   (`_currency.html`, every 30 s and on `workspace-changed`) says "Mis à jour
+   automatiquement il y a 3 min, 1 commit de origin/main · deckz setup : 3 problèmes
+   (…)", the details in its tooltip, until closed (12 hours, or for as long as the
+   setup reports a problem); otherwise, for a workspace behind, "origin/main a 1
+   commit que l'espace n'a pas" and "Mettre à jour…" (the Sync dialog); a failed
+   fetch says so. The build and upload dialogs load the same route's notice ("…
+   ce que vous construisez ou envoyez n'en tient pas compte", "Mettre à jour
+   d'abord…"; the publish dialog has its own since increment 1); the home page's
+   count of commits behind links to the workspace. **Tried for real** on the scratch
+   copy of slides (studioz from the worktree, port 8431, headless Chromium), with a
+   workspace `clean` and one `mine` holding a commit of its own, a commit pushed to
+   the stand-in origin before studioz started: at startup `clean` was
+   fast-forwarded and set up (its `uv sync` failing, the scratch copy having no
+   `../deckz` beside it: the banner listed it), `mine` untouched, its banner and the
+   build dialog's notice offering the update, which (from the Sync dialog's "Mettre
+   à jour seulement") rebased its commit and ran its setup, recorded as the
+   person's. Found on the way: the notice's `<div>` inherited the build form's
+   `hx-target` and replaced the whole dialog (now `hx-target="this"`); the banner's
+   first version ran past its 45vw and hid its ✕ (the text now truncates, the button
+   stays). Tests: the fetch moving the branch, writing no `FETCH_HEAD`, failing; a
+   clean workspace fast-forwarded and set up, `--force` for `package.json`; one with
+   its own work offered the update, its banner and notice; a busy one waiting; the
+   person's update set up too. **Left:** nothing tells a busy workspace's person
+   that its fast-forward waits for the job or the turn (the next fetch does it); the
+   setup's details show in a tooltip only.
 3. **A render made in one checkout is found from the others.** When a seeded output
    (`worktree.seed`: videos, Typst and matplotlib figures, SVGs) is missing or stale
    in a checkout, deckz looks for one fresh for this checkout's sources in the

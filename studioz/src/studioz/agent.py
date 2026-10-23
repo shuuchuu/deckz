@@ -966,6 +966,11 @@ class Conversation:
         self.last_activity = monotonic()
 
     @property
+    def busy(self) -> bool:
+        """Whether a turn runs (or waits for the person's answer)."""
+        return self._task is not None and not self._task.done()
+
+    @property
     def session(self) -> str | None:
         return self._read(_SESSION)
 
@@ -1575,6 +1580,15 @@ class Agents:
 
     def _failed(self) -> None:
         self.on_failure()
+
+    def busy(self, workspace: Path) -> bool:
+        """Whether the workspace's agent is in a turn.
+
+        Returns:
+            False too when it has no conversation yet.
+        """
+        found = self._conversations.get(workspace)
+        return found is not None and found.busy
 
     async def stop_idle(self) -> None:
         """Stop the idle agents' processes, and resume the paused ones due."""
