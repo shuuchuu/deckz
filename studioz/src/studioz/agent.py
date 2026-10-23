@@ -10,7 +10,9 @@ The agent works in the workspace (`cwd`), with the repository's project
 settings only (its `CLAUDE.md`, skills and hooks; not the person's own
 `~/.claude` setup, nor auto memory), none of Claude Code's own skills nor its
 tools of no use here (`UNUSED_TOOLS`), `auto` permissions inside Claude Code's
-command sandbox, and the workspace's own deckz and caches (plan, "Finding 2").
+command sandbox, which no command may leave (`SANDBOX`), and the workspace's own
+deckz and caches (plan, "Finding 2"). Where the sandbox can't run, the agent
+takes no turn: `sandbox_problem` says why and how to fix it.
 It never commits, pushes nor moves the branch: a `PreToolUse` hook refuses
 it, the person commits from studioz; nor rents a GPU machine (`deckz labs gpu
 up|run|pass`): the person starts a pass from its modal, which gives the cost.
@@ -835,6 +837,62 @@ async def _deny(  # ruff: ignore[unused-async]
     )
 
 
+SANDBOX = {
+    "enabled": True,
+    "autoAllowBashIfSandboxed": True,
+    "allowUnsandboxedCommands": False,
+    "failIfUnavailable": True,
+}
+"""Claude Code's sandbox for the agent's commands, with no way around it.
+
+Without the last two, a command the sandbox fails runs again outside it at the
+model's request (`dangerouslyDisableSandbox`), which `auto` lets through, and a
+machine without bubblewrap runs every command unconfined: both happened on a
+colleague's Ubuntu (plan, "Phase 6", increment 7)."""
+
+
+def sandbox_problem(
+    run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+    which: Callable[[str], str | None] = shutil.which,
+) -> str:
+    """Why Claude Code's sandbox can't run the agent's commands here, if it can't.
+
+    On Linux, it runs each command in bubblewrap, in a network namespace of its
+    own that socat bridges to its proxy; this starts bubblewrap the same way.
+
+    Args:
+        run: What runs bubblewrap.
+        which: What finds a command.
+
+    Returns:
+        The problem and its fix, in French, or nothing.
+    """
+    if any(which(command) is None for command in ("bwrap", "socat")):
+        return (
+            "Le bac à sable de l'agent demande bubblewrap et socat : installez-les "
+            "(« sudo apt install bubblewrap socat ») ; ce panneau le verra tout seul."
+        )
+    try:
+        result = run(
+            ["bwrap", "--ro-bind", "/", "/", "--unshare-net", "true"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        failure = str(error)
+    else:
+        if result.returncode == 0:
+            return ""
+        failure = result.stderr.strip() or f"code {result.returncode}"
+    return (
+        f"Le bac à sable de l'agent ne démarre pas (« {failure[:200]} »). Sur "
+        "Ubuntu, AppArmor l'en empêche : autorisez bubblewrap comme le dit le README "
+        "de studioz (« The agent's sandbox ») ; ce panneau le verra tout seul."
+    )
+
+
 def own_skills(workspace: Path) -> list[str]:
     """The skills and commands of the workspace's project settings.
 
@@ -893,7 +951,8 @@ def options(
         disallowed_tools=list(UNUSED_TOOLS),
         system_prompt={"type": "preset", "preset": "claude_code", "append": APPEND},
         permission_mode="auto",
-        sandbox={"enabled": True, "autoAllowBashIfSandboxed": True},
+        # As settings: the SDK's `sandbox` type lacks `failIfUnavailable`.
+        settings=json.dumps({"sandbox": SANDBOX}),
         env=env,
         hooks={
             "PreToolUse": [

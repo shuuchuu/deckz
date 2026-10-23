@@ -29,21 +29,22 @@ if (panel) {
   let asking = false;
   let undoable = 0;
   let pausedUntil = "";
-  let loggedIn = false;
+  // Logged in, with a sandbox that works: the agent can take a turn.
+  let ready = false;
   let aside = false;
 
   const atBottom = () => log.scrollHeight - log.scrollTop - log.clientHeight < 40;
 
   function update() {
     panel.dataset.running = String(running);
-    status.textContent = !loggedIn ? "" : asking ? "attend votre réponse" : running ? "travaille…"
+    status.textContent = !ready ? "" : asking ? "attend votre réponse" : running ? "travaille…"
       : pausedUntil ? `en pause jusqu'à ${pausedUntil.replace(/^le /, "")}` : "prêt";
     // A question asked at the end of a turn waits without it: "Écarter" drops it.
     stop.hidden = !running && !pausedUntil && !asking;
     stop.textContent = running ? "Arrêter" : asking ? "Écarter la question" : "Annuler la reprise";
     undo.hidden = running || !undoable;
-    send.disabled = running || !loggedIn;
-    message.disabled = !loggedIn;
+    send.disabled = running || !ready;
+    message.disabled = !ready;
     // Only the last one: it takes back the conversation set aside last.
     const buttons = log.querySelectorAll("[data-agent-aside]");
     buttons.forEach((button, i) => {
@@ -75,11 +76,12 @@ if (panel) {
     usage.textContent = state.usage.text;
     usage.title = state.usage.title;
     usage.classList.toggle("warn", state.usage.warn);
-    loggedIn = state.loggedIn;
-    login.hidden = loggedIn;
-    status.title = loggedIn && state.account ? `Compte Claude : ${state.account}` : "";
-    login.textContent = loggedIn ? "" :
-      `${state.account}. Dans un terminal, lancez « uv run studioz login » depuis le dépôt et connectez-vous avec votre compte Claude ; ce panneau le verra tout seul.`;
+    ready = state.loggedIn && !state.sandbox;
+    login.hidden = ready;
+    status.title = state.loggedIn && state.account ? `Compte Claude : ${state.account}` : "";
+    login.textContent = ready ? "" : !state.loggedIn ?
+      `${state.account}. Dans un terminal, lancez « uv run studioz login » depuis le dépôt et connectez-vous avec votre compte Claude ; ce panneau le verra tout seul.`
+      : state.sandbox;
     update();
     if (finished) {
       // What the agent changed shows in the panels and the before/after view.

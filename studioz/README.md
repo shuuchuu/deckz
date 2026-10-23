@@ -38,6 +38,42 @@ upstream branch by itself (at startup, every 15 minutes, when a page opens),
 fast-forwards the workspaces holding nothing of their own, and offers the others
 their update.
 
+## The agent's sandbox
+
+The agent runs its commands in Claude Code's sandbox, with no way out of it: on
+Linux, each command runs in bubblewrap, in a network namespace of its own. studioz
+checks that bubblewrap starts so, and until it does, the agent panel says why and
+the agent takes no message (`studioz.agent.sandbox_problem`).
+
+It needs `bwrap` and `socat`:
+
+```console
+sudo apt install bubblewrap socat
+```
+
+On Ubuntu 23.10 and later, AppArmor keeps unprivileged programs from using user
+namespaces, and bubblewrap fails with `bwrap: loopback: Failed RTM_NEWADDR:
+Operation not permitted`. Let bubblewrap alone use them, with an AppArmor profile
+of its own:
+
+```console
+sudo tee /etc/apparmor.d/bwrap <<'EOF'
+abi <abi/4.0>,
+include <tunables/global>
+
+profile bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+
+  include if exists <local/bwrap>
+}
+EOF
+sudo apparmor_parser -r /etc/apparmor.d/bwrap
+```
+
+The panel sees the fix within a minute. Turning the restriction off for every
+program (`kernel.apparmor_restrict_unprivileged_userns=0`) works too, but weakens
+the whole machine.
+
 ## Workflows
 
 A repository offers its routine agent work as workflows, in its `deckz.yml`

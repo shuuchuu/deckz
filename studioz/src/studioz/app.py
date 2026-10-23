@@ -99,6 +99,7 @@ class Studio:
     """The upstream branch's fetches, for every workspace (`studioz.updates`)."""
     closing: Event = field(default_factory=Event)
     """Set when studioz stops: the pages' server-sent events end."""
+    sandbox: "Sandbox" = field(default_factory=lambda: Sandbox())
 
     async def gone(self, request: Request) -> bool:
         """Whether a stream to `request`'s page should end.
@@ -152,6 +153,39 @@ class Login:
     def forget(self) -> None:
         """Check again at the next status: the login may have gone (a turn failed)."""
         self.checked = -1e9
+
+
+@dataclass
+class Sandbox:
+    """Whether Claude Code's sandbox works on this machine, checked now and then."""
+
+    checked: float = -1e9
+    problem: str = ""
+
+    async def status(self) -> str:
+        """Why the agent can't work in its sandbox (`agent.sandbox_problem`).
+
+        Returns:
+            The problem and its fix, or nothing.
+        """
+        # Kept ten minutes, one while it fails: the person's fix shows quickly.
+        keep = 60 if self.problem else 600
+        if monotonic() - self.checked > keep:
+            self.problem = await asyncio.to_thread(agent.sandbox_problem)
+            self.checked = monotonic()
+        return self.problem
+
+
+async def _agent_refusal(studio: "Studio") -> str | None:
+    """Why the agent can't take a turn: Claude Code not logged in, or no sandbox.
+
+    Returns:
+        Why, naming the fix, or nothing.
+    """
+    ok, why = await studio.login.status()
+    if not ok:
+        return why
+    return await studio.sandbox.status() or None
 
 
 class _Static(StaticFiles):
@@ -2157,6 +2191,7 @@ async def agent_events(
                 "context": agent.context_summary(conversation.context),
                 "loggedIn": ok,
                 "account": account,
+                "sandbox": await studio.sandbox.status(),
             }
             if state != last_state:
                 last_state = state
@@ -2192,8 +2227,7 @@ async def agent_message(
         204, or 409 while the agent is at work or Claude Code isn't logged in.
     """
     found = studio.workspace(name)
-    ok, why = await studio.login.status()
-    if not ok:
+    if why := await _agent_refusal(studio):
         return JSONResponse({"error": why}, status_code=409)
     conversation = studio.agents.conversation(found.worktree.path)
     # A browser posts a form's text with CRLF line endings.
@@ -2233,11 +2267,9 @@ async def agent_answer(request: Request, studio: StudioDep, name: str) -> Respon
         return JSONResponse(
             {"error": f"Pas de réponse à « {missing[0]} »"}, status_code=422
         )
-    if question.deferred:
-        # The answers start Claude Code again, resuming the session.
-        ok, why = await studio.login.status()
-        if not ok:
-            return JSONResponse({"error": why}, status_code=409)
+    # Deferred, the answers start Claude Code again, resuming the session.
+    if question.deferred and (why := await _agent_refusal(studio)):
+        return JSONResponse({"error": why}, status_code=409)
     if not await conversation.answer(question.id, answers):
         return JSONResponse(
             {"error": "Cette question n'attend plus de réponse"}, status_code=409
@@ -2261,8 +2293,7 @@ async def agent_ask(request: Request, studio: StudioDep, name: str) -> Response:
         text = asks.prompt(task, values)
     except ValueError as error:
         return JSONResponse({"error": str(error)}, status_code=422)
-    ok, why = await studio.login.status()
-    if not ok:
+    if why := await _agent_refusal(studio):
         return JSONResponse({"error": why}, status_code=409)
     conversation = studio.agents.conversation(found.worktree.path)
     if not await conversation.send(text):
@@ -2395,8 +2426,7 @@ async def _refusal(
     given = set(answers.files)
     if lacking := workflow.refusal(answers.values, given, answers.deck, decks):
         return lacking
-    ok, why = await studio.login.status()
-    return None if ok else why
+    return await _agent_refusal(studio)
 
 
 async def _begin(
@@ -2755,8 +2785,7 @@ async def report_then(
     chosen = report.chosen()
     if not chosen:
         return refuse("Cochez au moins un constat.")
-    ok, why = await studio.login.status()
-    if not ok:
+    if why := await _agent_refusal(studio):
         return refuse(why)
     prompt, shown = workflow.then.message(
         {
