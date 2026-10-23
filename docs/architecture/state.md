@@ -44,7 +44,8 @@ checkout, a `git stash`, or a copy into a worktree changes times:
   directory's `.render-fingerprint` changed (the converter's command and filters, the
   deck's variables);
 - an asset or a video is rebuilt when its stamp doesn't match the digest of its inputs
-  (`stamps`);
+  (`stamps`), unless another checkout of the repository holds one whose stamp does,
+  which is copied instead (`stamps.adopt`);
 - a marker record is used while it is at least as new as its PDF.
 
 Every fragment is copied to the build directory before any is rendered. When a render
