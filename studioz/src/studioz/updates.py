@@ -17,6 +17,14 @@ pull (its environment synced, `--force` when `package.json` changed, and
 whether `../deckz` is behind its upstream), and what it reported is kept,
 with what the update brought, in the workspace's
 `.run/studioz/update.json` for the page's banner.
+
+The main checkout is the workspaces' source: a new one starts from its
+commit, with its renders (`deckz worktree add`), and the renders made there
+serve the workspaces whose sources are the same (`deckz.stamps.adopt`).
+studioz never writes in it but when the person asks, from the home page
+(`refresh_source`): a fast-forward to the upstream branch, refused while it
+holds uncommitted changes, then its `deckz setup`, recorded as a
+workspace's update is.
 """
 
 import json
@@ -26,7 +34,7 @@ from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from os import environ
 from pathlib import Path
-from threading import Lock
+from threading import Lock, Thread
 from time import monotonic
 
 from .background import changes, git
@@ -245,6 +253,90 @@ class Fetcher:
             return git(main, "rev-parse", "--verify", "--quiet", up.tracking) != before
         finally:
             self._lock.release()
+
+
+@dataclass(frozen=True)
+class Source:
+    """The main checkout, as the home page shows it."""
+
+    path: Path
+    branch: str | None
+    behind: int
+    """The upstream branch's commits it lacks, as last fetched."""
+    ahead: int
+    """Its commits the upstream branch lacks."""
+    changed: tuple[str, ...]
+    """Its tracked files with uncommitted changes (untracked ones left out: \
+    git refuses the fast-forward only if it would overwrite one)."""
+    update: Applied | None
+    """Its last refresh, while its banner shows (`recent`)."""
+
+
+def source(main: Path, up: Upstream) -> Source:
+    """Where the main checkout stands against the upstream branch.
+
+    Returns:
+        It.
+    """
+    where = state(main, up)
+    update = applied(main)
+    return Source(
+        main,
+        git(main, "symbolic-ref", "--quiet", "--short", "HEAD"),
+        where.behind,
+        len(where.ahead),
+        tuple(change.path for change in changes(main) if change.status != "??"),
+        update if recent(update) else None,
+    )
+
+
+def refresh_source(main: Path, up: Upstream, fetcher: Fetcher) -> str | None:
+    """Fetch, then fast-forward the main checkout and run its `deckz setup`.
+
+    The setup runs in a thread, recorded (`applied`) as it goes.
+
+    Returns:
+        Why it wasn't done, in French; None once fast-forwarded.
+    """
+    found = source(main, up)
+    if found.changed:
+        shown = ", ".join(found.changed[:5])
+        more = f" et {len(found.changed) - 5} autres" if len(found.changed) > 5 else ""
+        return (
+            f"Le dossier principal a des modifications non enregistrées ({shown}"
+            f"{more}) : enregistrez-les (commit) ou annulez-les là où elles ont été "
+            "faites, puis actualisez."
+        )
+    fetcher.fetch(main, up)
+    if fetcher.error:
+        return f"Impossible de récupérer {up.name} : {fetcher.error}"
+    found = source(main, up)
+    if found.ahead:
+        commits = f"{found.ahead} commit{'s' if found.ahead > 1 else ''}"
+        return (
+            f"Le dossier principal a {commits} que {up.name} n'a pas : il ne peut "
+            "pas avancer sans les réécrire. Envoyez-les d'abord (git push), ou "
+            "actualisez-le depuis un terminal (git pull --rebase)."
+        )
+    if not found.behind:
+        return None
+    before = git(main, "rev-parse", "HEAD") or ""
+    result = subprocess.run(
+        ["git", "-C", str(main), "merge", "--ff-only", "--quiet", up.tracking],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode:
+        lines = (result.stderr or result.stdout).strip().splitlines()
+        return "git a refusé d'actualiser le dossier principal : " + " ".join(lines)
+    Thread(
+        target=after_update,
+        args=(main, before, up.tracking),
+        kwargs={"automatic": False},
+        daemon=True,
+    ).start()
+    return None
 
 
 def recent(update: Applied | None, within: timedelta = timedelta(hours=12)) -> bool:

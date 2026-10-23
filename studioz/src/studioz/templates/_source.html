@@ -1,0 +1,47 @@
+{#- The main checkout, the workspaces' source (`studioz.updates.source`). -#}
+{% set refreshing = source and source.update and source.update.setup_running %}
+<section class="source" id="source" hx-get="/source" hx-target="this" hx-swap="outerHTML"
+         hx-trigger="{{ 'every 2s' if refreshing else 'every 60s' }}">
+  <h2>Source des espaces</h2>
+  <p class="hint">
+    Le dossier principal (<code>{{ source.path if source else "" }}</code>) : chaque nouvel
+    espace part de son dernier commit, avec ses figures et vidéos déjà construites, et ce
+    qui y est construit sert aux espaces dont les sources sont les mêmes. On n'y travaille
+    pas : studioz n'y écrit que quand vous l'actualisez.
+  </p>
+  {% if not upstream %}
+  <p class="hint">Sa branche n'a pas de branche amont : rien à actualiser.</p>
+  {% else %}
+  <p class="source-state">
+    {% if source.branch %}<code class="branch">{{ source.branch }}</code>{% endif %}
+    {% if source.behind %}
+    <strong>en retard de {{ source.behind }} commit{{ "s" if source.behind > 1 }} sur {{ upstream.name }}</strong>
+    {% else %}
+    à jour avec {{ upstream.name }}
+    {% endif %}
+    {% if source.ahead %}· {{ source.ahead }} commit{{ "s" if source.ahead > 1 }} pas encore dans {{ upstream.name }}{% endif %}
+    {% if source.changed %}· {{ source.changed | length }} fichier{{ "s" if source.changed | length > 1 }} modifié{{ "s" if source.changed | length > 1 }} non enregistré{{ "s" if source.changed | length > 1 }}{% endif %}
+    <button type="button" class="secondary" hx-post="/source/actualiser" hx-target="#source" hx-swap="outerHTML"
+            hx-disabled-elt="this" hx-indicator="#source-progress"
+            title="Récupérer {{ upstream.name }}, avancer le dossier principal jusqu'à lui, puis lancer deckz setup">Actualiser</button>
+    <span id="source-progress" class="indicator">Récupération…</span>
+  </p>
+  {% if outcome %}<p class="error">{{ outcome }}</p>{% endif %}
+  {% if error and not outcome %}<p class="error">Impossible de récupérer {{ upstream.name }} : {{ error }}</p>{% endif %}
+  {% if source.update %}
+  {% set update = source.update %}
+  {% set count = update.setup | length %}
+  <div class="source-update {{ 'error' if count else 'hint' }}">
+    <p>
+      Actualisé {{ update.at | ago }}, {{ update.commits }} commit{{ "s" if update.commits > 1 }} de {{ upstream.name }}
+      {% if update.setup_running %}· deckz setup en cours…
+      {% elif count %}· deckz setup : {{ count }} problème{{ "s" if count > 1 }}
+      {% else %}· deckz setup : rien à signaler{% endif %}
+      {% if not update.setup_running %}<button type="button" class="icon" hx-post="/source/vu" hx-target="#source" hx-swap="outerHTML"
+              title="Fermer" aria-label="Fermer">✕</button>{% endif %}
+    </p>
+    {% if count %}<ul>{% for problem in update.setup %}<li><strong>{{ problem.name }}</strong> : {{ problem.detail }}</li>{% endfor %}</ul>{% endif %}
+  </div>
+  {% endif %}
+  {% endif %}
+</section>

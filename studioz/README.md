@@ -25,6 +25,14 @@ already logged in counts); studioz never handles credentials, and ignores an
 agent edits the workspace's files but never commits nor pushes: the person does, from
 studioz.
 
+The person works in workspaces only. The main checkout is their source: a new one
+starts from its last commit, with its builds, and studioz writes in it only when the
+person clicks "Actualiser" under "Source des espaces" on the home page (a fast-forward
+to its upstream branch, refused while it holds uncommitted changes or commits of its
+own, then its `deckz setup`). studioz fetches the upstream branch by itself (at
+startup, every 15 minutes, when a page opens), fast-forwards the workspaces holding
+nothing of their own, and offers the others their update.
+
 ## Workflows
 
 A repository offers its routine agent work as workflows, in its `deckz.yml`

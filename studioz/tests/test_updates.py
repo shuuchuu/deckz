@@ -188,3 +188,84 @@ def test_the_person_s_update_runs_the_setup_too(
     assert update is not None
     assert (update.commits, update.automatic) == (1, False)
     assert setups == [(workspace, False)]
+
+
+def _set_up(path: Path) -> updates.Applied:
+    for _ in range(100):
+        update = updates.applied(path)
+        if update is not None and not update.setup_running:
+            return update
+        time.sleep(0.05)
+    msg = f"{path}'s setup never ended"
+    raise AssertionError(msg)
+
+
+def test_the_source_is_refreshed_and_set_up(
+    repository: Path,
+    remote: Path,
+    setups: list[tuple[Path, bool]],
+    client: TestClient,
+) -> None:
+    _push_theirs(remote)
+    _studio(client).fetcher.fetch(repository, find_upstream(repository))
+
+    panel = client.get("/source").text
+    assert "Source des espaces" in panel
+    assert "en retard de 1 commit sur origin/main" in panel
+    panel = client.post("/source/actualiser", headers=ORIGIN).text
+
+    assert _git(repository, "rev-parse", "HEAD") == _git(remote, "rev-parse", "HEAD")
+    update = _set_up(repository)
+    assert (update.commits, update.automatic) == (1, False)
+    assert setups == [(repository, False)]
+    panel = client.get("/source").text
+    assert "à jour avec origin/main" in panel
+    assert "Actualisé" in panel
+    assert "../deckz is 2 commits behind origin/main" in panel
+    client.post("/source/vu", headers=ORIGIN)
+    assert "Actualisé" not in client.get("/source").text
+
+
+def test_the_source_with_uncommitted_changes_is_left_alone(
+    repository: Path,
+    remote: Path,
+    setups: list[tuple[Path, bool]],
+    client: TestClient,
+) -> None:
+    (repository / "deckz.yml").write_text("{a: 1}\n", encoding="utf8")
+    (repository / "scratch.md").write_text("mine\n", encoding="utf8")
+    _push_theirs(remote)
+    head = _git(repository, "rev-parse", "HEAD")
+
+    panel = client.post("/source/actualiser", headers=ORIGIN).text
+
+    assert _git(repository, "rev-parse", "HEAD") == head
+    assert "modifications non enregistrées (deckz.yml)" in panel
+    assert setups == []
+
+
+def test_the_source_ahead_of_the_upstream_is_left_alone(
+    repository: Path,
+    remote: Path,
+    setups: list[tuple[Path, bool]],
+    client: TestClient,
+) -> None:
+    (repository / "mine.md").write_text("mine\n", encoding="utf8")
+    _git(repository, "add", "mine.md")
+    _git(repository, "commit", "-qm", "Mine")
+    _push_theirs(remote)
+    head = _git(repository, "rev-parse", "HEAD")
+
+    panel = client.post("/source/actualiser", headers=ORIGIN).text
+
+    assert _git(repository, "rev-parse", "HEAD") == head
+    assert "1 commit que origin/main n&#39;a pas" in panel
+    assert "git pull --rebase" in panel
+    assert setups == []
+
+
+def test_the_source_without_upstream_has_nothing_to_refresh(
+    client: TestClient,
+) -> None:
+    assert "rien à actualiser" in client.get("/source").text
+    assert client.post("/source/actualiser", headers=ORIGIN).status_code == 409

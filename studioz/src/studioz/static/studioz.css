@@ -79,6 +79,9 @@ input { font: inherit; padding: 0.3rem 0.5rem; border: 1px solid var(--line); bo
 .htmx-request .indicator, .indicator.htmx-request { display: inline; }
 .error { background: var(--error-bg); padding: 0.5rem 0.8rem; border-radius: 4px; }
 
+.source-state { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.source-update p { margin: 0; display: flex; gap: 0.5rem; align-items: center; justify-content: space-between; }
+.source-update ul { margin: 0.3rem 0 0; padding-left: 1.2rem; font-size: 0.9em; overflow-wrap: anywhere; }
 table.workspaces { width: 100%; border-collapse: collapse; margin-top: 1rem; }
 .workspaces th, .workspaces td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
 .workspaces th { font-weight: 500; color: var(--muted); font-size: 0.85em; }

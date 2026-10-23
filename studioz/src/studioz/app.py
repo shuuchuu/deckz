@@ -256,6 +256,55 @@ def home(request: Request, studio: StudioDep) -> Response:
     )
 
 
+@router.get("/source", response_class=HTMLResponse)
+def source_panel(
+    request: Request, studio: StudioDep, outcome: str | None = None
+) -> Response:
+    """The home page's view of the main checkout, the workspaces' source.
+
+    Returns:
+        How far it is behind the upstream branch, its last refresh, and \
+        `outcome`, a refresh's.
+    """
+    up = sync.upstream(studio.main)
+    return _render(
+        request,
+        "_source.html",
+        source=updates.source(studio.main, up) if up else None,
+        upstream=up,
+        outcome=outcome,
+        error=studio.fetcher.error,
+    )
+
+
+@router.post("/source/actualiser", response_class=HTMLResponse)
+def source_refresh(request: Request, studio: StudioDep) -> Response:
+    """Fast-forward the main checkout to the upstream branch, then set it up.
+
+    Returns:
+        The panel, saying why it wasn't done if it wasn't.
+
+    Raises:
+        HTTPException: 409 without an upstream branch.
+    """
+    up = sync.upstream(studio.main)
+    if up is None:
+        raise HTTPException(409, "Pas de branche amont d'où actualiser")
+    refused = updates.refresh_source(studio.main, up, studio.fetcher)
+    return source_panel(request, studio, refused)
+
+
+@router.post("/source/vu", response_class=HTMLResponse)
+def source_seen(request: Request, studio: StudioDep) -> Response:
+    """Close the main checkout's last refresh's note.
+
+    Returns:
+        The panel without it.
+    """
+    updates.mark_seen(studio.main)
+    return source_panel(request, studio)
+
+
 @router.post("/espaces", response_class=HTMLResponse)
 def create(
     request: Request, studio: StudioDep, name: Annotated[str, Form()]
