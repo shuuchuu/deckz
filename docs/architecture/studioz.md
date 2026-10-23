@@ -56,5 +56,7 @@ too:
   follows a `deckz run --watch`;
 - the files a build records: `<main>.markers.json`, and the build directory's layout.
 
-The repository is one uv workspace: studioz depends on deckz `{ workspace = true }`,
-pinned to the same version, and both are released together.
+The repository is one uv workspace (`[tool.uv.workspace]`, a deliberate divergence
+from the Copier template): one `uv.lock`, studioz depends on deckz `{ workspace = true }`,
+pinned to the same version, the `dev` group installs it for the tests, and both are
+released together. `plans/studioz.md` is studioz's plan, with what is done.

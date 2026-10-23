@@ -49,8 +49,10 @@ that catches errors:
   1, without a traceback. A [`DeckParsingError`][deckz.exceptions.DeckParsingError]
   also prints the deck's tree with the unresolved paths marked;
 - a usage error exits 2 (printed by `cyclopts`);
-- Ctrl-C stops every Typst worker and multiprocessing child (`compiler.stop()`), then
-  exits 130.
+- Ctrl-C stops every Typst worker and multiprocessing child (`compiler.stop()`, which
+  also refuses new compilations; the deck builder cancels its queued ones), then exits
+  130. Workers start with SIGINT blocked (`_sigint_blocked`), so the Ctrl-C a terminal
+  sends the whole process group leaves them to the parent.
 
 `--debug`, or `DECKZ_DEBUG=1`, re-raises instead. Anything else that escapes is a bug,
 shown with its traceback. So the core raises a `DeckzError` subclass whose message names
@@ -72,7 +74,16 @@ the fix, and never calls `sys.exit` or prints.
 defaults to `DECKZ_LANG`. The `run` sub-app reads every option of every subcommand from
 `DECKZ_RUN_<OPTION>` (`Env("DECKZ_RUN_", command=False)`, the same names for `deckz run`
 and `deckz run deck`). A default taken from the environment or a `.env` file is
-announced (`environment_defaults`), never silent.
+announced (`environment_defaults`), never silent. A command showing a single resolved
+view (a tree, the settings) takes a plain `lang: Lang` instead, which ignores
+`DECKZ_LANG`.
+
+## Testing the command line
+
+Tests driving `main(...)` assert `raises(SystemExit)` with code 1, not the
+`DeckzError` itself. `tests/conftest.py` clears `DECKZ_*`, stubs out the `.env` lookup
+and points `XDG_CONFIG_HOME` at an empty directory, so the environment of whoever runs
+the tests changes nothing.
 
 ## Commands outside the core's API
 

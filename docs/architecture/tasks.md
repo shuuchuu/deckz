@@ -85,7 +85,7 @@ it.
 | | |
 |---|---|
 | **Responsibility** | Write deckz's git hooks, its Claude Code hooks and its CI workflow into a managed repository |
-| **Owns** | The `pre-commit` and `commit-msg` hook files that carry deckz's marker line; deckz's own entries in `.claude/settings.json`; the CI workflow file |
+| **Owns** | The `pre-commit` and `commit-msg` hook files that carry deckz's marker line, in the hooks directory (git's `core.hooksPath`, else `.git/hooks/`); deckz's own entries in `.claude/settings.json`; the CI workflow file |
 | **Never** | Overwrites a hook file deckz didn't write, unless `--force` |
 | **Entry points** | `deckz hooks install [--ci]`, `deckz setup` |
 | **Fails with** | [`HookInstallRefusedError`][deckz.exceptions.HookInstallRefusedError] |

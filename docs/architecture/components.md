@@ -69,13 +69,29 @@ output directory.
 | `CompileType` | `Format` | Main template | Converter | "Compiler" | Output |
 |---|---|---|---|---|---|
 | `Handout`, `Presentation`, `PrintHandout` | Typst | `main.typ` | `pandoc_command` + frame markers | `TypstCompiler` | `pdf/` |
-| `Html` | Html | `main.html` | `html_pandoc_command` | `HtmlPackager` | `html/<name>/` |
+| `Html` (`--html`: one whole-deck `{deck}-html` item) | Html | `main.html` | `html_pandoc_command` | `HtmlPackager` | `html/<name>/` |
 | `CourseNotes` | its own | `course-notes.typ` | `pandoc_command` + frame markers | `TypstCompiler` | `pdf/course-notes/` |
 
 The main template is rendered after its fragments. It gets a `fragment(section)`
 callable returning a converted fragment's text, which HTML needs because it has no
-`#include`. deckz knows nothing of reveal.js or the theme: the repository supplies
-those in its templates and Lua filters.
+`#include`: `main.html` inlines them, in Python, never through Jinja's `include`, which
+would template `{{` inside converted code again. The packager copies the page as
+`index.html` with every local file it references (attributes, `style`, CSS
+`url()`/`@import`, recursively) and the `html_static_dirs`, failing on a missing,
+root-absolute or out-of-tree reference; `deck_builder.publish` syncs the directory
+(`utils.sync_tree`). deckz knows nothing of reveal.js or the theme: the repository
+supplies those, and `FORMAT`-aware Lua filters, in its templates.
+
+A fragment is named by its content file's path (`dependency_relative_path`, the one
+place that naming is decided, so the main template's `#include` and the rendered copy
+on disk always agree). Flavors have no variables of their own (they had until 2026-10:
+the one repository using them found two interleaved versions of a file harder to
+maintain than one file per variant), so a file renders the same in every deck that
+includes it, with that deck's variables.
+
+`TypstFiguresAssetsBuilder` stamps each SVG with a digest of the mirrors it compiles,
+not of the sources, so an edit racing a build never leaves a stale SVG stamped as up to
+date.
 
 ## Process boundaries
 
@@ -83,7 +99,11 @@ those in its templates and Lua filters.
   of `components/compiler.py`): Typst's cache is global to a process and only grows.
   `keep_warm()` keeps one worker per main file across `--watch` rebuilds. `stop()` kills
   every worker, and the CLI calls it on Ctrl-C. Workers start with SIGINT blocked.
-- **Memory**: `typst_memory_max` stops a worker whose resident memory exceeds it.
+  Each compilation queries the frame, shrunk-frame and table markers (before compiling:
+  see `_markers` for why) and records them in `<main>.markers.json`, so that `deckz show
+  frames` and `deckz check overflow` read built PDFs without compiling.
+- **Memory**: `typst_memory_max` stops a worker whose resident memory, read from `/proc`
+  every half second, exceeds it.
   `typst_machine_compilations` makes each compilation hold a slot shared by every deckz
   process on the machine.
 - **pandoc** runs as a subprocess per fragment. Fragments render in threads

@@ -17,7 +17,7 @@ uses them, and they use nothing above them, except for the
 
 [`settings`][deckz.configuring.settings] defines Pydantic models. A path field declared
 as a template string, such as `"{git_dir}/content"`, is resolved against the fields
-computed before it. `deckz.yml` is merged from three places, in order: the repository's
+computed before it (a `BeforeValidator`, `_convert`/`_Path`). `deckz.yml` is merged from three places, in order: the repository's
 root, the user's config directory, then each directory from the root down to the
 current one (`utils.dirs_hierarchy`). So a company or a deck can override a setting by
 placing a `deckz.yml` deeper in the tree.
@@ -42,7 +42,9 @@ file of a deck, plus `lang`.
 
 The `Deck` tree is frozen, with tuples of nodes. A transformation (`Deck.filter`, the
 synthetic decks of `checking`, `course_notes.chapters_deck`) builds a new tree with
-`dataclasses.replace`. A `NodeVisitor` walks a tree.
+`dataclasses.replace`. A `NodeVisitor` walks a tree. A `ParsedDeck` (from
+`utils.all_decks`) is a deck with the variables its files render with, for the analyses
+that render content (assets usage).
 
 ## `exceptions`
 
@@ -71,6 +73,15 @@ Committed outputs come with their stamps, so a fresh clone rebuilds nothing.
 ## `drive_links`
 
 [`drive_links`][deckz.drive_links] reads and writes a deck's registry of Google Drive
-links (`<user config dir>/drive-links/<deck path>.yml`): each PDF's path, mapped to the
+links (`paths.drive_links`: `<user config dir>/drive-links/<deck path>.yml`, keyed by
+`paths.deck_path`, the deck's directory relative to the repository, so every checkout
+shares it): each PDF's path, mapped to the
 Drive file `deckz upload --reserve` made for it. Builds read it, through the factory,
 to give each PDF its link. Only `deckz upload` reaches Drive.
+
+`Uploader.reserve` creates an empty Drive file for a PDF (or reuses the one already
+online) and records it, before any build shows the link. `DeckBuilder._links` gives each
+main template `links` (`self`, `handout`, `course_notes`: those the registry has) and
+records them next to the build (`.links`). `plan()` reports `links_changed`, which
+`pipelines.outdated_pdfs` counts, so a new link rebuilds the PDF. `Uploader.upload`
+writes a PDF to its reserved file by ID, and never deletes a reserved file.
