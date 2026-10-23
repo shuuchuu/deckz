@@ -31,6 +31,10 @@ def status(
     other language, and its built PDFs not matching its content, with
     their shrunk frames and wrapping lines.
 
+    With `review.dir` set in `deckz.yml`, both also count each deck's
+    content files never reviewed or changed since their review (`deckz
+    review status DECK` lists them).
+
     Args:
         deck: Report on this deck only
         since: Count your changes from this revision (e.g. `HEAD~5`, a

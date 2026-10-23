@@ -381,6 +381,17 @@ typst_ignore_system_fonts: true
   [Usage](#usage)). `required_for_agents` (default false): a Claude Code
   session changes nothing in the main checkout, only in a worktree of
   its own (see [Claude Code hooks](#claude-code-hooks)).
+- `review`: where `deckz review` keeps its reports (see [Usage](#usage)):
+
+  ```yaml
+  review:
+    dir: docs/qa/sections
+  ```
+
+  `dir` (unset by default: `deckz review` then refuses, and the
+  `review-headers` check and `deckz status` leave reviews alone): the
+  directory, from the git root, whose Markdown files (at any depth) are
+  review reports. deckz writes only their front matter's `reviewed` key.
 
 `deckz.yml` files are merged, in order, from the git root, from the user's
 config directory (XDG-compliant, e.g.
@@ -659,8 +670,10 @@ named: their harm comes later than the commit, when a lab is published or a
 deck uploaded or taught, so a contributor commits freely and the debt is
 settled before then. By default every built-in check is deferred but
 `lab-secrets` (a secret stays in the history), `jinja-syntax` and
-`deck-definitions` (every `git pull` would break everyone's builds), and
-every plugin check blocks. `checks.deferred` replaces deckz's list, naming
+`deck-definitions` (every `git pull` would break everyone's builds),
+`review-headers` (a malformed review report stops `deckz review` for
+everyone, and a renamed file's review is best carried over by whoever
+renames it), and every plugin check blocks. `checks.deferred` replaces deckz's list, naming
 built-in and plugin checks alike (`[]` makes every check block):
 
 ```yaml
@@ -995,9 +1008,10 @@ under way at once).
 
 `deckz check variables`, `deckz search-sections` and `deckz i18n
 missing-en` print one tab-separated finding per line; `deckz check content`
-does too with `--plain`. With `--json`, `deckz check content` and the
-above, as well as `deckz show tree`/`paths`/`settings`/`variables`, `deckz
-deps` and `deckz asset deps`/`search`, print a single JSON document
+does too with `--plain`, and so does `deckz review status`. With `--json`,
+`deckz check content` and the above, as well as `deckz show
+tree`/`paths`/`settings`/`variables`, `deckz deps`, `deckz review
+status`/`diff`/`mark` and `deckz asset deps`/`search`, print a single JSON document
 instead (see each command's `--help` for its fields).
 
 The main commands:
@@ -1018,7 +1032,10 @@ The main commands:
   reports on one deck instead, whoever made its changes: the checks'
   problems in its files (deferred ones included), its English gaps, its
   files waiting for a port, and its built PDFs not matching its content,
-  with their shrunk frames and wrapping lines. `deckz show affected
+  with their shrunk frames and wrapping lines. With `review.dir` set,
+  both also count, for each deck, its content files never reviewed or
+  changed since their review (`deckz review status DECK` lists them).
+  `deckz show affected
   [PATH...] [--since REV]` prints the decks a change to PATHs, or the
   changes since REV, reach.
 - `deckz new deck DIR --name NAME --title TITLE`, `deckz new section
@@ -1255,7 +1272,24 @@ The main commands:
   across the repository, including unused ones, and the content files no
   deck includes (shared or local, fr or `en/`), with their number of
   frames. It only lists those files: unused content can be kept on
-  purpose, as material for decks to come.
+  purpose, as material for decks to come. With SECTION, `--json` also
+  gives each of its flavors' files (in include order, nested sections
+  resolved) with their frames and the decks using it, and those decks'
+  total frames.
+- `deckz review status [TARGET...]` / `diff REPORT [PATH...]` / `mark
+  REPORT [PATH...]`: the review registry (`review.dir` above). A report
+  is a Markdown file whose front matter's `reviewed` key, written by
+  `mark`, records each file reviewed with the git blob sha of the version
+  read. `status` says which files are fresh, stale (with the lines
+  changed) or never reviewed: a deck's content files by section, the
+  files under paths, or, with no TARGET, every shared section ranked by
+  the decks using it times its frames left to review. `diff` shows what
+  changed since a review, so the next one reads only that, and `mark`
+  records the files again, refusing (until `--accept`) one whose change
+  since its review came from the main branch, which nobody reviewed;
+  `--forget` drops a deleted or renamed file. The `review-headers` check
+  keeps the reports well formed, and `deckz status` counts each deck's
+  content not reviewed at its version.
 - `deckz search-sections KEYWORDS...`: search shared sections by title or
   Markdown heading.
 - `deckz section-flavors SECTION`: list a section's flavor names.

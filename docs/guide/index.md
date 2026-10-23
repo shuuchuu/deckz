@@ -13,6 +13,7 @@ page is one task. `deckz --help` lists the commands by task too, and `deckz <com
 | keep French and English in step | [Translating](translating.md) |
 | work on lab notebooks or videos | [Labs and videos](labs-and-videos.md) |
 | know if my work is ready to commit, teach or publish | [Before committing, teaching, publishing](before-you-commit.md) |
+| know what was reviewed, and what changed since | [Reviews](reviews.md) |
 | understand what a check reports | [Checks](checks.md) |
 
 The configuration files (`deckz.yml`, `variables.yml`, `deck.yml`, section `.yml`s)
