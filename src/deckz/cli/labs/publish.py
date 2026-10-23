@@ -23,7 +23,9 @@ def publish(
     check), the content checks report a problem in a notebook (deferred
     ones included: `lab-pairs`, `lab-format`, `lab-outputs`..., which let a
     commit through but not the notebooks going public), or doing so would
-    drop an already-published notebook's name.
+    drop an already-published notebook's name. A missing remote, one that
+    can't be reached or refuses the push fails with git's message and the
+    fix (`setup.remotes` gives `deckz setup` the remotes to add).
 
     Args:
         break_published_links: Allow removing an already-published
@@ -43,8 +45,10 @@ def publish(
     from ...configuring.settings import GlobalSettings
     from ...exceptions import LabPublishRefusedError
     from ...labs.publishing import publish as publish_labs
+    from ...remotes import publish_remotes, require_remotes
 
     settings = GlobalSettings.from_yaml(workdir)
+    require_remotes(settings, publish_remotes(settings, "labs"))
     if not skip_checks:
         notebooks = PurePosixPath(
             settings.paths.labs_notebooks_dir.relative_to(settings.paths.git_dir)

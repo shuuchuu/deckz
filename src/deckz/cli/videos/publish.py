@@ -10,7 +10,9 @@ def publish(*, break_published_links: bool = False, workdir: Path = Path()) -> N
     Refuses to publish if `videos.scenes_dir` has uncommitted changes, a
     render is missing/stale/at the wrong quality (run `deckz videos
     render` first), one is over the publish size limit, or doing so would
-    drop an already-published render's path.
+    drop an already-published render's path. A missing remote, one that
+    can't be reached or refuses the push fails with git's message and the
+    fix (`setup.remotes` gives `deckz setup` the remotes to add).
 
     Args:
         break_published_links: Allow removing an already-published
@@ -19,10 +21,12 @@ def publish(*, break_published_links: bool = False, workdir: Path = Path()) -> N
 
     """
     from ...configuring.settings import GlobalSettings
+    from ...remotes import publish_remotes, require_remotes
     from ...videos import publish as publish_videos
     from ...videos import publishable, scenes
 
     settings = GlobalSettings.from_yaml(workdir)
+    require_remotes(settings, publish_remotes(settings, "videos"))
     videos_settings = settings.videos
     found = scenes(settings)
     preview = publishable(

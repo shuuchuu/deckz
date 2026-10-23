@@ -332,11 +332,16 @@ as its French sibling), for `status` and `deckz show affected`.
 ### Setting up
 
 `setting_up.py` backs `deckz setup`: each step (deckz's own checkout
-behind its upstream, executables, git hooks,
+behind its upstream, executables, git hooks, `setup.remotes`,
 Claude hooks, `deckz.yml`'s `setup.steps`, videos never rendered) returns a
 `SetupItem` (`ok`, `done`, `missing`, `failed`, with how to fix it) and is
 idempotent; `check=True` changes nothing. The CLI prints them
 (`_presentation.print_setup`) and exits 1 while one is missing or failed.
+
+`remotes.py` is the one way to the remotes `labs publish` and `videos
+publish` push to: their lookup, the fetch of a published branch and the
+force-push, each failure a `RemoteError` carrying git's stderr and the fix
+(`setup.remotes` gives the URL a missing remote is added with).
 
 ### Checking
 

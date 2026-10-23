@@ -62,6 +62,10 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   (`lab-pairs`, `lab-format`...): fix it and commit, or `--skip-checks`.
   Only maintainers do it: `deckz status` says when committed files differ from the
   published ones.
+- Publishing pushes to git remotes a fresh clone doesn't have: `deckz setup` adds
+  those the repository lists in `deckz.yml`'s `setup.remotes`. Pushing needs your
+  GitHub account to have write access to the published repositories: a refused push
+  fails with git's own message (`git ls-remote <remote>` tests the connection).
 
 ## Videos
 

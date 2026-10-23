@@ -128,6 +128,13 @@ class VideoPublishRefusedError(DeckzError):
     """
 
 
+class RemoteError(DeckzError):
+    """A git remote `deckz labs publish`/`videos publish` pushes to is missing.
+
+    Or it can't be reached, or it refuses the push.
+    """
+
+
 class WorktreeError(DeckzError):
     """`deckz worktree` refuses.
 
