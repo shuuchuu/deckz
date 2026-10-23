@@ -13,7 +13,7 @@ The [guide](../guide/index.md) is for the people running a deckz-managed reposit
 | [Build pipeline](pipelines.md) | `pipelines`, `checking`, `course_notes`: planning and building decks |
 | [Analyses and checks](analyzing.md) | `analyzing`: read-only analyses, content checks |
 | [Components](components.md) | `components`: protocols, factories, and their implementations |
-| [Domain libraries](libraries.md) | `labs`, `videos`, `extras`, `worktrees`, `commits` |
+| [Domain libraries](libraries.md) | `labs`, `videos`, `extras`, `worktrees`, `commits`, `remotes` |
 | [Foundations](foundations.md) | `configuring`, `models`, `exceptions`, `utils`, `stamps`, `drive_links` |
 | [The repository's plugins](plugins.md) | What a deckz-managed repository plugs in, and what it may import |
 | [studioz](studioz.md) | How studioz uses deckz |
@@ -54,7 +54,8 @@ is a missing command (see "Operability guidelines" in `CLAUDE.md`).
 deckz's core is layered. A module may import from its own layer or from a layer below,
 never from one above. Modules separated by `|` in the same layer are also independent
 of each other. The `layers` contract in `pyproject.toml` (`[tool.importlinter]`)
-encodes this diagram, and `uv run doit check` fails when an import breaks it.
+encodes this diagram, and `uv run doit check` fails when an import breaks it. The
+contract is exhaustive: a new module of `deckz` fails it until it has a layer.
 
 ```mermaid
 flowchart TB
@@ -64,7 +65,7 @@ flowchart TB
     pipelines["<b>pipelines</b><br/>plan and build decks"]
     analyzing["<b>analyzing</b><br/>read-only analyses, content checks"]
     mid["<b>checking</b> | <b>course_notes</b> | <b>labs</b> | <b>videos</b> | <b>hooks_install</b>"]
-    components["<b>components</b> | <b>extras</b> | <b>worktrees</b> | <b>commits</b>"]
+    components["<b>components</b> | <b>extras</b> | <b>worktrees</b> | <b>commits</b> | <b>remotes</b>"]
     low["<b>drive_links</b> | <b>stamps</b>"]
     configuring["<b>configuring</b><br/>settings, variables"]
     utils["<b>utils</b>"]
@@ -111,7 +112,8 @@ means removing its line. They are:
 
 These pages are part of a change, not a separate task. A change updates them when it:
 
-- adds, moves, splits or removes a module or package of `deckz` (its layer, its page);
+- adds, moves, splits or removes a module or package of `deckz` (its layer, in the
+  contract and the diagram above, and its page);
 - adds a dependency between layers, or a known exception (the contract, and the table
   above);
 - changes what a component owns on disk, a lock, or a process boundary

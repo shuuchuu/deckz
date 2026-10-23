@@ -89,20 +89,24 @@ include_external_packages = true
 id = "layers"
 name = "deckz's layers"
 type = "layers"
+containers = ["deckz"]
+# Every module of deckz has its layer: a new one fails this contract until
+# it's placed here, and on docs/architecture/index.md's diagram.
+exhaustive = true
 layers = [
-  "deckz.cli",
-  "deckz.agent_hooks",
-  "deckz.agent_checkouts",
-  "deckz.status | deckz.setting_up | deckz.scaffolding | deckz.ci_report",
-  "deckz.pipelines",
-  "deckz.analyzing",
-  "deckz.checking | deckz.course_notes | deckz.labs | deckz.videos | deckz.hooks_install",
-  "deckz.components | deckz.extras | deckz.worktrees | deckz.commits",
-  "deckz.drive_links | deckz.stamps",
-  "deckz.configuring",
-  "deckz.utils",
-  "deckz.exceptions",
-  "deckz.models",
+  "cli",
+  "agent_hooks",
+  "agent_checkouts",
+  "status | setting_up | scaffolding | ci_report",
+  "pipelines",
+  "analyzing",
+  "checking | course_notes | labs | videos | hooks_install",
+  "components | extras | worktrees | commits | remotes",
+  "drive_links | stamps",
+  "configuring",
+  "utils",
+  "exceptions",
+  "models",
 ]
 # Known inversions, each a lazy import inside a function. Fixing one means
 # removing its line here (an unmatched ignore fails the contract).
@@ -119,8 +123,10 @@ ignore_imports = [
   "deckz.utils -> deckz.configuring.variables",
 ]
 broken_contract_guidance = """
-A module imports one in a layer above it (docs/architecture/index.md shows
-the layers). Move the code it needs down a layer, or the importing code up.
+A module imports one in a layer above it: move the code it needs down a
+layer, or the importing code up. Or a new module has no layer: add it to
+`layers` here, and to docs/architecture/ (the diagram of index.md, and the
+page of its layer).
 """
 
 [[tool.importlinter.contracts]]
