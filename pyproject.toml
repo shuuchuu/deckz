@@ -59,6 +59,7 @@ dev = [
   "deckz[videos]",
   "bumpver >= 2026.1132",
   "doit >= 0.37",
+  "import-linter >= 2",
   "mkdocs >= 1",
   "mkdocs-gen-files >= 0.5",
   "mkdocs-literate-nav >= 0.6",
@@ -79,6 +80,100 @@ dev = [
 
 [project.scripts]
 deckz = 'deckz.cli:main'
+
+[tool.importlinter]
+root_packages = ["deckz", "studioz"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+id = "layers"
+name = "deckz's layers"
+type = "layers"
+layers = [
+  "deckz.cli",
+  "deckz.agent_hooks",
+  "deckz.agent_checkouts",
+  "deckz.status | deckz.setting_up | deckz.scaffolding | deckz.ci_report",
+  "deckz.pipelines",
+  "deckz.analyzing",
+  "deckz.checking | deckz.course_notes | deckz.labs | deckz.videos | deckz.hooks_install",
+  "deckz.components | deckz.extras | deckz.worktrees | deckz.commits",
+  "deckz.drive_links | deckz.stamps",
+  "deckz.configuring",
+  "deckz.utils",
+  "deckz.exceptions",
+  "deckz.models",
+]
+# Known inversions, each a lazy import inside a function. Fixing one means
+# removing its line here (an unmatched ignore fails the contract).
+ignore_imports = [
+  # `deckz show affected --since` reuses `deckz status`'s git queries.
+  "deckz.analyzing.affected -> deckz.status",
+  # The built-in checks registry lives with the checks themselves.
+  "deckz.components.checks -> deckz.analyzing.content_checks",
+  "deckz.configuring.settings -> deckz.analyzing.content_checks",
+  # `parse_deck`/`all_decks`/`all_deck_settings` parse decks: they belong
+  # above `components`, not in `utils`.
+  "deckz.utils -> deckz.components.factory",
+  "deckz.utils -> deckz.configuring.settings",
+  "deckz.utils -> deckz.configuring.variables",
+]
+broken_contract_guidance = """
+A module imports one in a layer above it (docs/architecture/index.md shows
+the layers). Move the code it needs down a layer, or the importing code up.
+"""
+
+[[tool.importlinter.contracts]]
+id = "terminal"
+name = "Only the CLIs draw on the terminal"
+type = "protected"
+protected_modules = ["rich", "cyclopts"]
+allowed_importers = ["deckz.cli", "studioz.cli"]
+ignore_imports = [
+  # Draws its own transfer progress bars, instead of taking a
+  # `ProgressReporterProtocol`.
+  "deckz.extras.uploading -> rich",
+]
+broken_contract_guidance = """
+The core reports progress through a `ProgressReporterProtocol` and failures
+by raising a `DeckzError`; only `deckz.cli` (`cli/_presentation.py`) renders
+them.
+"""
+
+[[tool.importlinter.contracts]]
+id = "factories"
+name = "Concrete components are built by the factories only"
+type = "protected"
+protected_modules = [
+  "deckz.components.assets_analyzer",
+  "deckz.components.assets_builder",
+  "deckz.components.assets_metadata_retriever",
+  "deckz.components.assets_searcher",
+  "deckz.components.html_packager",
+  "deckz.components.markdown_converter",
+  "deckz.components.parser",
+  "deckz.components.renderer",
+]
+allowed_importers = ["deckz.components"]
+broken_contract_guidance = """
+Get the component from `GlobalSettingsFactory`/`DeckSettingsFactory`
+(`deckz.components.factory`) and type it with its protocol
+(`deckz.components.protocols`).
+"""
+
+[[tool.importlinter.contracts]]
+id = "studioz"
+name = "deckz never imports studioz"
+type = "forbidden"
+source_modules = ["deckz"]
+forbidden_modules = ["studioz"]
+
+[[tool.importlinter.contracts]]
+id = "studioz-cli"
+name = "studioz runs deckz's commands, never imports their code"
+type = "forbidden"
+source_modules = ["studioz"]
+forbidden_modules = ["deckz.cli"]
 
 [tool.uv.workspace]
 members = ["studioz"]
