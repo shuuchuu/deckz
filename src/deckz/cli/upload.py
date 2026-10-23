@@ -33,8 +33,8 @@ def upload(
     the same name are deleted (unless there's no local PDF at all), except
     the reserved ones.
 
-    A deck with Drive links (`drive-links.yml`, see --reserve) shows them in
-    its PDFs: each PDF goes to its reserved file, and the upload refuses a
+    A deck with Drive links (see --reserve) shows them in its PDFs: each PDF
+    goes to its reserved file, and the upload refuses a
     PDF with none (it would go out without its link), and a reserved PDF
     of the languages uploaded that isn't built (the others link to it).
 
@@ -42,8 +42,9 @@ def upload(
         reserve: Instead of uploading, create the Drive file of every PDF a
             full build of the deck writes in --lang (each kind, each part
             handout, the course notes in the languages they have chapters
-            in) that has none yet, and record it in the deck's
-            `drive-links.yml`, to commit: the PDFs built afterwards show
+            in) that has none yet, and record it in the deck's registry,
+            yours (`drive-links/<deck path>.yml` in deckz's user config
+            directory, every checkout's): the PDFs built afterwards show
             their links. A PDF already online keeps its link
         langs: With --reserve, the languages to reserve links for
         include_stale: Upload the outdated PDFs too, those without a link,
@@ -143,9 +144,8 @@ def upload(
         refusals.append(
             "these PDFs have no Drive link, which the deck's others show:\n"
             f"{_listed(unlinked, git_dir)}\n"
-            "Reserve theirs (`deckz upload --reserve --lang ...`), commit "
-            f"{paths.drive_links.name} and rebuild them, or pass --include-stale "
-            "to upload them as they are"
+            "Reserve theirs (`deckz upload --reserve --lang ...`) and rebuild "
+            "them, or pass --include-stale to upload them as they are"
         )
     if unbuilt and not include_stale:
         refusals.append(
@@ -229,7 +229,6 @@ def _reserve(
 
     drive_links.save(settings, Uploader(settings).reserve(missing, ids))
     print(
-        f"Reserved {len(missing)} Drive links in "
-        f"{settings.paths.drive_links.relative_to(git_dir)}: commit it, then "
+        f"Reserved {len(missing)} Drive links in {settings.paths.drive_links}: "
         "rebuild the deck's PDFs to show them"
     )

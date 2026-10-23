@@ -47,7 +47,10 @@ def test_registry_round_trip(repo: Path) -> None:
 
     drive_links.save(settings, {pdf: "file-id"})
 
-    text = settings.paths.drive_links.read_text(encoding="utf8")
+    # The user's, outside the repository, by the deck's path in it.
+    registry = repo.parent / "user" / "drive-links" / "company" / "abc.yml"
+    assert settings.paths.drive_links == registry
+    text = registry.read_text(encoding="utf8")
     assert "pdf/en/abc-handout.pdf: file-id" in text
     assert drive_links.load(settings) == {pdf: "file-id"}
     assert drive_links.links(settings) == {
@@ -55,8 +58,22 @@ def test_registry_round_trip(repo: Path) -> None:
     }
 
 
+def test_every_checkout_shares_the_registry(repo: Path) -> None:
+    settings = DeckSettings.from_yaml(_deck_dir(repo))
+    drive_links.save(settings, {settings.paths.pdf_dir / "abc-handout.pdf": "id"})
+    other = repo.parent / "other-checkout"
+    copytree(repo, other)
+
+    other_settings = DeckSettings.from_yaml(_deck_dir(other))
+
+    assert drive_links.load(other_settings) == {
+        other_settings.paths.pdf_dir / "abc-handout.pdf": "id"
+    }
+
+
 def test_a_malformed_registry_is_refused(repo: Path) -> None:
     settings = DeckSettings.from_yaml(_deck_dir(repo))
+    settings.paths.drive_links.parent.mkdir(parents=True)
     settings.paths.drive_links.write_text("- a\n", encoding="utf8")
 
     with raises(InvalidConfigurationError, match="Drive file ID"):

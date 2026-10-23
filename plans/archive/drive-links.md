@@ -16,12 +16,14 @@ uploaded, and the PDF can't contain it any more.
   fills those files: Drive keeps a file's ID across updates, so a link never changes.
   An empty file rather than `files.generateIds`: its ID exists for good, whatever
   delay until the first upload.
-- **A per-deck registry, committed**: `<deck>/drive-links.yml` (`paths.drive_links`),
-  each PDF's path relative to the deck directory mapped to its Drive file ID. A build
-  reads it and never calls Drive, so a build without the extras or credentials (CI, a
-  colleague) gives the same PDFs. A link is shown when the registry has it: no
-  registry, no links, as today. One file per deck: two sessions reserving for two
-  decks never conflict.
+- **A per-deck registry, the user's**: `<user config dir>/drive-links/<deck
+  path>.yml` (`paths.drive_links`), each PDF's path relative to the deck directory
+  mapped to its Drive file ID. The files are in the user's Drive, so the registry is
+  theirs, where they may track it (first committed in the deck's directory, moved
+  there at the user's request the same day); every checkout shares it. A build reads
+  it and never calls Drive. A link is shown when the registry has it: no registry
+  (another user, CI), no links, as before. One file per deck: two sessions reserving
+  for two decks never conflict.
 - **In each main template's context, `links`**: `self` (this PDF's own link),
   `handout` (the whole deck's handout, in this language) and `course_notes` (the
   course notes' PDF, in this language), each only when the registry has it. The

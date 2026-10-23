@@ -83,7 +83,12 @@ class DeckPaths(GlobalPaths):
     html_dir: _Path = cast("Path", "{current_dir}/html")
     local_content_dir: _Path = cast("Path", "{current_dir}/content")
     deck_definition: _Path = cast("Path", "{current_dir}/deck.yml")
-    drive_links: _Path = cast("Path", "{current_dir}/drive-links.yml")
+    deck_path: Path = Field(
+        default_factory=lambda data: data["current_dir"].relative_to(data["git_dir"])
+    )
+    """The deck's directory relative to the repository, the same in every \
+    checkout: the key of what deckz keeps for it outside the repository."""
+    drive_links: _Path = cast("Path", "{user_config_dir}/drive-links/{deck_path}.yml")
 
 
 class LabsGpuSettings(BaseModel):
