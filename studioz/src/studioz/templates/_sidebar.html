@@ -47,7 +47,7 @@
   </button>
 </nav>
 <aside class="primary-sidebar" id="sidebar">
-  <section class="view" data-view="formations" aria-label="Formations">
+  <section class="view{% if deck %} with-outline{% endif %}" data-view="formations" aria-label="Formations">
     {% set tree = decks | deck_tree %}
     <h2 class="view-title">
       <span>Formations{% if tree.path %} <span class="tree-root" title="Le dossier de toutes les formations">{{ tree.path }}/</span>{% endif %}</span>
@@ -61,6 +61,15 @@
       {{ deck_items(tree, deck, "/espaces/" ~ workspace.name ~ "/formations") }}
       {% if not decks %}<li class="empty">Aucune formation.</li>{% endif %}
     </ul>
+    {% if deck %}
+    {#- As VS Code's Outline below its Explorer: the PDF's own outline (deck.js). #}
+    <section class="outline" id="outline" aria-label="Plan de la formation">
+      <h2 class="view-title"><button type="button" class="outline-fold" id="outline-fold" aria-expanded="true"
+          title="Les parties et sections du PDF affiché : un clic y va">Plan</button></h2>
+      <p class="empty" id="outline-empty">Le plan s'affiche une fois la formation construite.</p>
+      <ul class="tree outline-tree" id="outline-tree"></ul>
+    </section>
+    {% endif %}
   </section>
   <section class="view" data-view="videos" aria-label="Vidéos" hidden>
     <section class="videos" id="videos" hx-swap="outerHTML" hx-trigger="load"

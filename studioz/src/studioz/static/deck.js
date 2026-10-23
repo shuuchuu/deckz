@@ -2,7 +2,8 @@
 // the workspace's `deckz run --watch` finishes a build (server-sent events).
 // A click on a page opens its frame's source in the editor beside it. The
 // "Avant/après" view shows the frames changed since the last commit
-// (`_comparison.html`), each page drawn by pdf.js once in view.
+// (`_comparison.html`), each page drawn by pdf.js once in view. The PDF's
+// outline is the Formations view's "Plan" (`_sidebar.html`).
 import { SourceEditor } from "/static/editor.js";
 import { showPanel } from "/static/layout.js";
 import * as pdfjsLib from "/static/vendor/pdfjs/pdf.min.mjs";
@@ -59,6 +60,7 @@ eventBus.on("pagesinit", () => {
 eventBus.on("pagechanging", () => {
   showPageNumber();
   showSlide();
+  markOutline();
 });
 // The window's size, the editor opening or closing, a sidebar shown, hidden
 // or dragged (once it rests: redrawing every page at each step is slow). The
@@ -100,6 +102,134 @@ function showSlide() {
   if (slide === document.body.dataset.slide) return;
   document.body.dataset.slide = slide;
   document.body.dispatchEvent(new Event("slide-in-view"));
+}
+
+// The PDF's outline: Typst's headings (parts, sections, subsections), not its
+// frames. A click goes to the page; the heading of the page in view is marked,
+// or the closed one around it. What the person opened or closed stays across
+// builds, keyed by the titles from the top.
+const outline = document.getElementById("outline");
+const outlineTree = document.getElementById("outline-tree");
+const outlineEmpty = document.getElementById("outline-empty");
+const outlineFold = document.getElementById("outline-fold");
+let headings = []; // {page, link, dest}, in the PDF's order
+const toggled = new Map(); // key -> open
+let marked = null;
+
+async function pageOf(pdf, dest) {
+  try {
+    const explicit = typeof dest === "string" ? await pdf.getDestination(dest) : dest;
+    const ref = Array.isArray(explicit) ? explicit[0] : null;
+    if (Number.isInteger(ref)) return ref + 1;
+    return ref ? (await pdf.getPageIndex(ref)) + 1 : null;
+  } catch {
+    return null;
+  }
+}
+
+async function loadOutline(pdf) {
+  if (!outline) return;
+  let found = [];
+  try {
+    found = (await pdf.getOutline()) ?? [];
+  } catch (error) {
+    console.error("studioz: could not read the outline", error);
+  }
+  const shown = [];
+  async function items(nodes, depth, parent) {
+    const list = [];
+    for (const node of nodes) {
+      const key = parent ? `${parent}\u0000${node.title}` : node.title;
+      const item = document.createElement("li");
+      const link = Object.assign(document.createElement("a"), {
+        href: "#",
+        textContent: node.title,
+      });
+      const heading = { page: await pageOf(pdf, node.dest), link, dest: node.dest };
+      if (heading.page) link.title = `Page ${heading.page}`;
+      shown.push(heading);
+      if (node.items?.length) {
+        const details = document.createElement("details");
+        details.dataset.key = key;
+        details.open = toggled.get(key) ?? depth === 0;
+        const summary = document.createElement("summary");
+        summary.append(link);
+        const children = document.createElement("ul");
+        children.append(...(await items(node.items, depth + 1, key)));
+        details.append(summary, children);
+        item.append(details);
+      } else {
+        item.append(link);
+      }
+      list.push(item);
+    }
+    return list;
+  }
+  const top = outlineTree.scrollTop;
+  outlineTree.replaceChildren(...(await items(found, 0, "")));
+  outlineTree.scrollTop = top;
+  headings = shown;
+  marked = null;
+  outlineEmpty.hidden = shown.length > 0;
+  outlineEmpty.textContent = "Ce PDF n'a pas de plan : aucune partie ni section.";
+  markOutline();
+}
+
+function markOutline() {
+  if (!outline || !headings.length) return;
+  const page = viewer.currentPageNumber;
+  let current = null;
+  for (const heading of headings) {
+    if (heading.page && heading.page <= page) current = heading;
+  }
+  // A heading inside a closed one: the outermost closed one stands for it.
+  let link = current?.link ?? null;
+  let details = link?.parentElement.closest("details");
+  if (details && link.parentElement.tagName === "SUMMARY") {
+    details = details.parentElement.closest("details");
+  }
+  for (; details; details = details.parentElement.closest("details")) {
+    if (!details.open) link = details.querySelector(":scope > summary > a");
+  }
+  if (link === marked) return;
+  marked?.classList.remove("current");
+  marked?.removeAttribute("aria-current");
+  marked = link;
+  if (!link) return;
+  link.classList.add("current");
+  link.setAttribute("aria-current", "location");
+  link.scrollIntoView({ block: "nearest" });
+}
+
+if (outline) {
+  outlineTree.addEventListener("click", (event) => {
+    const link = event.target.closest("a");
+    if (!link) return;
+    event.preventDefault();
+    const heading = headings.find((found) => found.link === link);
+    if (!heading) return;
+    if (deck.dataset.view === "changes") setView("slides");
+    linkService.goToDestination(heading.dest);
+  });
+  // `toggle` doesn't bubble.
+  outlineTree.addEventListener("toggle", (event) => {
+    toggled.set(event.target.dataset.key, event.target.open);
+    marked?.classList.remove("current");
+    marked = null;
+    markOutline();
+  }, true);
+  const fold = (open) => {
+    outlineFold.setAttribute("aria-expanded", String(open));
+    outlineTree.hidden = !open;
+    outlineEmpty.classList.toggle("folded", !open);
+    try { localStorage.setItem("studioz-outline-folded", open ? "" : "1"); } catch {}
+  };
+  let folded = false;
+  try { folded = localStorage.getItem("studioz-outline-folded") === "1"; } catch {}
+  fold(!folded);
+  outlineFold.addEventListener("click", () => {
+    fold(outlineFold.getAttribute("aria-expanded") !== "true");
+  });
 }
 
 let noticeTimer = null;
@@ -176,6 +306,7 @@ async function show(url) {
       showPageNumber();
       await loadFrames();
       showSlide();
+      await loadOutline(pdf);
       editor.refresh();
       if (deck.dataset.view === "changes") refreshComparison();
     } catch (error) {

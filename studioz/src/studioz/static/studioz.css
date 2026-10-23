@@ -477,6 +477,21 @@ body.shell { display: flex; flex-direction: column; height: 100vh; overflow: hid
 .tree summary:hover { color: var(--accent); }
 .tree li.deck-item a { display: block; padding: 0.1rem 0 0.1rem 1em; }
 .tree li.deck-item.current a { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 3px; }
+/* A deck's page: the deck list and the Plan below it share the view's height. */
+.primary-sidebar > .view.with-outline:not([hidden]) { display: flex; flex-direction: column; height: 100%; }
+.with-outline > .decks { flex: 1 1 auto; min-height: 4rem; overflow-y: auto; }
+.outline { flex: 0 1 auto; max-height: 55%; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid var(--line); margin-top: 0.4rem; }
+.outline .view-title { margin: 0.5rem 0 0.3rem; }
+.outline-fold { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.outline-fold::before { content: "›"; display: inline-block; width: 1em; text-align: center; color: var(--muted); transition: transform 0.1s; }
+.outline-fold[aria-expanded="true"]::before { transform: rotate(90deg); }
+.outline-tree { min-height: 0; overflow-y: auto; }
+.outline .empty { margin: 0; font-size: 0.85em; }
+.outline .empty.folded { display: none; }
+.outline-tree > li > a, .outline-tree ul > li > a { display: block; padding: 0.1rem 0 0.1rem 1em; }
+.outline-tree summary a { display: inline; }
+.primary-sidebar .outline-tree a.current { color: var(--accent); font-weight: 600; }
+.outline-tree > li > a.current, .outline-tree ul > li > a.current { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 3px; }
 .tree-root { font-family: var(--mono); font-weight: 400; text-transform: none; letter-spacing: 0; }
 .primary-sidebar .workflows li { flex-direction: column; align-items: flex-start; gap: 0.1rem; }
 .primary-sidebar .workflows button { padding: 0.15rem 0.6rem; font-size: 0.9em; text-align: left; }

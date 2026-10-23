@@ -32,6 +32,9 @@ in step); the page follows it through server-sent events and shows the
 handout in pdf.js, and the watch stops once no page has followed it for 30 s.
 A link out of studioz (the PDF's, the agent's Markdown, a notebook's) opens a new
 tab.
+The PDF's own outline (Typst's headings: parts and sections, not frames) is the
+Formations view's "Plan" on a deck's page (`deck.js`, `pdf.getOutline()`), below the
+deck list: a click goes to the page, the heading of the page in view is marked.
 A click on a page opens its frame's source (`deckz.analyzing.frames`, from
 what the build recorded, never compiling in studioz's process) in the editor
 beside it (`static/editor.js`, CodeMirror), which saves through
