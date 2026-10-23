@@ -7,8 +7,7 @@
   <td hx-get="/espaces/{{ workspace.name }}/taille" hx-trigger="load">…</td>
   <td>{{ workspace.last_use | ago }}</td>
   <td>
-    <button class="secondary" hx-post="/espaces/{{ workspace.name }}/fermer"
-            hx-target="#workspace-{{ workspace.name }}" hx-swap="outerHTML"
-            hx-confirm="Fermer l'espace de travail « {{ workspace.name }} » ?">Fermer</button>
+    <button class="secondary" hx-get="/espaces/{{ workspace.name }}/fermer"
+            hx-target="#workspace-{{ workspace.name }}" hx-swap="outerHTML">Fermer</button>
   </td>
 </tr>

@@ -1040,8 +1040,10 @@ The main commands:
   to run; checks the executables deckz and the repository need (`setup.requires`
   above), saying how to install a missing one; installs the git hooks;
   adds the git remotes `setup.remotes` lists that the clone lacks;
-  runs the repository's `setup.steps` not done yet; and reports the
-  videos never rendered (`--videos` renders them). `--check` only
+  runs the repository's `setup.steps` not done yet; reports the
+  videos never rendered (`--videos` renders them); and drops the builds a
+  removed worktree set aside (below) that a checkout holds again, or kept
+  30 days. `--check` only
   reports, `--claude` also installs the Claude Code hooks. It exits 1
   while something is missing or failed, and is safe to run any number of
   times.
@@ -1057,6 +1059,12 @@ The main commands:
   checkout's and fast-forwards the main checkout to it; `deckz worktree
   remove NAME` removes one, and its branch, refusing while it holds
   either (`--force` loses the uncommitted changes and keeps the branch).
+  A worktree's builds outlive it: `land` and `remove` copy into the main
+  checkout the stamped ones under `worktree.seed` it lacks, and `remove`
+  sets aside, in the repository's git directory, those the main checkout
+  holds built from other sources (neither copy is overwritten: only a
+  build knows which is up to date), until the main checkout's build
+  adopts them once its sources match (a pull), or for 30 days.
 - `deckz run` (alias for `deckz run deck`, optionally restricted with
   `--parts`) / `deckz run file PATH` / `deckz run section SECTION FLAVOR` /
   `deckz run assets`: compile the deck in the current directory, a single

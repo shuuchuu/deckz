@@ -15,6 +15,7 @@
     <p>{{ worktree.unsynced }} commit(s) non synchronisé(s), gardés sur la branche
       <code>{{ worktree.branch }}</code>.</p>
     {% endif %}
+    {% include "_close_renders.html" %}
     <a class="button secondary" href="/">Garder</a>
     <button class="danger" hx-post="/espaces/{{ workspace.name }}/fermer"
             hx-vals='{"force": "true"}'

@@ -29,9 +29,14 @@ The person works in workspaces only. The main checkout is their source: a new on
 starts from its last commit, with its builds, and studioz writes in it only when the
 person clicks "Actualiser" under "Source des espaces" on the home page (a fast-forward
 to its upstream branch, refused while it holds uncommitted changes or commits of its
-own, then its `deckz setup`). studioz fetches the upstream branch by itself (at
-startup, every 15 minutes, when a page opens), fast-forwards the workspaces holding
-nothing of their own, and offers the others their update.
+own, then its `deckz setup`), and when a workspace is closed (Fermer, as `deckz
+worktree remove`), which copies there the figures and videos built in the workspace
+that it lacks, and sets aside in the git directory those it holds built from other
+sources, for it to take once Actualiser brings it the same sources (30 days at most);
+the confirmation says how many of each before anything is done. studioz fetches the
+upstream branch by itself (at startup, every 15 minutes, when a page opens),
+fast-forwards the workspaces holding nothing of their own, and offers the others
+their update.
 
 ## Workflows
 

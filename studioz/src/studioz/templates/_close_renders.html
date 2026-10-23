@@ -1,0 +1,13 @@
+{# What closing does with the workspace's builds: `renders` (deckz.worktrees.Renders); `done` once it's closed. #}
+{% set copied = renders.copied | length %}
+{% set kept = renders.set_aside | length %}
+{% if copied or kept %}
+<p class="renders">
+  {%- if copied %}{{ copied }} rendu{{ "s" if copied > 1 }} (figures, vidéos) que le dossier principal n'a pas
+    {{ ("y ont été recopiés" if copied > 1 else "y a été recopié") if done else ("y seront recopiés" if copied > 1 else "y sera recopié") }}.{% endif %}
+  {% if kept %}<span title="{{ renders.set_aside | join('\n') }}">{{ kept }} rendu{{ "s" if kept > 1 }}
+    fait{{ "s" if kept > 1 }} pour d'autres sources que celles du dossier principal
+    {{ ("ont été mis" if kept > 1 else "a été mis") if done else ("seront mis" if kept > 1 else "sera mis") }} de côté
+    pour 30 jours : il {{ "les" if kept > 1 else "le" }} reprend une fois ses sources à jour (Actualiser).</span>{% endif -%}
+</p>
+{% endif %}

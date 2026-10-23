@@ -55,10 +55,10 @@ repository's scenes and templates (see [plugins](plugins.md)).
 
 | | |
 |---|---|
-| **Responsibility** | Worktrees as workspaces: add (seeded with the main checkout's builds), list, land (rebase, fast-forward), remove |
+| **Responsibility** | Worktrees as workspaces: add (seeded with the main checkout's builds), list, land (rebase, fast-forward), remove; a worktree's builds handed over to the main checkout on land and remove (`hand_over`) |
 | **Owns** | `../<repo>--<name>` checkouts on `ws/<name>` branches |
-| **Depends on** | `configuring` (`worktree.seed`), `exceptions` |
-| **Never** | Removes a worktree holding work found nowhere else |
+| **Depends on** | `configuring` (`worktree.seed`), `stamps` (`set_aside`), `utils`, `exceptions` |
+| **Never** | Removes a worktree holding work found nowhere else; overwrites a build of the main checkout's |
 | **Entry points** | `deckz worktree …`, `agent_checkouts`, `labs.gpu_pass`, studioz's workspaces |
 | **Fails with** | [`WorktreeError`][deckz.exceptions.WorktreeError] |
 

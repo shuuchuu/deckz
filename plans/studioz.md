@@ -20,8 +20,8 @@ afternoon; its increments 1 (the model), 2 (a new conversation for a new file), 
 are done. Phase 7's increments 1 (logging in, and errors naming their fix), 2
 (links in new tabs), 3 (the slide in view) and 4 (the PDF's outline) are done.
 **Next:** phase 8 (planned 2026-10-23 after a publish from a stale workspace
-rolled the labs back, its decisions taken the same day; increments 1 to 4 done,
-next its increment 5), phase 7's "Also left" (start with "Starting phase 7" below), phase 6's
+rolled the labs back, its decisions taken the same day; its 5 increments done,
+what's left is in each one's **Left**), phase 7's "Also left" (start with "Starting phase 7" below), phase 6's
 increment 5
 (the colleague's next afternoon measured), "Then, with the colleague" (below
 phase 5), and the open items. A GPU pass rents a machine that costs money: never
@@ -2112,8 +2112,8 @@ phase 7".
    panel with `deckz setup`'s problems listed, until closed (`POST /source/vu`).
    slides' `HANDBOOK.md` ("Installer") says that with studioz one works only in
    workspaces, the main checkout moving by Actualiser alone, and that a figure or a
-   video built in one checkout serves the others (increment 3); increment 5 will
-   add what happens to a worktree's renders when it goes. studioz's README says the
+   video built in one checkout serves the others (increment 3); increment 5 added
+   what happens to a worktree's renders when it goes. studioz's README says the
    same. **Tried for real** on a scratch copy of slides (a bare stand-in origin, a
    main checkout cloned from it, one commit pushed from another clone; studioz from
    the worktree, port 8431, headless Chromium): the panel said "en retard de 1
@@ -2127,27 +2127,62 @@ phase 7".
    `deckz run --watch` someone left running in the main checkout from seeing its
    files move; the setup's VIRTUAL_ENV warning (studioz's environment leaks into
    `uv` there: harmless, uv ignores it).
-5. **A worktree's renders outlive it.** Increment 3 finds a render only while the
-   worktree holding it exists, and `deckz worktree remove` deletes it (minutes to
-   hours of rendering). So:
-   - `deckz worktree land`: once the main checkout is fast-forwarded to the
-     worktree's commits (both then have the same sources), every seeded output
-     fresh in the worktree and missing or stale in the main checkout is copied
-     there, with its stamps.
-   - `deckz worktree remove`: the same copy where the main checkout's output is
-     missing or stale for its own sources. One that is fresh in the main checkout
-     for its own, older sources (the work reached the upstream branch through
-     studioz's Sync, and the main checkout hasn't pulled yet) isn't overwritten,
-     which would make it stale there until the pull, nor lost: it is set aside in a
-     store in the repository's git directory (`<git common dir>/deckz/renders/<stamp
-     digest>/`, the output and its stamps), which increment 3's lookup searches
-     too, so the main checkout adopts it at its next pull. Outputs fresh only for
-     sources that never reached the upstream branch go with the worktree, named in
-     the confirmation as its unsynced commits already are (`worktrees._refusal`).
-     `remove` reports what it did ("3 rendus recopiés dans le dossier principal, 1
-     mis de côté"), and studioz's Fermer dialog shows it before the person confirms.
-   - The store drops an entry once some checkout holds a fresh copy of it, or after
-     30 days (`deckz setup` prunes it). **Decided** (2026-10-23): 30 days.
+5. **A worktree's renders outlive it**: done 2026-10-23. `deckz.worktrees.hand_over`
+   lists the worktree's stamped outputs among its ignored files under
+   `worktree.seed` (`git ls-files --others --ignored`), each with its companions
+   (the unstamped files beside it named after it: a video's poster and `.quality`,
+   a plot's credits). `deckz worktree land`, once the main checkout is
+   fast-forwarded, copies there each one it lacks (companions first, the stamp
+   last); `deckz worktree remove` does the same, then sets aside each one the main
+   checkout holds stamped otherwise, unless another checkout or the store already
+   holds it with the worktree's stamp, in `<git common dir>/deckz/renders/<stamp>/`
+   (the output at its path, its stamp, its companions: `stamps.set_aside`), which
+   `stamps.adopt` searches after the checkouts ("copied from the builds set
+   aside"). `remove` returns `Removed(kept_branch, renders)` and prints what it
+   copied and set aside; `land` returns the copies too. `deckz setup`'s new item
+   "builds set aside" (`setting_up.set_aside_builds`, last, after the videos
+   adopted theirs) drops an entry a checkout holds again with its stamp, or older
+   than `stamps.STORE_DAYS` (30; the entry's time is reset when set aside).
+   **Changed from the plan:** neither command overwrites the main checkout's copy,
+   nor tells "fresh" from "stale" there: only a builder knows the digest of its
+   sources now (deckz's Typst figures, slides' plot builders, the videos), and
+   `worktree` can't run them for the main checkout. So `land` copies only what the
+   main checkout lacks; one it holds stamped otherwise, after a land, is adopted
+   from the worktree by its next build (increment 3), or from the store once the
+   worktree is removed. And `remove` sets aside every output the main checkout
+   holds stamped otherwise, including those built for sources that never reached
+   the upstream branch (rather than naming them as lost): a copy adopted only for
+   an exact stamp is never wrong, a branch kept by `--force` gets its renders back
+   if it's checked out again within 30 days, and the cost is disk for 30 days at
+   most. studioz's Fermer now asks in the workspace's row (`GET
+   /espaces/{name}/fermer`, `_close_confirm.html`, from `worktrees.pending_renders`,
+   a dry run) rather than the browser's `hx-confirm`: "2 rendus (figures, vidéos)
+   que le dossier principal n'a pas y seront recopiés. 2 rendus faits pour d'autres
+   sources que celles du dossier principal seront mis de côté pour 30 jours : il
+   les reprend une fois ses sources à jour (Actualiser)." (the paths in a tooltip);
+   the refusal row says the same, the closed row what was done. **Tried for real**
+   on a scratch clone of slides (`git clone --shared`, the main checkout's 329 MB
+   of builds copied in, deckz-studioz's code on `PYTHONPATH` over slides'
+   environment): a worktree editing one Typst figure, adding one and editing a
+   scene (rendered at `-q l`), its commits on a branch standing in for origin:
+   `remove` copied the new figure's 2 SVGs and set aside the edited figure's 2 and
+   the video (poster and quality with it); the main checkout, fast-forwarded to
+   that branch, then compiled nothing (`deckz run assets`: both SVGs "copied from
+   the builds set aside", stamped as the worktree's) and `deckz videos list`
+   showed the trial's render (draft); `set_aside_builds` dropped the 3 entries. A
+   second worktree: `land` copied the new figure (0.6 s), `remove` set aside the
+   edited one (0.75 s; 9 s before the companions were indexed by directory), which
+   the main checkout's next build adopted. `pending_renders` takes 0.3 s on a
+   worktree's ~2100 ignored files. studioz from the worktree on the scratch clone
+   (port 8431, headless Chromium): Fermer showed the counts above, its Fermer
+   closed and said "y ont été recopiés", "ont été mis de côté". Tests: land copies
+   what the main checkout lacks and overwrites nothing; remove copies and sets
+   aside, the main checkout adopting the set-aside copy with its poster once its
+   stamp matches, then `prune` dropping it; the dry run changing nothing; nothing
+   set aside that another checkout holds; `prune` by age; `deckz setup`'s item;
+   the Fermer row, the refusal and the closed row. **Left:** a build adopted from
+   the store logs a line per output, not a summary; `agent_checkouts`'s removal
+   (Claude Code's `WorktreeRemove` hook) hands over too but reports nothing.
 
 ## Risks
 

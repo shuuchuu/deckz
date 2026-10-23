@@ -1,5 +1,6 @@
 <tr id="workspace-{{ workspace.name }}" class="closed">
   <td>{{ workspace.name }}</td>
-  <td colspan="6">Fermé.{% if kept %} Ses commits non synchronisés restent sur la branche
-    {{ workspace.worktree.branch }}.{% endif %}</td>
+  <td colspan="6">Fermé.{% if removed.kept_branch %} Ses commits non synchronisés restent sur la branche
+    {{ workspace.worktree.branch }}.{% endif %}
+    {% with renders = removed.renders, done = true %}{% include "_close_renders.html" %}{% endwith %}</td>
 </tr>

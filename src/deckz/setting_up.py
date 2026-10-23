@@ -5,10 +5,10 @@ Every step is idempotent and reports what it found or did as a
 from a git checkout, is behind its upstream branch; deckz's own executables (git,
 pandoc), those the repository declares (`deckz.yml`'s `setup.requires`), the
 git hooks, the git remotes it declares (`setup.remotes`, e.g. those the labs
-and videos are published to), the repository's own steps (`setup.steps`), and
-the videos a deck
-build needs rendered. With `check`, nothing is changed: each item only says
-what's missing, and how to fix it.
+and videos are published to), the repository's own steps (`setup.steps`), the
+videos a deck build needs rendered, and the builds a removed worktree set
+aside that no checkout needs anymore. With `check`, nothing is changed: each
+item only says what's missing, and how to fix it.
 """
 
 from collections.abc import Iterable
@@ -67,8 +67,8 @@ def setup(
         progress: Advanced while rendering videos.
 
     Returns:
-        One item for deckz, then one per requirement, hook set, remote, step
-        and the videos.
+        One item for deckz, then one per requirement, hook set, remote, step,
+        the videos and the builds set aside.
     """
     items = [deckz_checkout(settings)]
     items.extend(requirements(settings))
@@ -80,6 +80,7 @@ def setup(
     items.append(
         rendered_videos(settings, render=videos and not check, progress=progress)
     )
+    items.append(set_aside_builds(settings, check=check))
     return items
 
 
@@ -352,6 +353,29 @@ def rendered_videos(
     if failed:
         return SetupItem("videos", Status.FAILED, "\n".join(failed))
     return SetupItem("videos", Status.DONE, f"rendered {len(missing)}")
+
+
+def set_aside_builds(settings: "GlobalSettings", *, check: bool) -> SetupItem:
+    """Drop the builds `deckz worktree remove` set aside that are done with.
+
+    Those a checkout of the repository holds again (adopted, or rebuilt the \
+    same), and those older than `deckz.stamps.STORE_DAYS` (`deckz.stamps.prune`).
+
+    Returns:
+        Their item.
+    """
+    from .stamps import prune
+
+    if check:
+        return SetupItem("builds set aside", Status.OK)
+    dropped = prune(settings.paths.git_dir)
+    if not dropped:
+        return SetupItem("builds set aside", Status.OK)
+    return SetupItem(
+        "builds set aside",
+        Status.DONE,
+        f"dropped {len(dropped)} a checkout holds again, or kept 30 days",
+    )
 
 
 def incomplete(items: Iterable[SetupItem]) -> bool:

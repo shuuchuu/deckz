@@ -28,17 +28,31 @@ than have it built again. A stamp digests bytes, never paths, so a copy whose
 stamp matches is exactly what a build here would make: a video rendered in the
 main checkout is published from a worktree, a figure a worktree compiled
 serves the others.
+
+A checkout going away (`deckz worktree remove`) sets aside in the
+repository's git directory the outputs only it holds (`set_aside`), so that
+the main checkout still adopts them once its sources catch up (a pull): the
+store (`<git common dir>/deckz/renders/<stamp>/`, each output at its path in
+the checkout, with its stamp and companions) is searched after the other
+checkouts. `prune` drops what a checkout holds again, and what's older than
+`STORE_DAYS`.
 """
 
 import ast
 import hashlib
 from collections.abc import Iterable
 from logging import getLogger
+from os import utime
 from pathlib import Path
+from shutil import rmtree
+from time import time
 
 from .utils import copy_file_if_changed, write_atomic
 
 _logger = getLogger(__name__)
+
+STORE_DAYS = 30
+"""How long an output set aside is kept for a checkout to adopt it."""
 
 
 def stamp_path(output: Path) -> Path:
@@ -117,10 +131,11 @@ def adopt(output: Path, stamp: str, companions: Iterable[Path] = ()) -> bool:
     """Copy `output` from another checkout where it's stamped `stamp`.
 
     The main checkout is looked in first, then the worktrees, in git's \
-    order: the first whose copy of `output` (and of each of `companions`) \
-    exists with that stamp is copied, the stamp last, so that `output` is \
-    never stamped over another file. A copy rebuilt there meanwhile (its \
-    stamp changed during the copy) isn't stamped here: it's built again.
+    order, then the outputs set aside (`set_aside`): the first whose copy of \
+    `output` (and of each of `companions`) exists with that stamp is copied, \
+    the stamp last, so that `output` is never stamped over another file. A \
+    copy rebuilt there meanwhile (its stamp changed during the copy) isn't \
+    stamped here: it's built again.
 
     Args:
         output: The output, in this checkout.
@@ -135,7 +150,10 @@ def adopt(output: Path, stamp: str, companions: Iterable[Path] = ()) -> bool:
         return False
     relative = output.relative_to(root)
     files = [relative, *(path.relative_to(root) for path in companions)]
-    for other in _checkouts(root):
+    others = _checkouts(root)
+    if (store := _store(root)) is not None:
+        others.append(store / stamp)
+    for other in others:
         if other == root.resolve():
             continue
         found = stamp_path(other / relative)
@@ -148,7 +166,10 @@ def adopt(output: Path, stamp: str, companions: Iterable[Path] = ()) -> bool:
         if _read(found) != stamp:
             continue
         write_stamp(output, stamp)
-        _logger.info("%s: copied from %s, where it's up to date", relative, other)
+        if store is not None and other.parent == store:
+            _logger.info("%s: copied from the builds set aside", relative)
+        else:
+            _logger.info("%s: copied from %s, where it's up to date", relative, other)
         return True
     return False
 
@@ -169,28 +190,51 @@ def _checkout(path: Path) -> Path | None:
     return next((p for p in path.parents if (p / ".git").exists()), None)
 
 
-def _checkouts(root: Path) -> list[Path]:
-    """Every checkout of the repository `root` is a checkout of.
+def _common_dir(root: Path) -> Path | None:
+    """The git directory the checkouts of `root`'s repository share.
 
     Read from git's own files, without running git (a build may ask for \
     hundreds of outputs): `.git` is the main checkout's git directory, or a \
     worktree's `gitdir:` file pointing to its own one, whose `commondir` \
-    leads to the main one, which lists each worktree's under `worktrees/`.
+    leads to the main one.
+
+    Returns:
+        It, or None if `root` has no readable `.git`.
+    """
+    dot_git = root / ".git"
+    try:
+        if dot_git.is_dir():
+            return dot_git
+        text = dot_git.read_text(encoding="utf8").strip()
+        own = (root / text.removeprefix("gitdir:").strip()).resolve()
+        commondir = (own / "commondir").read_text(encoding="utf8").strip()
+        return (own / commondir).resolve()
+    except OSError:
+        return None
+
+
+def _store(root: Path) -> Path | None:
+    """Where the outputs set aside go: in the shared git directory.
+
+    Returns:
+        `<git common dir>/deckz/renders`, or None outside a repository.
+    """
+    common = _common_dir(root)
+    return None if common is None else common / "deckz" / "renders"
+
+
+def _checkouts(root: Path) -> list[Path]:
+    """Every checkout of the repository `root` is a checkout of.
+
+    The shared git directory (`_common_dir`) lists each worktree's own \
+    under `worktrees/`.
 
     Returns:
         The main checkout's root (unless the repository is bare), then each \
         worktree's that exists.
     """
-    dot_git = root / ".git"
-    try:
-        if dot_git.is_dir():
-            common = dot_git
-        else:
-            text = dot_git.read_text(encoding="utf8").strip()
-            own = (root / text.removeprefix("gitdir:").strip()).resolve()
-            commondir = (own / "commondir").read_text(encoding="utf8").strip()
-            common = (own / commondir).resolve()
-    except OSError:
+    common = _common_dir(root)
+    if common is None:
         return []
     found = [common.parent] if common.name == ".git" else []
     entries = common / "worktrees"
@@ -199,6 +243,84 @@ def _checkouts(root: Path) -> list[Path]:
         if gitdir and (checkout := Path(gitdir).parent).is_dir():
             found.append(checkout)
     return found
+
+
+def held_elsewhere(root: Path, relative: Path, stamp: str) -> bool:
+    """Whether another checkout than `root`, or the store, has it stamped `stamp`.
+
+    Args:
+        root: The checkout asking.
+        relative: The output's path in a checkout.
+        stamp: Its stamp in `root`.
+
+    Returns:
+        True if one does: no need to set it aside.
+    """
+    others = _checkouts(root)
+    if (store := _store(root)) is not None:
+        others.append(store / stamp)
+    return any(
+        other != root.resolve()
+        and (other / relative).is_file()
+        and _read(stamp_path(other / relative)) == stamp
+        for other in others
+    )
+
+
+def set_aside(root: Path, output: Path, companions: Iterable[Path] = ()) -> None:
+    """Keep `output`, stamped, for another checkout to adopt once `root` is gone.
+
+    Copied into the store (see the module docstring) with its stamp, last, \
+    and `companions`. The entry's time is reset: `prune` keeps it \
+    `STORE_DAYS` from now.
+
+    Args:
+        root: The checkout holding `output`.
+        output: The output, stamped.
+        companions: Files next to `output` that go with it.
+
+    Raises:
+        ValueError: If `output` has no stamp, or `root` is in no repository.
+    """
+    stamp = _read(stamp_path(output))
+    store = _store(root)
+    if stamp is None or store is None:
+        msg = f"{output} has no stamp, or {root} is in no repository"
+        raise ValueError(msg)
+    entry = store / stamp
+    for file in (*companions, output, stamp_path(output)):
+        copy_file_if_changed(file, entry / file.relative_to(root))
+    utime(entry)
+
+
+def prune(root: Path, days: int = STORE_DAYS) -> list[str]:
+    """Drop the outputs set aside that a checkout holds, or older than `days`.
+
+    Returns:
+        The paths dropped, relative to their checkout.
+    """
+    store = _store(root)
+    if store is None or not store.is_dir():
+        return []
+    checkouts = _checkouts(root)
+    dropped = []
+    for entry in sorted(store.iterdir()):
+        outputs = [
+            found.with_name(found.name.removesuffix(".stamp")).relative_to(entry)
+            for found in entry.rglob("*.stamp")
+        ]
+        held = all(
+            any(
+                (other / relative).is_file()
+                and _read(stamp_path(other / relative)) == entry.name
+                for other in checkouts
+            )
+            for relative in outputs
+        )
+        if held or entry.stat().st_mtime < time() - days * 86400:
+            rmtree(entry)
+            dropped.extend(str(relative) for relative in outputs)
+    return dropped
 
 
 def write_stamp(output: Path, stamp: str) -> None:

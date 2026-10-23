@@ -67,3 +67,10 @@ there when a build or a render needs it: render a video in the main checkout, pu
 it from a worktree. The worktree shares nothing else with the main
 checkout but git's history: your `~/.config/deckz/.env` applies to both. `remove`
 refuses while the worktree holds work nothing else has, and lists it.
+
+What the worktree built outlives it. `deckz worktree land` and `remove` copy into the
+main checkout the figures and videos it lacks; `remove` sets aside, in the
+repository's git directory, those the main checkout has built from other sources
+(it says which), and the main checkout's next build or render takes them once its
+sources match the worktree's: after a pull of the worktree's work. `deckz setup`
+drops them once a checkout holds them, or after 30 days.

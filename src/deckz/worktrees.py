@@ -22,6 +22,15 @@ fast-forwards the main checkout to it: the history stays linear.
 
 `remove` refuses while the worktree holds work nothing else has:
 uncommitted changes, or commits on no other branch, local or remote.
+
+A worktree's builds outlive it (`hand_over`): `land` and `remove` copy into
+the main checkout the stamped outputs under `worktree.seed` it lacks, and
+`remove` sets aside in the repository's git directory those the main
+checkout holds stamped otherwise (`deckz.stamps.set_aside`). Only a builder
+knows which stamp its sources digest to now, so neither is overwritten: the
+main checkout's builders adopt the one set aside once their sources digest
+to its stamp (a pull of the worktree's commits), or `deckz setup` drops it
+after `deckz.stamps.STORE_DAYS`.
 """
 
 import re
@@ -32,6 +41,8 @@ from shutil import copy2
 from typing import TYPE_CHECKING
 
 from .exceptions import WorktreeError
+from .stamps import held_elsewhere, set_aside, stamp_path, write_stamp
+from .utils import copy_file_if_changed
 
 if TYPE_CHECKING:
     from .configuring.settings import GlobalSettings
@@ -62,6 +73,24 @@ class AddedWorktree:
     """The commit it starts from."""
     copied: int
     """How many files were copied from the main checkout."""
+
+
+@dataclass(frozen=True)
+class Renders:
+    """What `hand_over` does with a worktree's builds: paths in the checkout."""
+
+    copied: tuple[str, ...] = ()
+    """Copied into the main checkout, which lacked them."""
+    set_aside: tuple[str, ...] = ()
+    """Kept in the repository's git directory, the main checkout's own \
+    copy being stamped otherwise."""
+
+
+@dataclass(frozen=True)
+class Removed:
+    kept_branch: bool
+    """Whether its branch was kept, for its unsynced commits."""
+    renders: Renders
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -226,8 +255,135 @@ def seed(source: Path, path: Path, entries: tuple[str, ...]) -> int:
     return len(files)
 
 
-def remove(settings: "GlobalSettings", name: str, *, force: bool = False) -> bool:
+def hand_over(
+    source: Path,
+    main: Path,
+    entries: tuple[str, ...],
+    *,
+    store: bool,
+    dry_run: bool = False,
+) -> Renders:
+    """Give the main checkout `source`'s stamped builds under `entries`.
+
+    Each stamped output (`deckz.stamps`) the main checkout lacks is copied \
+    there, its companions (the files beside it named after it, e.g. a \
+    video's poster) first and its stamp last. With `store`, each the main \
+    checkout holds stamped otherwise is set aside (`deckz.stamps.set_aside`), \
+    unless another checkout or the store holds it with the same stamp. One \
+    stamped the same in both is left alone.
+
+    Args:
+        source: The worktree.
+        main: The main checkout.
+        entries: `deckz.yml`'s `worktree.seed`.
+        store: Set aside what the main checkout holds stamped otherwise.
+        dry_run: Only say what would be done.
+
+    Returns:
+        What was (or would be) copied and set aside.
+    """
+    if not entries or not source.is_dir():
+        return Renders()
+    copied, kept = [], []
+    for output, companions in _stamped_builds(source, entries):
+        stamp = (source / stamp_path(output)).read_text(encoding="utf8").strip()
+        mine = main / output
+        if not mine.is_file():
+            copied.append(str(output))
+            if not dry_run:
+                _copy_build(source, main, output, companions, stamp)
+        elif (
+            store
+            and _read(stamp_path(mine)) != stamp
+            and not held_elsewhere(source, output, stamp)
+        ):
+            kept.append(str(output))
+            if not dry_run:
+                set_aside(
+                    source, source / output, [source / file for file in companions]
+                )
+    return Renders(tuple(copied), tuple(kept))
+
+
+def _stamped_builds(
+    checkout: Path, entries: tuple[str, ...]
+) -> list[tuple[Path, list[Path]]]:
+    """The stamped outputs among `checkout`'s ignored files under `entries`.
+
+    Returns:
+        Each output and its companions (the files beside it named after it, \
+        e.g. a video's poster and quality), relative to `checkout`, sorted.
+    """
+    listed = _git(
+        checkout,
+        "ls-files",
+        "-z",
+        "--others",
+        "--ignored",
+        "--exclude-standard",
+        "--",
+        *entries,
+    )
+    files = {Path(file) for file in listed.split("\0") if file}
+    outputs = {
+        file.with_name(file.name.removesuffix(".stamp"))
+        for file in files
+        if file.name.endswith(".stamp")
+    }
+    by_dir: dict[Path, list[Path]] = {}
+    for file in files - outputs:
+        if not file.name.endswith(".stamp"):
+            by_dir.setdefault(file.parent, []).append(file)
+    return [
+        (
+            output,
+            sorted(
+                file
+                for file in by_dir.get(output.parent, ())
+                if file.name.startswith(f"{output.stem}.")
+            ),
+        )
+        for output in sorted(outputs & files)
+    ]
+
+
+def _copy_build(
+    source: Path, main: Path, output: Path, companions: list[Path], stamp: str
+) -> None:
+    """Copy `output` and its companions from `source` to `main`, its stamp last."""
+    # Its stamp, if left, isn't about the files copied.
+    stamp_path(main / output).unlink(missing_ok=True)
+    for file in (*companions, output):
+        copy_file_if_changed(source / file, main / file)
+    write_stamp(main / output, stamp)
+
+
+def _read(path: Path) -> str | None:
+    try:
+        return path.read_text(encoding="utf8").strip()
+    except OSError:
+        return None
+
+
+def pending_renders(settings: "GlobalSettings", name: str) -> Renders:
+    """What `remove` would do with the worktree `name`'s builds.
+
+    Returns:
+        Them, nothing done; nothing for an unknown worktree.
+    """
+    worktree = next((w for w in worktrees(settings) if w.name == name), None)
+    if worktree is None:
+        return Renders()
+    main = main_checkout(settings.paths.git_dir)
+    return hand_over(
+        worktree.path, main, settings.worktree.seed, store=True, dry_run=True
+    )
+
+
+def remove(settings: "GlobalSettings", name: str, *, force: bool = False) -> Removed:
     """Remove the worktree `name`, and its branch unless it has unsynced commits.
+
+    Its builds go to the main checkout first (`hand_over`).
 
     Args:
         settings: The settings of any checkout of the repository.
@@ -236,7 +392,7 @@ def remove(settings: "GlobalSettings", name: str, *, force: bool = False) -> boo
             commits (kept on its branch).
 
     Returns:
-        Whether its branch was kept, for its unsynced commits.
+        Whether its branch was kept, and what became of its builds.
 
     Raises:
         WorktreeError: If there's no such worktree, it's the one running \
@@ -254,28 +410,34 @@ def remove(settings: "GlobalSettings", name: str, *, force: bool = False) -> boo
     if (worktree.changes or worktree.unsynced) and not force:
         raise WorktreeError(_refusal(worktree))
     main = main_checkout(settings.paths.git_dir)
+    renders = hand_over(worktree.path, main, settings.worktree.seed, store=True)
     _git(
         main, "worktree", "remove", *(["--force"] if force else []), str(worktree.path)
     )
     if worktree.unsynced:
-        return True
+        return Removed(kept_branch=True, renders=renders)
     _git(main, "branch", "-D", worktree.branch)
-    return False
+    return Removed(kept_branch=False, renders=renders)
 
 
-def land(settings: "GlobalSettings", name: str | None = None) -> tuple[str, int]:
+def land(
+    settings: "GlobalSettings", name: str | None = None
+) -> tuple[str, int, Renders]:
     """Put the worktree `name`'s commits on the main checkout's branch.
 
     Rebases its branch onto the main checkout's (linear history), then
     fast-forwards the main checkout to it, which updates the main checkout's
-    files: git refuses if one of them has an uncommitted change there.
+    files: git refuses if one of them has an uncommitted change there. Then
+    the worktree's builds the main checkout lacks are copied there
+    (`hand_over`).
 
     Args:
         settings: The settings of any checkout of the repository.
         name: The worktree's name; None for the one running the command.
 
     Returns:
-        The main checkout's branch, and how many commits it gained.
+        The main checkout's branch, how many commits it gained, and the \
+        builds copied.
 
     Raises:
         WorktreeError: If there's no such worktree, the rebase conflicts or \
@@ -318,7 +480,8 @@ def land(settings: "GlobalSettings", name: str | None = None) -> tuple[str, int]
             "uncommitted change there touches one of the landed files"
         )
         raise WorktreeError(msg) from error
-    return target, count
+    renders = hand_over(worktree.path, main, settings.worktree.seed, store=False)
+    return target, count, renders
 
 
 def _refusal(worktree: Worktree) -> str:
