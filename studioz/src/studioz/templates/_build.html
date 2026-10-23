@@ -5,6 +5,7 @@
     <h2>{% if deck %}Construire {{ deck }}{% else %}Construire toutes les formations{% endif %}</h2>
     <button type="button" class="secondary" onclick="this.closest('dialog').close()">Fermer</button>
   </header>
+  <div hx-get="/espaces/{{ workspace.name }}/mise-a-jour?avis=true" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
   <fieldset class="choices">
     <legend>Documents</legend>
     {% for kind, label in kinds.items() %}

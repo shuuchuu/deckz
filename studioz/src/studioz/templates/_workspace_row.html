@@ -3,7 +3,7 @@
   <td><a href="/espaces/{{ workspace.name }}">{{ workspace.name }}</a></td>
   <td>{{ worktree.changes | length or "aucune" }}</td>
   <td>{{ worktree.unsynced or "aucun" }}</td>
-  <td>{% if workspace.behind is none %}—{% else %}{{ workspace.behind or "à jour" }}{% endif %}</td>
+  <td>{% if workspace.behind is none %}—{% elif workspace.behind %}<a href="/espaces/{{ workspace.name }}" title="Ses commits ou ses modifications l'empêchent de se mettre à jour seul : l'ouvrir pour le mettre à jour">{{ workspace.behind }}</a>{% else %}à jour{% endif %}</td>
   <td hx-get="/espaces/{{ workspace.name }}/taille" hx-trigger="load">…</td>
   <td>{{ workspace.last_use | ago }}</td>
   <td>

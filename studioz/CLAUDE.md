@@ -65,6 +65,14 @@ check --staged` with a temporary `GIT_INDEX_FILE` holding the commit, and
 `deckz hooks check-commits`), then a push of exactly the commit checked,
 never forced. The dialogs open through `static/dialogs.js`, so that a panel
 reloading under its button doesn't drop the answer.
+`studioz.updates` keeps the workspaces current: the upstream branch fetched at
+startup, every 15 minutes (`create_app(fetch_every=…)`) and when a page opens (at
+most once a minute; the tests' conftest turns that off), with no `FETCH_HEAD`; a
+workspace behind it with nothing of its own (no commit, nothing uncommitted, no
+job nor agent turn running) fast-forwarded at once, any update (that one, or the
+person's from the Sync dialog) followed by the workspace's `deckz setup`, and the
+top bar's banner (`_currency.html`) saying what it brought and what the setup
+reported, or offering the update; the build and upload dialogs warn when behind.
 `studioz.jobs` runs the long commands a person starts (`studioz.actions`: a
 deck's or every deck's full build, `deckz upload` after showing `deckz upload
 --dry-run`, `deckz labs|videos publish`), each workspace's one after the other,

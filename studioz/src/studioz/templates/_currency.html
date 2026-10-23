@@ -1,0 +1,32 @@
+{#- Whether the workspace is current with the upstream branch (`studioz.updates`):
+    the top bar's banner, or, with `notice`, a build or upload dialog's notice. -#}
+{% set url = "/espaces/" ~ workspace.name ~ "/mise-a-jour" %}
+{% if notice %}
+<div class="currency-notice">
+  {% if state and state.behind %}
+  <p class="error">{{ state.upstream.name }} a {{ state.behind }} commit{{ "s" if state.behind > 1 }} que l'espace n'a pas :
+    ce que vous construisez ou envoyez n'en tient pas compte. Mettez l'espace à jour d'abord, sauf raison particulière.</p>
+  <p><button type="button" data-dialog="#sync-dialog" data-url="/espaces/{{ workspace.name }}/synchronisation/formulaire"
+             onclick="this.closest('dialog').close()">Mettre à jour d'abord…</button></p>
+  {% endif %}
+</div>
+{% else %}
+<span class="currency" id="currency" hx-get="{{ url }}" hx-trigger="every 30s, workspace-changed from:body" hx-target="this" hx-swap="outerHTML">
+  {% if update %}
+  {% set count = update.setup | length %}
+  <span class="currency-note{% if count %} warning{% endif %}" role="status">
+    <span class="currency-text"{% if count %} title="{% for problem in update.setup %}{{ problem.name }} : {{ problem.detail }}{% if not loop.last %}&#10;&#10;{% endif %}{% endfor %}"{% endif %}>
+      {% if update.automatic %}Mis à jour automatiquement{% else %}Mis à jour{% endif %} {{ update.at | ago }},
+      {{ update.commits }} commit{{ "s" if update.commits > 1 }} de {{ state.upstream.name if state else "la branche amont" }}{% if update.setup_running %}
+      · deckz setup en cours…{% elif count %} · deckz setup : {{ count }} problème{{ "s" if count > 1 }}
+      ({% for problem in update.setup %}{{ problem.name }}{% if not loop.last %}, {% endif %}{% endfor %}){% endif %}</span>
+    {% if not update.setup_running %}<button type="button" class="icon" hx-post="{{ url }}/vu" hx-target="#currency" hx-swap="outerHTML"
+            title="Fermer" aria-label="Fermer">✕</button>{% endif %}
+  </span>
+  {% elif state and state.behind %}
+  <span class="currency-note warning">{{ state.upstream.name }} a {{ state.behind }} commit{{ "s" if state.behind > 1 }} que l'espace n'a pas
+    <button type="button" data-dialog="#sync-dialog" data-url="/espaces/{{ workspace.name }}/synchronisation/formulaire">Mettre à jour…</button></span>
+  {% endif %}
+  {% if error %}<span class="currency-note warning" title="{{ error }}">Impossible de récupérer {{ state.upstream.name if state else "la branche amont" }}</span>{% endif %}
+</span>
+{% endif %}

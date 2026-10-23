@@ -1,5 +1,6 @@
 <span class="crumb-sep">›</span>
 <a class="workspace-name" href="/espaces/{{ workspace.name }}">{{ workspace.name }}</a>
+<span class="currency" id="currency" hx-get="/espaces/{{ workspace.name }}/mise-a-jour" hx-trigger="load" hx-swap="outerHTML"></span>
 <button type="button" class="command-center" data-palette title="Ctrl+P : une formation · Ctrl+Maj+P : une commande">
   <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></svg>
   Rechercher une formation, une commande…<kbd>Ctrl+P</kbd></button>

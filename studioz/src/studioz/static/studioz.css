@@ -118,6 +118,12 @@ tr.closed td { color: var(--muted); }
 .problems .blocks { display: inline-block; margin-right: 0.4em; padding: 0 0.35em; border-radius: 3px; background: var(--error-bg); color: var(--danger); font-size: 0.8em; }
 .problems .hint, .problems .error { font-size: 0.85em; margin: 0.4rem 0; }
 .topbar a.workspace-name { color: inherit; text-decoration: none; }
+/* Whether the workspace is current (`_currency.html`): a note beside its name. */
+.currency { display: inline-flex; gap: 0.4rem; align-items: center; min-width: 0; margin-left: 0.6rem; font-size: 0.85em; }
+.currency-note { display: inline-flex; gap: 0.4rem; align-items: center; max-width: 45vw; padding: 0.05rem 0.5rem; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); white-space: nowrap; }
+.currency-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.currency-note.warning { border-color: var(--danger); background: var(--error-bg); color: var(--text); }
+.currency-note button { padding: 0 0.5rem; font-size: 1em; }
 
 .deck { display: flex; flex-direction: column; min-width: 0; min-height: 0; container-type: inline-size; }
 /* Too narrow for the PDF and the editor side by side: one above the other. */
