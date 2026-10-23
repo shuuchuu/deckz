@@ -119,7 +119,8 @@ one Claude Code conversation per workspace through the Agent SDK, logged in as
 the person (never an API key: studioz removes `ANTHROPIC_API_KEY`), on `studioz
 --model` (`sonnet`) unless a workflow declares its own model for its turns
 (`set_model` on the running process), in the
-workspace with the repository's project settings, `auto` permissions in the
+workspace with the repository's project settings (its skills only, none of Claude
+Code's own, and without the tools of `agent.UNUSED_TOOLS`), `auto` permissions in the
 sandbox, and a `PreToolUse` hook refusing the `git` commands that commit, push
 or move a branch (the person commits from studioz), and `deckz labs gpu up|run|pass`
 but a dry run (a pass starts from its modal, which gives the cost). An API error
