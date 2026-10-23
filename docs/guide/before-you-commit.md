@@ -15,7 +15,9 @@ says where your work stands, item by item, each with what to do:
 - lab notebooks and videos not published as committed or rendered (compared with
   the published ones as last fetched; `--fetch` fetches them first), and the demos
   you changed whose code no longer matches their outputs;
-- the PDFs of the decks your changes reach that don't match them anymore.
+- the PDFs of the decks your changes reach that don't match them anymore;
+- with `review.dir` set, the content of those decks never reviewed, or changed since
+  its review (see [Reviews](reviews.md)).
 
 "Your changes" are your uncommitted files plus the commits you haven't pushed
 (`--since <revision>` to look further back).
@@ -28,7 +30,8 @@ says instead what's left before teaching or uploading one deck, whoever made it:
 checks' problems in its files (deferred ones included: they're due now), what fails
 its English build, its files waiting for a port to the other language, and its built
 PDFs that don't match its
-content, with their shrunk frames and header or footer lines that wrap.
+content, with their shrunk frames and header or footer lines that wrap, and how many
+of its content files aren't reviewed at their current version.
 
 ## Committing
 

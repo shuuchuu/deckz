@@ -23,7 +23,9 @@ def content(
     notebooks in deckz's canonical JSON (`lab-format`),
     asset credit lines free of LaTeX (`asset-credits`), no raw LaTeX in
     content (`raw-latex`, `lab-urls`), content files' Jinja tags
-    (`jinja-syntax`), and every deck parsing in French (`deck-definitions`).
+    (`jinja-syntax`), every deck parsing in French (`deck-definitions`),
+    and, with `review.dir`, review reports' front matter well formed and
+    naming existing files (`review-headers`).
     A `templates/checks.py` module (see `GlobalPaths.checks_module`) can
     add the repository's own, merged in under their own names.
 
@@ -31,7 +33,8 @@ def content(
     those `deckz.yml` lists under `checks.opt_in`, which run only when
     named, and exits 1 if a blocking check reports a problem. A deferred
     check's problems (`checks.deferred`; by default every built-in but
-    `lab-secrets`, `jinja-syntax` and `deck-definitions`) are printed
+    `lab-secrets`, `jinja-syntax`, `deck-definitions` and `review-headers`)
+    are printed
     without failing: their harm comes later than the commit (a lab
     published, a deck uploaded), and `deckz status` keeps showing them.
     Checks named in CHECKS fail on any problem.

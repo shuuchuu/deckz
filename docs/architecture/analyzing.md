@@ -9,7 +9,7 @@ flavors, marking a translation synced).
 |---|---|
 | **Responsibility** | Read-only analyses of a managed repository, its git history and its built outputs; deckz's own content checks |
 | **Owns** | The built-in checks (`content_checks.CHECKS`) and which ones are deferred (`DEFERRED`) |
-| **Depends on** | `checking`, `course_notes`, `labs`, `extras` (optional imports), `commits`, the factories (parsers), `components.frame_markers`/`marker_records` (what builds recorded) |
+| **Depends on** | `checking`, `course_notes`, `labs`, `extras` (optional imports), `commits`, `worktrees` (the main checkout's branch), the factories (parsers), `components.frame_markers`/`marker_records` (what builds recorded) |
 | **Never** | Compiles. Reading a built PDF uses what its compilation recorded (`<main>.markers.json`), or a Typst query when there is no record |
 | **Fails with** | `DeckzError` subclasses, or findings (lists of messages) for checks |
 
@@ -17,7 +17,7 @@ flavors, marking a translation synced).
 
 | Module | Backs | What it does |
 |---|---|---|
-| [`content_checks`][deckz.analyzing.content_checks] | `deckz check` | Generic content checks, each a `(settings, paths) -> list[str]` in `CHECKS`: `lab-ids`, `lab-pairs`, `lab-outputs`, `lab-secrets`, `lab-format`, `asset-credits`, `raw-latex`, `jinja-syntax`, `deck-definitions`, `lab-urls`, `course-notes-files`, `course-notes-pairs` |
+| [`content_checks`][deckz.analyzing.content_checks] | `deckz check` | Generic content checks, each a `(settings, paths) -> list[str]` in `CHECKS`: `lab-ids`, `lab-pairs`, `lab-outputs`, `lab-secrets`, `lab-format`, `asset-credits`, `raw-latex`, `jinja-syntax`, `deck-definitions`, `lab-urls`, `course-notes-files`, `course-notes-pairs`, `review-headers` |
 | [`affected`][deckz.analyzing.affected] | `deckz show affected`, `status`, `upload` | Which decks a change of some files reaches (in French: an `en/` file counts as its French sibling), and their findings |
 | [`i18n_stale`][deckz.analyzing.i18n_stale] | `deckz i18n stale`, `mark-synced`, the commit-msg hook | fr/en pairs, and their staleness from the history's `Lang-sync` trailers |
 | [`i18n_coverage`][deckz.analyzing.i18n_coverage] | `deckz i18n missing-en`, `status` | French content, titles and variables with no English counterpart |
@@ -26,7 +26,8 @@ flavors, marking a translation synced).
 | [`overflow`][deckz.analyzing.overflow] | `deckz check overflow`, `status`, studioz | Shrunk frames, wrapped tables and lines, with their sources |
 | [`parity`][deckz.analyzing.parity] | `deckz check parity` | Compare a deck's PDF and HTML versions, slide by slide (`deckz[parity]`) |
 | [`sections_search`][deckz.analyzing.sections_search] | `deckz search-sections`, `section-files`, `section-flavors` | Find shared sections by keyword, list their flavors and files |
-| [`sections_analyzer`][deckz.analyzing.sections_analyzer] | `deckz deps` | Which sections, flavors and files the decks use |
+| [`sections_analyzer`][deckz.analyzing.sections_analyzer] | `deckz deps` | Which sections, flavors and files the decks use; each flavor's files and frames (`frame_count`, the one frame count), the decks' total frames |
+| [`review`][deckz.analyzing.review] | `deckz review`, the `review-headers` check, `status` | The review registry: the reports under `review.dir`, whose front matter's `reviewed` key records each file reviewed by its blob sha; files' states (fresh, stale, unreviewed), the sections ranked by what's left to review, diffs since a review, and `mark`, which rewrites that key only and refuses a file changed from the main line since its review |
 | [`flavor_renamer`][deckz.analyzing.flavor_renamer], [`flavors_merger`][deckz.analyzing.flavors_merger], [`flavor_files`][deckz.analyzing.flavor_files] | `deckz flavor rename`, `deduplicate` | Edit section definitions and every deck referring to them |
 
 ## Content checks
@@ -57,7 +58,8 @@ flowchart TB
   names; `deck-definitions` parses every deck in French, in a process pool.
 - A check **blocks** or is **deferred** (`ChecksSettings.blocking`: `deckz.yml`'s
   `checks.deferred`, else `content_checks.DEFERRED`, every built-in but `lab-secrets`,
-  `jinja-syntax` and `deck-definitions`; a plugin check blocks unless listed). `deckz
+  `jinja-syntax`, `deck-definitions` and `review-headers`; a plugin check blocks
+  unless listed). `deckz
   check` fails on a blocking check's findings, or on any finding of a check named on its
   command line; `--plain` and `--json` say which block, and `deckz status` and studioz
   mark them (`blocks_commit`). A blocking

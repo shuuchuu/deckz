@@ -32,6 +32,7 @@ a repository's own checks block unless it lists them.
 | `lab-secrets` | yes | no token or password in a notebook (they're public) | remove it, revoke it; `labs.not_secrets` for a false positive |
 | `jinja-syntax` | yes | every content file's Jinja parses with the repository's environment, its filters and tests known (otherwise only the build fails) | fix the tag or the filter's name; `{% raw %}…{% endraw %}` around braces meant as text |
 | `deck-definitions` | yes | every deck parses in French: its `deck.yml`, the sections it includes and their `.yml`, the files they name, its `variables.yml` | fix the YAML, or restore (or stop including) the section or file it names |
+| `review-headers` | yes | every review report's `reviewed` front matter is well formed, and the files it records exist (only with `review.dir`, see [Reviews](reviews.md)) | a renamed file: `deckz review mark <report> --forget <old> <new>`; a deleted one: `--forget <old>` |
 | `lab-ids` | no | every notebook has a valid, unique published ID | `deckz labs ids` |
 | `lab-pairs` | no | every lab exists in French and English, with the same cells and code | translate the missing one; `deckz labs compare <lab dir>` |
 | `lab-outputs` | no | hands-on notebooks store no outputs; demos store a full run's, none of them blank | clear them, or run the demo and `deckz labs outputs` |

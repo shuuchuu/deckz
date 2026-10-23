@@ -87,7 +87,8 @@ def status(
         for target in found.targets:
             _print_target(target, plain=plain)
     else:
-        _print_ranking(found.ranked, plain=plain)
+        content = settings.paths.content_dir.relative_to(settings.paths.git_dir)
+        _print_ranking(found.ranked, content.as_posix(), plain=plain)
     for problem in found.problems:
         print(f"unreadable report: {problem}", file=stderr)
 
@@ -204,7 +205,9 @@ def _print_target(target: "TargetReview", *, plain: bool) -> None:
         print("A deleted or renamed file: `deckz review mark <report> --forget <path>`")
 
 
-def _print_ranking(ranked: "Sequence[RankedSection]", *, plain: bool) -> None:
+def _print_ranking(
+    ranked: "Sequence[RankedSection]", content: str, *, plain: bool
+) -> None:
     if plain:
         for r in ranked:
             values = (
@@ -234,5 +237,6 @@ def _print_ranking(ranked: "Sequence[RankedSection]", *, plain: bool) -> None:
         )
     print(
         "\nscore: the decks including the section times the frames of its stale "
-        "and unreviewed files. `deckz review status <its directory>` lists them."
+        f"and unreviewed files. `deckz review status {content}/<section>` lists "
+        "them, with its subsections'."
     )

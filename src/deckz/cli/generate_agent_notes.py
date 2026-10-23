@@ -122,6 +122,15 @@ no variables of its own: every file of a deck renders with the same
   When a listed file's changes need no port after all, `deckz i18n
   mark-synced PATH... --reason "<why>"` records it in an empty commit
   (a commit: only where committing is yours to do).
+- `deckz review status [DECK_DIR | PATH...]` (with `review.dir` set in
+  `deckz.yml`) -- which files a review report records at their current
+  version (fresh), changed since (stale) or never reviewed; with no
+  argument, the shared sections most worth reviewing next. `deckz review
+  diff REPORT` shows what changed since a review, so a review reads only
+  that; `deckz review mark REPORT [PATH...]` records what was read, and
+  refuses a file whose change came from the main branch until it's read
+  and passed with `--accept PATH`. Never edit a report's `reviewed`
+  front matter by hand.
 - `deckz labs stale [NOTEBOOKS...]` -- demos whose code cells changed
   after their outputs were written, from git history alone. Rerunning
   one costs a run (GPU time for some): when a listed change alters no

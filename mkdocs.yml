@@ -17,6 +17,7 @@ nav:
       - Translating: guide/translating.md
       - Labs and videos: guide/labs-and-videos.md
       - Before committing, teaching, publishing: guide/before-you-commit.md
+      - Reviews: guide/reviews.md
       - Checks: guide/checks.md
   - Architecture:
       - architecture/index.md
