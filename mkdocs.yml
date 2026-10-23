@@ -18,7 +18,27 @@ nav:
       - Labs and videos: guide/labs-and-videos.md
       - Before committing, teaching, publishing: guide/before-you-commit.md
       - Checks: guide/checks.md
+  - Architecture:
+      - architecture/index.md
+      - Command line: architecture/cli.md
+      - Tasks: architecture/tasks.md
+      - Build pipeline: architecture/pipelines.md
+      - Analyses and checks: architecture/analyzing.md
+      - Components: architecture/components.md
+      - Domain libraries: architecture/libraries.md
+      - Foundations: architecture/foundations.md
+      - The repository's plugins: architecture/plugins.md
+      - studioz: architecture/studioz.md
+      - Files and concurrency: architecture/state.md
   - Code Reference: reference/
+
+# Mermaid diagrams, in docs/architecture/.
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
 
 plugins:
   - search

@@ -14,6 +14,8 @@ def task_check():
             "uv run ruff check src/deckz tests studioz/src studioz/tests",
             "uv run ruff format --check src/deckz tests studioz/src studioz/tests",
             "uv run ty check src/deckz tests studioz/src studioz/tests",
+            # The layers and boundaries of docs/architecture/, `[tool.importlinter]`.
+            "uv run lint-imports --no-logo",
         ],
     }
 
