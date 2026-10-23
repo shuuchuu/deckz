@@ -146,8 +146,11 @@ def _launch(
     # Set apart from basicConfig, which is a no-op once the root logger has
     # handlers, e.g. on a second `main` call in the same process.
     getLogger().setLevel(DEBUG if verbose or debug else WARNING if quiet else INFO)
+    from ..stamps import adoptions
+
     try:
-        app(tokens, result_action="return_none", exit_on_error=False)
+        with adoptions():
+            app(tokens, result_action="return_none", exit_on_error=False)
     except KeyboardInterrupt:
         if debug or environ.get("DECKZ_DEBUG"):
             raise

@@ -46,6 +46,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .configuring.settings import GlobalSettings
+    from .worktrees import Removed
 
 # Programs that change the files they name: refused when one is in the main
 # checkout. Every non-option argument is one, except where `_targets` says.
@@ -679,10 +680,14 @@ def create_worktree(settings: "GlobalSettings", name: str) -> Path:
     return added.path
 
 
-def remove_worktree(settings: "GlobalSettings", path: Path) -> None:
+def remove_worktree(settings: "GlobalSettings", path: Path) -> "Removed":
     """Remove the worktree at `path`, as `deckz worktree remove` would.
 
-    Refuses, as it does, while the worktree holds work nothing else has.
+    Refuses, as it does, while the worktree holds work nothing else has; \
+    hands its builds over to the main checkout, as it does.
+
+    Returns:
+        What `deckz.worktrees.remove` did.
 
     Raises:
         WorktreeError: If `path` isn't one of `deckz worktree`'s.
@@ -693,7 +698,6 @@ def remove_worktree(settings: "GlobalSettings", path: Path) -> None:
     resolved = path.resolve()
     for worktree in worktrees(settings):
         if worktree.path.resolve() == resolved:
-            remove(settings, worktree.name)
-            return
+            return remove(settings, worktree.name)
     msg = f"{path} isn't a `deckz worktree`"
     raise WorktreeError(msg)

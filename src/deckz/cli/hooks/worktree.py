@@ -43,7 +43,9 @@ def worktree_remove(*, workdir: Path = Path()) -> None:
 
     Wired as Claude Code's WorktreeRemove hook by `deckz hooks install`:
     `deckz worktree remove`, which refuses while the worktree holds work
-    nothing else has (uncommitted changes, unsynced commits).
+    nothing else has (uncommitted changes, unsynced commits), and hands its
+    builds over to the main checkout: what it copied and set aside goes to
+    stderr.
 
     Args:
         workdir: Path to move into before resolving settings
@@ -58,7 +60,15 @@ def worktree_remove(*, workdir: Path = Path()) -> None:
 
     path = read_payload().get("worktree_path")
     try:
-        remove_worktree(GlobalSettings.from_yaml(workdir), Path(path or ""))
+        removed = remove_worktree(GlobalSettings.from_yaml(workdir), Path(path or ""))
     except Exception as error:
         print(f"deckz hooks worktree-remove: kept {path}: {error}", file=stderr)
         raise SystemExit(1) from error
+    renders = removed.renders
+    print(
+        f"deckz hooks worktree-remove: removed {path}; copied "
+        f"{len(renders.copied)} build(s) into the main checkout, set aside "
+        f"{len(renders.set_aside)}"
+        + (f" ({', '.join(renders.set_aside)})" if renders.set_aside else ""),
+        file=stderr,
+    )

@@ -3,6 +3,7 @@ from functools import cached_property
 from pathlib import Path
 
 from ..exceptions import HookError
+from ..stamps import adoptions
 from ..utils import file_lock
 from .hooks import load_hook
 from .protocols import AssetsBuilderProtocol, CompilerProtocol
@@ -46,7 +47,7 @@ class AssetsBuilder(AssetsBuilderProtocol):
 
     def build_assets(self) -> None:
         builders = self._builders
-        with file_lock(self._lock, "Waiting for another build's assets"):
+        with file_lock(self._lock, "Waiting for another build's assets"), adoptions():
             for assets_builder in builders:
                 assets_builder.build_assets()
 

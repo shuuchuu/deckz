@@ -1,6 +1,8 @@
 import subprocess
 from pathlib import Path
 
+from pytest import CaptureFixture, MonkeyPatch
+
 from deckz.agent_checkouts import create_worktree, edit_denial, remove_worktree
 from deckz.agent_hooks import bash_denial, commands, post_bash_report
 from deckz.configuring.settings import GlobalPaths, GlobalSettings, WorktreeSettings
@@ -265,5 +267,38 @@ def test_create_worktree_makes_a_deckz_worktree(tmp_path: Path) -> None:
 
     assert path == tmp_path / "repo--feature-x-y"
     assert (path / "a.md").is_file()
-    remove_worktree(_settings(main), path)
+    removed = remove_worktree(_settings(main), path)
     assert not path.exists()
+    assert not removed.kept_branch
+
+
+def test_worktree_remove_hook_reports_the_builds_handed_over(
+    tmp_path: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    from io import StringIO
+    from json import dumps
+
+    from deckz.cli import main as deckz
+    from deckz.stamps import write_stamp
+
+    main = tmp_path / "repo"
+    _git(tmp_path, "init", "--quiet", "-b", "main", str(main))
+    (main / ".gitignore").write_text("/built/\n", encoding="utf8")
+    (main / "deckz.yml").write_text("worktree:\n  seed: [built]\n", encoding="utf8")
+    _git(main, "add", ".gitignore", "deckz.yml")
+    _git(main, "commit", "-m", "Init")
+    worktree = tmp_path / "repo--x"
+    _git(main, "worktree", "add", "--quiet", "-b", "ws/x", str(worktree))
+    (worktree / "built").mkdir()
+    write_stamp(worktree / "built" / "fig.svg", "s")
+    (worktree / "built" / "fig.svg").write_text("<svg/>", encoding="utf8")
+    payload = dumps({"worktree_path": str(worktree)})
+    monkeypatch.setattr("sys.stdin", StringIO(payload))
+
+    deckz(("hooks", "worktree-remove", "--workdir", str(main)))
+
+    captured = capsys.readouterr()
+    assert not worktree.exists()
+    assert (main / "built" / "fig.svg").read_text(encoding="utf8") == "<svg/>"
+    assert "copied 1 build(s) into the main checkout, set aside 0" in captured.err
+    assert captured.out == ""
