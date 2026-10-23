@@ -18,10 +18,9 @@ Phase 6 (the agent's usage) was planned on 2026-10-21 from the colleague's first
 afternoon; its increments 1 (the model), 2 (a new conversation for a new file), 3
 (the context's size) and 4 (slides' `docs/figures.md`, in slides' main as `b83c29fb`)
 are done. Phase 7's increments 1 (logging in, and errors naming their fix), 2
-(links in new tabs) and 3 (the slide in view) are done.
-**Next:** phase 7's increment 4 (the PDF's bookmarks;
-start with "Starting phase 7" below) and its
-"Also left", phase 6's increment 5
+(links in new tabs), 3 (the slide in view) and 4 (the PDF's outline) are done.
+**Next:** phase 7's "Also left" (start with "Starting phase 7" below), phase 6's
+increment 5
 (the colleague's next afternoon measured), "Then, with the colleague" (below
 phase 5), and the open items. A GPU pass rents a machine that costs money: never
 start one without the user saying so. `git log
@@ -53,7 +52,7 @@ architecture):
 | `checkpoints.py` | the workspace's files before and after each agent turn, and undoing the last one |
 | `asks.py` | what the dialogs ask the agent (prompts), and the proposed commit message |
 | `workflows.py` | the workflows a workspace's `deckz.yml` declares (`studioz.workflows`), their forms' prompts and files |
-| `static/` | `deck.js` (pdf.js viewer, comparison), `video.js` (a scene's page: before/after played together), `lab.js` and `notebook.js`/`notebook.css` (a notebook's page, and the sandboxed page inside its frame, MathJax's configuration), `editor.js` (CodeMirror: Markdown, YAML, Python), `dialogs.js` (dialogs opened from reloading panels), `agent.js` (the agent panel), `layout.js` (the VS Code layout: activity bar, sidebars, bottom panel, sashes, status bar), `notifications.js` (jobs' ends: toasts, the bell, desktop notifications), vendored JS (`uv run doit vendor`) |
+| `static/` | `deck.js` (pdf.js viewer, comparison, the slide in view, the Plan), `video.js` (a scene's page: before/after played together), `lab.js` and `notebook.js`/`notebook.css` (a notebook's page, and the sandboxed page inside its frame, MathJax's configuration), `editor.js` (CodeMirror: Markdown, YAML, Python), `dialogs.js` (dialogs opened from reloading panels), `agent.js` (the agent panel), `layout.js` (the VS Code layout: activity bar, sidebars, bottom panel, sashes, status bar), `notifications.js` (jobs' ends: toasts, the bell, desktop notifications), vendored JS (`uv run doit vendor`) |
 
 Tests: `studioz/tests/`, against temporary repositories, a fake `deckz` (a script
 in the workspace's `.venv/bin/`), a local bare remote and a fake Agent SDK client
@@ -165,10 +164,9 @@ checked for slides sessions (tell them only of a change in what deckz does), and
 pre-commit hook's two Ctrl-C timing tests fail about one run in three: retry the
 commit ("Also left" has their fix).
 
-Increments 1 (logging in), 2 (links in new tabs) and 3 (the slide in view) are done
-(their entries under phase 7); next is increment 4 (the PDF's bookmarks): `deck.js`
-already keeps the page in view (`showSlide`), which the outline's highlight can
-follow. Logging in on a scratch
+Increments 1 to 4 are done (their entries under phase 7); next is its "Also left",
+the flaky timing tests first (one failed again during increment 4, in a full run).
+Logging in on a scratch
 `CLAUDE_CONFIG_DIR` (empty) never touches the person's own login; a model that
 doesn't exist (`studioz --model claude-nonexistent-9`) and a bogus session id in a
 workspace's `.run/studioz/agent/session` give real errors at no cost.
@@ -1893,13 +1891,30 @@ the first one first, since it stops a newcomer before anything else works.
    from a message (VS Code's chat lets one untick the current file); a title shows
    Typst's markup as the build recorded it (`*Skills*\ :`), which the agent reads
    well but the line shows raw.
-4. **The PDF's bookmarks.** Typst writes the PDF's outline from the headings (check
-   which levels end up in it: sections, subsections, frames); studioz's viewer
-   (`deck.js`, pdf.js's `PDFViewer` alone, without pdf.js's own sidebar) shows none.
-   Read it with `pdf.getOutline()` and show it as a tree, collapsible, the section of
-   the page in view highlighted: in a "Plan" tab beside the deck's PDF or as a view
-   of the sidebar (the activity bar's Formations view lists decks, not a deck's
-   parts); a click goes to the page (`linkService.goToDestination`).
+4. **The PDF's bookmarks**: done 2026-10-23. **Found:** Typst's outline has the
+   deck's parts, sections and subsections, not its frames (`mutool show … outline`
+   on the Fortinet handout: 20 entries on 3 levels, "Informations sur la formation"
+   to "Quiz"). **Placed** as VS Code's Outline below its Explorer: a "Plan" section
+   at the bottom of the Formations view, on a deck's page only (`_sidebar.html`;
+   the view becomes a column, the deck list and the Plan, at most 55 % of it, each
+   scrolling on its own), foldable from its title (kept per browser). `deck.js`
+   (`loadOutline`) builds the tree from `pdf.getOutline()` after each PDF load, each
+   heading's page from its destination (`getDestination`, `getPageIndex`); parts
+   open by default, and what the person opens or closes stays across builds (keyed
+   by the titles from the top). A click goes to the heading
+   (`linkService.goToDestination`), back to the slides from the before/after view;
+   the heading of the page in view is marked (`markOutline`, at each page change),
+   or the outermost closed heading around it, scrolled into view in the tree. A PDF
+   with no outline says so. **Tried for real** in headless Chromium on
+   `studioz-dev`'s Fortinet deck: 20 headings, the five parts open; pages 1 and 2
+   (before the first heading) marked none; "Garde-fous" went to p. 19 and was
+   marked; at p. 41, "Évaluer un prompt" (closed) stood for its "Démonstration",
+   which was marked once opened; "AI Act" clicked from the before/after view went
+   back to the slides at p. 77; the Plan folded stayed so after a reload. No page
+   error. Not tried for real: a heading opened kept across a rebuild (the code keys
+   it like the deck tree's folders). **Left:** the frames themselves aren't in the
+   tree (the build's `/cadres` has them, with their files: a third level of frames
+   under each section would make the Plan a table of contents of the slides).
 
 **Also left** (from the review of what's open, 2026-10-21; not the colleague's
 notes), most useful first:

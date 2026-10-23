@@ -36,6 +36,15 @@ def test_deck_page(client: TestClient, workspace: Path) -> None:
     assert 'href="?lang=en"' in page.text
     # The PDF and the editor share the page by a sash.
     assert 'data-side="split"' in page.text
+    # The PDF's outline below the decks, filled by deck.js.
+    assert 'class="view with-outline" data-view="formations"' in page.text
+    assert 'id="outline-tree"' in page.text
+
+
+def test_no_outline_without_a_deck(client: TestClient, workspace: Path) -> None:
+    page = client.get("/espaces/demo").text
+    assert 'id="outline"' not in page
+    assert 'class="view" data-view="formations"' in page
 
 
 def test_only_decks_of_the_workspace(client: TestClient, workspace: Path) -> None:
