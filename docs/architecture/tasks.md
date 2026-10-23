@@ -40,7 +40,7 @@ also applied by a git hook or a check, which every contributor passes.
 |---|---|
 | **Responsibility** | Where a person's work stands, and what is left to do, each item with its fix |
 | **Owns** | `StatusSection`/`StatusItem` (sections told apart by their `key`); "your changes" (`base_revision`, `changed_paths`) |
-| **Depends on** | `pipelines` (what is outdated), `analyzing` (checks, i18n, affected decks, overflow), `labs`, `videos`, the factories |
+| **Depends on** | `pipelines` (what is outdated), `analyzing` (checks, i18n, affected decks, overflow), `labs`, `videos`, `remotes`, the factories |
 | **Never** | Touches the network unless `fetch` |
 | **Entry points** | [`status`][deckz.status.status], [`deck_status`][deckz.status.deck_status] (`deckz status [DECK]`) |
 | **Fails with** | `DeckzError` from what it reads (settings, git) |
@@ -54,7 +54,7 @@ section is a contract with studioz (see [studioz](studioz.md)).
 |---|---|
 | **Responsibility** | Set up a clone: every step idempotent, `check=True` changes nothing |
 | **Owns** | `SetupItem` (`ok`, `done`, `missing`, `failed`, with its fix) |
-| **Depends on** | `hooks_install`, `videos` (renders a build needs), `deckz.yml`'s `setup.requires`/`setup.steps` |
+| **Depends on** | `hooks_install`, `remotes` (`setup.remotes`), `videos` (renders a build needs), `deckz.yml`'s `setup.requires`/`setup.steps` |
 | **Never** | Fails half-way silently: each step reports its own item |
 | **Entry points** | [`setup`][deckz.setting_up.setup] (`deckz setup`), [`incomplete`][deckz.setting_up.incomplete] |
 | **Fails with** | Items with status `failed`, the CLI exiting 1 |

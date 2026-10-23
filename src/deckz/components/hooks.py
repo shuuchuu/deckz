@@ -1,6 +1,6 @@
 """Load the Python hooks a deckz-managed repository supplies.
 
-Two modules of the target repository are executed by deckz:
+Four modules of the target repository are executed by deckz:
 
 - `templates/jinja2/env.py`, defining \
     `environment_for(suffix: str) -> jinja2.Environment` (see \
@@ -8,7 +8,16 @@ Two modules of the target repository are executed by deckz:
 - `templates/assets_builders.py`, defining \
     `assets_builders(assets_dir: Path, compiler: CompilerProtocol) -> \
     Iterable[AssetsBuilderProtocol]` (see \
-    [`AssetsBuilder`][deckz.components.assets_builder.AssetsBuilder]).
+    [`AssetsBuilder`][deckz.components.assets_builder.AssetsBuilder]);
+- `templates/checks.py`, defining `checks(settings: GlobalSettings) -> \
+    Mapping[str, Callable[..., list[str]]]`, optional (see \
+    [`ChecksRunner`][deckz.components.checks.ChecksRunner]);
+- `templates/hooks.py`, defining `deny_bash(words: Sequence[str], cwd: \
+    Path, settings: GlobalSettings) -> str | None`, optional (see \
+    [`agent_hooks`][deckz.agent_hooks]).
+
+docs/architecture/plugins.md has the whole boundary, including what such \
+modules import from deckz.
 
 This is a trust boundary: loading a hook runs arbitrary code from the \
 repository, with the user's permissions, so deckz must only be run on \

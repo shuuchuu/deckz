@@ -21,9 +21,12 @@ full layout). Keep this distinction in mind: "the repo" (this codebase) vs.
 Dependency management and running: this project uses `uv`; run tools via
 `uv run <tool>`.
 
-- Lint + format-check + typecheck: `uv run doit check` (or individually:
+- Lint + format-check + typecheck + layers: `uv run doit check` (or individually:
   `uv run ruff check src/deckz tests`, `uv run ruff format --check src/deckz tests`,
-  `uv run ty check src/deckz tests`; each also covers `studioz/src studioz/tests`)
+  `uv run ty check src/deckz tests`, each also covering `studioz/src studioz/tests`;
+  and `uv run lint-imports`, the import-linter contracts of `[tool.importlinter]`
+  in `pyproject.toml`: deckz's layers, only the CLIs import `rich`/`cyclopts`,
+  concrete components come from the factories, deckz and studioz's boundary)
 - Tests: `uv run doit test` (runs `pytest -n auto`, parallel via pytest-xdist)
   or `uv run pytest` (serial)
 - Default doit task (`uv run doit`) runs `check` only, not `test`.
@@ -33,7 +36,9 @@ Dependency management and running: this project uses `uv`; run tools via
   `scripts/bumpver_pre_commit.sh` during `bumpver update` itself (to keep
   `uv.lock` in the same commit as the version bump) — it's not a git hook
   and isn't affected by `install_hooks`.
-- Docs: built with `mkdocs` from docstrings (see `mkdocs.yml`, `docs/`).
+- Docs: built with `mkdocs` from docstrings (see `mkdocs.yml`, `docs/`):
+  `docs/guide/` for the people running a deckz-managed repository,
+  `docs/architecture/` for those working on deckz, the code reference generated.
 - Plans: a plan for a multi-step change goes in `plans/`, and moves to
   `plans/archive/` once finished (what is left is only the user's to do:
   push, release).
@@ -60,6 +65,19 @@ into this checkout only a finished change. Before merging one that changes behav
 
 ## Architecture
 
+`docs/architecture/` is the architecture's reference: the layers (which
+the `layers` import-linter contract enforces), each part's responsibility,
+what it owns, depends on and never does, the boundaries with the managed
+repository's plugins and with studioz, and what deckz writes where. Keep it
+up to date in the same change as the code: a change that adds, moves or
+removes a module (the contract is exhaustive, so a new module fails `doit
+check` until it has a layer), adds a dependency between layers or a known
+exception (`ignore_imports`, and the table of `docs/architecture/index.md`),
+changes what a component owns on disk, a lock or a process boundary, or
+changes what the managed repository plugs in or imports, or what studioz
+relies on (`--json` outputs, `watch`'s log messages), updates the pages it
+makes wrong. The notes below are a summary for working on the code.
+
 ### CLI wiring
 
 `src/deckz/cli/__init__.py` creates the single `cyclopts` `App` and, in
@@ -81,9 +99,10 @@ themselves stay thin: they parse CLI args, build a `DeckSettings`/
 `src/deckz/checking.py`, or an `analyzing/*` module — no business logic
 lives in the `cli/` layer.
 
-The reverse holds too: the core never draws on the terminal. Rich widgets
-live only in `cli/_presentation.py` (`RichTreeVisitor`, `RichProgress`,
-`open_path`). The core reports progress through a
+The reverse holds too: the core never draws on the terminal (the `terminal`
+contract; `extras/uploading.py`'s own progress bars are its one known
+exception). Rich widgets live in `cli/`, most in `cli/_presentation.py`
+(`RichTreeVisitor`, `RichProgress`, `open_path`). The core reports progress through a
 `ProgressReporterProtocol` (`NullProgress` by default, `RichProgress` passed
 in by the `run` commands) and reports failures by raising a `DeckzError`
 subclass, e.g. `DeckParsingError` carrying the deck whose tree `main()`

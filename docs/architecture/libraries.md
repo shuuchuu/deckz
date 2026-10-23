@@ -1,7 +1,7 @@
 # Domain libraries
 
 Below the analyses are libraries for the domains deckz manages besides decks: lab
-notebooks, videos, side services, worktrees and commit trailers. Each library is plain
+notebooks, videos, side services, worktrees, commit trailers and publish remotes. Each library is plain
 code, with no dependency on the build pipeline. Several of them shell out (to `git`,
 `ssh`, `manim`, `ffmpeg`) or call a remote service, and their optional dependencies are
 deckz's extras.
@@ -12,7 +12,7 @@ deckz's extras.
 |---|---|
 | **Responsibility** | Lab notebooks: format, IDs, fr/en comparison, execution (local, container, rented GPU), outputs, secrets, publishing |
 | **Owns** | The notebooks' canonical JSON form (`notebook.canonical_dump`); `labs/published/`'s assembly; the GPU machines' state in `.run/gpu/<name>/` |
-| **Depends on** | `configuring`, `commits` (`Lab-outputs-current`), `worktrees` (a GPU pass), `extras` (optional imports), `exceptions` |
+| **Depends on** | `configuring`, `commits` (`Lab-outputs-current`), `worktrees` (a GPU pass), `remotes` (publishing), `extras` (optional imports), `exceptions` |
 | **Never** | Imports `analyzing` or `pipelines`: `analyzing.content_checks` uses `labs`, not the reverse |
 | **Fails with** | `LabIdConflictError`, `LabContainerError`, `LabPublishRefusedError`, `LabOutputsMismatchError`, `LabOutputsHookError`, `GpuRunError` |
 
@@ -32,7 +32,7 @@ deckz's extras.
 |---|---|
 | **Responsibility** | Discover `@register_scene` Manim scenes, render them and their posters, publish the renders |
 | **Owns** | The renders under `assets/videos/` and their stamps |
-| **Depends on** | `stamps`, `components.protocols`/`progress` (progress reporting), `configuring`, `utils` |
+| **Depends on** | `stamps`, `remotes` (publishing), `components.protocols`/`progress` (progress reporting), `configuring`, `utils` |
 | **Never** | Imports Manim to discover or list scenes: only rendering needs `deckz[videos]`, and it shells out to `manim`/`ffmpeg` |
 | **Fails with** | `VideoSceneError`, `VideoFetchError`, `VideoPublishRefusedError` |
 
@@ -68,3 +68,13 @@ repository's scenes and templates (see [plugins](plugins.md)).
 `Lang-synced`, `Lab-outputs-current`) and makes the empty commits that record a
 decision. deckz keeps no state of its own about history: what a commit settles is in its
 message.
+
+## `remotes`
+
+| | |
+|---|---|
+| **Responsibility** | The git remotes `labs publish` and `videos publish` push to: their lookup, fetching a published branch, the force-push |
+| **Owns** | The fix for a missing remote (`add_remote_fix`, with its URL from `deckz.yml`'s `setup.remotes`) |
+| **Depends on** | `exceptions` only; `git`, with the user's own credentials |
+| **Entry points** | `labs.publishing`, `videos.publishing`, `deckz labs publish`/`videos publish` (`require_remotes`), `setting_up` (which runs `git remote add` itself), `status` (reports a missing one) |
+| **Fails with** | [`RemoteError`][deckz.exceptions], carrying git's stderr and the fix |
