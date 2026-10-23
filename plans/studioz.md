@@ -2180,9 +2180,13 @@ phase 7".
    aside, the main checkout adopting the set-aside copy with its poster once its
    stamp matches, then `prune` dropping it; the dry run changing nothing; nothing
    set aside that another checkout holds; `prune` by age; `deckz setup`'s item;
-   the Fermer row, the refusal and the closed row. **Left:** a build adopted from
-   the store logs a line per output, not a summary; `agent_checkouts`'s removal
-   (Claude Code's `WorktreeRemove` hook) hands over too but reports nothing.
+   the Fermer row, the refusal and the closed row. Its two leftovers, done the
+   same day: copies are summed up in one line per assets build and per deckz
+   command ("Copied 6 build(s) up to date elsewhere rather than build them: 6 from
+   …", `stamps.adoptions()`, each copy at debug level within it; tried on a
+   scratch clone, a worktree missing 6 Typst figures); Claude Code's
+   `WorktreeRemove` hook (`deckz hooks worktree-remove`) prints to stderr what it
+   copied and set aside (`agent_checkouts.remove_worktree` returns `Removed`).
 
 ## Risks
 

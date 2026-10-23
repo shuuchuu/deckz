@@ -36,15 +36,21 @@ store (`<git common dir>/deckz/renders/<stamp>/`, each output at its path in
 the checkout, with its stamp and companions) is searched after the other
 checkouts. `prune` drops what a checkout holds again, and what's older than
 `STORE_DAYS`.
+
+Within `adoptions()` (an assets build, a deckz command), each copy is logged
+at debug level only, and one line sums them up at the end.
 """
 
 import ast
 import hashlib
-from collections.abc import Iterable
+from collections import Counter
+from collections.abc import Generator, Iterable
+from contextlib import contextmanager
 from logging import getLogger
 from os import utime
 from pathlib import Path
 from shutil import rmtree
+from threading import Lock
 from time import time
 
 from .utils import copy_file_if_changed, write_atomic
@@ -53,6 +59,50 @@ _logger = getLogger(__name__)
 
 STORE_DAYS = 30
 """How long an output set aside is kept for a checkout to adopt it."""
+
+_SET_ASIDE = "the builds set aside"
+_gathering: list[list[str]] = []
+"""Where each `adoptions()` in progress, innermost last, records its copies' \
+sources."""
+_gathering_lock = Lock()
+
+
+@contextmanager
+def adoptions() -> Generator[None]:
+    """Sum up in one log line the outputs `adopt` copies meanwhile.
+
+    Each copy is then logged at debug level only (`--verbose` shows it). \
+    Nested, the innermost gathers: a `--watch`'s rebuilds each get theirs.
+    """
+    gathered: list[str] = []
+    with _gathering_lock:
+        _gathering.append(gathered)
+    try:
+        yield
+    finally:
+        with _gathering_lock:
+            _gathering.remove(gathered)
+        if gathered:
+            sources = ", ".join(
+                f"{count} from {source}"
+                for source, count in Counter(gathered).most_common()
+            )
+            _logger.info(
+                "Copied %d build(s) up to date elsewhere rather than build them: %s",
+                len(gathered),
+                sources,
+            )
+
+
+def _record(relative: Path, source: str) -> None:
+    with _gathering_lock:
+        gathered = _gathering[-1] if _gathering else None
+        if gathered is not None:
+            gathered.append(source)
+    if gathered is None:
+        _logger.info("%s: copied from %s, where it's up to date", relative, source)
+    else:
+        _logger.debug("%s: copied from %s, where it's up to date", relative, source)
 
 
 def stamp_path(output: Path) -> Path:
@@ -166,10 +216,8 @@ def adopt(output: Path, stamp: str, companions: Iterable[Path] = ()) -> bool:
         if _read(found) != stamp:
             continue
         write_stamp(output, stamp)
-        if store is not None and other.parent == store:
-            _logger.info("%s: copied from the builds set aside", relative)
-        else:
-            _logger.info("%s: copied from %s, where it's up to date", relative, other)
+        from_store = store is not None and other.parent == store
+        _record(relative, _SET_ASIDE if from_store else str(other))
         return True
     return False
 

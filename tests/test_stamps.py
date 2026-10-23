@@ -2,10 +2,17 @@ import os
 import subprocess
 from pathlib import Path
 
-from pytest import MonkeyPatch, raises
+from pytest import LogCaptureFixture, MonkeyPatch, raises
 
 from deckz import stamps
-from deckz.stamps import digest, is_fresh, python_sources, stamp_path, write_stamp
+from deckz.stamps import (
+    adoptions,
+    digest,
+    is_fresh,
+    python_sources,
+    stamp_path,
+    write_stamp,
+)
 from deckz.utils import copy_file_if_changed, write_atomic
 
 
@@ -238,3 +245,30 @@ def test_is_fresh_leaves_unstamped_a_copy_rebuilt_while_copied(
 
 def test_is_fresh_outside_a_repository_copies_nothing(tmp_path: Path) -> None:
     assert not is_fresh(tmp_path / "fig.svg", "s")
+
+
+def test_adoptions_sums_up_the_copies_in_one_line(
+    tmp_path: Path, caplog: LogCaptureFixture
+) -> None:
+    main, a, b = _checkouts(tmp_path)
+    for name in ("one", "two"):
+        write_stamp(_write(main / "assets" / f"{name}.svg", name), name)
+    write_stamp(_write(b / "assets" / "three.svg", "three"), "three")
+    caplog.set_level("INFO", logger="deckz.stamps")
+
+    with adoptions():
+        for name in ("one", "two", "three"):
+            assert is_fresh(a / "assets" / f"{name}.svg", name)
+
+    (line,) = [r.getMessage() for r in caplog.records if r.levelname == "INFO"]
+    assert line == (
+        "Copied 3 build(s) up to date elsewhere rather than build them: "
+        f"2 from {main}, 1 from {b}"
+    )
+    # Outside, each copy gets its own line.
+    caplog.clear()
+    (a / "assets" / "one.svg").unlink()
+    assert is_fresh(a / "assets" / "one.svg", "one")
+    assert [r.getMessage() for r in caplog.records] == [
+        f"assets/one.svg: copied from {main}, where it's up to date"
+    ]

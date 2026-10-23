@@ -79,7 +79,9 @@ checkouts. A worktree going away sets aside the outputs the main checkout holds
 stamped otherwise (`set_aside`, from `worktrees.hand_over`) in a store in the
 shared git directory (`<git common dir>/deckz/renders/<stamp>/`), which `adopt`
 searches after the checkouts; `prune` (from `deckz setup`) drops an entry a
-checkout holds again, or older than `STORE_DAYS` (30).
+checkout holds again, or older than `STORE_DAYS` (30). Within `adoptions()` (each
+assets build, each deckz command), the copies are logged at debug level and summed
+up in one line at the end.
 
 ## `drive_links`
 
