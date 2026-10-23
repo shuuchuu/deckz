@@ -872,9 +872,13 @@ extras, see [Installation](#installation)) creates, in the deck's Drive
 folder, an empty file for every PDF a full build of the deck writes in those
 languages (each kind, each part handout, the course notes in the languages
 they have chapters in) that has none yet -- a PDF already online keeps its
-file and link -- and records their IDs in the deck's `drive-links.yml`
-(`paths.drive_links`), each PDF's path in the deck's directory mapped to its
-file ID:
+file and link -- and records their IDs in the deck's registry, each PDF's
+path in the deck's directory mapped to its file ID. The files are in your
+Drive, so the registry is yours: `drive-links/<deck path>.yml` in your deckz
+config directory (`~/.config/deckz/drive-links/company1/deck1.yml` on Linux;
+`paths.drive_links`, `{deck_path}` being the deck's directory relative to the
+repository), where you may track it, and which every checkout of the
+repository (worktrees included) shares:
 
 ```yaml
 pdf/abc-handout.pdf: 1a2B3c...
@@ -882,9 +886,9 @@ pdf/course-notes/abc-course-notes.pdf: 4d5E6f...
 pdf/en/abc-handout.pdf: 7g8H9i...
 ```
 
-Commit it: builds read it and never reach Drive, so every checkout compiles
-the same links, with or without the extras or credentials. Each main
-template gets them as `links`, those the registry has (none without one):
+Builds read it and never reach Drive. Each main template gets the links as
+`links`, those the registry has (none without one: another user's or CI's
+builds show none):
 
 - `links.self`: the PDF's own;
 - `links.handout`: the whole deck's handout, in the PDF's language;
@@ -900,7 +904,7 @@ since) is outdated, as when its content changed: `deckz upload` refuses it,
 keeps a file's ID when `deckz upload` updates it, so a link never changes;
 a reserved file is never deleted, even with no local PDF anymore (its link
 is printed in PDFs already handed out): never change or remove a line of
-`drive-links.yml` either.
+the registry either.
 
 ### Upgrading from 31.x (`clean content`)
 

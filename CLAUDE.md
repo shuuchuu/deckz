@@ -279,7 +279,9 @@ refusing (`ScaffoldRefusedError`) to overwrite anything.
 ### Drive links
 
 `drive_links.py` reads and writes a deck's registry (`paths.drive_links`,
-`<deck>/drive-links.yml`, committed in the target repo): each PDF's path in the
+`<user config dir>/drive-links/<deck path>.yml`: the Drive files are the user's,
+and every checkout of the target repo shares it, keyed by `paths.deck_path`, the
+deck's directory relative to the repository): each PDF's path in the
 deck's directory, mapped to the Google Drive file `deckz upload --reserve`
 created for it (`extras/uploading.py::Uploader.reserve`, an empty file, or the
 one already online), before any build shows its link. The factory hands the

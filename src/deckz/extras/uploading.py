@@ -174,9 +174,7 @@ class Uploader:
         self._logger.info("Checking/creating folder hierarchy")
         folder = app_name
         folder_id, folder_link = self._get_or_create_folder("root", folder)
-        for folder in self._settings.paths.current_dir.relative_to(
-            self._settings.paths.git_dir
-        ).parts:
+        for folder in self._settings.paths.deck_path.parts:
             folder_id, folder_link = self._get_or_create_folder(folder_id, folder)
         self._logger.debug(f"Setting permissions for {folder}")
         self._service.permissions().create(
@@ -266,7 +264,7 @@ class Uploader:
         if (existing := existing_by_id.get(file_id)) is None:
             msg = (
                 f"“{pdf.name}”'s Drive file ({file_id}, in "
-                f"{self._settings.paths.drive_links.name}) is not in the deck's "
+                f"{self._settings.paths.drive_links}) is not in the deck's "
                 "folder anymore: restore it from Drive's trash, or remove its "
                 "line and run `deckz upload --reserve` for a new link, then "
                 "rebuild the PDFs showing it"

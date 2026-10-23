@@ -2,12 +2,14 @@
 
 A PDF can only show its own link if the link exists before it's compiled, \
 so `deckz upload --reserve` creates the Drive files first, empty, and \
-records their IDs in the deck's registry (`paths.drive_links`, \
-`<deck>/drive-links.yml`, committed): each PDF's path relative to the deck \
-directory, mapped to its file ID. Builds read it and never reach Drive, so \
-every checkout compiles the same links, with or without the extras or \
-credentials; `deckz upload` then writes each PDF to its file, whose ID, and \
-so link, Drive keeps across updates.
+records their IDs in the deck's registry (`paths.drive_links`): each PDF's \
+path relative to the deck directory, mapped to its file ID. The files are in \
+the user's Drive, so the registry is the user's too, in their config \
+directory (`drive-links/<deck path>.yml`, where they may track it), shared \
+by every checkout of the repository. Builds read it and never reach Drive; \
+`deckz upload` then writes each PDF to its file, whose ID, and so link, \
+Drive keeps across updates. Without a registry (another user, CI), a deck's \
+PDFs show no link.
 """
 
 from collections.abc import Mapping
@@ -18,8 +20,9 @@ from .exceptions import InvalidConfigurationError
 from .utils import load_yaml, write_atomic
 
 _HEADER = """\
-# The Google Drive file each PDF of this deck is uploaded to, by its path in
-# the deck's directory: the PDFs show these links. Written by `deckz upload
+# The Google Drive file each PDF of a deck is uploaded to, by its path in the
+# deck's directory (this file's path in deckz's drive-links/ directory): the
+# PDFs show these links. Written by `deckz upload
 # --reserve`. A link may be printed in handed-out PDFs: never change or
 # remove one.
 """
@@ -81,4 +84,5 @@ def save(settings: DeckSettings, ids: Mapping[Path, str]) -> None:
         for pdf, file_id in ids.items()
     }
     text = _HEADER + yaml.safe_dump(dict(sorted(entries.items())), sort_keys=False)
+    settings.paths.drive_links.parent.mkdir(parents=True, exist_ok=True)
     write_atomic(settings.paths.drive_links, text.encode("utf8"))
