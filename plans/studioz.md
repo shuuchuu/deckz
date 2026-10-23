@@ -20,8 +20,8 @@ afternoon; its increments 1 (the model), 2 (a new conversation for a new file), 
 are done. Phase 7's increments 1 (logging in, and errors naming their fix), 2
 (links in new tabs), 3 (the slide in view) and 4 (the PDF's outline) are done.
 **Next:** phase 8 (planned 2026-10-23 after a publish from a stale workspace
-rolled the labs back, its decisions taken the same day; increments 1 to 3 done,
-next its increment 4), phase 7's "Also left" (start with "Starting phase 7" below), phase 6's
+rolled the labs back, its decisions taken the same day; increments 1 to 4 done,
+next its increment 5), phase 7's "Also left" (start with "Starting phase 7" below), phase 6's
 increment 5
 (the colleague's next afternoon measured), "Then, with the colleague" (below
 phase 5), and the open items. A GPU pass rents a machine that costs money: never
@@ -2096,14 +2096,37 @@ phase 7".
    wins, even a draft when another checkout has the published quality; the copy
    isn't a hard link (135 MB of videos on slides: a second copy per checkout, as
    seeding already makes).
-4. **One place to work, for studioz's users.** The home page shows the main
-   checkout as "Source des espaces", with how far it is behind the upstream branch
-   and an "Actualiser" button (`git pull --ff-only` then `deckz setup`, refused
-   while it holds uncommitted work, saying which files). studioz still never writes
-   in it otherwise. Slides' `HANDBOOK.md` says that with studioz one never works in
-   the main checkout (pulling, rendering, publishing are done in a workspace, or by
-   Actualiser), and how the main checkout and the workspaces share renders
-   (increments 3 and 5).
+4. **One place to work, for studioz's users**: done 2026-10-23. The home page's
+   "Source des espaces" panel (`_source.html`, `GET /source`, every 60 s, every 2 s
+   while its setup runs) shows the main checkout's path and branch, how far behind
+   the upstream branch it is (as last fetched), its commits the upstream lacks and
+   its uncommitted tracked files, with "Actualiser" (`POST /source/actualiser`,
+   `updates.refresh_source`): refused while a tracked file has uncommitted changes
+   (naming up to 5; untracked files are left to git, which refuses the
+   fast-forward only if it would overwrite one), then the shared `Fetcher` fetches,
+   refused while the main checkout has commits of its own (it can't move without
+   rewriting them: push them, or `git pull --rebase` in a terminal), else `git
+   merge --ff-only` of the upstream's tracking ref (rather than `git pull`: no
+   `FETCH_HEAD`, as increment 2) and `updates.after_update` in a thread, recorded in
+   the main checkout's `.run/studioz/update.json` (gitignored) and shown under the
+   panel with `deckz setup`'s problems listed, until closed (`POST /source/vu`).
+   slides' `HANDBOOK.md` ("Installer") says that with studioz one works only in
+   workspaces, the main checkout moving by Actualiser alone, and that a figure or a
+   video built in one checkout serves the others (increment 3); increment 5 will
+   add what happens to a worktree's renders when it goes. studioz's README says the
+   same. **Tried for real** on a scratch copy of slides (a bare stand-in origin, a
+   main checkout cloned from it, one commit pushed from another clone; studioz from
+   the worktree, port 8431, headless Chromium): the panel said "en retard de 1
+   commit sur origin/main"; with `HANDBOOK.md` edited, Actualiser refused, naming
+   it, HEAD unmoved; edited back, Actualiser fast-forwarded it in 2.4 s, the setup
+   ran (its `uv sync` failing, the scratch copy's `../deckz` being a symlink: the
+   panel listed the 3 problems). Found on the way: the problems' `<ul>` inside the
+   note's `<p>` split the box (a `<p>` can't hold a list); now a `<div>`. Tests:
+   the panel, the refresh and its setup, the note closed, refused for uncommitted
+   changes and for commits of its own, no upstream. **Left:** nothing stops a
+   `deckz run --watch` someone left running in the main checkout from seeing its
+   files move; the setup's VIRTUAL_ENV warning (studioz's environment leaks into
+   `uv` there: harmless, uv ignores it).
 5. **A worktree's renders outlive it.** Increment 3 finds a render only while the
    worktree holding it exists, and `deckz worktree remove` deletes it (minutes to
    hours of rendering). So:

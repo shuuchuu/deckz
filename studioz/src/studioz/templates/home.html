@@ -27,7 +27,9 @@
     </section>
     <dialog id="action-dialog" class="commit-dialog" aria-label="Workflow"></dialog>
     {% endif %}
+    <div hx-get="/source" hx-trigger="load" hx-swap="outerHTML"></div>
     {% if workspaces %}
+    <h2>Vos espaces</h2>
     <table class="workspaces">
       <thead>
         <tr>
