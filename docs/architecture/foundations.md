@@ -68,7 +68,14 @@ that domain's module, not here.
 [`stamps`][deckz.stamps] decides whether a built file is up to date from a digest of its
 inputs' bytes (`<output>.stamp`), never from modification times, which a checkout, a
 `git stash` or a copy into a worktree changes. Assets builders and `videos` use it.
-Committed outputs come with their stamps, so a fresh clone rebuilds nothing.
+Committed outputs come with their stamps, so a fresh clone rebuilds nothing. An
+output missing or stale in one checkout is copied from another checkout of the
+repository where its stamp matches (`adopt`, which `is_fresh` calls), with the
+`companions` a build writes next to it (a video's poster and quality): stamps
+digest bytes, never paths, so the copy is what a build here would make. The
+checkouts are read from git's own files (`.git`, `commondir`, `worktrees/*/gitdir`),
+not by running git: about 0.7 ms per output not fresh here, on slides with five
+checkouts.
 
 ## `drive_links`
 

@@ -1,4 +1,5 @@
 import os
+import subprocess
 from pathlib import Path
 
 from pygit2 import init_repository
@@ -277,3 +278,29 @@ def test_state_tells_what_a_render_needs(tmp_path: Path) -> None:
     assert state(render, "l") == "fresh"
     module.write_text(_SIMPLE_SCENE + "# Changed.\n", encoding="utf8")
     assert state(render, "l") == "stale"
+
+
+def test_state_copies_a_render_fresh_in_another_checkout(tmp_path: Path) -> None:
+    main = tmp_path / "repo"
+    _write(main / "figures" / "scenes" / "nn" / "demo.py", _SIMPLE_SCENE)
+    git = ["git", "-C", str(main)]
+    for args in (["init", "--quiet"], ["add", "."], ["commit", "--quiet", "-m", "c"]):
+        subprocess.run([*git, *args], check=True)
+    worktree = tmp_path / "repo--ws"
+    subprocess.run(
+        [*git, "worktree", "add", "--quiet", "-b", "ws/ws", str(worktree)],
+        check=True,
+    )
+    rendered = renders(_settings(main).paths.videos_dir, scenes(_settings(main))[0])[0]
+    _rendered(rendered.file)
+    write_stamp(rendered.file, digest(rendered.scene.sources()))
+    settings = _settings(worktree)
+    render = renders(settings.paths.videos_dir, scenes(settings)[0])[0]
+
+    assert state(render, "h") == "fresh"
+    assert render.file.with_suffix(".png").read_bytes() == b"poster"
+    assert quality(render.file) == "h"
+    # Not once the scene differs here.
+    render.file.unlink()
+    _write(scenes(settings)[0].module, _SIMPLE_SCENE + "# Changed.\n")
+    assert state(render, "h") == "missing"

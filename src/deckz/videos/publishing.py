@@ -24,7 +24,7 @@ from tempfile import TemporaryDirectory
 from ..exceptions import VideoFetchError, VideoPublishRefusedError
 from ..remotes import branch_tip, replace_branch
 from ..stamps import stamp_path
-from .scenes import Scene, out_of_date, quality, renders
+from .scenes import Scene, out_of_date, quality, renders, state
 
 
 def _git(
@@ -330,7 +330,9 @@ def fetch_renders(
     without Manim): each render missing from `videos_dir` is written from
     `source`'s `branch` (a remote's name or a repository's URL), with its
     poster frame (ffmpeg) and its `quality` stamp, the published one. A
-    render already there is never replaced. Nothing knows which sources a
+    render already there is never replaced, and one up to date in another
+    checkout of the repository is copied from there instead
+    (`deckz.stamps.adopt`). Nothing knows which sources a
     published render was made from, so a fetched one carries no sources
     stamp, and is dated to the epoch: `deckz videos render` takes it for
     stale and renders it again.
@@ -355,7 +357,7 @@ def fetch_renders(
         render
         for scene in found
         for render in renders(videos_dir, scene)
-        if not render.file.is_file()
+        if not render.file.is_file() and state(render, quality) == "missing"
     ]
     if not missing:
         return FetchResult((), (), ())

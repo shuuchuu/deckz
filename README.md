@@ -371,7 +371,11 @@ typst_ignore_system_fonts: true
   `seed`: paths whose ignored files (the builds a fresh checkout lacks)
   are copied from the main checkout, file times kept, so that content
   stamps decide what to rebuild (see [Assets builders](#assets-builders)).
-  Nothing is shared by a link: each worktree gets its own environment
+  Later on, an output missing or stale in one checkout but up to date in
+  another (the main one or a worktree, for the same sources) is copied
+  from there with its stamp when a build or a render looks at it, rather
+  than built again: a video rendered in the main checkout is published
+  from a worktree. Nothing is shared by a link: each worktree gets its own environment
   from `setup.steps` (e.g. `uv sync`, a second from uv's cache), and
   what every checkout shares goes in the user's `.env` (see
   [Usage](#usage)). `required_for_agents` (default false): a Claude Code

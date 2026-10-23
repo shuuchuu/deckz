@@ -318,18 +318,20 @@ def rendered_videos(
     """Whether every registered scene has its renders: a deck using one fails without.
 
     Only the renders that don't exist at all count; `deckz videos render` also \
-    redoes outdated ones.
+    redoes outdated ones. One up to date in another checkout of the repository \
+    is copied from there (`deckz.stamps.adopt`) rather than counted.
 
     Returns:
         Their item.
     """
-    from .videos import renders, scenes
+    from .videos import renders, scenes, state
 
+    quality = settings.videos.published_quality
     missing = [
         r
         for scene in scenes(settings)
         for r in renders(settings.paths.videos_dir, scene)
-        if not r.file.is_file()
+        if not r.file.is_file() and state(r, quality) == "missing"
     ]
     if not missing:
         return SetupItem("videos", Status.OK)

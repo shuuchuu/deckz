@@ -20,14 +20,25 @@ if not is_fresh(output, stamp, [source, *shared_inputs]):
 
 When the outputs are committed, so are their stamps: a fresh clone then
 rebuilds nothing.
+
+An output missing or stale here may be fresh in another checkout of the
+repository (the main one, a worktree: `deckz worktree`), built or rendered
+there from the same sources: `is_fresh` then copies it, with its stamp, rather
+than have it built again. A stamp digests bytes, never paths, so a copy whose
+stamp matches is exactly what a build here would make: a video rendered in the
+main checkout is published from a worktree, a figure a worktree compiled
+serves the others.
 """
 
 import ast
 import hashlib
 from collections.abc import Iterable
+from logging import getLogger
 from pathlib import Path
 
-from .utils import write_atomic
+from .utils import copy_file_if_changed, write_atomic
+
+_logger = getLogger(__name__)
 
 
 def stamp_path(output: Path) -> Path:
@@ -62,7 +73,12 @@ def digest(inputs: Iterable[Path], *extra: str) -> str:
     return hasher.hexdigest()
 
 
-def is_fresh(output: Path, stamp: str, inputs: Iterable[Path] = ()) -> bool:
+def is_fresh(
+    output: Path,
+    stamp: str,
+    inputs: Iterable[Path] = (),
+    companions: Iterable[Path] = (),
+) -> bool:
     """Whether `output` exists and was built from inputs digesting to `stamp`.
 
     An output with no stamp yet, built before its builder wrote stamps, is \
@@ -70,27 +86,119 @@ def is_fresh(output: Path, stamp: str, inputs: Iterable[Path] = ()) -> bool:
     rule), and stamped: without that, the first build after the switch \
     would rebuild everything (every video included).
 
+    An output missing or stale is first looked for in the repository's other \
+    checkouts (`adopt`): one fresh there is copied here, and up to date.
+
     Args:
         output: The built file.
         stamp: The `digest` of what it would be built from now.
         inputs: The files `stamp` digests, for an output with no stamp yet.
+        companions: Files the build writes next to `output` and copied with \
+            it from another checkout (a video's poster), which must exist there.
 
     Returns:
         True if `output` needs no rebuild.
     """
-    if not output.is_file():
+    if output.is_file():
+        try:
+            if stamp_path(output).read_text(encoding="utf8").strip() == stamp:
+                return True
+        except FileNotFoundError:
+            inputs = tuple(inputs)
+            if inputs and output.stat().st_mtime_ns >= max(
+                path.stat().st_mtime_ns for path in inputs
+            ):
+                write_stamp(output, stamp)
+                return True
+    return adopt(output, stamp, companions)
+
+
+def adopt(output: Path, stamp: str, companions: Iterable[Path] = ()) -> bool:
+    """Copy `output` from another checkout where it's stamped `stamp`.
+
+    The main checkout is looked in first, then the worktrees, in git's \
+    order: the first whose copy of `output` (and of each of `companions`) \
+    exists with that stamp is copied, the stamp last, so that `output` is \
+    never stamped over another file. A copy rebuilt there meanwhile (its \
+    stamp changed during the copy) isn't stamped here: it's built again.
+
+    Args:
+        output: The output, in this checkout.
+        stamp: The `digest` of what it would be built from here.
+        companions: Files next to `output` copied with it.
+
+    Returns:
+        Whether it was copied.
+    """
+    root = _checkout(output)
+    if root is None:
         return False
+    relative = output.relative_to(root)
+    files = [relative, *(path.relative_to(root) for path in companions)]
+    for other in _checkouts(root):
+        if other == root.resolve():
+            continue
+        found = stamp_path(other / relative)
+        if _read(found) != stamp or not all((other / f).is_file() for f in files):
+            continue
+        # This checkout's stamp isn't about the files being replaced.
+        stamp_path(output).unlink(missing_ok=True)
+        for file in reversed(files):
+            copy_file_if_changed(other / file, root / file)
+        if _read(found) != stamp:
+            continue
+        write_stamp(output, stamp)
+        _logger.info("%s: copied from %s, where it's up to date", relative, other)
+        return True
+    return False
+
+
+def _read(path: Path) -> str | None:
     try:
-        return stamp_path(output).read_text(encoding="utf8").strip() == stamp
-    except FileNotFoundError:
-        pass
-    inputs = tuple(inputs)
-    if not inputs or output.stat().st_mtime_ns < max(
-        path.stat().st_mtime_ns for path in inputs
-    ):
-        return False
-    write_stamp(output, stamp)
-    return True
+        return path.read_text(encoding="utf8").strip()
+    except OSError:
+        return None
+
+
+def _checkout(path: Path) -> Path | None:
+    """The root of the git checkout holding `path` (which may not exist yet).
+
+    Returns:
+        The first of its parents holding a `.git`, or None.
+    """
+    return next((p for p in path.parents if (p / ".git").exists()), None)
+
+
+def _checkouts(root: Path) -> list[Path]:
+    """Every checkout of the repository `root` is a checkout of.
+
+    Read from git's own files, without running git (a build may ask for \
+    hundreds of outputs): `.git` is the main checkout's git directory, or a \
+    worktree's `gitdir:` file pointing to its own one, whose `commondir` \
+    leads to the main one, which lists each worktree's under `worktrees/`.
+
+    Returns:
+        The main checkout's root (unless the repository is bare), then each \
+        worktree's that exists.
+    """
+    dot_git = root / ".git"
+    try:
+        if dot_git.is_dir():
+            common = dot_git
+        else:
+            text = dot_git.read_text(encoding="utf8").strip()
+            own = (root / text.removeprefix("gitdir:").strip()).resolve()
+            commondir = (own / "commondir").read_text(encoding="utf8").strip()
+            common = (own / commondir).resolve()
+    except OSError:
+        return []
+    found = [common.parent] if common.name == ".git" else []
+    entries = common / "worktrees"
+    for entry in sorted(entries.iterdir()) if entries.is_dir() else ():
+        gitdir = _read(entry / "gitdir")
+        if gitdir and (checkout := Path(gitdir).parent).is_dir():
+            found.append(checkout)
+    return found
 
 
 def write_stamp(output: Path, stamp: str) -> None:

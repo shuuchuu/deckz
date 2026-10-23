@@ -212,18 +212,23 @@ def quality(file: Path) -> str | None:
 def state(render: Render, wanted: str) -> Literal["missing", "stale", "draft", "fresh"]:
     """Where `render` stands, `wanted` being the quality it's published at.
 
+    A render missing or stale here but fresh in another checkout of the \
+    repository is copied from there first, with its poster and quality \
+    (`deckz.stamps.adopt`).
+
     Returns:
         `missing` if it was never rendered, `stale` if it or its poster \
         doesn't match its scene's sources anymore, `draft` if it does but \
         at another quality than `wanted`, else `fresh`.
     """
     file = render.file
-    if not file.is_file():
-        return "missing"
+    poster = file.with_suffix(".png")
     sources = render.scene.sources()
-    if not file.with_suffix(".png").is_file() or not is_fresh(
-        file, digest(sources), sources
+    if not is_fresh(
+        file, digest(sources), sources, (poster, file.with_suffix(".quality"))
     ):
+        return "stale" if file.is_file() else "missing"
+    if not poster.is_file():
         return "stale"
     return "fresh" if quality(file) == wanted else "draft"
 

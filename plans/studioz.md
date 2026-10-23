@@ -20,8 +20,8 @@ afternoon; its increments 1 (the model), 2 (a new conversation for a new file), 
 are done. Phase 7's increments 1 (logging in, and errors naming their fix), 2
 (links in new tabs), 3 (the slide in view) and 4 (the PDF's outline) are done.
 **Next:** phase 8 (planned 2026-10-23 after a publish from a stale workspace
-rolled the labs back, its decisions taken the same day; increments 1 and 2 done,
-next its increment 3), phase 7's "Also left" (start with "Starting phase 7" below), phase 6's
+rolled the labs back, its decisions taken the same day; increments 1 to 3 done,
+next its increment 4), phase 7's "Also left" (start with "Starting phase 7" below), phase 6's
 increment 5
 (the colleague's next afternoon measured), "Then, with the colleague" (below
 phase 5), and the open items. A GPU pass rents a machine that costs money: never
@@ -2062,19 +2062,40 @@ phase 7".
    person's update set up too. **Left:** nothing tells a busy workspace's person
    that its fast-forward waits for the job or the turn (the next fetch does it); the
    setup's details show in a tooltip only.
-3. **A render made in one checkout is found from the others.** When a seeded output
-   (`worktree.seed`: videos, Typst and matplotlib figures, SVGs) is missing or stale
-   in a checkout, deckz looks for one fresh for this checkout's sources in the
-   repository's other checkouts (`deckz.worktrees.worktrees`, the main one
-   included) and copies it with its stamps (`.stamp`, and a video's `.quality` and
-   poster), before building or rendering it. Stamps are digests of the sources'
-   bytes, so a copy is safe whenever its stamp matches here (`deckz.stamps.
-   is_fresh`; `videos.scenes.out_of_date` for a render). It runs where builds and
-   renders start (`deckz run`, `deckz videos render`, `deckz setup`, publishing),
-   and after studioz's Update. Rendering in the main checkout and publishing from a
-   workspace then works. A first measure: the lookup's cost on slides with five
-   worktrees (each candidate's stamp is one small read; the sources' digest is
-   computed once per output).
+3. **A render made in one checkout is found from the others**: done 2026-10-23.
+   `deckz.stamps.is_fresh`, which every builder asks before building (deckz's Typst
+   figures, slides' plots and SVG copies, the videos' `state`), now calls
+   `stamps.adopt` for an output missing or stale here: the first checkout of the
+   repository (the main one, then the worktrees, in git's order) whose copy is
+   stamped with this checkout's digest is copied (`copy_file_if_changed`, atomic),
+   with its `companions` (a video's poster and `.quality`, which must exist there),
+   the stamp written last, and not at all if the stamp there changed during the copy
+   (a rebuild meanwhile). **Changed from the plan:** in `is_fresh` rather than at
+   each entry point (`deckz run`, `videos render`, `setup`, publishing), since the
+   stamp is only known where the builder computes it; so `deckz videos list` (and
+   studioz's Vidéos view) copies too, which shows a render made elsewhere as fresh
+   rather than missing. `deckz setup`'s videos item (run after studioz's Update)
+   and `deckz videos fetch` count a render missing only once the copy failed;
+   `deckz status`'s Videos section still checks `is_file()` only (a status stays
+   read-only; its fix, `deckz videos render`, then copies). The checkouts are read
+   from git's own files (`.git`, `commondir`, `worktrees/*/gitdir`), not
+   `deckz.worktrees.worktrees` (which lists `ws/` branches only and runs git), and
+   not cached (a `--watch` sees a worktree added later). **Measured** on slides
+   (main + 4 worktrees): 0.7 ms per output not fresh here, about 0.4 s for a
+   fresh clone's ~600 outputs; nothing for a fresh output. **Tried for real**: a
+   worktree of slides' `main` (`deckz worktree add adopt-trial`, its deckz pointed
+   at `../deckz-studioz`, removed after), with a plot, its SVG copy, a Typst figure
+   and a video (poster, quality, stamp) deleted: `deckz run assets` copied the
+   three figures from the main checkout (5.5 s, as fast as with nothing to do;
+   each logs "copied from …, where it's up to date"), `deckz videos list` the
+   video, all byte-identical to the main checkout's; `--json`'s stdout stays clean
+   (the log goes to stderr). Tests: copied from a worktree and into the main
+   checkout, the main checkout preferred, a candidate lacking a companion skipped,
+   a copy rebuilt meanwhile left unstamped, outside a repository, the videos'
+   `state` and `fetch_renders`. **Left:** among several fresh copies the first
+   wins, even a draft when another checkout has the published quality; the copy
+   isn't a hard link (135 MB of videos on slides: a second copy per checkout, as
+   seeding already makes).
 4. **One place to work, for studioz's users.** The home page shows the main
    checkout as "Source des espaces", with how far it is behind the upstream branch
    and an "Actualiser" button (`git pull --ff-only` then `deckz setup`, refused

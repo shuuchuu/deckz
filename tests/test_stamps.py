@@ -1,8 +1,10 @@
 import os
+import subprocess
 from pathlib import Path
 
 from pytest import MonkeyPatch, raises
 
+from deckz import stamps
 from deckz.stamps import digest, is_fresh, python_sources, stamp_path, write_stamp
 from deckz.utils import copy_file_if_changed, write_atomic
 
@@ -148,3 +150,91 @@ def test_python_sources_survives_import_cycles(tmp_path: Path) -> None:
     b = _write(tmp_path / "b.py", "import a\n")
 
     assert python_sources(a, [tmp_path]) == (a, b)
+
+
+def _checkouts(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """Make a repository with two worktrees beside its main checkout.
+
+    Returns:
+        The main checkout, then the worktrees.
+    """
+    main = tmp_path / "repo"
+    _write(main / "README.md", "Repo")
+    git = ["git", "-C", str(main)]
+    for args in (["init", "--quiet"], ["add", "."], ["commit", "--quiet", "-m", "c"]):
+        subprocess.run([*git, *args], check=True)
+    for name in ("a", "b"):
+        path = tmp_path / f"repo--{name}"
+        subprocess.run(
+            [*git, "worktree", "add", "--quiet", "-b", f"ws/{name}", str(path)],
+            check=True,
+        )
+    return main, tmp_path / "repo--a", tmp_path / "repo--b"
+
+
+def _built(checkout: Path, stamp: str, text: str = "video") -> Path:
+    output = _write(checkout / "assets" / "videos" / "demo.mp4", text)
+    _write(output.with_suffix(".png"), f"poster of {text}")
+    write_stamp(output, stamp)
+    return output
+
+
+def test_is_fresh_copies_an_output_fresh_in_another_checkout(tmp_path: Path) -> None:
+    main, a, b = _checkouts(tmp_path)
+    _built(main, "s1", "main's")
+    _built(b, "s2", "b's")
+    output = a / "assets" / "videos" / "demo.mp4"
+    poster = output.with_suffix(".png")
+
+    assert is_fresh(output, "s2", companions=[poster])
+    assert output.read_text(encoding="utf8") == "b's"
+    assert poster.read_text(encoding="utf8") == "poster of b's"
+    assert stamp_path(output).read_text(encoding="utf8") == "s2\n"
+    # From a worktree into the main checkout too, over a stale output.
+    assert is_fresh(main / "assets" / "videos" / "demo.mp4", "s2")
+    assert (main / "assets" / "videos" / "demo.mp4").read_text(encoding="utf8") == "b's"
+    assert not is_fresh(output, "s3")
+
+
+def test_is_fresh_prefers_the_main_checkout(tmp_path: Path) -> None:
+    main, a, b = _checkouts(tmp_path)
+    _built(main, "s", "main's")
+    _built(b, "s", "b's")
+    output = a / "assets" / "videos" / "demo.mp4"
+
+    assert is_fresh(output, "s")
+    assert output.read_text(encoding="utf8") == "main's"
+
+
+def test_is_fresh_skips_a_checkout_lacking_a_companion(tmp_path: Path) -> None:
+    main, a, _ = _checkouts(tmp_path)
+    built = _built(main, "s")
+    built.with_suffix(".png").unlink()
+    output = a / "assets" / "videos" / "demo.mp4"
+
+    assert not is_fresh(output, "s", companions=[output.with_suffix(".png")])
+    assert not output.exists()
+    # Without companions asked for, the output alone is enough.
+    assert is_fresh(output, "s")
+
+
+def test_is_fresh_leaves_unstamped_a_copy_rebuilt_while_copied(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    main, a, _ = _checkouts(tmp_path)
+    built = _built(main, "s")
+    copy = stamps.copy_file_if_changed
+
+    def rebuilt_meanwhile(original: Path, destination: Path) -> bool:
+        write_stamp(built, "rebuilt")
+        return copy(original, destination)
+
+    monkeypatch.setattr(stamps, "copy_file_if_changed", rebuilt_meanwhile)
+    output = a / "assets" / "videos" / "demo.mp4"
+
+    assert not is_fresh(output, "s")
+    assert not stamp_path(output).exists()
+
+
+def test_is_fresh_outside_a_repository_copies_nothing(tmp_path: Path) -> None:
+    assert not is_fresh(tmp_path / "fig.svg", "s")

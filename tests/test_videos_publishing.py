@@ -5,6 +5,7 @@ from typing import Any
 from pytest import raises
 
 from deckz.exceptions import VideoFetchError, VideoPublishRefusedError
+from deckz.stamps import digest, write_stamp
 from deckz.videos.publishing import (
     FetchResult,
     differing_sources,
@@ -309,6 +310,25 @@ def test_fetch_renders_never_replaces_a_render(
 
     assert _fetch(work) == FetchResult((), (), ())
     assert video.read_bytes() == b"mine"
+
+
+def test_fetch_renders_copies_a_render_up_to_date_in_another_checkout(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    from deckz.videos import rendering
+
+    monkeypatch.setattr(rendering, "make_poster", _poster)
+    _, work = _make_repos(tmp_path)
+    video = _fake_render(work, size=10)
+    write_stamp(video, digest(_scene(work).sources()))
+    _publish(work, _preview(work))
+    worktree = tmp_path / "work--ws"
+    _git(work, "worktree", "add", "--quiet", "-b", "ws/ws", str(worktree))
+
+    assert _fetch(worktree) == FetchResult((), (), ())
+    copied = worktree / "assets" / "videos" / "nn" / "demo.mp4"
+    assert copied.read_bytes() == b"\0" * 10
+    assert state(Render(_scene(worktree), None, copied), QUALITY) == "fresh"
 
 
 def test_fetch_renders_lists_what_was_never_published(tmp_path: Path) -> None:
