@@ -344,6 +344,9 @@ dialog a.change { font-family: var(--mono); font-size: 0.9em; overflow-wrap: any
 .agent-entry[data-kind="end"] { border-bottom: 1px dashed var(--line); padding-bottom: 0.3rem; }
 .agent-entry[data-kind="error"] { background: var(--error-bg); padding: 0.3rem 0.6rem; border-radius: 4px; }
 .agent-detail { margin: 0.15rem 0 0; font-size: 0.85em; max-height: 8rem; overflow: auto; color: var(--muted); }
+.agent-entry[data-kind="person"] .agent-detail { font: inherit; font-size: 0.75em; white-space: normal; }
+.agent-slide { margin: 0; font-size: 0.75em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agent-slide::before { content: "Diapositive en vue : "; }
 .agent-text.markdown { white-space: normal; }
 .agent-text.markdown > :first-child { margin-top: 0; }
 .agent-text.markdown > :last-child { margin-bottom: 0; }

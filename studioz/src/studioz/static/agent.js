@@ -22,6 +22,8 @@ if (panel) {
   // The file the message is about (the editor's): another file than the
   // conversation's starts a new one (`Conversation.send`).
   const about = document.getElementById("agent-about");
+  // The slide in view on a deck's page (`deck.js`), which the message names.
+  const slide = document.getElementById("agent-slide");
   const base = panel.dataset.base;
   let running = false;
   let asking = false;
@@ -130,6 +132,7 @@ if (panel) {
     const body = new FormData();
     body.set("message", text);
     body.set("about", about.value);
+    body.set("slide", document.body.dataset.slide ?? "");
     if (await post("message", body)) {
       message.value = "";
       about.value = "";
@@ -235,6 +238,18 @@ if (panel) {
     message.focus();
     message.setSelectionRange(event.detail.text.length, event.detail.text.length);
   });
+
+  function showSlide() {
+    const shown = document.body.dataset.slide ? JSON.parse(document.body.dataset.slide) : null;
+    slide.hidden = !shown;
+    if (!shown) return;
+    slide.textContent = `p. ${shown.page} · ${shown.title}`;
+    slide.title = shown.file
+      ? `L'agent saura que vous regardez ce cadre : ${shown.file}, ligne ${shown.line}`
+      : "L'agent saura que vous regardez ce cadre (sa source est introuvable)";
+  }
+  document.body.addEventListener("slide-in-view", showSlide);
+  showSlide();
 
   // A workflow started from the home page opens its workspace with `?agent`.
   if (new URLSearchParams(location.search).has("agent")) showAgent(true);

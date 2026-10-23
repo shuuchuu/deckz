@@ -662,6 +662,105 @@ def test_a_message_about_another_file_starts_afresh(
     assert conversation.session == "session-2"
 
 
+def _slide(page: int, file: str | None = "content/a.md", line: int = 3) -> str:
+    title = f"Cadre {page}"
+    return json.dumps({"page": page, "title": title, "file": file, "line": line})
+
+
+def test_a_message_names_the_slide_in_view(
+    agent_client: TestClient, workspace: Path, factory: FakeFactory
+) -> None:
+    def say(message: str, slide: str = "", about: str = "") -> None:
+        response = agent_client.post(
+            f"{BASE}/message",
+            data={"message": message, "slide": slide, "about": about},
+            headers=ORIGIN,
+        )
+        assert response.status_code == 204
+        _wait_idle(conversation)
+
+    conversation = _conversation(agent_client, workspace)
+    # Short: another file's message follows it, setting nothing aside.
+    factory.context = agent.ASIDE_FROM - 1
+    say("Cette diapositive est moche", _slide(10))
+
+    assert factory.clients[0].prompts == [
+        "(La personne regarde, dans studioz, le cadre « Cadre 10 » : content/a.md, "
+        "ligne 3, page 10 du PDF.)\n\nCette diapositive est moche"
+    ]
+    person = conversation.entries[0]
+    assert (person.text, person.detail) == (
+        "Cette diapositive est moche",
+        "Diapositive en vue : p. 10, « Cadre 10 »",
+    )
+    assert conversation.about == "content/a.md"
+
+    # Another slide of the same file, or the same one again: a follow-up.
+    say("Aligne les T", _slide(11, line=9))
+    say("merci", _slide(11, line=9))
+    assert len(factory.clients) == 1
+    assert factory.clients[0].prompts[-1].endswith("ligne 9, page 11 du PDF.)\n\nmerci")
+
+    # The editor's file wins, and the slide stays the one seen last.
+    say("Et ce passage", _slide(11, line=9), about="content/c.md")
+    assert conversation.about == "content/c.md"
+    assert not conversation.aside
+    factory.context = agent.ASIDE_FROM
+    say("Encore", _slide(11, line=9))
+    assert conversation.about == "content/c.md"
+
+    # Another file's slide, the conversation past `ASIDE_FROM`: a new one.
+    say("Et celle-ci ?", _slide(20, "content/b.md"))
+    assert conversation.about == "content/b.md"
+    assert conversation.aside
+    assert [e.kind for e in conversation.entries[:2]] == ["aside", "person"]
+
+    # Taken back, the conversation remembers its own last slide.
+    assert agent_client.post(f"{BASE}/precedente", headers=ORIGIN).status_code == 204
+    assert conversation.about == "content/c.md"
+    say("Revenons-y", _slide(11, line=9))
+    assert conversation.about == "content/c.md"
+
+
+def test_a_slide_without_a_source(workspace: Path, factory: FakeFactory) -> None:
+    conversation = Conversation(workspace, factory)
+    slide = agent.Slide.parse(_slide(4, file=None))
+    assert slide == agent.Slide(4, "Cadre 4")
+
+    async def turn() -> None:
+        assert await conversation.send("Pourquoi ?", slide=slide)
+        assert conversation._task is not None
+        await conversation._task
+
+    asyncio.run(turn())
+    told = factory.clients[0].prompts[0]
+    assert told.startswith(
+        "(La personne regarde, dans studioz, la page 4 du PDF : "
+        "le cadre « Cadre 4 », dont la source est introuvable.)"
+    )
+    assert conversation.about is None
+
+
+@mark.parametrize(
+    "raw",
+    [
+        "",
+        "pas du json",
+        "[]",
+        '{"page": 0, "title": "T"}',
+        '{"page": 2}',
+        '{"page": 2, "title": "T", "file": 3}',
+        '{"page": 2, "title": "T", "file": "a.md", "line": "3"}',
+    ],
+)
+def test_no_slide_from_what_a_page_posts(raw: str) -> None:
+    assert agent.Slide.parse(raw) is None
+
+
+def test_the_panel_shows_the_slide_in_view(agent_client: TestClient) -> None:
+    assert 'id="agent-slide" hidden' in agent_client.get("/espaces/demo").text
+
+
 def test_a_short_conversation_follows_the_file(
     workspace: Path, factory: FakeFactory
 ) -> None:

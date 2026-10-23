@@ -56,7 +56,10 @@ function showPageNumber() {
 eventBus.on("pagesinit", () => {
   viewer.currentScaleValue = "page-width";
 });
-eventBus.on("pagechanging", showPageNumber);
+eventBus.on("pagechanging", () => {
+  showPageNumber();
+  showSlide();
+});
 // The window's size, the editor opening or closing, a sidebar shown, hidden
 // or dragged (once it rests: redrawing every page at each step is slow). The
 // page clicked to open the editor stays in view.
@@ -85,6 +88,18 @@ async function loadFrames() {
   } catch (error) {
     console.error("studioz: could not load the frames", error);
   }
+}
+
+// The slide in view, which a message to the agent names (`agent.js`): none on a
+// page without a frame (title, outline) nor in the before/after view.
+function showSlide() {
+  const frame = deck.dataset.view === "changes" || !viewer.pagesCount
+    ? null : frames.get(viewer.currentPageNumber);
+  const { page, title, file, line } = frame ?? {};
+  const slide = frame ? JSON.stringify({ page, title, file, line }) : "";
+  if (slide === document.body.dataset.slide) return;
+  document.body.dataset.slide = slide;
+  document.body.dispatchEvent(new Event("slide-in-view"));
 }
 
 let noticeTimer = null;
@@ -160,6 +175,7 @@ async function show(url) {
       waiting.hidden = true;
       showPageNumber();
       await loadFrames();
+      showSlide();
       editor.refresh();
       if (deck.dataset.view === "changes") refreshComparison();
     } catch (error) {
@@ -236,6 +252,7 @@ function setView(view) {
     else link.href = url;
   }
   if (view === "changes") refreshComparison();
+  showSlide();
 }
 
 for (const button of document.querySelectorAll(".views button")) {
