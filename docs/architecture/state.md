@@ -39,7 +39,8 @@ deckz decides what to rebuild from contents, not modification times, because a
 checkout, a `git stash`, or a copy into a worktree changes times:
 
 - a fragment is rendered again when its build copy differs from its source
-  (`utils.file_changed`), when an output of its rendering is missing, or when the build
+  (`utils.file_changed` on its `build_copy_path`; `needs_render`, the test both `plan`
+  and `build_deck` apply), when an output of its rendering is missing, or when the build
   directory's `.render-fingerprint` changed (the converter's command and filters, the
   deck's variables);
 - an asset or a video is rebuilt when its stamp doesn't match the digest of its inputs

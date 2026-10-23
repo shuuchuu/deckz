@@ -65,429 +65,50 @@ into this checkout only a finished change. Before merging one that changes behav
 
 ## Architecture
 
-`docs/architecture/` is the architecture's reference: the layers (which
-the `layers` import-linter contract enforces), each part's responsibility,
-what it owns, depends on and never does, the boundaries with the managed
-repository's plugins and with studioz, and what deckz writes where. Keep it
-up to date in the same change as the code: a change that adds, moves or
-removes a module (the contract is exhaustive, so a new module fails `doit
-check` until it has a layer), adds a dependency between layers or a known
-exception (`ignore_imports`, and the table of `docs/architecture/index.md`),
-changes what a component owns on disk, a lock or a process boundary, or
-changes what the managed repository plugs in or imports, or what studioz
-relies on (`--json` outputs, `watch`'s log messages), updates the pages it
-makes wrong. The notes below are a summary for working on the code.
+`docs/architecture/` is the reference: read its page before changing a part of deckz.
 
-### CLI wiring
+| Page | Covers |
+|---|---|
+| `index.md` | The layers, the rules and their import-linter contracts, the known exceptions |
+| `cli.md` | `deckz.cli`: command registration, the error boundary (`main`/`_launch`), stdout vs stderr, `.env` and `DECKZ_*` defaults, testing `main` |
+| `tasks.md` | `status`, `setting_up`, `scaffolding`, `ci_report`, the Claude Code hooks, `hooks_install` |
+| `pipelines.md` | `pipelines` (targets, plan vs build, locks, stale PDFs, `watch`), `checking`, `course_notes` |
+| `analyzing.md` | The analyses, the content checks (blocking/deferred, the gates), fr/en pairing and `Lang-sync` |
+| `components.md` | Protocols and factories, each component, the deck builder's outputs, Typst workers |
+| `libraries.md` | `labs`, `videos`, `extras`, `worktrees`, `commits`, `remotes` |
+| `foundations.md` | `configuring`, `models`, `exceptions`, `utils`, `stamps`, `drive_links` |
+| `plugins.md` | What a managed repository plugs in (`templates/*.py`, `deckz.yml` commands), what it imports from deckz |
+| `studioz.md` | How studioz uses deckz, and what deckz keeps stable for it |
+| `state.md` | What deckz writes where, freshness, locks, processes |
 
-`src/deckz/cli/__init__.py` creates the single `cyclopts` `App` and, in
-`main()`, calls `import_module_and_submodules` to import every module under
-`deckz.cli` — each command module registers itself onto the shared `app` via
-`@app.command()` as an import side effect (e.g. `src/deckz/cli/upload.py`).
-Related commands are grouped under sub-apps: most are their own package
-under `src/deckz/cli/` with one module per subcommand (`run`, `check`,
-`clean`, `show`, `flavor`, `asset`, `i18n`, `labs`, `hooks`, `worktree`,
-`extras` — see `run/__init__.py` for the pattern: an `App(name=...)` registered onto the
-parent app). A sub-app may declare a default subcommand via `@app.default`
-(`run`/`show`/`clean` do; `check`'s default is `content`, running
-every check — deckz's own content checks plus a `templates/checks.py`
-plugin's, see "Checking" below — `variables` stays its own, separate
-subcommand since it's a different, slower kind of analysis). Command
-functions
-themselves stay thin: they parse CLI args, build a `DeckSettings`/
-`GlobalSettings`, and delegate to `src/deckz/pipelines.py`,
-`src/deckz/checking.py`, or an `analyzing/*` module — no business logic
-lives in the `cli/` layer.
+The rules that shape every change:
 
-The reverse holds too: the core never draws on the terminal (the `terminal`
-contract; `extras/uploading.py`'s own progress bars are its one known
-exception). Rich widgets live in `cli/`, most in `cli/_presentation.py`
-(`RichTreeVisitor`, `RichProgress`, `open_path`). The core reports progress through a
-`ProgressReporterProtocol` (`NullProgress` by default, `RichProgress` passed
-in by the `run` commands) and reports failures by raising a `DeckzError`
-subclass, e.g. `DeckParsingError` carrying the deck whose tree `main()`
-renders, or `CompilationError` from a failed build. `main()` is the single
-error boundary: its cyclopts meta app (`_launch`) takes the global
-`--quiet`/`--verbose`/`--debug` flags, sets the log level, and turns any
-`DeckzError` into a logged message and exit code 1, without a traceback
-(`--debug` or `DECKZ_DEBUG=1` re-raises instead); a usage error exits 2.
-On Ctrl-C it exits 130 after `compiler.stop()`, which kills every Typst
-worker and refuses new compilations (the deck builder also cancels its
-queued ones). Workers start with SIGINT blocked (`_sigint_blocked`), so the
-Ctrl-C a terminal sends the whole process group leaves them to the parent.
-Logs and progress bars go to stderr, stdout carries only results
-(`--json` output included).
-Tests driving `main(...)` therefore assert `raises(SystemExit)` with code
-1, not the `DeckzError` itself.
+- **Layers.** A module imports only from its own layer or below
+  (`[tool.importlinter]` in `pyproject.toml`, run by `uv run doit check`). The
+  contract is exhaustive: a new module fails it until it has a layer.
+- **Thin CLI, silent core.** A command parses its arguments, builds a
+  `GlobalSettings`/`DeckSettings`, calls one core function and renders the result.
+  The core never prints or exits: it reports progress through a
+  `ProgressReporterProtocol` and fails by raising a `DeckzError` whose message names
+  the fix. stdout carries results only.
+- **Factories.** Components come from `GlobalSettingsFactory`/`DeckSettingsFactory`,
+  typed with their protocols.
+- **Frozen data.** The `Deck` tree and the settings are never mutated: a variant is
+  a copy (`dataclasses.replace`, `with_output_dirs`).
+- **Plugins** from the managed repository load only through `load_hook`. What the
+  managed repository imports from deckz is its public API (`plugins.md`).
+- **studioz** runs the workspace's own `deckz` and imports only read-only APIs. A
+  rule it needs goes into deckz. Its own architecture is in `studioz/CLAUDE.md`, and
+  its plan in `plans/studioz.md`.
 
-`main()` also loads the closest `.env` (python-dotenv), then the user's
-(`<user config dir>/.env`, for what every checkout shares), before parsing, so
-option defaults can come from environment variables: the shared `Langs`
-option (`cli/_options.py`, `--lang fr en`) reads `DECKZ_LANG` on the
-commands that process several languages in one pass, and the `run`
-sub-app's `Env("DECKZ_RUN_", command=False)` config gives every `run`
-subcommand's options a `DECKZ_RUN_<OPTION>` default (one name for all of
-them, so `deckz run` and `deckz run deck` agree). Commands showing a
-single resolved view take a plain `lang: Lang` instead. Tests clear
-`DECKZ_*`, stub out the `.env` lookup and point `XDG_CONFIG_HOME` at an
-empty directory (`tests/conftest.py`).
-
-### Settings resolution
-
-`configuring/settings.py` defines `GlobalPaths`/`DeckSettings`/`GlobalSettings`
-(Pydantic models). Paths are built from a small template-like mechanism:
-fields declared as raw strings like `"{git_dir}/content"` are resolved against
-already-computed sibling fields via a custom `BeforeValidator`
-(`_convert`/`_Path`). `deckz.yml` and `variables.yml` are looked up and
-merged from three locations, in order: the target repo's git root, the
-user's XDG config dir, and the current directory up to the git root (see
-`utils.dirs_hierarchy` / `load_all_yamls`). `GlobalSettings` covers
-repo-wide operations (e.g. `run decks`, asset building); `DeckSettings`
-extends it for operations scoped to a single deck (the current working
-directory must be inside a deck).
-
-### Components + factories (dependency injection)
-
-`components/protocols.py` defines `Protocol` classes for every major piece
-(`ParserProtocol`, `DeckBuilderProtocol`, `CompilerProtocol`,
-`RendererProtocol`, `AssetsBuilderProtocol`, etc.), and
-`components/factory.py` provides `GlobalSettingsFactory` /
-`DeckSettingsFactory` as the construction points — they lazily import and
-instantiate the concrete implementation (`components/parser.py`,
-`components/deck_builder.py`, `components/compiler.py`,
-`components/renderer.py`, etc.) wired up with
-paths/settings. Call sites depend on the protocol/factory, not on concrete
-classes directly, so new implementations only need to be plugged in at the
-factory. That includes `Parser`: a deck's parser comes from
-`DeckSettingsFactory(settings, lang=..., lenient=...).parser()`, and one
-resolving against shared content only (a lone section, `run shared`/`run
-all`) from `GlobalSettingsFactory.shared_parser()`.
-`GlobalSettingsFactory.compiler()` returns `TypstCompiler`
-(`components/compiler.py`: the `typst` bindings in a child process per PDF,
-kept warm across `--watch` rebuilds so Typst's incremental cache survives;
-see the module's header comment for why never in deckz's own process;
-A deck's Typst fragments go through `FrameMarkingConverter`
-(`components/frame_markers.py`): an invisible `<deckz-frame>` marker after
-each `# Title`, recording the fragment, the heading's index and its page,
-which each compilation queries (before compiling: see `_markers` for why),
-with the theme's shrunk-frame and table markers, and records next to its PDF
-(`components/marker_records.py`, `<main>.markers.json`), so that `deckz show
-frames` (`analyzing/frames.py`) maps pages to content files and lines (a `run file`/`section` preview's too), and
-`deckz check overflow` (`analyzing/overflow.py`) finds the shrunk frames'
-lines, without compiling anything.
-`typst_memory_max` makes it stop a worker whose resident memory, read from
-`/proc` every half second, goes over the limit; `typst_machine_compilations`
-makes each compilation hold one of a few `flock`ed slot files shared by every
-deckz process, `components/machine_slots.py`).
-
-### Build pipeline
-
-`pipelines.py` holds the orchestration the CLI commands call. Planning is
-separate from execution: each `run` command first computes its
-`BuildTarget`s (`deck_targets`, `file_targets`, `section_targets`,
-`decks_targets`, `shared_targets`, `all_targets`: one parsed deck per
-requested language, plus the language, settings, failure label and
-optional `basedirs` to build each with), then
-either `build`s them or, under `--dry-run`, prints their `plan`. The
-`run`/`run_file`/…/`run_all` functions are `build` over those targets, kept
-for `watch()` to re-run (reparsing on each change). `build` builds the
-assets once, then for each target: load the deck's variables
-(`configuring/variables.py::get_variables`: the `variables.yml` files from the
-repo root down to the deck, the same for every file of the deck, plus `lang`)
-→ build assets via the assets builder (the
-target repo's own `templates/assets_builders.py`, e.g. generated plots) → build the deck
-(render Jinja2 → convert Markdown to Typst with pandoc → compile with Typst) via
-the deck builder; a target's `basedirs` override is set only by
-`shared_targets`/`all_targets` since their synthetic decks can include
-files living under any deck's directory, not just one
-`current_dir`/`content_dir` pair. Each target compiles holding
-`deck_lock` (an `flock` on `<build_dir>/.lock`), so two builds of one deck
-(a `--watch` and a full build, two terminals) wait for each other instead of
-writing the same files at once; likewise, `AssetsBuilder` runs the assets
-builders holding `assets_lock` (`<git_dir>/.run/assets.lock`), both through
-`utils.file_lock`. `TypstFiguresAssetsBuilder` stamps each SVG with a digest
-of the mirrors it compiles, not of the sources, so an edit racing a build
-never leaves a stale SVG stamped as up to date. `build` raises `CompilationError`, naming
-the target's label, when any PDF fails to compile, so every `run` command
-fails. A Jinja error in a content file is a `RenderError` naming the file
-and line (`render_dependencies`). Every fragment is copied before the first
-renders, so any failure there (Jinja, pandoc, Ctrl-C) removes the build copies
-of the failing fragment and of those not rendered yet: a copy matching its
-source would otherwise pass for rendered, and the next build keep its previous
-output, or none ("file not found" from Typst). Only after every target compiled, `OutputKinds.sync` (`--sync`, on by
-default) removes the `stale_pdfs`: the PDFs of the targets' output
-directories, in the languages built (`models.lang_dir`), that no build of
-the whole deck with every PDF kind would write (a `BuildTarget` keeps its
-deck whole and applies `--parts` in `_deck_builder`, for this). What a
-narrower build skips is never removed.
-
-Each compilation has an output `Format` (`components/deck_builder.py`):
-`CompileType`s `Handout`/`Presentation`/`PrintHandout` are `Typst`, and
-`Html` (`--html`, one whole-deck `{deck}-html` item) is `Html`. The factory
-hands the deck builder one `OutputFormat` per format (main template,
-fragment suffix, Markdown converter, "compiler", output dir): Typst is
-`main.typ` + `pandoc_command` + `TypstCompiler` → `pdf/`, HTML is
-`main.html` + `html_pandoc_command` + `HtmlPackager`
-(`components/html_packager.py`) → `html/<name>/`, a directory synced by
-`deck_builder.publish`/`utils.sync_tree`. The main template is rendered
-*after* its fragments and gets a `fragment(section)` callable returning a
-converted fragment's text: HTML has no `#include`, so `main.html` inlines
-them (in Python, never via Jinja `include`, which would re-template `{{`
-inside converted code). The packager copies the page as `index.html` plus
-every local file it references (attributes, `style`, CSS `url()`/`@import`,
-recursively) and the `html_static_dirs`, failing on a missing,
-root-absolute or out-of-tree reference. deckz knows nothing of reveal.js:
-that, and `FORMAT`-aware Lua filters, are the target repo's business.
-`deckz run file`/`deckz run section` get their `.run/` scratch output dirs
-from `checking.preview_settings`, a copy of the deck's settings; settings
-objects are never mutated after construction. `pipelines.plan` (backing
-`--dry-run`) stops before building anything, assets included: it returns
-each target's deck builder's `plan()`, a `PlannedCompile` per PDF with the
-fragments that would be re-rendered, whose freshness test
-(`needs_render`: `utils.file_changed` on each `build_copy_path`, or an
-output of its rendering missing) is the one `build_deck` applies. `watch()` is a generic file-watch-and-rerun
-wrapper, not build-specific: each of `run/deck.py`, `run/file.py`,
-`run/section.py`, and `run/assets.py` calls it directly when invoked with
-`--watch`, wrapping that same module's one-shot pipeline call instead of
-running it once.
-
-A fragment is named by its content file's path (`dependency_relative_path`,
-the single place that naming is decided, so the main template's `#include`
-and the on-disk rendered copy always agree), and re-rendered when its
-source changed. What renders every fragment besides its source, the
-Markdown converter's command and filters and the deck's variables, is
-hashed into each build dir's `.render-fingerprint` (`render_fingerprint`):
-a change there renders every fragment again. Flavors have no variables of
-their own (they had, until 2026-10: the one repo using them found two
-interleaved versions of a file harder to maintain than one file per
-variant), so a file renders the same wherever a deck includes it.
-
-`shared_targets`/`all_targets` (backing `deckz run shared`/`deckz run all`)
-build their `Deck` purely in memory via `src/deckz/checking.py` — no yaml is
-ever written to disk. They use `Parser.all_files_section()`
-(`components/parser.py`) to expand a shared section to every file in its
-own directory rather than a named flavor's `includes` list; `all_targets`
-additionally builds one extra copy of a section per deck that locally
-overrides one of its files (detected by re-resolving with that deck's own
-`local_content_dir`). Both write their output to a persistent
-`<git_dir>/.run/{shared,all}/` scratch directory (`checking.run_scratch_dir`),
-alongside `deckz run file`/`deckz run section`'s own `<git_dir>/.run/{file,section}/`
-scratch trees, since none of these synthetic/preview decks have a real deck
-directory of their own. `deckz check variables` uses the same
-`checking.check_scratch_dir` helper for its own scratch tree, kept separately
-under `<git_dir>/.check/variables/` since it's a `check` command, not a `run` one.
-`deckz clean all` sweeps both `.run/` and `.check/` wholesale.
-
-### Hooks
-
-The target repo's `templates/jinja2/env.py` (`environment_for`) and
-`templates/assets_builders.py` (`assets_builders`) are loaded through
-`components/hooks.py::load_hook`, which turns an import failure, a missing
-function or a `DECKZ_HOOKS_VERSION` other than `HOOKS_VERSION` into a
-`HookError`; `Renderer`/`AssetsBuilder` also check what the hooks return.
-Its module docstring documents the trust boundary (the hooks are arbitrary
-code from the target repo).
-
-### Scaffolding
-
-`scaffolding.py` backs `deckz new deck|section` (`cli/new/`) and `deckz labs
-new`: the files a new deck, shared section or lab notebook pair needs, in
-both languages, from the repository's `templates/scaffold/` when present,
-refusing (`ScaffoldRefusedError`) to overwrite anything.
-
-### Drive links
-
-`drive_links.py` reads and writes a deck's registry (`paths.drive_links`,
-`<user config dir>/drive-links/<deck path>.yml`: the Drive files are the user's,
-and every checkout of the target repo shares it, keyed by `paths.deck_path`, the
-deck's directory relative to the repository): each PDF's path in the
-deck's directory, mapped to the Google Drive file `deckz upload --reserve`
-created for it (`extras/uploading.py::Uploader.reserve`, an empty file, or the
-one already online), before any build shows its link. The factory hands the
-deck builder the registry's links; `DeckBuilder._links` gives each main
-template `links` (`self`, `handout`, `course_notes`, those the registry has),
-records them next to the compilation's build (`.links`), and `plan` reports
-`links_changed`, which `outdated_pdfs` counts. `Uploader.upload` writes a
-reserved PDF to its file by ID, and never deletes a reserved file.
-
-### Course notes
-
-`course_notes.py` backs `deckz run course-notes` and `deckz show course-notes`: a
-deck's course notes are its own tree (`chapters_deck`), the deck's parsed tree with
-each `File` replaced by its chapter (`paths.course_notes_dir`, mirroring the content
-directory, `en/` siblings included; `deckz.yml`'s `course_notes.skip`/`same_as`),
-built by `pipelines.course_notes_targets` with the deck's own settings and
-`basedirs` rooted at the course notes directory, through the deck builder's
-`CompileType.CourseNotes` (its own `Format`, so its own main template,
-`paths.jinja2_course_notes_main_template`, and output dir,
-`paths.course_notes_pdf_dir`, which `stale_pdfs` never globs; `upload` uploads
-it beside the slides of its language, `pipelines.published_targets`). Such a
-target has `BuildTarget.course_notes` set, which makes `_deck_builder` build its
-course notes PDF only, whatever the build's `OutputKinds`, so `deck_targets`/
-`decks_targets` can add the course notes to a slides build (`--course-notes`,
-`OutputKinds.course_notes`), as one `build`, without failing on a deck with no
-chapter.
-`pipelines.chapters_targets` turns `run file`/`run section` preview targets into
-their chapters' (`--course-notes`; `run file` given a chapter's path,
-`checking.chapter_relative`, builds it alone): a chapter no deck includes builds
-too.
-`course_notes_pairs` adds the chapters to `i18n_stale.lang_pairs`, so `i18n stale`,
-the commit-msg hook and the Stop hook follow them; `course-notes-files` and
-`course-notes-pairs` are deferred built-in checks (the latter reports a directory
-with no English chapter at all as one line, and not with `paths`: it's being
-drafted).
-
-### Status
-
-`status.py` backs `deckz status`: one `StatusSection` per concern (checks,
-translation, labs, videos, built decks, told apart by its `key`), each a
-summary line plus
-`StatusItem`s carrying their fix. "Your changes" come from `git status`
-and the commits since the upstream's merge base (`base_revision`). It
-never touches the network unless `fetch`. `analyzing/affected.py` maps
-changed files to the decks resolving them (French; an `en/` file counts
-as its French sibling), for `status` and `deckz show affected`.
-
-### Setting up
-
-`setting_up.py` backs `deckz setup`: each step (deckz's own checkout
-behind its upstream, executables, git hooks, `setup.remotes`,
-Claude hooks, `deckz.yml`'s `setup.steps`, videos never rendered) returns a
-`SetupItem` (`ok`, `done`, `missing`, `failed`, with how to fix it) and is
-idempotent; `check=True` changes nothing. The CLI prints them
-(`_presentation.print_setup`) and exits 1 while one is missing or failed.
-
-`remotes.py` is the one way to the remotes `labs publish` and `videos
-publish` push to: their lookup, the fetch of a published branch and the
-force-push, each failure a `RemoteError` carrying git's stderr and the fix
-(`setup.remotes` gives the URL a missing remote is added with).
-
-### Checking
-
-`analyzing/content_checks.py` holds deckz's own generic content checks
-(`lab-ids`, `lab-pairs`, `lab-outputs`, `lab-secrets` (with `labs/secrets.py`,
-also behind `labs publish`'s refusal), `lab-format`, `asset-credits`,
-`raw-latex`, `jinja-syntax` (each content file parsed with the repository's own
-Jinja environment, its filter and test names checked), `deck-definitions`
-(every deck parsed in French, in the process pool), `lab-urls`), each a
-`(settings) -> list[str]` function in its `CHECKS` dict. A check is blocking
-or deferred (`ChecksSettings.blocking`: `deckz.yml`'s `checks.deferred`, else
-`content_checks.DEFERRED`, every built-in but `lab-secrets`, `jinja-syntax` and
-`deck-definitions`; a plugin check blocks unless listed): `deckz check` exits 1
-on a blocking check's problems only, or on any problem of the checks named on
-its command line, and prints the deferred ones, whose harm comes after the
-commit (`--plain` and `--json` say which); `deckz status` marks the
-`blocks_commit` items, and so does studioz. `ChecksRunner.findings()` gives
-each problem as a `Finding` (its check, whether it blocks, and `path`: the file
-its text starts with, as every built-in's does), which the gates where deferred
-problems come due filter by path: `deckz upload` (`affected.deck_findings`, the
-files `affected.reaches` the deck) and `deckz labs publish` (those under the
-notebooks directory), both with `--skip-checks`, and `deckz status DECK`
-(`status.deck_status`).
-`components/checks.py::ChecksRunner` merges those with the target repo's
-own, from an optional `templates/checks.py` module (`checks(settings) ->
-Mapping[str, Callable[[], list[str]]]`, loaded through
-`components/hooks.py::load_hook` like every other hook) — a name collision
-with a built-in is a `HookError`. `GlobalSettingsFactory.checks_runner()`
-is the construction point. `cli/check/content.py` is both `deckz check
-content` and (`@app.default`) `deckz check`: with `--staged`, it first
-exports the git index's staged tree to `<git_dir>/.check/staged/`
-(`checking.py::export_staged`, shelling out to `git ls-files`/
-`checkout-index`, no `.git` of its own) and runs the checks against that
-instead of the working tree, so another session's unfinished edits neither
-block nor hide a check.
-
-`hooks_install.py` writes deckz's own `pre-commit` (`deckz check --staged`)
-and `commit-msg` git hooks into the repo's hooks directory (`core.hooksPath`
-if set, else `<git_dir>/.git/hooks/`), each a thin shell script shelling
-back out to `deckz` (from the `PATH`, else `uv run --quiet deckz`:
-`deckz_command`, also used for the Claude Code hooks' commands); refuses to
-overwrite a hook file without deckz's own marker line unless `--force`
-(`HookInstallRefusedError`). `deckz.yml`'s `checks.opt_in` lists checks that
-`deckz check`, the pre-commit hook and the post-edit Claude Code hook skip
-unless named (slow, networked, or not yet passing ones).
-`deckz hooks install --ci` writes a GitHub Actions workflow
-(`hooks_install.ci_workflow`, from `deckz.yml`'s `ci` settings) running the
-same checks on every push and pull request, and `deckz hooks check-commits`
-(`i18n_stale.one_sided_commits`) on the commits themselves.
-The commit-msg hook (`deckz hooks check-commit-msg`, `cli/hooks/`) reuses
-`analyzing/i18n_stale.py`'s fr/en pairing (`content_pairs`/
-`notebook_pairs`/`lang_sync_kind`) to mark (`mark_pending`, through `git
-interpret-trailers`) a commit whose staged diff touches one side of a pair
-(`staged_one_sided_pairs`) and whose draft message makes no choice `Lang-sync:
-pending`: refusing it protected nothing, since `stale_files` reads a commit with
-no trailer as pending anyway. It refuses (`CommitRefusedError`), and
-`check-commits` fails on, only a `Lang-sync` line that isn't read
-(`unread_lang_sync`), the author's choice it would lose. Changes found later to need no
-port leave `deckz i18n stale` through `deckz i18n mark-synced`
-(`i18n_stale.mark_synced`): an empty commit (`--only`, so nothing staged goes in)
-naming each file in a `Lang-synced` trailer, which the history walk counts as the
-pair's sync point.
-
-### Data model
-
-`models.py` defines the deck domain model: `DeckDefinition`/`Deck`,
-`PartDefinition`/`Part`, section/flavor includes, and the
-`ResolvedPath`/`UnresolvedPath` distinction used when resolving shared vs.
-local content file/section references. `Parser` (`components/parser.py`)
-turns YAML deck/section definitions into this model; the rest of the
-pipeline operates on the model, not on YAML directly. The `Deck` tree
-(`Deck`/`Part`/`Section`/`File`) is frozen, with tuples of nodes: every
-transformation (`Deck.filter`, the synthetic decks of `checking.py`)
-builds a new tree with `dataclasses.replace`. `utils.all_decks` returns
-each deck as a `ParsedDeck`, the deck and the variables its files render
-with, for the analyses that render content (assets usage).
-
-### Analyzing
-
-`analyzing/` holds repository-wide, read-only analyses that don't fit the
-build pipeline: flavor renaming/merging, section search, i18n
-(fr/en) consistency checks, variable-usage checks, and the generic content
-checks (see "Checking" below). These back the
-`deckz deps`, `deckz search-sections`, `deckz section-flavors`,
-`deckz section-files`, `deckz flavor rename`, `deckz flavor deduplicate`,
-`deckz i18n *`, `deckz check variables`, and `deckz check content`
-commands.
-
-`variables_usage.py` (backing `deckz check variables`) surveys every shared
-section's every named flavor -- via `Parser.from_section`, so that a
-broken flavor is reported -- with the repository-wide `variables.yml`,
-plus every real deck's own tree with its own, and reports a fragment
-reading a `variables.xxx`/`variables['xxx']` name nothing sets
-(`undefined`), a fragment that fails to parse with the target repo's own
-Jinja environment (`unparsable`), and a flavor/deck that fails to parse at
-all (`structural`, caught per-context so one bad flavor doesn't abort the
-whole survey).
-
-### Extras
-
-`src/deckz/extras/` holds the business logic for `deckz extras`'s
-subcommands (`github_querying.py` for `issue`, `mailing.py` for `random`)
-plus `uploading.py` for the top-level `deckz upload`
-— side commands unrelated to the build pipeline, each with its own thin
-`cli/extras/*.py` (or `cli/upload.py`) wrapper, same split as everywhere
-else in `cli/`. Their third-party clients (Google, GitHub, SendGrid,
-email-validator) are the `deckz[extras]` optional dependencies, installed
-by the `dev` group: the CLI wrappers import them inside
-`extras.extras_imports()`, which turns a missing one into a
-`MissingExtraError`. `deckz labs` is unrelated and not under `extras/`: its
-library (`src/deckz/labs/`) is plain deckz code with no optional
-dependency, backing the top-level `labs` sub-app (`cli/labs/`).
-
-### studioz
-
-`studioz/` is a second package, studioz: a local web UI to work on a
-deckz-managed repository (workspaces, previews, editing, commit and sync, and later
-agents), on each person's machine. `plans/studioz.md` is its plan, with what is done.
-The repository is a uv workspace for it (`[tool.uv.workspace]`, a deliberate
-divergence from the Copier template): one `uv.lock`, studioz depends on deckz through
-`{ workspace = true }`, pinned to the same version, and the `dev` group installs it
-for the tests. deckz's core never imports studioz nor its web stack; studioz uses
-deckz's Python API (`deckz.worktrees`, `deckz.setting_up`…), and a rule it needs goes
-into deckz, never into studioz.
-
-Its architecture (routes, workspaces, watches, the agent, jobs…) is in
-`studioz/CLAUDE.md`, which loads when working under `studioz/`.
+Keep `docs/architecture/` up to date in the same change as the code. A change that
+adds, moves or removes a module (its layer, in the contract and the diagram), adds a
+dependency between layers or a known exception (`ignore_imports`, and the table of
+`index.md`), changes what a component owns on disk, a lock or a process boundary,
+changes what the managed repository plugs in or imports, or changes what studioz
+relies on (`--json` outputs, `watch`'s log messages), updates the pages it makes
+wrong. The pages describe responsibilities and boundaries; details of one function go
+in its docstring, which the code reference renders.
 
 ## Operability guidelines
 
