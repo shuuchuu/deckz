@@ -289,6 +289,22 @@ def _uncommitted_lab_items(
     return items
 
 
+def _missing_remote_items(
+    settings: "GlobalSettings", remotes: Iterable[str]
+) -> list[StatusItem]:
+    # Without one, nothing can be compared with what's published, nor published.
+    from .remotes import add_remote_fix, remote_url
+
+    return [
+        StatusItem(
+            f"no `{remote}` remote in this clone, to publish to",
+            add_remote_fix(remote, settings.setup.remotes.get(remote)),
+        )
+        for remote in remotes
+        if remote_url(settings.paths.git_dir, remote) is None
+    ]
+
+
 def _files_remote_tree(settings: "GlobalSettings", *, fetch: bool) -> dict[str, str]:
     # The files published to `labs.published_files_remote`, by path.
     labs = settings.labs
@@ -380,6 +396,7 @@ def labs_section(
     """
     from .exceptions import LabPublishRefusedError
     from .labs.publishing import _published_files, _published_notebooks
+    from .remotes import publish_remotes
 
     git_dir = settings.paths.git_dir
     notebooks_dir = settings.paths.labs_notebooks_dir
@@ -390,6 +407,10 @@ def labs_section(
     published_rel = published_dir.relative_to(git_dir).as_posix()
     items = _uncommitted_lab_items(settings, uncommitted)
     items += _stale_demo_items(settings, changed)
+    if missing := _missing_remote_items(settings, publish_remotes(settings, "labs")):
+        return StatusSection(
+            "Labs", "not compared with the published ones", _capped(items + missing)
+        )
     if fetch:
         _git(git_dir, "fetch", "--quiet", labs.publish_remote, labs.publish_branch)
     ref = f"{labs.publish_remote}/{labs.publish_branch}"
@@ -440,6 +461,8 @@ def videos_section(settings: "GlobalSettings", *, fetch: bool) -> StatusSection:
     Returns:
         Its section.
     """
+    from .exceptions import RemoteError
+    from .remotes import publish_remotes
     from .videos import quality, renders, scenes
     from .videos.publishing import fetch_published, published_blobs, unpublished_reason
 
@@ -472,12 +495,26 @@ def videos_section(settings: "GlobalSettings", *, fetch: bool) -> StatusSection:
         for r in found
         if r.file.is_file() and quality(r.file) != videos.published_quality
     ]
+    if missing_remote := _missing_remote_items(
+        settings, publish_remotes(settings, "videos")
+    ):
+        return StatusSection(
+            "Videos",
+            "not compared with the published ones",
+            _capped(items + missing_remote),
+        )
     ref = f"{videos.publish_remote}/{videos.publish_branch}"
-    commit = (
-        fetch_published(git_dir, videos.publish_remote, videos.publish_branch)
-        if fetch
-        else _git(git_dir, "rev-parse", "--verify", "--quiet", ref)
-    )
+    try:
+        commit = (
+            fetch_published(git_dir, videos.publish_remote, videos.publish_branch)
+            if fetch
+            else _git(git_dir, "rev-parse", "--verify", "--quiet", ref)
+        )
+    except RemoteError as error:
+        items.append(StatusItem(str(error)))
+        return StatusSection(
+            "Videos", "not compared with the published ones", _capped(items)
+        )
     if commit is None:
         summary = f"{ref} was never fetched: `deckz status --fetch` compares with it"
         return StatusSection("Videos", summary, _capped(items))

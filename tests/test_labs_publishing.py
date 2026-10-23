@@ -5,7 +5,7 @@ from typing import Any
 
 from pytest import raises
 
-from deckz.exceptions import LabPublishRefusedError
+from deckz.exceptions import LabPublishRefusedError, RemoteError
 from deckz.labs.publishing import publish
 
 ID_PATTERN = r"[a-z0-9]+(-[a-z0-9]+)*"
@@ -254,3 +254,45 @@ def test_publish_command_refuses_a_notebook_with_check_problems(
     main(("labs", "publish", "--skip-checks", "--workdir", str(work)))
 
     assert _git(remote, "ls-tree", "--name-only", "main") == "topic-demo-fr.ipynb\n"
+
+
+def test_publish_names_an_unreachable_remote(tmp_path: Path) -> None:
+    _remote, work = _make_repos(tmp_path)
+    _git(work, "remote", "set-url", "labs", str(tmp_path / "nowhere.git"))
+
+    with raises(RemoteError, match=r"can't reach labs: .*nowhere\.git"):
+        _publish(work)
+
+
+def test_publish_gives_git_s_reason_for_a_refused_push(tmp_path: Path) -> None:
+    remote, work = _make_repos(tmp_path)
+    hook = remote / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho 'Permission denied to you' >&2\nexit 1\n")
+    hook.chmod(0o755)
+
+    with raises(RemoteError, match=r"can't push to labs: .*Permission denied to you"):
+        _publish(work)
+
+
+def test_publish_command_names_a_missing_remote_and_its_fix(
+    tmp_path: Path, monkeypatch: Any, caplog: Any
+) -> None:
+    import appdirs
+
+    from deckz.cli import main
+
+    monkeypatch.setattr(appdirs, "user_config_dir", lambda _: str(tmp_path))
+    _remote, work = _make_repos(tmp_path)
+    _git(work, "remote", "remove", "labs")
+    (work / "deckz.yml").write_text(
+        "setup:\n  remotes:\n    labs: git@example.com:owner/labs.git\n"
+    )
+
+    with raises(SystemExit) as exc_info:
+        main(("labs", "publish", "--skip-checks", "--workdir", str(work)))
+
+    assert exc_info.value.code == 1
+    assert (
+        "no `labs` remote in this clone: `deckz setup` adds it "
+        "(`git remote add labs git@example.com:owner/labs.git`)"
+    ) in caplog.text

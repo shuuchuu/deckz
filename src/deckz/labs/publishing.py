@@ -25,6 +25,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from ..exceptions import LabPublishRefusedError
+from ..remotes import branch_tip, replace_branch
 
 
 def _git(
@@ -174,33 +175,7 @@ def _tree(git_dir: Path, entries: dict[str, str]) -> str:
         return _git(git_dir, "write-tree", env=env)
 
 
-def _fetched_tip(git_dir: Path, remote: str, branch: str) -> str:
-    # A non-raising fetch: the branch may not exist yet (first publish), which
-    # fails the fetch but is not an error -- a never-published branch has no
-    # tip either way.
-    subprocess.run(
-        ["git", "-C", str(git_dir), "fetch", "--quiet", remote, branch],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return subprocess.run(
-        [
-            "git",
-            "-C",
-            str(git_dir),
-            "rev-parse",
-            "--verify",
-            "--quiet",
-            f"{remote}/{branch}",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    ).stdout.strip()
-
-
-def _is_tree(git_dir: Path, tip: str, tree: str) -> bool:
+def _is_tree(git_dir: Path, tip: str | None, tree: str) -> bool:
     # The tip is already one parentless commit of this tree.
     return bool(tip) and (
         _git(git_dir, "rev-parse", f"{tip}^{{tree}}") == tree
@@ -209,22 +184,16 @@ def _is_tree(git_dir: Path, tip: str, tree: str) -> bool:
 
 
 def _replace(
-    git_dir: Path, tree: str, *, remote: str, branch: str, tip: str, message: str
+    git_dir: Path,
+    tree: str,
+    *,
+    remote: str,
+    branch: str,
+    tip: str | None,
+    message: str,
 ) -> None:
     commit = _git(git_dir, "commit-tree", tree, "-m", message)
-    subprocess.run(
-        [
-            "git",
-            "-C",
-            str(git_dir),
-            "push",
-            f"--force-with-lease={branch}:{tip}",
-            remote,
-            f"{commit}:refs/heads/{branch}",
-        ],
-        check=True,
-        capture_output=True,
-    )
+    replace_branch(git_dir, remote, branch, commit, tip)
 
 
 def publish(
@@ -267,7 +236,7 @@ def publish(
         if _git(git_dir, "status", "--porcelain", "--", rel):
             msg = f"{rel} has uncommitted changes"
             raise LabPublishRefusedError(msg)
-    tip = _fetched_tip(git_dir, remote, branch)
+    tip = branch_tip(git_dir, remote, branch)
     published = _published_notebooks(
         git_dir,
         notebooks_dir,
@@ -304,7 +273,7 @@ def publish(
         )
         pushed = True
     if files_remote:
-        files_tip = _fetched_tip(git_dir, files_remote, files_branch)
+        files_tip = branch_tip(git_dir, files_remote, files_branch)
         files_tree = _tree(git_dir, files)
         if not _is_tree(git_dir, files_tip, files_tree):
             _replace(

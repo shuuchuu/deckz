@@ -19,7 +19,9 @@ def setup(
     behind its upstream branch (after fetching it); checks deckz's
     executables (git, pandoc) and those `deckz.yml` lists in
     `setup.requires`, saying how to install a missing one; installs the git
-    hooks; runs the repository's own `setup.steps` not done yet; and
+    hooks; adds the git remotes `setup.remotes` lists that the clone lacks
+    (e.g. those the labs and videos are published to); runs the
+    repository's own `setup.steps` not done yet; and
     reports the videos never rendered. Safe to run any number of times.
     Exits 1 while something is still missing or failed.
 

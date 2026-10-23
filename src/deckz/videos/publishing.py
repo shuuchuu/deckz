@@ -22,6 +22,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from ..exceptions import VideoFetchError, VideoPublishRefusedError
+from ..remotes import branch_tip, replace_branch
 from ..stamps import stamp_path
 from .scenes import Scene, out_of_date, quality, renders
 
@@ -134,15 +135,7 @@ def fetch_published(git_dir: Path, remote: str, branch: str) -> str | None:
     Returns:
         The published commit, or None before the first publish.
     """
-    if not _git(git_dir, "ls-remote", "--heads", remote, branch):
-        return None
-    subprocess.run(
-        ["git", "-C", str(git_dir), "fetch", "--quiet", remote, branch],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return _git(git_dir, "rev-parse", f"{remote}/{branch}")
+    return branch_tip(git_dir, remote, branch)
 
 
 def published_paths(git_dir: Path, commit: str | None) -> set[str]:
@@ -256,19 +249,7 @@ def publish(
 
     today = datetime.now(tz=UTC).date().isoformat()
     commit = _git(git_dir, "commit-tree", tree, "-m", f"Videos ({today})")
-    subprocess.run(
-        [
-            "git",
-            "-C",
-            str(git_dir),
-            "push",
-            f"--force-with-lease={branch}:{remote_commit or ''}",
-            remote,
-            f"{commit}:refs/heads/{branch}",
-        ],
-        check=True,
-        capture_output=True,
-    )
+    replace_branch(git_dir, remote, branch, commit, remote_commit)
     return True
 
 

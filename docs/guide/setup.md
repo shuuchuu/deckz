@@ -16,6 +16,8 @@ for you:
 - the executables (git, pandoc, and those the repository lists in `deckz.yml`'s
   `setup.requires`): a missing one is reported with how to install it;
 - the git hooks, which check every commit (see [Before committing](before-you-commit.md));
+- the git remotes the repository lists in `deckz.yml`'s `setup.remotes`, e.g. those
+  the labs and videos are published to: a missing one is added;
 - the repository's own setup steps (`setup.steps`), e.g. downloading the JavaScript
   the HTML decks need;
 - the videos never rendered: reported, since a render takes minutes. `deckz setup

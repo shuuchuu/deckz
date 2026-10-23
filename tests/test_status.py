@@ -160,7 +160,7 @@ def test_status_without_labs_nor_videos(repo: Path) -> None:
     assert [section.key for section in sections] == ["translation", "labs", "videos"]
 
 
-def test_videos_names_each_draft(repo: Path) -> None:
+def _scene(repo: Path) -> None:
     module = repo / "figures" / "scenes" / "nn" / "demo.py"
     module.parent.mkdir(parents=True)
     module.write_text(
@@ -168,6 +168,11 @@ def test_videos_names_each_draft(repo: Path) -> None:
         "@register_scene\nclass Demo:\n    pass\n",
         encoding="utf8",
     )
+
+
+def test_videos_names_each_draft(repo: Path, tmp_path: Path) -> None:
+    _scene(repo)
+    _git(repo, "remote", "add", "videos", str(tmp_path / "videos.git"))
     settings = _settings(repo)
     scene = scenes(settings)[0]
     render = renders(settings.paths.videos_dir, scene)[0]
@@ -186,6 +191,24 @@ def test_videos_names_each_draft(repo: Path) -> None:
             "`deckz videos render nn/demo` renders it at the published quality",
         )
     ]
+
+
+def test_videos_names_a_missing_remote_and_how_to_add_it(repo: Path) -> None:
+    _scene(repo)
+    (repo / "deckz.yml").write_text(
+        (repo / "deckz.yml").read_text(encoding="utf8")
+        + "setup:\n  remotes:\n    videos: git@example.com:owner/videos.git\n",
+        encoding="utf8",
+    )
+
+    section = videos_section(_settings(repo), fetch=True)
+
+    assert section.summary == "not compared with the published ones"
+    assert (
+        "no `videos` remote in this clone, to publish to",
+        "`deckz setup` adds it "
+        "(`git remote add videos git@example.com:owner/videos.git`)",
+    ) in [(item.text, item.fix) for item in section.items]
 
 
 def test_status_command_prints_every_section(repo: Path, capsys: Any) -> None:

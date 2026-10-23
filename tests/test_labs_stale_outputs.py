@@ -214,6 +214,7 @@ def test_status_lists_your_stale_demos_and_counts_the_others(repo: Path) -> None
     _write(repo, "print(2)\n", "1\n")
     _write(repo, "print(2)\n", "1\n", other)
     _commit(repo, "Print 2 instead")
+    _git(repo, "remote", "add", "labs", str(repo / "labs.git"))
 
     section = labs_section(_settings(repo), set(), fetch=False, changed={DEMO})
 

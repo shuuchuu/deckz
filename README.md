@@ -342,11 +342,20 @@ typst_ignore_system_fonts: true
       - name: reveal.js for HTML decks
         run: [npm, ci]
         creates: node_modules
+    remotes:
+      labs: git@github.com:owner/labs.git
+      videos: git@github.com:owner/videos.git
   ```
 
   - `requires`: executables that must be on the `PATH`, each with what
     needs it (`why`) and how to install it (`install`), both shown when
     it's missing.
+  - `remotes`: git remotes a clone needs besides `origin` (those
+    `labs.publish_remote`, `labs.published_files_remote` and
+    `videos.publish_remote` name), with their URLs: `deckz setup` adds a
+    missing one and leaves one already there alone, whatever its URL;
+    `deckz labs publish`, `deckz videos publish` and `deckz status` name
+    a missing one with the fix.
   - `steps`: commands run from the git root, without a shell, in order.
     A step whose `creates` path exists is done and skipped (`deckz setup
     --force` runs it anyway); one without `creates` runs every time.
@@ -1026,6 +1035,7 @@ The main commands:
   reports it when it's behind its upstream branch, with the `git pull`
   to run; checks the executables deckz and the repository need (`setup.requires`
   above), saying how to install a missing one; installs the git hooks;
+  adds the git remotes `setup.remotes` lists that the clone lacks;
   runs the repository's `setup.steps` not done yet; and reports the
   videos never rendered (`--videos` renders them). `--check` only
   reports, `--claude` also installs the Claude Code hooks. It exits 1

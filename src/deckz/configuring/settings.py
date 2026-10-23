@@ -305,6 +305,11 @@ class SetupSettings(BaseModel):
     steps: tuple[SetupStep, ...] = ()
     """Commands that set up a clone or a worktree, e.g. `uv sync` (no \
     `creates`: runs every time) or vendoring JavaScript."""
+    remotes: dict[str, str] = Field(default_factory=dict)
+    """Git remotes a clone needs besides `origin`, by name: their URLs, e.g. \
+    `labs: git@github.com:owner/labs.git` for the remotes `deckz labs \
+    publish` and `deckz videos publish` push to. `deckz setup` adds the \
+    missing ones, and leaves one already there alone, whatever its URL."""
 
 
 class WorktreeSettings(BaseModel):

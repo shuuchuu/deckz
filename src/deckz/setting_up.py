@@ -4,7 +4,9 @@ Every step is idempotent and reports what it found or did as a
 [`SetupItem`][deckz.setting_up.SetupItem]: whether deckz itself, when it runs
 from a git checkout, is behind its upstream branch; deckz's own executables (git,
 pandoc), those the repository declares (`deckz.yml`'s `setup.requires`), the
-git hooks, the repository's own steps (`setup.steps`), and the videos a deck
+git hooks, the git remotes it declares (`setup.remotes`, e.g. those the labs
+and videos are published to), the repository's own steps (`setup.steps`), and
+the videos a deck
 build needs rendered. With `check`, nothing is changed: each item only says
 what's missing, and how to fix it.
 """
@@ -65,12 +67,13 @@ def setup(
         progress: Advanced while rendering videos.
 
     Returns:
-        One item for deckz, then one per requirement, hook set, step and the
-        videos.
+        One item for deckz, then one per requirement, hook set, remote, step
+        and the videos.
     """
     items = [deckz_checkout(settings)]
     items.extend(requirements(settings))
     items.append(git_hooks(settings, check=check))
+    items.extend(remotes(settings, check=check))
     if claude:
         items.append(claude_hooks(settings, check=check))
     items.extend(steps(settings, check=check, force=force))
@@ -220,6 +223,34 @@ def git_hooks(settings: "GlobalSettings", *, check: bool) -> SetupItem:
             f"{error}: keep yours, or replace it with `deckz hooks install --force`",
         )
     return SetupItem("git hooks", Status.DONE, f"installed in {directory}")
+
+
+def remotes(settings: "GlobalSettings", *, check: bool) -> list[SetupItem]:
+    """The git remotes `setup.remotes` lists: added when missing.
+
+    A remote already there is left alone, even at another URL (https rather
+    than ssh, a fork).
+
+    Returns:
+        One item per remote.
+    """
+    from .remotes import add_remote_fix, remote_url
+
+    git_dir = settings.paths.git_dir
+    items = []
+    for name, url in settings.setup.remotes.items():
+        label = f"remote {name}"
+        if remote_url(git_dir, name) is not None:
+            items.append(SetupItem(label, Status.OK))
+        elif check:
+            items.append(SetupItem(label, Status.MISSING, add_remote_fix(name, url)))
+        elif _git(git_dir, "remote", "add", name, url) is None:
+            items.append(
+                SetupItem(label, Status.FAILED, f"`git remote add {name} {url}` failed")
+            )
+        else:
+            items.append(SetupItem(label, Status.DONE, f"added, at {url}"))
+    return items
 
 
 def claude_hooks(settings: "GlobalSettings", *, check: bool) -> SetupItem:

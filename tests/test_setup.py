@@ -23,6 +23,8 @@ setup:
     - name: make the marker
       run: [python3, -c, "open('marker', 'w').close()"]
       creates: marker
+  remotes:
+    labs: git@example.com:owner/labs.git
 """
 
 
@@ -50,6 +52,10 @@ def test_check_reports_and_changes_nothing(repo: Path) -> None:
     assert "apt install no-such-package" in items["no-such-command-deckz"].detail
     assert items["git hooks"].status is Status.MISSING
     assert items["make the marker"].status is Status.MISSING
+    assert items["remote labs"].status is Status.MISSING
+    assert "git remote add labs git@example.com:owner/labs.git" in (
+        items["remote labs"].detail
+    )
     assert items["videos"].status is Status.OK
     assert not (repo / "marker").exists()
     assert not (repo / ".git" / "hooks" / "pre-commit").exists()
@@ -69,6 +75,31 @@ def test_setup_installs_the_hooks_and_runs_the_steps_once(repo: Path) -> None:
     assert second["make the marker"].status is Status.OK
     # A tool a person must install stays missing.
     assert incomplete(second.values())
+
+
+def test_setup_adds_a_missing_remote_and_keeps_one_there(repo: Path) -> None:
+    first = _by_name(repo)
+
+    assert first["remote labs"].status is Status.DONE
+    assert _remote_url(repo, "labs") == "git@example.com:owner/labs.git"
+
+    run(
+        ["git", "-C", str(repo), "remote", "set-url", "labs", "https://x/labs.git"],
+        check=True,
+    )
+    second = _by_name(repo)
+
+    assert second["remote labs"].status is Status.OK
+    assert _remote_url(repo, "labs") == "https://x/labs.git"
+
+
+def _remote_url(repo: Path, name: str) -> str:
+    return run(
+        ["git", "-C", str(repo), "remote", "get-url", name],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
 
 
 def test_a_failing_step_reports_its_output(repo: Path) -> None:
