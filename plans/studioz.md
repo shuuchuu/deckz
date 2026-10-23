@@ -17,7 +17,7 @@ from studioz) are done: phase 5 is done. Then the memory guard "Risks" promised
 Phase 6 (the agent's usage) was planned on 2026-10-21 from the colleague's first
 afternoon; its increments 1 (the model), 2 (a new conversation for a new file), 3
 (the context's size) and 4 (slides' `docs/figures.md`, in slides' main as `b83c29fb`)
-are done. Phase 7's increments 1 (logging in, and errors naming their fix), 2
+are done, and 6 (a smaller prefix, 2026-10-23). Phase 7's increments 1 (logging in, and errors naming their fix), 2
 (links in new tabs), 3 (the slide in view) and 4 (the PDF's outline) are done.
 **Next:** phase 8 (planned 2026-10-23 after a publish from a stale workspace
 rolled the labs back, its decisions taken the same day; its 5 increments done,
@@ -152,6 +152,14 @@ Found along the way, not done (each increment's "Left" has the rest):
   `outdated` only: for a deck with a registry (`deckz upload --reserve`), the job
   fails on deckz's refusal instead of the dialog saying so first. Show them as
   `outdated` is.
+- The sandbox fails on the colleague's machine (2026-10-23, `~/downloads/576c7091-…`):
+  every sandboxed Bash command ended on `bwrap: loopback: Failed RTM_NEWADDR:
+  Operation not permitted` (typical of a system restricting unprivileged user
+  namespaces, Ubuntu 24.04's AppArmor default among them; not confirmed), and the
+  agent retried with `dangerouslyDisableSandbox`, which `auto` let through. So on
+  that machine the agent runs outside the sandbox studioz counts on. Worth: a check
+  at start that `bwrap` works, refusing with the fix, and
+  `allowUnsandboxedCommands: False` in `options()`'s sandbox.
 
 ### Starting phase 7
 
@@ -1797,7 +1805,31 @@ Each increment is usable on its own, in this order:
    left: a `deckz` command giving a content file's rendered pages as PNGs (build,
    find the pages from the build's markers, convert) would save the page hunting, a
    few percent at most here; trimming slides' `CLAUDE.md` saves less, since the cache
-   serves it.
+   serves it. A first, short one (2026-10-23, `~/downloads/576c7091-….jsonl`): one
+   message ("utilise l'option na=False pour la démonstration"), 9 calls on Sonnet 5,
+   0.33 $: the first call wrote its whole 39 k prefix (nothing read from the cache),
+   0.16 $, half the cost; the calls after it read 40 to 47 k each. Small as it is, it
+   shows the floor of a new conversation; it led to increment 6.
+6. **A smaller prefix**: done 2026-10-23. Of that 39 k prefix, the tools' definitions
+   were about 18 k tokens and the skills' listing 3 k, with Claude Code's own skills
+   (charts, the Claude API, code review, `/loop`…) more than half of it, and
+   ScheduleWakeup's definition alone 2 k: all of it read again at every call, of no
+   use in a workspace. `options()` now gives the Agent SDK `skills=` the workspace's
+   own skills and commands (`own_skills`, read from its `.claude/`, so deckz names
+   none of slides'), which hides the others from the listing and the Skill tool, and
+   `disallowed_tools=` `agent.UNUSED_TOOLS` (ScheduleWakeup, the Cron tools,
+   RemoteTrigger, PushNotification, ReportFindings, ListAgents, the worktree tools,
+   DesignSync, Workflow). Agent and SendMessage stay (slides' `qa-fix` drives
+   subagents), and AskUserQuestion (studioz shows it as a form). Checked first with
+   a one-turn probe in a scratch repository, then **measured** on `studioz-dev`, the
+   same question ("sans outil, liste tes skills et tes outils") from main's studioz
+   then from the worktree's: a new conversation's prefix went from 41,207 tokens (21
+   skills, 12 tools) to 34,039 (slides' 8 skills, 8 tools), 7.2 k less at every call
+   (−17 %): about 0.03 $ less for a new conversation's first call on Sonnet, and
+   0.0014 $ for each call after it. Left: the account's claude.ai connectors (Claude
+   Docs, in the colleague's session) load despite `setting_sources=["project"]`;
+   slides' `CLAUDE.md` (25 k characters, about 6.5 k tokens) is now the largest
+   piece left.
 
 ### Phase 7: what the colleague's first afternoon found (noted 2026-10-21)
 

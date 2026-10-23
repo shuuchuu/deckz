@@ -8,7 +8,8 @@ credentials, and removes `ANTHROPIC_API_KEY` from its environment at start
 
 The agent works in the workspace (`cwd`), with the repository's project
 settings only (its `CLAUDE.md`, skills and hooks; not the person's own
-`~/.claude` setup, nor auto memory), `auto` permissions inside Claude Code's
+`~/.claude` setup, nor auto memory), none of Claude Code's own skills nor its
+tools of no use here (`UNUSED_TOOLS`), `auto` permissions inside Claude Code's
 command sandbox, and the workspace's own deckz and caches (plan, "Finding 2").
 It never commits, pushes nor moves the branch: a `PreToolUse` hook refuses
 it, the person commits from studioz; nor rents a GPU machine (`deckz labs gpu
@@ -120,6 +121,24 @@ LONG = 100_000
 """The context from which the panel suggests a new conversation."""
 DEFAULT_MODEL = "sonnet"
 """The agent's model, as Claude Code names it (an alias, or a model's id)."""
+UNUSED_TOOLS = (
+    "ScheduleWakeup",
+    "CronCreate",
+    "CronDelete",
+    "CronList",
+    "RemoteTrigger",
+    "PushNotification",
+    "ReportFindings",
+    "ListAgents",
+    "EnterWorktree",
+    "ExitWorktree",
+    "DesignSync",
+    "Workflow",
+)
+"""Claude Code's tools kept from the agent: each call reads every tool's definition
+again (ScheduleWakeup's alone is 2 k tokens), and these serve no one here. The
+workspace is already a worktree, its own sessions aren't the agent's to message,
+and a `Workflow` spends the person's usage on many agents at once."""
 _IDLE_AFTER = 15 * 60.0
 _DETAIL = 400
 LOGIN = "uv run studioz login"
@@ -816,6 +835,21 @@ async def _deny(  # ruff: ignore[unused-async]
     )
 
 
+def own_skills(workspace: Path) -> list[str]:
+    """The skills and commands of the workspace's project settings.
+
+    The agent sees only these: Claude Code's built-in skills (charts, the Claude
+    API, code review…) would cost each call about 2 k tokens of their listing.
+
+    Returns:
+        Their names, sorted.
+    """
+    claude = workspace / ".claude"
+    skills = [path.parent.name for path in claude.glob("skills/*/SKILL.md")]
+    commands = [path.stem for path in claude.glob("commands/*.md")]
+    return sorted({*skills, *commands})
+
+
 def options(
     workspace: Path,
     resume: str | None,
@@ -855,6 +889,8 @@ def options(
         resume=resume,
         model=model,
         setting_sources=["project"],
+        skills=own_skills(workspace),
+        disallowed_tools=list(UNUSED_TOOLS),
         system_prompt={"type": "preset", "preset": "claude_code", "append": APPEND},
         permission_mode="auto",
         sandbox={"enabled": True, "autoAllowBashIfSandboxed": True},

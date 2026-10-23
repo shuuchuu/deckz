@@ -256,6 +256,22 @@ def test_options(tmp_path: Path, monkeypatch: Any) -> None:
     assert found.env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] == "1"
     assert found.model == agent.DEFAULT_MODEL == "sonnet"
     assert agent.options(tmp_path, None, model="opus").model == "opus"
+    # No skill at all rather than Claude Code's own.
+    assert found.skills == []
+    assert "ScheduleWakeup" in found.disallowed_tools
+    assert "Agent" not in found.disallowed_tools
+    assert agent.ASK not in found.disallowed_tools
+
+
+def test_options_list_the_workspace_skills_only(tmp_path: Path) -> None:
+    claude = tmp_path / ".claude"
+    for skill in ("qa-fix", "sync-langs", "notes-only"):
+        (claude / "skills" / skill).mkdir(parents=True)
+    (claude / "skills" / "qa-fix" / "SKILL.md").write_text("---\nname: qa-fix\n---\n")
+    (claude / "skills" / "sync-langs" / "SKILL.md").write_text("")
+    (claude / "commands").mkdir()
+    (claude / "commands" / "deploy.md").write_text("")
+    assert agent.options(tmp_path, None).skills == ["deploy", "qa-fix", "sync-langs"]
 
 
 def test_model_label() -> None:
