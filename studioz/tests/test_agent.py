@@ -1,5 +1,6 @@
 import asyncio
 import json
+import subprocess
 from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 from time import monotonic, sleep, time
@@ -33,6 +34,7 @@ from studioz.agent import (
     asked,
     entries,
     refused_git,
+    sandbox_problem,
 )
 from studioz.app import Login, create_app
 from studioz.cli import login
@@ -261,6 +263,12 @@ def test_options(tmp_path: Path, monkeypatch: Any) -> None:
     assert "ScheduleWakeup" in found.disallowed_tools
     assert "Agent" not in found.disallowed_tools
     assert agent.ASK not in found.disallowed_tools
+    # No command leaves the sandbox, and no sandbox means no command.
+    assert found.sandbox is None
+    sandbox = json.loads(found.settings or "{}")["sandbox"]
+    assert sandbox["enabled"]
+    assert not sandbox["allowUnsandboxedCommands"]
+    assert sandbox["failIfUnavailable"]
 
 
 def test_options_list_the_workspace_skills_only(tmp_path: Path) -> None:
@@ -597,6 +605,57 @@ def test_not_logged_in(workspace: Path, repository: Path, factory: FakeFactory) 
     assert response.status_code == 409
     assert "aucun compte" in response.json()["error"]
     assert not factory.clients
+
+
+def test_no_turn_without_the_sandbox(
+    workspace: Path,
+    repository: Path,
+    factory: FakeFactory,
+    logged_in: Login,
+    monkeypatch: Any,
+) -> None:
+    problem = "Le bac à sable de l'agent ne démarre pas"
+    monkeypatch.setattr("studioz.agent.sandbox_problem", lambda: problem)
+    app = create_app(repository, agents=Agents(factory), login=logged_in)
+    with TestClient(app, base_url="http://localhost:8421") as client:
+        response = client.post(
+            f"{BASE}/message", data={"message": "Bonjour"}, headers=ORIGIN
+        )
+    assert response.status_code == 409
+    assert response.json()["error"] == problem
+    assert not factory.clients
+
+
+def _bwrap(code: int, stderr: str = "") -> Callable[..., Any]:
+    def run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        assert command[0] == "bwrap"
+        assert "--unshare-net" in command
+        return subprocess.CompletedProcess(command, code, "", stderr)
+
+    return run
+
+
+def test_sandbox_problem() -> None:
+    def found(command: str) -> str:
+        return f"/usr/bin/{command}"
+
+    assert sandbox_problem(_bwrap(0), found) == ""
+    loopback = "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted"
+    refused = sandbox_problem(_bwrap(1, loopback), found)
+    assert loopback in refused
+    assert "AppArmor" in refused
+    assert "README" in refused
+    assert "code 1" in sandbox_problem(_bwrap(1), found)
+
+    def no_socat(command: str) -> str | None:
+        return None if command == "socat" else found(command)
+
+    assert "apt install bubblewrap socat" in sandbox_problem(_bwrap(0), no_socat)
+
+    def broken(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(command, 10)
+
+    assert "timed out" in sandbox_problem(broken, found)
 
 
 def test_messages_refused_from_another_site(

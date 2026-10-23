@@ -17,7 +17,8 @@ from studioz) are done: phase 5 is done. Then the memory guard "Risks" promised
 Phase 6 (the agent's usage) was planned on 2026-10-21 from the colleague's first
 afternoon; its increments 1 (the model), 2 (a new conversation for a new file), 3
 (the context's size) and 4 (slides' `docs/figures.md`, in slides' main as `b83c29fb`)
-are done, and 6 (a smaller prefix, 2026-10-23). Phase 7's increments 1 (logging in, and errors naming their fix), 2
+are done, and 6 (a smaller prefix) and 7 (no agent outside its sandbox), both
+2026-10-23. Phase 7's increments 1 (logging in, and errors naming their fix), 2
 (links in new tabs), 3 (the slide in view) and 4 (the PDF's outline) are done.
 **Next:** phase 8 (planned 2026-10-23 after a publish from a stale workspace
 rolled the labs back, its decisions taken the same day; its 5 increments done,
@@ -152,14 +153,11 @@ Found along the way, not done (each increment's "Left" has the rest):
   `outdated` only: for a deck with a registry (`deckz upload --reserve`), the job
   fails on deckz's refusal instead of the dialog saying so first. Show them as
   `outdated` is.
-- The sandbox fails on the colleague's machine (2026-10-23, `~/downloads/576c7091-…`):
-  every sandboxed Bash command ended on `bwrap: loopback: Failed RTM_NEWADDR:
-  Operation not permitted` (typical of a system restricting unprivileged user
-  namespaces, Ubuntu 24.04's AppArmor default among them; not confirmed), and the
-  agent retried with `dangerouslyDisableSandbox`, which `auto` let through. So on
-  that machine the agent runs outside the sandbox studioz counts on. Worth: a check
-  at start that `bwrap` works, refusing with the fix, and
-  `allowUnsandboxedCommands: False` in `options()`'s sandbox.
+- ~~The sandbox fails on the colleague's machine~~ Done 2026-10-23: phase 6,
+  increment 7. The colleague fixed AppArmor on their machine the same day, with
+  Claude's help (how isn't recorded here). Left: their studioz's probe confirming
+  it once they update, and, if their fix differs from the README's profile, the
+  README taking the one that worked.
 
 ### Starting phase 7
 
@@ -1830,6 +1828,32 @@ Each increment is usable on its own, in this order:
    Docs, in the colleague's session) load despite `setting_sources=["project"]`;
    slides' `CLAUDE.md` (25 k characters, about 6.5 k tokens) is now the largest
    piece left.
+7. **No agent outside its sandbox**: done 2026-10-23. Found in the same transcript:
+   on the colleague's machine (Ubuntu), every sandboxed Bash command ended on
+   `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`, AppArmor's
+   restriction of unprivileged user namespaces (Ubuntu 23.10 and later), and the
+   agent ran the next one again with `dangerouslyDisableSandbox`, which `auto` let
+   through: the agent worked outside the sandbox studioz counts on. Claude Code
+   also runs every command unconfined when bubblewrap is missing, unless
+   `failIfUnavailable`. Now `options()` gives Claude Code `agent.SANDBOX`, with
+   `allowUnsandboxedCommands: false` and `failIfUnavailable: true` (through
+   `settings`: the SDK's `sandbox` type lacks the latter), and
+   `agent.sandbox_problem` starts bubblewrap as the sandbox does (`--unshare-net`,
+   after checking `bwrap` and `socat` are there). While it fails, `app.Sandbox`
+   (checked every ten minutes, every minute while failing) keeps the agent from
+   taking a turn, as not being logged in does (`_agent_refusal`: a message, an
+   answer, an ask, a workflow, a report's follow-up), and the panel shows the
+   problem and its fix in place of the login's line, the message box disabled.
+   The fix is in studioz's README, "The agent's sandbox": `apt install bubblewrap
+   socat`, and on Ubuntu an AppArmor profile letting bubblewrap alone use user
+   namespaces. Tried on `studioz-dev`: the agent ran `echo` sandboxed, and its
+   `touch ~/…` with `dangerouslyDisableSandbox` still ran inside it (read-only file
+   system, no file); with the probe made to fail as on the colleague's machine,
+   headless Chromium showed the panel's line, the box disabled, and a message got a
+   409 naming the fix. The tests replace the probe (`conftest`): CI's Ubuntu runner
+   may lack bubblewrap. **Not tried:** the AppArmor profile itself (this machine is
+   Debian, without the restriction): `apparmor_parser -Q` parses it, the
+   colleague's machine will tell.
 
 ### Phase 7: what the colleague's first afternoon found (noted 2026-10-21)
 
