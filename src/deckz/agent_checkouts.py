@@ -660,6 +660,8 @@ def create_worktree(settings: "GlobalSettings", name: str) -> Path:
 
     Its name is `name` with what `deckz worktree` doesn't take turned to
     `-` (Claude Code's may hold `/` and `.`); then `deckz setup` runs in it.
+    A `deckz worktree` of that name already there is reused as it is:
+    `claude --worktree <name> --resume <session>` asks for it again.
 
     Returns:
         Its path.
@@ -671,9 +673,13 @@ def create_worktree(settings: "GlobalSettings", name: str) -> Path:
     from .configuring.settings import GlobalSettings
     from .exceptions import WorktreeError
     from .setting_up import incomplete, setup
-    from .worktrees import add
+    from .worktrees import add, worktrees
 
-    added = add(settings, re.sub(r"[^A-Za-z0-9_-]", "-", name).strip("-") or "agent")
+    name = re.sub(r"[^A-Za-z0-9_-]", "-", name).strip("-") or "agent"
+    for worktree in worktrees(settings):
+        if worktree.name == name and worktree.path.is_dir():
+            return worktree.path
+    added = add(settings, name)
     if incomplete(setup(GlobalSettings.from_yaml(added.path))):
         msg = f"`deckz setup` left something missing in {added.path}"
         raise WorktreeError(msg)
