@@ -143,6 +143,12 @@ Found along the way, not done (each increment's "Left" has the rest):
   passed alone and on the next run.
 - A limit pause doesn't survive a studioz restart (a pending question now
   does); no warning before a long task when a usage window is nearly full.
+- deckz's Drive links (`b198cf2`, from a slides session, 2026-10-23): `deckz upload
+  --dry-run --json` adds `unlinked` (a PDF with no link in the deck's
+  `drive-links.yml`) and `unbuilt` (a reserved PDF not built), both refused like
+  `outdated`. studioz's upload dialog (`actions.upload_plan`) reads `pdfs` and
+  `outdated` only: for a deck with a `drive-links.yml` (none yet), the job fails on
+  deckz's refusal instead of the dialog saying so first. Show them as `outdated` is.
 
 ### Starting phase 7
 
