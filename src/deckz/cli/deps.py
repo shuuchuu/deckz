@@ -35,13 +35,19 @@ def deps(
         json: Print one JSON object instead, with "unused_flavors"
             (section to flavor names), "unused_files" (path from the
             repository root to its number of frames) and, given SECTION,
-            "dependents" (deck to part names)
+            "dependents" (deck to part names), "flavors" (each flavor of
+            SECTION, or FLAVOR alone, to `{"files": {path from the
+            repository root: frames}, "dependents": {deck: [part names]}}`,
+            its files in include order, nested sections' flavors resolved,
+            in French) and "deck_frames" (each deck of the flavors'
+            dependents to its total number of frames, in French, to weigh
+            the section's share of it)
         workdir: Path to move into before running the command
 
     """
     from rich.console import Console
 
-    from ..analyzing.sections_analyzer import SectionsAnalyzer
+    from ..analyzing.sections_analyzer import SectionsAnalyzer, frame_count
     from ..configuring.settings import GlobalSettings
 
     if not unused and section is None:
@@ -66,7 +72,7 @@ def deps(
                 for path, flavors in sections_analyzer.unused_flavors().items()
             }
             report["unused_files"] = {
-                str(path.relative_to(settings.paths.git_dir)): _frame_count(path)
+                str(path.relative_to(settings.paths.git_dir)): frame_count(path)
                 for path in sorted(sections_analyzer.unused_files())
             }
         if section is not None:
@@ -74,6 +80,27 @@ def deps(
                 str(deck): sorted(parts)
                 for deck, parts in sections_analyzer.parts_using_flavor(
                     section, flavor
+                ).items()
+            }
+            usage = sections_analyzer.flavors_usage(settings, section, flavor)
+            report["flavors"] = {
+                name: {
+                    "files": {
+                        str(path.relative_to(settings.paths.git_dir)): frames
+                        for path, frames in used.files.items()
+                    },
+                    "dependents": {
+                        str(deck): sorted(parts)
+                        for deck, parts in used.dependents.items()
+                    },
+                }
+                for name, used in usage.items()
+            }
+            dependents = {deck for used in usage.values() for deck in used.dependents}
+            report["deck_frames"] = {
+                str(deck): frames
+                for deck, frames in sections_analyzer.deck_frames(
+                    sorted(dependents)
                 ).items()
             }
         print_json(report)
@@ -123,6 +150,8 @@ def _print_unused_files_report(
     from rich.padding import Padding
     from rich.table import Table
 
+    from ..analyzing.sections_analyzer import frame_count
+
     console.rule("[bold]Unused content files", align="left")
     console.print()
     paths = sorted(unused_files)
@@ -131,31 +160,11 @@ def _print_unused_files_report(
         for path in paths:
             content.add_row(
                 f"[link=file://{path}]{path.relative_to(git_dir)}[/link]",
-                str(_frame_count(path)),
+                str(frame_count(path)),
             )
     else:
         content = "None."
     console.print(Padding(content, (0, 0, 0, 2)))
-
-
-def _frame_count(path: Path) -> int:
-    """Count a Markdown file's frames: its level-1 headings, outside code blocks.
-
-    Returns:
-        The number of `# ` lines outside fenced code blocks.
-    """
-    count, fence = 0, ""
-    for line in path.read_text(encoding="utf8").splitlines():
-        stripped = line.lstrip()
-        if stripped.startswith(("```", "~~~")):
-            marker = stripped[:3]
-            if not fence:
-                fence = marker
-            elif marker == fence:
-                fence = ""
-        elif not fence and line.startswith("# "):
-            count += 1
-    return count
 
 
 def _print_section_report(

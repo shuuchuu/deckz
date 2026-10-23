@@ -38,7 +38,7 @@ class StatusSection:
     items: tuple[StatusItem, ...] = field(default=())
     key: str = ""
     """What the section is about, for a program, whatever its title: `checks`, \
-    `translation`, `labs`, `videos` or `decks`."""
+    `translation`, `labs`, `videos`, `decks` or `review`."""
 
 
 def _git(git_dir: Path, *args: str, strip: bool = True) -> str | None:
@@ -633,6 +633,53 @@ def decks_section(
     return StatusSection("Built decks", summary, _capped(items))
 
 
+def review_section(
+    settings: "GlobalSettings", decks: Sequence["DeckSettings"]
+) -> StatusSection | None:
+    """The decks' content files never reviewed, or changed since their review.
+
+    One item per deck, pointing to `deckz review status <deck>`
+    (`deckz.analyzing.review`).
+
+    Returns:
+        Its section, None when `review.dir` is unset.
+    """
+    from .analyzing.review import all_reports, deck_counts, marks_index
+
+    if settings.review.dir is None:
+        return None
+    git_dir = settings.paths.git_dir
+    reports, problems = all_reports(settings)
+    index = marks_index(git_dir, reports)
+    items = [StatusItem(f"unreadable review report: {problem}") for problem in problems]
+    for deck in decks:
+        counts = deck_counts(deck, index)
+        if counts is None:
+            continue  # It doesn't parse: the `deck-definitions` check says why.
+        unreviewed, stale, total = counts
+        if not unreviewed and not stale:
+            continue
+        where = deck.paths.current_dir.relative_to(git_dir)
+        found = [
+            f"{unreviewed} never reviewed" if unreviewed else "",
+            f"{stale} changed since their review" if stale else "",
+        ]
+        items.append(
+            StatusItem(
+                f"{where}: of its {_count(total, 'content file')}, "
+                + ", ".join(text for text in found if text),
+                f"`deckz review status {where}` lists them",
+            )
+        )
+    if not decks:
+        summary = "your changes reach no deck"
+    elif behind := len(items) - len(problems):
+        summary = f"{_count(behind, 'deck')} with content not reviewed at its version"
+    else:
+        summary = "every content file is reviewed at its version"
+    return StatusSection("Review", summary, _capped(items))
+
+
 def status(
     settings: "GlobalSettings",
     *,
@@ -669,6 +716,8 @@ def status(
     }
     if decks:
         sections["decks"] = decks_section(settings, changed, affected)
+    if (review := review_section(settings, affected)) is not None:
+        sections["review"] = review
     return f"{_count(len(changed), 'changed file')}, {scope}", [
         replace(section, key=key) for key, section in sections.items()
     ]
@@ -795,6 +844,8 @@ def deck_status(
             else "its PDFs match its content, no frame shrunk"
         )
         sections["decks"] = StatusSection("Built decks", summary, _capped(items))
+    if (review := review_section(settings, [settings])) is not None:
+        sections["review"] = review
     return f"deck {where}", [
         replace(section, key=key) for key, section in sections.items()
     ]

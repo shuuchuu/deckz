@@ -80,6 +80,23 @@ def section_files(
     return resolved_files(_section_flavor_deck(settings, section, flavor, lang))
 
 
+def ordered_section_files(
+    settings: "GlobalSettings",
+    section: str,
+    flavor: FlavorName,
+    lang: Lang = "fr",
+) -> list[ResolvedPath]:
+    """Like `section_files`, in include order, each file once.
+
+    Returns:
+        The resolved file paths, as a build would include them.
+    """
+    from .sections_analyzer import ordered_files
+
+    deck = _section_flavor_deck(settings, section, flavor, lang)
+    return ordered_files(node for part in deck.parts.values() for node in part.nodes)
+
+
 @dataclass(frozen=True)
 class SectionTitleMatch:
     """A section whose yml `title` or `default_titles` matched a keyword."""

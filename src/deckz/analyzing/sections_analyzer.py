@@ -1,13 +1,15 @@
 from collections.abc import Iterable, Mapping, MutableMapping, MutableSet
+from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path, PurePath
-from typing import cast, get_args
+from typing import TYPE_CHECKING, cast, get_args
 
 from ..models import (
     Deck,
     File,
     FlavorName,
     Lang,
+    Node,
     NodeVisitor,
     Part,
     PartName,
@@ -17,6 +19,45 @@ from ..models import (
     UnresolvedPath,
 )
 from ..utils import all_decks, content_dirs, content_files, load_yaml
+
+if TYPE_CHECKING:
+    from ..configuring.settings import GlobalSettings
+
+
+def frame_count(path: Path) -> int:
+    """Count a Markdown file's frames: its level-1 headings, outside code blocks.
+
+    Returns:
+        The number of `# ` lines outside fenced code blocks, as a build \
+        marks them (`frame_markers.frame_headings`).
+    """
+    from ..components.frame_markers import frame_headings
+
+    return len(frame_headings(path.read_text(encoding="utf8")))
+
+
+def ordered_files(nodes: Iterable[Node]) -> list[ResolvedPath]:
+    """The files of `nodes`, recursively, in include order, each once.
+
+    Returns:
+        Their resolved paths; a node that didn't resolve is left out.
+    """
+    found: dict[ResolvedPath, None] = {}
+    for node in nodes:
+        if isinstance(node, Section):
+            found.update(dict.fromkeys(ordered_files(node.nodes)))
+        elif isinstance(node, File) and node.resolved_path is not None:
+            found[node.resolved_path] = None
+    return list(found)
+
+
+@dataclass(frozen=True)
+class FlavorUsage:
+    files: dict[Path, int]
+    """Its files (absolute, in include order, nested sections resolved, in \
+    French), each with its frames."""
+    dependents: dict[Path, set[PartName]]
+    """The decks using it (relative to the repository), with their parts."""
 
 
 class SectionsAnalyzer:
@@ -64,6 +105,65 @@ class SectionsAnalyzer:
                             using[deck_path] = set()
                         using[deck_path].add(part_name)
         return using
+
+    def section_flavors(self, section: str) -> list[FlavorName]:
+        """The flavors of a shared section, in its definition's order.
+
+        Returns:
+            Their names; none if there's no such section.
+        """
+        definition = self._shared_sections.get(UnresolvedPath(PurePath(section)))
+        return [] if definition is None else [f.name for f in definition.flavors]
+
+    def flavors_usage(
+        self, settings: "GlobalSettings", section: str, flavor: str | None = None
+    ) -> dict[FlavorName, FlavorUsage]:
+        """Each flavor of a shared section: its files and the decks using it.
+
+        Args:
+            settings: The repository's settings, to resolve the flavors.
+            section: The section's path relative to the shared content \
+                directory.
+            flavor: Only this flavor; every one if None.
+
+        Returns:
+            Each flavor's usage, in the section definition's order; nothing \
+            for an unknown section or flavor.
+        """
+        from .sections_search import ordered_section_files
+
+        return {
+            name: FlavorUsage(
+                {
+                    Path(path): frame_count(Path(path))
+                    for path in ordered_section_files(settings, section, name)
+                },
+                self.parts_using_flavor(section, name),
+            )
+            for name in self.section_flavors(section)
+            if flavor is None or name == flavor
+        }
+
+    def deck_frames(self, decks: Iterable[Path]) -> dict[Path, int]:
+        """Each deck's total frames, in French: its files' frames, summed.
+
+        Args:
+            decks: Deck directories relative to the repository, as \
+                `parts_using_flavor` gives them.
+
+        Returns:
+            The total of each deck found, by deck.
+        """
+        totals = {}
+        for deck_path in decks:
+            if (deck := self._decks.get(deck_path)) is None:
+                continue
+            totals[deck_path] = sum(
+                frame_count(Path(path))
+                for part in deck.parts.values()
+                for path in ordered_files(part.nodes)
+            )
+        return totals
 
     @cached_property
     def _decks(self) -> Mapping[Path, Deck]:
