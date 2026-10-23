@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
 from hashlib import sha256
-from json import dumps
+from json import JSONDecodeError, dumps, loads
 from logging import getLogger
 from multiprocessing import cpu_count
 from pathlib import Path, PurePosixPath
@@ -166,6 +166,11 @@ class PlannedCompile:
     """Fragments new or changed since this output's last build, rendered even \
     without `full_render`."""
 
+    links_changed: bool = False
+    """Whether the Drive links the output shows changed since its last build \
+    (`deckz.drive_links`): one was reserved, or the output was never built \
+    with them."""
+
 
 @dataclass(frozen=True)
 class CompileItem:
@@ -193,8 +198,12 @@ class DeckBuilder(DeckBuilderProtocol):
         build_part_handouts: bool = True,
         build_course_notes: bool = False,
         course_notes_suffix: str = CompileType.CourseNotes.value,
+        links: Mapping[Path, str] | None = None,
+        course_notes_pdf_dir: Path | None = None,
     ):
         self._variables = variables
+        self._links_by_path = links or {}
+        self._course_notes_pdf_dir = course_notes_pdf_dir
         self._failures: list[tuple[str, str]] = []
         self._build_presentation = build_presentation
         self._build_handout = build_handout
@@ -265,6 +274,7 @@ class DeckBuilder(DeckBuilderProtocol):
                     fragments=len(item.dependencies),
                     full_render=full_render,
                     changed_fragments=changed,
+                    links_changed=_recorded_links(build_dir) != self._links(name, item),
                 )
             )
         return planned
@@ -407,7 +417,8 @@ class DeckBuilder(DeckBuilderProtocol):
         if render_stale:
             fingerprint_path.write_text(fingerprint, encoding="utf8")
         # After the fragments: a main template may inline them (`fragment`).
-        self._render_main(item, output_format, main_path)
+        links = self._links(name, item)
+        self._render_main(item, output_format, main_path, links)
         rendered = perf_counter()
         result = output_format.compiler.compile(main_path)
         self._logger.debug(
@@ -423,10 +434,35 @@ class DeckBuilder(DeckBuilderProtocol):
                 main_path.with_suffix(output_format.artifact_suffix),
                 output_format.output_path(name),
             )
+            (build_dir / _LINKS_RECORD).write_text(
+                dumps(links, sort_keys=True), encoding="utf8"
+            )
         return result
 
+    def _links(self, name: str, item: CompileItem) -> dict[str, str]:
+        # The Drive links a compilation shows, those the registry has: its
+        # own, the whole deck's handout's and the course notes', in its
+        # language.
+        candidates = {"self": self._formats[item.compile_type.format].output_path(name)}
+        if (typst := self._formats.get(Format.Typst)) is not None:
+            candidates["handout"] = typst.output_path(
+                self._name_compile_item(CompileType.Handout)
+            )
+        if self._course_notes_pdf_dir is not None:
+            notes = self._name_compile_item(CompileType.CourseNotes)
+            candidates["course_notes"] = self._course_notes_pdf_dir / f"{notes}.pdf"
+        return {
+            key: self._links_by_path[path]
+            for key, path in candidates.items()
+            if path in self._links_by_path
+        }
+
     def _render_main(
-        self, item: CompileItem, output_format: OutputFormat, output_path: Path
+        self,
+        item: CompileItem,
+        output_format: OutputFormat,
+        output_path: Path,
+        links: Mapping[str, str],
     ) -> None:
         build_dir = output_path.parent
 
@@ -445,10 +481,25 @@ class DeckBuilder(DeckBuilderProtocol):
                 toc=item.toc,
                 print=item.compile_type is CompileType.PrintHandout,
                 fragment=fragment,
+                links=links,
             )
         except TemplateError as error:
             msg = _render_message(error, output_format.template)
             raise RenderError(msg) from error
+
+
+# Next to a compilation's build, the links it was last compiled with.
+_LINKS_RECORD = ".links"
+
+
+def _recorded_links(build_dir: Path) -> dict[str, str]:
+    # Built before deckz recorded them, or never: none, as a deck without a
+    # registry has.
+    try:
+        recorded = loads((build_dir / _LINKS_RECORD).read_text(encoding="utf8"))
+    except (OSError, JSONDecodeError):
+        return {}
+    return recorded if isinstance(recorded, dict) else {}
 
 
 def publish(artifact: Path, output: Path) -> None:

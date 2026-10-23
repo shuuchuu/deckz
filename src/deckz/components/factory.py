@@ -195,6 +195,7 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
         progress: ProgressReporterProtocol | None = None,
         build_course_notes: bool = False,
     ) -> DeckBuilderProtocol:
+        from .. import drive_links
         from ..models import lang_dir
         from .deck_builder import DeckBuilder, Format, OutputFormat
         from .frame_markers import FrameMarkingConverter
@@ -249,6 +250,8 @@ class DeckSettingsFactory(GlobalSettingsFactory["DeckSettings"], DeckFactoryProt
             else (paths.content_dir, assets_dir, paths.current_dir),
             renderer=self.renderer(),
             progress=progress if progress is not None else NullProgress(),
+            links=drive_links.links(self._settings),
+            course_notes_pdf_dir=lang_dir(paths.course_notes_pdf_dir, self._lang),
         )
 
     def _course_notes_format(self) -> "OutputFormat":

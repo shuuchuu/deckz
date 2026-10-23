@@ -818,8 +818,8 @@ them), rendered and converted like the deck's own files, through the
 repository's own main template, `templates/jinja2/course-notes.typ`
 (`paths.jinja2_course_notes_main_template`, same context as `main.typ`). The
 PDF is `pdf/course-notes/<deck>-course-notes.pdf` (`paths.course_notes_pdf_dir`;
-`pdf/course-notes/en/` in English), which `--sync` and `deckz upload` leave
-alone. `deckz show course-notes` lists each content file of the deck with its
+`pdf/course-notes/en/` in English), which `--sync` leaves alone and `deckz
+upload` uploads next to the slides of its language. `deckz show course-notes` lists each content file of the deck with its
 chapter: `written`, `covered`, `skipped` or `missing`.
 
 `deckz run --course-notes` builds them along with the slides, in one command
@@ -861,6 +861,46 @@ English one at all is still being written or translated: `course-notes-pairs`
 reports it as one line, and not at all on the files of a post-edit hook
 (`deckz check` given paths), while each chapter missing from a directory that
 has English ones is a line of its own.
+
+### Drive links
+
+A PDF can show its own Google Drive link, and the course notes' and the
+whole deck's handout's: the way back from a printed or downloaded copy to
+the online, up-to-date one. A link has to exist before the PDF is compiled,
+so it's reserved first: `deckz upload --reserve --lang fr en` (with the
+extras, see [Installation](#installation)) creates, in the deck's Drive
+folder, an empty file for every PDF a full build of the deck writes in those
+languages (each kind, each part handout, the course notes in the languages
+they have chapters in) that has none yet -- a PDF already online keeps its
+file and link -- and records their IDs in the deck's `drive-links.yml`
+(`paths.drive_links`), each PDF's path in the deck's directory mapped to its
+file ID:
+
+```yaml
+pdf/abc-handout.pdf: 1a2B3c...
+pdf/course-notes/abc-course-notes.pdf: 4d5E6f...
+pdf/en/abc-handout.pdf: 7g8H9i...
+```
+
+Commit it: builds read it and never reach Drive, so every checkout compiles
+the same links, with or without the extras or credentials. Each main
+template gets them as `links`, those the registry has (none without one):
+
+- `links.self`: the PDF's own;
+- `links.handout`: the whole deck's handout, in the PDF's language;
+- `links.course_notes`: the course notes', in the PDF's language.
+
+```typst
+{% if links.self is defined %}#link("{{ links.self }}"){% endif %}
+```
+
+A PDF built with other links than the registry's now (one was reserved
+since) is outdated, as when its content changed: `deckz upload` refuses it,
+`deckz status` lists it and `--dry-run` says `Drive links changed`. Drive
+keeps a file's ID when `deckz upload` updates it, so a link never changes;
+a reserved file is never deleted, even with no local PDF anymore (its link
+is printed in PDFs already handed out): never change or remove a line of
+`drive-links.yml` either.
 
 ### Upgrading from 31.x (`clean content`)
 
@@ -1229,10 +1269,14 @@ The main commands:
   stdout, e.g. `deckz generate-agent-notes > CLAUDE.md`.
 - `deckz generate-completion {bash,zsh,fish}`: print a shell completion
   script (see [Shell completion](#shell-completion)).
-- `deckz upload`: upload built PDFs to Google Drive. It refuses, naming
+- `deckz upload`: upload built PDFs, the slides' and the course notes', to
+  Google Drive. It refuses, naming
   them, when a PDF doesn't match the deck's content anymore: a content
-  fragment changed since it was built, the Markdown conversion changed, or
-  no build produces it. Rebuild or delete those, or pass `--include-stale`.
+  fragment changed since it was built, the Markdown conversion changed, its
+  Drive links did, or no build produces it; and, for a deck with
+  [Drive links](#drive-links), a PDF with no link or a reserved one not
+  built. Rebuild or delete those, or pass `--include-stale`.
+  `--reserve` reserves the links instead.
   It refuses too while the content checks report a problem in the deck's
   files (deferred checks included: the upload is when they're due; a
   problem is the deck's when the file it starts with is under the deck's

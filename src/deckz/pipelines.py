@@ -341,9 +341,11 @@ def outdated_pdfs(targets: Iterable[BuildTarget]) -> list[Path]:
 
     Either no build of the deck produces them anymore (see `stale_pdfs`), \
     or a content fragment they include is new or changed since they were \
-    built, or they were never built here (no build directory, e.g. after \
-    `deckz clean`). Their deck's yaml files and the main template aren't \
-    compared, only the content fragments.
+    built, or the Drive links they show (`deckz.drive_links`), or they were \
+    never built here (no build directory, e.g. after `deckz clean`). Their \
+    deck's yaml files and the main template aren't compared, only the \
+    content fragments and the links. A course notes target's PDF is \
+    compared too, but never stale.
 
     Returns:
         The outdated PDFs that exist, sorted.
@@ -351,16 +353,57 @@ def outdated_pdfs(targets: Iterable[BuildTarget]) -> list[Path]:
     targets = list(targets)
     outdated = set(stale_pdfs(targets, _EVERY_PDF))
     for target in targets:
-        if target.course_notes:
-            continue
         builder = _deck_builder(target, _EVERY_PDF, _NULL_PROGRESS, whole_deck=True)
         outdated.update(
             planned.output_path
             for planned in builder.plan()
             if planned.output_path.is_file()
-            and (planned.full_render or planned.changed_fragments)
+            and (
+                planned.full_render
+                or planned.changed_fragments
+                or planned.links_changed
+            )
         )
     return sorted(outdated)
+
+
+def published_targets(
+    settings: DeckSettings, langs: Iterable[Lang]
+) -> list[BuildTarget]:
+    """What `deckz upload` publishes of the deck: slides and course notes.
+
+    Args:
+        settings: The deck's settings.
+        langs: The languages to publish.
+
+    Returns:
+        One target per language, then the course notes', in the languages \
+        they have chapters in.
+    """
+    langs = tuple(langs)
+    return [
+        *deck_targets(settings, langs),
+        *course_notes_targets(settings, langs, required=False),
+    ]
+
+
+def published_pdfs(targets: Iterable[BuildTarget]) -> list[Path]:
+    """Every PDF a full build of `targets` writes.
+
+    Each kind, each part handout, and the course notes of their course \
+    notes targets (`published_targets`): those a deck's Drive links \
+    (`deckz.drive_links`) are reserved for.
+
+    Returns:
+        The PDFs, in build order.
+    """
+    return [
+        path
+        for target in targets
+        for path in _deck_builder(
+            target, _EVERY_PDF, _NULL_PROGRESS, whole_deck=True
+        ).output_paths()
+    ]
 
 
 def plan(targets: Iterable[BuildTarget], outputs: OutputKinds) -> list[PlannedCompile]:

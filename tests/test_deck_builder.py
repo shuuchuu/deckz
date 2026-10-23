@@ -31,6 +31,7 @@ from deckz.models import (
 class FakeRenderer:
     def __init__(self) -> None:
         self.fragments: list[Path] = []
+        self.links: dict[str, Any] = {}
         self.fail_next = False
 
     def render_to_str(self, template_path: Path, /, **_: Any) -> tuple[str, Any]:
@@ -45,6 +46,8 @@ class FakeRenderer:
                 self.fail_next = False
                 msg = "oops"
                 raise TemplateSyntaxError(msg, 1)
+        else:
+            self.links[output_path.stem] = kwargs["links"]
         text = template_path.read_text(encoding="utf8")
         if template_path.suffix == ".html":
             # An HTML main template inlines its fragments.
@@ -131,6 +134,7 @@ class Repo:
         html: bool = False,
         part_handouts: bool = True,
         variables: dict[str, Any] | None = None,
+        links: dict[Path, str] | None = None,
     ) -> DeckBuilder:
         deck = Deck(name="deck", parts={PartName("p1"): Part(title=None, nodes=files)})
         return DeckBuilder(
@@ -166,6 +170,8 @@ class Repo:
             renderer=self.renderer,
             progress=NullProgress(),
             build_part_handouts=part_handouts,
+            links=links,
+            course_notes_pdf_dir=self.root / "pdf" / "course-notes",
         )
 
 
@@ -258,6 +264,48 @@ def test_variables_change_renders_everything(tmp_path: Path) -> None:
     assert len(repo.renderer.fragments) == 4
     rendered = tmp_path / "build" / "deck-handout" / "a.md"
     assert rendered.read_text(encoding="utf8") == "A{'company': 'B'}"
+
+
+def test_main_template_gets_the_links_the_registry_has(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    pdf = tmp_path / "pdf"
+    links = {
+        pdf / "deck-handout.pdf": "handout-link",
+        pdf / "course-notes" / "deck-course-notes.pdf": "notes-link",
+    }
+
+    assert repo.builder(repo.file("a.md"), links=links).build_deck()
+
+    assert repo.renderer.links == {
+        "deck-handout": {
+            "self": "handout-link",
+            "handout": "handout-link",
+            "course_notes": "notes-link",
+        },
+        # No link of its own reserved.
+        "deck-p1-handout": {"handout": "handout-link", "course_notes": "notes-link"},
+    }
+
+
+def test_a_links_change_is_planned_and_recorded(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    files = (repo.file("a.md"),)
+    # Built before deckz recorded links, or without a registry: up to date.
+    repo.builder(*files).build_deck()
+    for record in (tmp_path / "build").glob("*/.links"):
+        record.unlink()
+    assert not any(p.links_changed for p in repo.builder(*files).plan())
+
+    links = {tmp_path / "pdf" / "deck-p1-handout.pdf": "p1-link"}
+    builder = repo.builder(*files, links=links)
+    planned = builder.plan()
+    builder.build_deck()
+
+    assert [(p.name, p.links_changed) for p in planned] == [
+        ("deck-handout", False),
+        ("deck-p1-handout", True),
+    ]
+    assert not any(p.links_changed for p in repo.builder(*files, links=links).plan())
 
 
 @mark.parametrize("failing", ["renderer", "converter"])
