@@ -208,6 +208,18 @@ class I18nSettings(BaseModel):
     no trailers, yet their one-sided changes were already settled."""
 
 
+class ReviewSettings(BaseModel):
+    """The review registry of `deckz review` (`deckz.analyzing.review`)."""
+
+    model_config = ConfigDict(frozen=True)
+    dir: str | None = None
+    """Directory of the review reports, relative to the git root, e.g. \
+    `docs/qa/sections`: every Markdown file under it, at any depth, is a \
+    report, whose front matter's `reviewed` key deckz writes (`deckz review \
+    mark`) and nothing else. Unset, `deckz review` refuses, and the \
+    `review-headers` check and `deckz status` leave reviews alone."""
+
+
 class ChecksSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
     opt_in: tuple[str, ...] = ()
@@ -460,6 +472,8 @@ class GlobalSettings(BaseModel):
     labs: LabsSettings = Field(default_factory=LabsSettings)
     checks: ChecksSettings = Field(default_factory=ChecksSettings)
     i18n: I18nSettings = Field(default_factory=I18nSettings)
+    review: ReviewSettings = Field(default_factory=ReviewSettings)
+    """Where `deckz review`'s reports are."""
     videos: VideosSettings = Field(default_factory=VideosSettings)
     course_notes: CourseNotesSettings = Field(default_factory=CourseNotesSettings)
     setup: SetupSettings = Field(default_factory=SetupSettings)

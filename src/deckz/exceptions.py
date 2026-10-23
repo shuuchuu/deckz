@@ -151,6 +151,16 @@ class DeckParsingError(DeckzError):
         self.deck = deck
         self.errors = errors
 
+    def __reduce__(self) -> tuple[type["DeckParsingError"], tuple[Deck, list[str]]]:
+        # Raised in a process pool's worker (`utils.all_decks`): unpickling it
+        # with `args` alone would fail in the pool's result thread, and the
+        # pool would wait forever.
+        return type(self), (self.deck, self.errors)
+
 
 class CourseNotesError(DeckzError):
     """A deck's course notes can't be built, e.g. no chapter is written yet."""
+
+
+class ReviewError(DeckzError):
+    """`deckz review` can't go on: no `review.dir`, or a report it can't read."""

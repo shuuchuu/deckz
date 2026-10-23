@@ -556,6 +556,17 @@ def _has_chapter(settings: "GlobalSettings", directory: Path) -> bool:
     )
 
 
+def review_headers(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
+    # Every review report's `reviewed` front matter is well formed, and the
+    # files it records exist (see `deckz.analyzing.review`). Nothing to do
+    # without `review.dir`. A rename or deletion of a recorded file shows
+    # in the whole-repository run (the pre-commit hook's): the hooks' paths
+    # are the files edited, never the one gone.
+    from .review import header_problems
+
+    return header_problems(settings, paths)
+
+
 CHECKS: dict[str, Callable[["GlobalSettings", Paths], list[str]]] = {
     "lab-ids": lab_ids,
     "lab-pairs": lab_pairs,
@@ -569,6 +580,7 @@ CHECKS: dict[str, Callable[["GlobalSettings", Paths], list[str]]] = {
     "lab-urls": lab_urls,
     "course-notes-files": course_notes_files,
     "course-notes-pairs": course_notes_pairs,
+    "review-headers": review_headers,
 }
 
 DEFERRED = (
@@ -588,6 +600,8 @@ Their harm comes later than the commit (a lab published, a deck uploaded or
 taught), so a contributor commits freely and the debt is settled before
 then. Those left out block a commit, the point of their harm:
 `lab-secrets` (a secret stays in the history), `jinja-syntax` and
-`deck-definitions` (each `git pull` breaks everyone's builds). `deckz.yml`'s
-`checks.deferred` replaces this list.
+`deck-definitions` (each `git pull` breaks everyone's builds), and
+`review-headers` (a malformed report stops `deckz review` for everyone
+after a pull, and a renamed file's review is best carried over by whoever
+renames it). `deckz.yml`'s `checks.deferred` replaces this list.
 """
