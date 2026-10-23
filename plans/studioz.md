@@ -1,6 +1,6 @@
 # studioz plan: a UI for operating a deckz repo, agents included
 
-## Where things stand, and how to resume (2026-10-22)
+## Where things stand, and how to resume (2026-10-23)
 
 **Done:** phases 0, 1 and 2 (workspaces without agents: increments 1 to 8 under
 "Phase 2"), and phase 3 (the agent in a workspace: increments 1 to 5 under
@@ -17,9 +17,9 @@ from studioz) are done: phase 5 is done. Then the memory guard "Risks" promised
 Phase 6 (the agent's usage) was planned on 2026-10-21 from the colleague's first
 afternoon; its increments 1 (the model), 2 (a new conversation for a new file), 3
 (the context's size) and 4 (slides' `docs/figures.md`, in slides' main as `b83c29fb`)
-are done. Phase 7's increments 1 (logging in, and errors naming their fix) and 2
-(links in new tabs) are done.
-**Next:** phase 7's increments 3 and 4 (the slide in view, the PDF's bookmarks;
+are done. Phase 7's increments 1 (logging in, and errors naming their fix), 2
+(links in new tabs) and 3 (the slide in view) are done.
+**Next:** phase 7's increment 4 (the PDF's bookmarks;
 start with "Starting phase 7" below) and its
 "Also left", phase 6's increment 5
 (the colleague's next afternoon measured), "Then, with the colleague" (below
@@ -159,9 +159,10 @@ checked for slides sessions (tell them only of a change in what deckz does), and
 pre-commit hook's two Ctrl-C timing tests fail about one run in three: retry the
 commit ("Also left" has their fix).
 
-Increments 1 (logging in) and 2 (links in new tabs) are done (their entries under
-phase 7); next is increment 3 (the slide in view), whose entry proposes when a
-message's slide makes it about another file. Logging in on a scratch
+Increments 1 (logging in), 2 (links in new tabs) and 3 (the slide in view) are done
+(their entries under phase 7); next is increment 4 (the PDF's bookmarks): `deck.js`
+already keeps the page in view (`showSlide`), which the outline's highlight can
+follow. Logging in on a scratch
 `CLAUDE_CONFIG_DIR` (empty) never touches the person's own login; a model that
 doesn't exist (`studioz --model claude-nonexistent-9`) and a bogus session id in a
 workspace's `.run/studioz/agent/session` give real errors at no cost.
@@ -1855,18 +1856,37 @@ the first one first, since it stops a newcomer before anything else works.
    text stays text (markdown-it's `linkify` needs `linkify-it-py`, a new dependency
    relocking slides; the colleague's afternoon had one link, written as a Markdown
    link).
-3. **The agent knows the slide in view.** Writing "cette slide est moche" should be
-   enough, without "Demander à l'agent". The deck page knows the page in view (the
-   status bar's "p. 10 / 85") and, from the build's frames (`/cadres`), its file,
-   line and title. A message sent from the panel on a deck page carries it: a line
-   studioz puts before the prompt ("La personne regarde la diapositive « titre »,
-   `file`, ligne N, page N"), as the undo note is (`Conversation._note`), the
-   transcript showing the person's words only, and the slide in small under them.
-   To decide with phase 6's increment 2: whether that file is also the message's
-   `about`, which can start a new conversation. Proposed: yes, but only when the
-   person moved to another slide since their last message, so that a follow-up
-   ("merci", "aligne les T") stays. On a page with no frame (title, outline), no
-   line is added.
+3. **The agent knows the slide in view**: done 2026-10-23. Writing "cette diapositive
+   est moche" is enough, without "Demander à l'agent". `deck.js` (`showSlide`) keeps
+   the frame of the page in view (`viewer.currentPageNumber` in `/cadres`'s frames)
+   in `body`'s `data-slide`, as JSON, at each page change, each build's new frames
+   and each view change; none on a page with no frame (title, outline, a part's
+   title) nor in the before/after view, where the PDF isn't shown. The agent panel
+   shows it above the message box ("Diapositive en vue : p. 10 · Emploi du temps",
+   its file and line in the tooltip) and posts it with the message (`slide`, beside
+   `about`); other pages post none. `agent.Slide.parse` reads it (anything else is
+   no slide), and `Conversation.send(slide=…)` tells the agent a line before the
+   message ("(La personne regarde, dans studioz, le cadre « Emploi du temps » :
+   decks/…/schedule.md, ligne 1, page 10 du PDF.)"; for a frame whose source the
+   build didn't find, its page and title), the transcript keeps the person's words
+   with the slide in small under them (the entry's `detail`). **Decided** (with phase
+   6's increment 2): the slide's file is the message's `about` when the last message
+   written on a deck's page had another file's slide (`slide` in the agent's
+   directory, in `_KEPT`, so a conversation taken back keeps its own); compared by
+   file, not by slide, since `about` is a file: another slide of the same file, or
+   "merci" on the same one, stays a follow-up, and the editor's `about` wins. **Tried
+   for real** in headless Chromium on `studioz-dev`'s Fortinet deck: page 1 posted no
+   slide and hid the line; page 10 showed and posted `{"page": 10, "title": "Emploi
+   du temps", "file": "decks/orsys/INTRA/2026-10-fortinet/content/about/schedule.md",
+   "line": 1}`; the before/after view hid it, coming back showed it again. One real
+   turn (Sonnet, 0.11 $, 8 s): "Cette diapositive est-elle trop chargée ?" made the
+   agent read `schedule.md` at once and answer about its two bullets. Found on the
+   way: a first version compared the slide with the previous one field by field, and
+   on a frameless first page never set `data-slide` at all (`null` equal to
+   `undefined`); it now compares the JSON. **Left:** the person can't drop the slide
+   from a message (VS Code's chat lets one untick the current file); a title shows
+   Typst's markup as the build recorded it (`*Skills*\ :`), which the agent reads
+   well but the line shows raw.
 4. **The PDF's bookmarks.** Typst writes the PDF's outline from the headings (check
    which levels end up in it: sections, subsections, frames); studioz's viewer
    (`deck.js`, pdf.js's `PDFViewer` alone, without pdf.js's own sidebar) shows none.

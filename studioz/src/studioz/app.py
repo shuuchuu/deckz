@@ -2059,8 +2059,11 @@ async def agent_message(
     name: str,
     message: Annotated[str, Form()] = "",
     about: Annotated[str, Form()] = "",
+    slide: Annotated[str, Form()] = "",
 ) -> Response:
     """Give the agent a message, `about` the file the editor started it on.
+
+    A message written on a deck's page names the `slide` in view (`agent.Slide`).
 
     Returns:
         204, or 409 while the agent is at work or Claude Code isn't logged in.
@@ -2072,7 +2075,9 @@ async def agent_message(
     conversation = studio.agents.conversation(found.worktree.path)
     # A browser posts a form's text with CRLF line endings.
     sent = await conversation.send(
-        message.replace("\r\n", "\n"), about=about.strip() or None
+        message.replace("\r\n", "\n"),
+        about=about.strip() or None,
+        slide=agent.Slide.parse(slide),
     )
     if not sent:
         return JSONResponse({"error": "L'agent travaille encore"}, status_code=409)

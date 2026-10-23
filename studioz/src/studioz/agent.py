@@ -37,9 +37,12 @@ every message (plan, "Phase 6"): the panel shows the context's size, and
 suggests a new conversation past `LONG`. A conversation is about the file of
 its last message from the editor; once past `ASIDE_FROM`, a message from the
 editor about another file starts a new one, setting the previous one aside,
-which the person may take back. A message written without the editor is a
-follow-up, and a workflow's conversation is about several files: neither
-starts a new one.
+which the person may take back. A message written on a deck's page tells the
+agent the slide in view (`Slide`), and is about its file once the person moved
+to another file's slide since their last message: "cette diapositive est
+moche" needs no more, and "merci" stays a follow-up. A message written
+elsewhere is a follow-up, and a workflow's conversation is about several
+files: neither starts a new one.
 """
 
 import asyncio
@@ -97,9 +100,11 @@ _CONTEXT = "context"
 _SPENT = "spent"
 """What Claude Code reported its session spent, until the last turn: resuming a
 session, it counts from there."""
+_SLIDE = "slide"
+"""The file of the slide in view at the last message sent from a deck's page."""
 _ASIDE = "precedente"
 """The conversation set aside for a new one about another file (the last one)."""
-_KEPT = (_SESSION, _TRANSCRIPT, _QUESTION, _ABOUT, _CONTEXT, _SPENT)
+_KEPT = (_SESSION, _TRANSCRIPT, _QUESTION, _ABOUT, _CONTEXT, _SPENT, _SLIDE)
 """What a conversation set aside takes along. The last turn's checkpoints stay:
 they are the workspace's files, whichever conversation changed them."""
 MANY = "*"
@@ -258,6 +263,63 @@ class Entry:
     text: str
     detail: str = ""
     at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+
+
+@dataclass(frozen=True)
+class Slide:
+    """The slide in view on a deck's page when the person wrote (`/cadres`)."""
+
+    page: int
+    title: str
+    file: str | None = None
+    """Its content file, None if the build found none."""
+    line: int | None = None
+
+    @classmethod
+    def parse(cls, raw: str) -> "Slide | None":
+        """Read the slide a deck's page posts.
+
+        Args:
+            raw: Its JSON (`deck.js`), empty on a page with no slide in view.
+
+        Returns:
+            The slide, None if there is none or it isn't one.
+        """
+        try:
+            found = json.loads(raw) if raw.strip() else None
+        except ValueError:
+            return None
+        if not isinstance(found, dict):
+            return None
+        page, title = found.get("page"), found.get("title")
+        file, line = found.get("file") or None, found.get("line") or None
+        if (
+            not isinstance(page, int)
+            or page < 1
+            or not isinstance(title, str)
+            or not isinstance(file, str | None)
+            or not isinstance(line, int | None)
+        ):
+            return None
+        return cls(page, title.strip(), file, line if file else None)
+
+    @property
+    def told(self) -> str:
+        """The line the agent reads before the person's message."""
+        if self.file is None:
+            return (
+                f"(La personne regarde, dans studioz, la page {self.page} du PDF : "
+                f"le cadre « {self.title} », dont la source est introuvable.)"
+            )
+        return (
+            f"(La personne regarde, dans studioz, le cadre « {self.title} » : "
+            f"{self.file}, ligne {self.line}, page {self.page} du PDF.)"
+        )
+
+    @property
+    def shown(self) -> str:
+        """What the transcript shows under the person's words."""
+        return f"Diapositive en vue : p. {self.page}, « {self.title} »"
 
 
 ASK = "AskUserQuestion"
@@ -987,6 +1049,7 @@ class Conversation:
         shown: str | None = None,
         model: str | None = None,
         about: str | None = None,
+        slide: Slide | None = None,
     ) -> bool:
         """Give the agent a message, starting its turn.
 
@@ -998,6 +1061,10 @@ class Conversation:
             about: The file the message is about (the editor's), `MANY` for a \
                 workflow's; None for a follow-up. A file other than the \
                 conversation's starts a new one, the previous one set aside.
+            slide: The slide in view on the deck's page the message was \
+                written on, which the agent is told. With no `about`, the \
+                message is about its file if the slide of the last message \
+                written on a deck's page was another file's.
 
         Returns:
             Whether it was sent: not while the agent is still at work.
@@ -1007,6 +1074,9 @@ class Conversation:
         # The person takes over from a pause, or from a question.
         self.paused_until = None
         self._decline("La personne a écrit un message au lieu de répondre.")
+        seen = self._read(_SLIDE)
+        if slide and slide.file and about is None and slide.file != seen:
+            about = slide.file
         current = self.about
         other = about not in {None, MANY} and current not in {None, about, MANY}
         if other and self.entries and (self.context or 0) >= ASIDE_FROM:
@@ -1023,9 +1093,14 @@ class Conversation:
         if about and current != MANY:
             self._directory.mkdir(parents=True, exist_ok=True)
             (self._directory / _ABOUT).write_text(about, encoding="utf8")
-        await self._add(Entry("person", (shown or prompt).strip()))
+        if slide and slide.file:
+            self._directory.mkdir(parents=True, exist_ok=True)
+            (self._directory / _SLIDE).write_text(slide.file, encoding="utf8")
+        await self._add(
+            Entry("person", (shown or prompt).strip(), slide.shown if slide else "")
+        )
         self._turn_model = model or self.model
-        self._start(prompt.strip())
+        self._start(f"{slide.told}\n\n{prompt.strip()}" if slide else prompt.strip())
         return True
 
     def _start(self, prompt: str) -> None:

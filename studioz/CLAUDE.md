@@ -137,7 +137,13 @@ conversation is about one file: the editor's "Demander à l'agent" names it (`ab
 and from `agent.ASIDE_FROM` a message about another file sets the conversation aside
 (`precedente/`, one, which "Reprendre la précédente" exchanges back) for a new one;
 a follow-up typed in the panel stays, and a workflow's conversation (`MANY`) is never
-set aside. A session's total so far, which
+set aside. On a deck's page, `deck.js` puts the slide in view (its frame from
+`/cadres`; none on a frameless page nor in the before/after view) in `body`'s
+`data-slide`, the panel shows it above the message box and posts it: the agent is
+told it in a line before the message (`agent.Slide`), the transcript shows it under
+the person's words, and its file is the message's `about` when the last message
+written on a deck's page had another file's slide (`slide`, kept with the
+conversation), so that "merci" stays a follow-up. A session's total so far, which
 a turn's cost subtracts, is kept in `spent`, since a resumed session counts from it.
 `studioz.workflows` reads the workflows a workspace's own `deckz.yml` declares
 (`studioz.workflows`, its schema in studioz, refusing unknown keys; deckz ignores
