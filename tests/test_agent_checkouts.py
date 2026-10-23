@@ -272,6 +272,16 @@ def test_create_worktree_makes_a_deckz_worktree(tmp_path: Path) -> None:
     assert not removed.kept_branch
 
 
+def test_create_worktree_reuses_an_existing_one(tmp_path: Path) -> None:
+    main, worktree = _checkouts(tmp_path)
+    (worktree / "b.md").write_text("work\n", encoding="utf8")
+
+    path = create_worktree(_settings(main, required=False), "x")
+
+    assert path == worktree
+    assert (path / "b.md").read_text(encoding="utf8") == "work\n"
+
+
 def test_worktree_remove_hook_reports_the_builds_handed_over(
     tmp_path: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
 ) -> None:

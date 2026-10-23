@@ -10,7 +10,8 @@ def worktree_create(*, workdir: Path = Path()) -> None:
     Wired as Claude Code's WorktreeCreate hook by `deckz hooks install`
     (see `deckz.agent_checkouts.create_worktree`): `claude --worktree
     <name>`, EnterWorktree with a name and a subagent's worktree isolation
-    get a `deckz worktree`, builds included, instead of git's bare one.
+    get a `deckz worktree`, builds included, instead of git's bare one;
+    `claude --worktree <name> --resume <session>` gets the existing one back.
     Prints its path, as Claude Code expects; anything else goes to stderr.
 
     Args:
