@@ -1330,12 +1330,14 @@ def _publication(studio: Studio, name: str) -> dict[str, Any]:
     report = studio.statuses.report(path)
     groups = {group.key: group for group in report.result or ()}
     up = sync.upstream(studio.main)
+    state = sync.state(path, up) if up else None
     return {
         "workspace": found,
         "report": report,
         "pending": {what: groups.get(what) for what in actions.PUBLISHABLE},
         "publishable": actions.PUBLISHABLE,
-        "ahead": len(sync.state(path, up).ahead) if up else 0,
+        "ahead": len(state.ahead) if state else 0,
+        "behind": state.behind if state else 0,
         "upstream": up,
     }
 

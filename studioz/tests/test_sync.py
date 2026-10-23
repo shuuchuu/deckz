@@ -287,3 +287,24 @@ def test_sync_refused_from_another_site(
     )
     assert response.status_code == 403
     assert _git(remote, "ls-remote", "origin", "main").split()[0] != head
+
+
+def test_publish_dialog_offers_to_sync_first(
+    repository: Path, remote: Path, synced: Path, client: TestClient
+) -> None:
+    form = client.post("/espaces/demo/publier/formulaire", headers=ORIGIN).text
+    assert "à partir de origin/main (la branche partagée)" in form
+    assert "Synchroniser d'abord" not in form
+
+    _write(synced, "mine.md")
+    _commit(synced, "Mine")
+    _write(remote, "theirs.md")
+    _commit(remote, "Theirs")
+    _git(remote, "push", "--quiet", "origin", "main")
+    _git(synced, "fetch", "--quiet", "origin")
+
+    form = client.post("/espaces/demo/publier/formulaire", headers=ORIGIN).text
+    assert "1 commit de cet espace n'est pas encore sur origin/main" in form
+    assert "origin/main a 1 commit que l'espace n'a pas" in form
+    assert "Synchroniser d'abord" in form
+    assert 'data-url="/espaces/demo/synchronisation/formulaire"' in form

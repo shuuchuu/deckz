@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from .analyzing.i18n_stale import StaleFile
     from .components.checks import Finding
     from .configuring.settings import DeckSettings, GlobalSettings
+    from .upstream import Source
 
 _MAX_ITEMS = 15
 
@@ -378,6 +379,34 @@ def _stale_demo_items(
     return items
 
 
+def _lab_source(git_dir: Path, *, fetch: bool) -> tuple["Source", list[StatusItem]]:
+    # What a publish takes the notebooks from, and why it's as last fetched.
+    from .exceptions import RemoteError
+    from .upstream import source
+
+    try:
+        return source(git_dir, fetch_first=fetch), []
+    except RemoteError as error:
+        return source(git_dir, fetch_first=False), [StatusItem(str(error))]
+
+
+def _unpushed_lab_items(
+    git_dir: Path, found_source: "Source", paths: list[str]
+) -> list[StatusItem]:
+    # HEAD's lab commits the source lacks: a publish takes the source's.
+    from .upstream import unpushed
+
+    if not (commits := unpushed(git_dir, found_source.commit, paths)):
+        return []
+    return [
+        StatusItem(
+            f"{_count(len(commits), 'commit')} changing the labs not on "
+            f"{found_source.name} yet",
+            f"push them: a publish takes {found_source.name}'s notebooks",
+        )
+    ]
+
+
 def labs_section(
     settings: "GlobalSettings",
     uncommitted: set[str],
@@ -385,11 +414,13 @@ def labs_section(
     fetch: bool,
     changed: Collection[str] = (),
 ) -> StatusSection:
-    """Lab notebooks not committed, committed but not published, or stale.
+    """Lab notebooks not committed, not pushed, pushed but not published, or stale.
 
-    A demo is stale when its code changed since its outputs were written
-    (`deckz.labs.stale_outputs`): those of `changed` are listed, the others
-    counted.
+    What's published is compared with the upstream branch's notebooks
+    (`deckz.upstream.source`), which a publish takes, as last fetched (HEAD
+    with no upstream). A demo is stale when its code changed since its
+    outputs were written (`deckz.labs.stale_outputs`): those of `changed`
+    are listed, the others counted.
 
     Returns:
         Its section.
@@ -411,6 +442,13 @@ def labs_section(
         return StatusSection(
             "Labs", "not compared with the published ones", _capped(items + missing)
         )
+    found_source, fetch_items = _lab_source(git_dir, fetch=fetch)
+    items += fetch_items
+    items += _unpushed_lab_items(
+        git_dir,
+        found_source,
+        [notebooks_dir.relative_to(git_dir).as_posix(), published_rel],
+    )
     if fetch:
         _git(git_dir, "fetch", "--quiet", labs.publish_remote, labs.publish_branch)
     ref = f"{labs.publish_remote}/{labs.publish_branch}"
@@ -425,8 +463,9 @@ def labs_section(
             id_metadata_key=labs.id_metadata_key,
             id_pattern=labs.id_pattern,
             not_secrets=labs.not_secrets,
+            source=found_source.commit,
         )
-        files = _published_files(git_dir, published_dir)
+        files = _published_files(git_dir, published_dir, found_source.commit)
     except LabPublishRefusedError as error:
         items.append(StatusItem(f"not publishable: {error}"))
         return StatusSection("Labs", "", _capped(items))
@@ -446,12 +485,16 @@ def labs_section(
         shown = ", ".join(differ[:8]) + (", ..." if len(differ) > 8 else "")
         items.append(
             StatusItem(
-                f"{_count(len(differ), 'committed notebook')} not as published: "
+                f"{_count(len(differ), 'notebook')} of {found_source.name} not "
+                "as published: "
                 f"{shown}",
                 "`deckz labs publish`, once they're reviewed",
             )
         )
-    summary = f"compared with {ref} as fetched on {_commit_date(git_dir, remote)}"
+    summary = (
+        f"{found_source.name} compared with {ref} as fetched on "
+        f"{_commit_date(git_dir, remote)}"
+    )
     return StatusSection("Labs", summary, _capped(items))
 
 

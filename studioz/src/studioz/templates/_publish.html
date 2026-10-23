@@ -5,11 +5,18 @@
     <button type="button" class="secondary" onclick="this.closest('dialog').close()">Fermer</button>
   </header>
   <p>Les liens des TP et les QR codes des vidéos sont imprimés dans les PDF remis aux stagiaires.
-    Une publication remplace tout ce qui est publié ; deckz refuse de faire disparaître un lien déjà publié,
-    et de publier des carnets non committés.</p>
-  {% if ahead %}
-  <p class="error">{{ ahead }} commit{{ "s" if ahead > 1 }} de cet espace ne {{ "sont" if ahead > 1 else "est" }} pas encore sur {{ upstream.name }} :
-    vous publieriez un contenu que le dépôt n'a pas encore. Synchronisez d'abord, sauf raison particulière.</p>
+    Une publication remplace tout ce qui est publié{% if upstream %}, à partir de {{ upstream.name }} (la branche partagée), quel que soit l'espace{% endif %} ;
+    deckz refuse de faire disparaître un lien déjà publié, de publier des carnets non committés ou pas encore sur la branche partagée,
+    et de remplacer une version publiée que son historique n'a pas.</p>
+  {% if ahead or behind %}
+  <p class="error">
+    {% if ahead %}{{ ahead }} commit{{ "s" if ahead > 1 }} de cet espace {% if ahead > 1 %}ne sont{% else %}n'est{% endif %} pas encore sur {{ upstream.name }} :
+    deckz refuse de publier des TP ou des vidéos qu'ils modifient tant qu'ils n'y sont pas.{% endif %}
+    {% if behind %}{{ upstream.name }} a {{ behind }} commit{{ "s" if behind > 1 }} que l'espace n'a pas :
+    les TP publiés seront les siens, mais les vidéos de l'espace ne se publient qu'une fois l'espace mis à jour.{% endif %}
+    Synchronisez d'abord, puis revenez publier.</p>
+  <p><button type="button" data-dialog="#sync-dialog" data-url="/espaces/{{ workspace.name }}/synchronisation/formulaire"
+             onclick="this.closest('dialog').close()">Synchroniser d'abord…</button></p>
   {% endif %}
   {% for what, (name, does) in publishable.items() %}
   {% set group = pending[what] %}

@@ -101,6 +101,56 @@ def publishable(
     return PublishPreview(site=site, problems=tuple(problems), warnings=tuple(warnings))
 
 
+def differing_sources(
+    git_dir: Path, scenes_dir: Path, found: list[Scene], commit: str
+) -> list[str]:
+    """The scenes' sources that differ between the working tree and `commit`.
+
+    A render is fresh for the sources it was made from (its stamp): when
+    they're `commit`'s, a render fresh here is fresh for `commit` too.
+
+    Args:
+        git_dir: Root of the deckz-managed repository.
+        scenes_dir: `GlobalPaths.scenes_dir`: a scene `commit` has and the \
+            working tree doesn't counts too.
+        found: Every registered scene (`scenes(settings)`).
+        commit: The commit to compare with (the upstream branch's).
+
+    Returns:
+        Their paths, relative to `git_dir`, sorted.
+    """
+    sources = sorted(
+        {
+            source.relative_to(git_dir).as_posix()
+            for scene in found
+            for source in scene.sources()
+        }
+    )
+    here = (
+        dict(
+            zip(
+                sources,
+                _git(
+                    git_dir, "hash-object", "--stdin-paths", stdin="\n".join(sources)
+                ).splitlines(),
+                strict=True,
+            )
+        )
+        if sources
+        else {}
+    )
+    there = {}
+    if sources:
+        for line in _git(git_dir, "ls-tree", "-r", commit, "--", *sources).splitlines():
+            info, path = line.split("\t", 1)
+            there[path] = info.split()[2]
+    differ = {path for path in sources if here[path] != there.get(path)}
+    scenes_rel = scenes_dir.relative_to(git_dir).as_posix()
+    changed = _git(git_dir, "diff", "--name-only", commit, "--", scenes_rel)
+    differ |= {path for path in changed.splitlines() if path.endswith(".py")}
+    return sorted(differ)
+
+
 def _blob(git_dir: Path, file: Path) -> str:
     return _git(git_dir, "hash-object", "-w", str(file))
 

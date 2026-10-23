@@ -13,7 +13,7 @@ The [guide](../guide/index.md) is for the people running a deckz-managed reposit
 | [Build pipeline](pipelines.md) | `pipelines`, `checking`, `course_notes`: planning and building decks |
 | [Analyses and checks](analyzing.md) | `analyzing`: read-only analyses, content checks |
 | [Components](components.md) | `components`: protocols, factories, and their implementations |
-| [Domain libraries](libraries.md) | `labs`, `videos`, `extras`, `worktrees`, `commits`, `remotes` |
+| [Domain libraries](libraries.md) | `labs`, `videos`, `upstream`, `extras`, `worktrees`, `commits`, `remotes` |
 | [Foundations](foundations.md) | `configuring`, `models`, `exceptions`, `utils`, `stamps`, `drive_links` |
 | [The repository's plugins](plugins.md) | What a deckz-managed repository plugs in, and what it may import |
 | [studioz](studioz.md) | How studioz uses deckz |
@@ -65,13 +65,14 @@ flowchart TB
     pipelines["<b>pipelines</b><br/>plan and build decks"]
     analyzing["<b>analyzing</b><br/>read-only analyses, content checks"]
     mid["<b>checking</b> | <b>course_notes</b> | <b>labs</b> | <b>videos</b> | <b>hooks_install</b>"]
+    upstream["<b>upstream</b><br/>the branch labs and videos are published from"]
     components["<b>components</b> | <b>extras</b> | <b>worktrees</b> | <b>commits</b> | <b>remotes</b>"]
     low["<b>drive_links</b> | <b>stamps</b>"]
     configuring["<b>configuring</b><br/>settings, variables"]
     utils["<b>utils</b>"]
     exceptions["<b>exceptions</b>"]
     models["<b>models</b>"]
-    cli --> agent --> tasks --> pipelines --> analyzing --> mid --> components --> low --> configuring --> utils --> exceptions --> models
+    cli --> agent --> tasks --> pipelines --> analyzing --> mid --> upstream --> components --> low --> configuring --> utils --> exceptions --> models
 ```
 
 Imports into deckz's core are mostly lazy (inside the function that needs them), so

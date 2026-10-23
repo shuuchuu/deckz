@@ -7,6 +7,7 @@ from pytest import raises
 from deckz.exceptions import VideoFetchError, VideoPublishRefusedError
 from deckz.videos.publishing import (
     FetchResult,
+    differing_sources,
     fetch_published,
     fetch_renders,
     publish,
@@ -335,3 +336,56 @@ def test_fetch_renders_names_the_fix_when_it_cant_fetch(tmp_path: Path) -> None:
 
     with raises(VideoFetchError, match=r"videos\.publish_remote"):
         _fetch(work, str(tmp_path / "nowhere"))
+
+
+def test_differing_sources_names_the_scene_sources_another_commit_has_otherwise(
+    tmp_path: Path,
+) -> None:
+    _remote, work = _make_repos(tmp_path)
+    base = _git(work, "rev-parse", "HEAD").strip()
+    scenes_dir = work / "figures" / "scenes"
+
+    assert differing_sources(work, scenes_dir, [_scene(work)], base) == []
+
+    # Newer upstream: a scene changed, and one added.
+    _write(scenes_dir / "nn" / "demo.py", _SCENE_SOURCE + "# changed\n")
+    _write(scenes_dir / "nn" / "other.py", _SCENE_SOURCE)
+    _git(work, "add", "-A")
+    _git(work, "commit", "-m", "Change the scenes")
+    newer = _git(work, "rev-parse", "HEAD").strip()
+    _git(work, "checkout", "-q", base)
+
+    assert differing_sources(work, scenes_dir, [_scene(work)], newer) == [
+        "figures/scenes/nn/demo.py",
+        "figures/scenes/nn/other.py",
+    ]
+
+
+def test_publish_command_refuses_scene_sources_other_than_the_upstream_s(
+    tmp_path: Path, monkeypatch: Any, caplog: Any
+) -> None:
+    import appdirs
+
+    from deckz.cli import main
+
+    monkeypatch.setattr(appdirs, "user_config_dir", lambda _: str(tmp_path))
+    remote, work = _make_repos(tmp_path)
+    origin = tmp_path / "origin.git"
+    _git(tmp_path, "init", "--bare", "-b", "main", str(origin))
+    _git(work, "remote", "add", "origin", str(origin))
+    _git(work, "push", "--quiet", "-u", "origin", "main")
+    stale = tmp_path / "work--stale"
+    _git(work, "worktree", "add", "-q", "-b", "ws/stale", str(stale))
+    _write(work / "figures" / "scenes" / "nn" / "demo.py", _SCENE_SOURCE + "# v2\n")
+    _git(work, "commit", "-qam", "Change the demo scene")
+    _git(work, "push", "--quiet", "origin", "main")
+
+    with raises(SystemExit) as exc_info:
+        main(("videos", "publish", "--workdir", str(stale)))
+
+    assert exc_info.value.code == 1
+    assert (
+        "the scenes' sources here differ from origin/main's: figures/scenes/nn/demo.py"
+    ) in caplog.text
+    assert "update this checkout to origin/main" in caplog.text
+    assert not _git(remote, "branch", "--list")
