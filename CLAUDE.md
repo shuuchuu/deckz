@@ -276,6 +276,19 @@ new`: the files a new deck, shared section or lab notebook pair needs, in
 both languages, from the repository's `templates/scaffold/` when present,
 refusing (`ScaffoldRefusedError`) to overwrite anything.
 
+### Drive links
+
+`drive_links.py` reads and writes a deck's registry (`paths.drive_links`,
+`<deck>/drive-links.yml`, committed in the target repo): each PDF's path in the
+deck's directory, mapped to the Google Drive file `deckz upload --reserve`
+created for it (`extras/uploading.py::Uploader.reserve`, an empty file, or the
+one already online), before any build shows its link. The factory hands the
+deck builder the registry's links; `DeckBuilder._links` gives each main
+template `links` (`self`, `handout`, `course_notes`, those the registry has),
+records them next to the compilation's build (`.links`), and `plan` reports
+`links_changed`, which `outdated_pdfs` counts. `Uploader.upload` writes a
+reserved PDF to its file by ID, and never deletes a reserved file.
+
 ### Course notes
 
 `course_notes.py` backs `deckz run course-notes` and `deckz show course-notes`: a
@@ -286,7 +299,8 @@ built by `pipelines.course_notes_targets` with the deck's own settings and
 `basedirs` rooted at the course notes directory, through the deck builder's
 `CompileType.CourseNotes` (its own `Format`, so its own main template,
 `paths.jinja2_course_notes_main_template`, and output dir,
-`paths.course_notes_pdf_dir`, which `stale_pdfs` and `upload` never glob). Such a
+`paths.course_notes_pdf_dir`, which `stale_pdfs` never globs; `upload` uploads
+it beside the slides of its language, `pipelines.published_targets`). Such a
 target has `BuildTarget.course_notes` set, which makes `_deck_builder` build its
 course notes PDF only, whatever the build's `OutputKinds`, so `deck_targets`/
 `decks_targets` can add the course notes to a slides build (`--course-notes`,

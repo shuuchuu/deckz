@@ -83,6 +83,7 @@ class DeckPaths(GlobalPaths):
     html_dir: _Path = cast("Path", "{current_dir}/html")
     local_content_dir: _Path = cast("Path", "{current_dir}/content")
     deck_definition: _Path = cast("Path", "{current_dir}/deck.yml")
+    drive_links: _Path = cast("Path", "{current_dir}/drive-links.yml")
 
 
 class LabsGpuSettings(BaseModel):

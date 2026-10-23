@@ -296,9 +296,10 @@ def print_plan(
                 "fragments (first build or Markdown converter changed)"
             )
             continue
+        links = ", Drive links changed" if item.links_changed else ""
         print(
             f"{display(item.output_path)}: render "
-            f"{len(item.changed_fragments)} of {item.fragments} fragments"
+            f"{len(item.changed_fragments)} of {item.fragments} fragments{links}"
         )
         for fragment in item.changed_fragments:
             print(f"  {display(fragment)}")
