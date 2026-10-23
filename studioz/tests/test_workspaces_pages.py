@@ -98,6 +98,57 @@ def test_close_refuses_then_forces(
     assert not path.exists()
 
 
+def test_close_says_what_becomes_of_the_builds(
+    repository: Path, monkeypatch: Any
+) -> None:
+    from studioz.app import create_app
+
+    from deckz.stamps import write_stamp
+
+    (repository / ".gitignore").write_text("/.run/\n/built/\n", encoding="utf8")
+    (repository / "deckz.yml").write_text("worktree:\n  seed: [built]\n", "utf8")
+    for args in (("add", "-A"), ("commit", "-qm", "Seed the builds")):
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repository),
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@e",
+                *args,
+            ],
+            check=True,
+        )
+    write_stamp(_write(repository / "built" / "fig.svg", "main's"), "old")
+    client = TestClient(create_app(repository), base_url="http://localhost:8421")
+    _create(client, monkeypatch)
+    path = repository.parent / "repo--demo"
+    write_stamp(_write(path / "built" / "fig.svg", "rebuilt"), "new")
+    write_stamp(_write(path / "built" / "new.svg", "new"), "n")
+
+    assert 'hx-get="/espaces/demo/fermer"' in client.get("/").text
+    confirm = client.get("/espaces/demo/fermer").text
+    assert "1 rendu (figures, vidéos) que le dossier principal n'a pas" in confirm
+    assert "y sera recopié" in confirm
+    assert "sera mis de côté" in confirm
+    assert "built/fig.svg" in confirm
+    assert path.is_dir()
+
+    closed = client.post("/espaces/demo/fermer", headers=ORIGIN).text
+    assert "Fermé." in closed
+    assert "y a été recopié" in closed
+    assert "a été mis de côté" in closed
+    assert (repository / "built" / "new.svg").read_text(encoding="utf8") == "new"
+
+
+def _write(path: Path, text: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf8")
+    return path
+
+
 def test_size(client: TestClient, monkeypatch: Any) -> None:
     _create(client, monkeypatch)
 

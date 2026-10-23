@@ -1,0 +1,10 @@
+<tr id="workspace-{{ workspace.name }}" class="confirm">
+  <td>{{ workspace.name }}</td>
+  <td colspan="6">
+    <p>Fermer l'espace de travail « {{ workspace.name }} » ?</p>
+    {% include "_close_renders.html" %}
+    <a class="button secondary" href="/">Garder</a>
+    <button class="danger" hx-post="/espaces/{{ workspace.name }}/fermer"
+            hx-target="#workspace-{{ workspace.name }}" hx-swap="outerHTML">Fermer</button>
+  </td>
+</tr>

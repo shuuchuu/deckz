@@ -61,6 +61,23 @@ def test_check_reports_and_changes_nothing(repo: Path) -> None:
     assert not (repo / ".git" / "hooks" / "pre-commit").exists()
 
 
+def test_setup_drops_the_builds_set_aside_for_too_long(repo: Path) -> None:
+    from os import utime
+
+    entry = repo / ".git" / "deckz" / "renders" / "s"
+    (entry / "fig.svg.stamp").parent.mkdir(parents=True)
+    (entry / "fig.svg").write_text("<svg/>", encoding="utf8")
+    (entry / "fig.svg.stamp").write_text("s\n", encoding="utf8")
+
+    assert _by_name(repo, check=True)["builds set aside"].status is Status.OK
+    assert _by_name(repo)["builds set aside"].status is Status.OK
+    utime(entry, (0, 0))
+    assert _by_name(repo, check=True)["builds set aside"].status is Status.OK
+    assert entry.exists()
+    assert _by_name(repo)["builds set aside"].status is Status.DONE
+    assert not entry.exists()
+
+
 def test_setup_installs_the_hooks_and_runs_the_steps_once(repo: Path) -> None:
     first = _by_name(repo)
 

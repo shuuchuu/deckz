@@ -75,7 +75,11 @@ repository where its stamp matches (`adopt`, which `is_fresh` calls), with the
 digest bytes, never paths, so the copy is what a build here would make. The
 checkouts are read from git's own files (`.git`, `commondir`, `worktrees/*/gitdir`),
 not by running git: about 0.7 ms per output not fresh here, on slides with five
-checkouts.
+checkouts. A worktree going away sets aside the outputs the main checkout holds
+stamped otherwise (`set_aside`, from `worktrees.hand_over`) in a store in the
+shared git directory (`<git common dir>/deckz/renders/<stamp>/`), which `adopt`
+searches after the checkouts; `prune` (from `deckz setup`) drops an entry a
+checkout holds again, or older than `STORE_DAYS` (30).
 
 ## `drive_links`
 

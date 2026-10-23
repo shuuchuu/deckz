@@ -20,6 +20,7 @@ and what keeps them from writing it at the same time.
 | `<git_dir>/.run/studioz/` | studioz's own state for a workspace | studioz | `deckz clean all` removes it too |
 | `<git_dir>/.check/{variables,staged}/` | Scratch trees of `check variables`, and the exported index of `check --staged` | `checking.check_scratch_dir`, `export_staged` | `deckz clean all` |
 | `<git_dir>/.check/hooks-sessions/` | Per-session state of the Claude Code hooks | `agent_hooks` | |
+| `<git common dir>/deckz/renders/<stamp>/` | Builds a removed worktree set aside, at their paths, with stamps and companions | `stamps.set_aside`, from `deckz worktree remove` | `deckz setup` drops those a checkout holds again or older than 30 days |
 | `<git common dir>/deckz-bash-snapshots/` | `git status` snapshots around an agent's Bash calls in the main checkout | `agent_checkouts` | |
 | Assets (`assets/…`), with `<output>.stamp` | Generated figures, plots, videos | the assets builders, `videos` | Often committed, with their stamps |
 | The repository's hooks directory, `.claude/settings.json`, the CI workflow | Installed hooks | `hooks_install` | Only deckz's own hook files or entries |
@@ -44,8 +45,9 @@ checkout, a `git stash`, or a copy into a worktree changes times:
   directory's `.render-fingerprint` changed (the converter's command and filters, the
   deck's variables);
 - an asset or a video is rebuilt when its stamp doesn't match the digest of its inputs
-  (`stamps`), unless another checkout of the repository holds one whose stamp does,
-  which is copied instead (`stamps.adopt`);
+  (`stamps`), unless another checkout of the repository, or the store of builds a
+  removed worktree set aside, holds one whose stamp does, which is copied instead
+  (`stamps.adopt`);
 - a marker record is used while it is at least as new as its PDF.
 
 Every fragment is copied to the build directory before any is rendered. When a render

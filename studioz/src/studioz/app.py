@@ -43,7 +43,7 @@ from deckz.analyzing.i18n_stale import lang_sync_kind, one_sided
 from deckz.configuring.settings import DeckSettings, GlobalSettings
 from deckz.exceptions import DeckzError, WorktreeError
 from deckz.models import LANGS, Lang
-from deckz.worktrees import main_checkout, remove
+from deckz.worktrees import main_checkout, pending_renders, remove
 
 from . import (
     __version__,
@@ -2821,6 +2821,18 @@ def size(studio: StudioDep, name: str) -> str:
     return _size(workspaces.size(studio.workspace(name).worktree.path))
 
 
+@router.get("/espaces/{name}/fermer", response_class=HTMLResponse)
+def close_confirm(request: Request, studio: StudioDep, name: str) -> Response:
+    """Ask before closing, saying what becomes of the workspace's builds.
+
+    Returns:
+        The workspace's row, as a confirmation.
+    """
+    found = studio.workspace(name)
+    renders = pending_renders(studio.settings, name)
+    return _render(request, "_close_confirm.html", workspace=found, renders=renders)
+
+
 @router.post("/espaces/{name}/fermer", response_class=HTMLResponse)
 def close(
     request: Request,
@@ -2830,10 +2842,11 @@ def close(
 ) -> Response:
     found = studio.workspace(name)
     try:
-        kept = remove(studio.settings, name, force=force)
+        removed = remove(studio.settings, name, force=force)
     except WorktreeError:
-        return _render(request, "_close_refused.html", workspace=found)
-    return _render(request, "_closed.html", workspace=found, kept=kept)
+        renders = pending_renders(studio.settings, name)
+        return _render(request, "_close_refused.html", workspace=found, renders=renders)
+    return _render(request, "_closed.html", workspace=found, removed=removed)
 
 
 def _busy(studio: Studio, workspace: Path) -> bool:
