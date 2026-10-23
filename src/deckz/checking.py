@@ -104,6 +104,43 @@ def export_staged(git_dir: Path) -> Path:
     return target
 
 
+def export_tree(git_dir: Path, commit: str, name: str) -> Path:
+    """Export `commit`'s tree into a persistent scratch directory, as `export_staged`.
+
+    Used by `deckz labs publish` to check the notebooks it publishes when
+    they're another commit's than the working tree's (the upstream branch's).
+
+    Args:
+        git_dir: Root of the deckz-managed repository.
+        commit: The commit to export.
+        name: The scratch directory's name, under `.check/`.
+
+    Returns:
+        The (freshly emptied) scratch directory, holding every file of \
+        `commit`.
+    """
+    from os import environ
+    from shutil import rmtree
+    from subprocess import run
+    from tempfile import TemporaryDirectory
+
+    target = git_dir / ".check" / name
+    if target.is_dir():
+        rmtree(target)
+    target.mkdir(parents=True)
+    with TemporaryDirectory() as tmp:
+        # A scratch index: the real one stays as the person staged it.
+        env = {**environ, "GIT_INDEX_FILE": str(Path(tmp) / "index")}
+        run(["git", "read-tree", commit], cwd=git_dir, env=env, check=True)
+        run(
+            ["git", "checkout-index", "--all", f"--prefix={target}/"],
+            cwd=git_dir,
+            env=env,
+            check=True,
+        )
+    return target
+
+
 def content_relative(settings: DeckSettings, path: str) -> str:
     """`path` as `deckz run file`/`section` take it: relative to a content directory.
 

@@ -55,11 +55,16 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   beyond the translation.
 - Never put a token or password in a notebook: the `lab-secrets` check refuses it,
   and so does publishing. Read secrets from the environment.
-- `deckz labs publish` publishes the committed notebooks, and the files committed
+- `deckz labs publish` publishes the notebooks of the shared branch (`origin/main`,
+  fetched first), whichever checkout it runs in, and the files committed there
   under `labs/published/` (with them, or to a repository of their own, such as the
-  one a Codespace opens: `labs.published_files_remote`). It refuses while a check
+  one a Codespace opens: `labs.published_files_remote`). Push your lab commits
+  first: it refuses while they aren't on the shared branch. It refuses while a check
   reports a problem in a notebook, even one that didn't block its commit
-  (`lab-pairs`, `lab-format`...): fix it and commit, or `--skip-checks`.
+  (`lab-pairs`, `lab-format`...): fix it, commit and push, or `--skip-checks`; and
+  it refuses to replace a published version the shared branch's history doesn't
+  hold (someone published commits never pushed): push them, or
+  `--replace-unknown`.
   Only maintainers do it: `deckz status` says when committed files differ from the
   published ones.
 - Publishing pushes to git remotes a fresh clone doesn't have: `deckz setup` adds
@@ -78,5 +83,7 @@ Videos are Manim scenes, rendered apart from deck builds (a render takes minutes
   from);
 - `deckz videos list` shows each one's state (never rendered, stale, a draft, or
   fresh), `--json` for a script;
-- `deckz videos publish` publishes the renders (maintainers). A published video's
-  address is printed in handouts: never rename or remove its scene.
+- `deckz videos publish` publishes the renders (maintainers), from a checkout whose
+  scenes are the shared branch's (it refuses otherwise: update the checkout, push
+  its commits). A published video's address is printed in handouts: never rename
+  or remove its scene.

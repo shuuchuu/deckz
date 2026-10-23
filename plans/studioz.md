@@ -20,8 +20,8 @@ afternoon; its increments 1 (the model), 2 (a new conversation for a new file), 
 are done. Phase 7's increments 1 (logging in, and errors naming their fix), 2
 (links in new tabs), 3 (the slide in view) and 4 (the PDF's outline) are done.
 **Next:** phase 8 (planned 2026-10-23 after a publish from a stale workspace
-rolled the labs back: its increment 1 first, and its three open decisions to put
-to the user), phase 7's "Also left" (start with "Starting phase 7" below), phase 6's
+rolled the labs back, its decisions taken the same day; increment 1 done, next
+its increment 2), phase 7's "Also left" (start with "Starting phase 7" below), phase 6's
 increment 5
 (the colleague's next afternoon measured), "Then, with the colleague" (below
 phase 5), and the open items. A GPU pass rents a machine that costs money: never
@@ -1970,29 +1970,56 @@ handbooks'. Increments 1 and 2 change what deckz does for every slides session:
 tell them before merging (`ListAgents`, `SendMessage`). Same procedure as "Starting
 phase 7".
 
-1. **Publish what's on the upstream branch.** `deckz labs publish` fetches the
-   upstream branch (the main checkout's, `origin/main` on slides: the one studioz's
-   `sync.Upstream` names) and builds its tree from that commit's notebooks and
-   `labs/published` files, not HEAD's. It refuses when HEAD has commits touching
-   either that the upstream branch doesn't ("push them first": otherwise the next
-   person's publish drops them), naming them. Second net, whatever the source: it
-   refuses to replace a published notebook (or published file) with a blob that is
-   an earlier version of the same path in the source commit's history (`git log
-   --format=%H -- <path>`, as found on 2026-10-23: each regressed blob was there),
-   unless `--allow-older <id>…`, and names each with the dates of both versions.
-   `deckz status`'s Labs section compares with the same commit, so "not as
-   published" means the same thing everywhere. Videos get the same rule:
-   `deckz videos publish` publishes the renders fresh for the upstream branch's
-   scene sources, which means computing their stamps from git blobs rather than
-   from the working tree (`deckz.stamps.digest` takes paths today; scene sources
-   are found transitively by `python_sources`, which needs the tree's files too).
-   In studioz, Publier becomes "Synchroniser puis publier" when the workspace has
-   unpushed commits touching the labs (or scenes), running Sync's check and push
-   first; its dialog says which commit is published ("origin/main, 3 min ago").
-   **Decide** (open): publishing from the upstream commit, recommended, since then
-   nothing depends on the checkout; or keep HEAD and refuse unless HEAD's labs equal
-   the upstream's, which keeps unpushed notebooks publishable by `--force` and is
-   less code (no stamps from blobs).
+1. **Publish what's on the upstream branch**: done 2026-10-23 (deckz side and the
+   publish dialog; the user tries the publish itself, see Left). **Decided**
+   (2026-10-23): publish from the upstream commit, not HEAD. `deckz.upstream`
+   holds the branch every checkout meets on (`upstream()`, the main checkout's
+   branch's upstream, the same `studioz.sync.upstream` finds; `source()`, fetched
+   or as last fetched, HEAD without an upstream; `unpushed()`, `missing()`,
+   `known_blobs()`). `deckz labs publish` fetches it and publishes its notebooks and
+   `labs/published` files (`labs.publishing.publish(source=…)`), refusing HEAD's
+   commits changing either that it lacks ("these commits change the labs and aren't
+   on origin/main yet: … Push them first"). The content checks run on the working
+   tree when HEAD's two directories are the upstream's, else on an export of the
+   upstream commit (`checking.export_tree`, under `.check/upstream`: 0.8 s on
+   slides, then 15 s of checks, as on the working tree). **Changed from the plan:**
+   the second net refuses to replace a published version the source's history
+   doesn't hold (`git rev-list --objects <source> -- labs/notebooks labs/published`,
+   0.09 s on slides), unless `--replace-unknown`, rather than "an older version":
+   with the upstream as the source, its current version is never older but by a
+   deliberate revert, and what can still go wrong is someone (an older deckz, the
+   colleague's) having published commits the upstream never got; the 2026-10-23
+   publish passes it (each of its blobs is in slides' history), so the user's
+   republish goes through. `deckz status`'s Labs section compares the same commit
+   ("64 notebooks of origin/main not as published", its summary "origin/main
+   compared with labs/main as fetched on …") and lists the unpushed lab commits;
+   tried on a scratch copy of slides (local bare stand-ins for origin, labs and
+   labs-codespace holding today's state, a worktree on the colleague's 10-16
+   `2ff593cf`): the stale worktree and the current checkout now report the same
+   64 notebooks and 4 files, where the stale one compared its own HEAD before,
+   matching the bad publish, so it showed nothing to publish. Videos: rather than
+   stamps computed from blobs, `deckz videos publish` refuses while the scenes'
+   sources (each scene's `sources()`, and any `.py` under `scenes_dir` the upstream
+   has otherwise) differ from the upstream's (`videos.publishing.differing_sources`,
+   the working tree's bytes against the upstream's blobs: 0.2 s on slides), naming
+   them and the fix (push the commits changing them, update to the upstream,
+   commit): a render fresh here is then fresh for the upstream. On the scratch copy,
+   the 10-16 worktree differs by one (`figures/scenes/nn/weight_initialization.py`),
+   the current checkout by none. studioz's publish dialog says it publishes from
+   origin/main whatever the workspace (`actions.PUBLISHABLE`), and when the
+   workspace has unpushed commits or lacks some of the upstream's, says what deckz
+   will refuse and offers "Synchroniser d'abord…" (the Sync dialog); found on the
+   way: it wrote "1 commit de cet espace ne est pas encore", now "n'est". Tests: the
+   stale worktree publishing the upstream's notebook, the unpushed commits refused,
+   the checks run on the export, the unknown version refused then replaced, the
+   videos' sources compared and the command's refusal, the dialog. **Left:** the
+   user tries `deckz labs publish` for real (the repository's Bash hook refuses an
+   agent any `labs publish`, even against the scratch copy's local remotes: from
+   `../deckz-studioz`, `bash <scratchpad>/trial-setup.sh` then `uv run deckz labs
+   publish --skip-checks --workdir <trial>/slides--stale` publishes the upstream's
+   notebooks into the stand-in); a chained "Synchroniser puis publier" (one dialog
+   doing the Sync's check and push then the publish) if "Synchroniser d'abord" turns
+   out to be a step too many.
 2. **Workspaces stay current.** studioz fetches the upstream branch at startup, when
    a workspace's page opens, and every 15 minutes while one is open (one `git fetch`
    for the repository: the refs are shared by every worktree), and the Problems'
@@ -2004,9 +2031,10 @@ phase 7".
    `uv.lock` changed and the `setup.steps`; `--force` when `package.json` changed),
    and shows `deckz setup`'s report that `../deckz` is behind its upstream. Building,
    uploading and publishing from a workspace behind it ask first ("Mettre à jour
-   d'abord", the default, or go on). **Decide** (open): whether an update that is
+   d'abord", the default, or go on). **Decided** (2026-10-23): an update that is
    only a fast-forward (no commits of the workspace's own, nothing uncommitted) is
-   applied without asking; the user leans towards always asking.
+   applied without asking, the banner then saying what it brought; any other
+   update is proposed.
 3. **A render made in one checkout is found from the others.** When a seeded output
    (`worktree.seed`: videos, Typst and matplotlib figures, SVGs) is missing or stale
    in a checkout, deckz looks for one fresh for this checkout's sources in the
@@ -2048,7 +2076,7 @@ phase 7".
      `remove` reports what it did ("3 rendus recopiés dans le dossier principal, 1
      mis de côté"), and studioz's Fermer dialog shows it before the person confirms.
    - The store drops an entry once some checkout holds a fresh copy of it, or after
-     30 days (`deckz setup` prunes it). **Decide** (open): the 30 days.
+     30 days (`deckz setup` prunes it). **Decided** (2026-10-23): 30 days.
 
 ## Risks
 

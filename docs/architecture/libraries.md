@@ -12,7 +12,7 @@ deckz's extras.
 |---|---|
 | **Responsibility** | Lab notebooks: format, IDs, fr/en comparison, execution (local, container, rented GPU), outputs, secrets, publishing |
 | **Owns** | The notebooks' canonical JSON form (`notebook.canonical_dump`); `labs/published/`'s assembly; the GPU machines' state in `.run/gpu/<name>/` |
-| **Depends on** | `configuring`, `commits` (`Lab-outputs-current`), `worktrees` (a GPU pass), `remotes` (publishing), `extras` (optional imports), `exceptions` |
+| **Depends on** | `configuring`, `commits` (`Lab-outputs-current`), `worktrees` (a GPU pass), `upstream` and `remotes` (publishing), `extras` (optional imports), `exceptions` |
 | **Never** | Imports `analyzing` or `pipelines`: `analyzing.content_checks` uses `labs`, not the reverse |
 | **Fails with** | `LabIdConflictError`, `LabContainerError`, `LabPublishRefusedError`, `LabOutputsMismatchError`, `LabOutputsHookError`, `GpuRunError` |
 
@@ -68,6 +68,17 @@ repository's scenes and templates (see [plugins](plugins.md)).
 `Lang-synced`, `Lab-outputs-current`) and makes the empty commits that record a
 decision. deckz keeps no state of its own about history: what a commit settles is in its
 message.
+
+## `upstream`
+
+| | |
+|---|---|
+| **Responsibility** | The branch every checkout's work meets on, which `labs publish` and `videos publish` publish from: the main checkout's branch's upstream (`origin/main`), fetched, whichever checkout runs them |
+| **Owns** | `Source` (the commit published, and how to name it), what HEAD has that it lacks (`unpushed`) and lacks that it has (`missing`), every version its history holds under some paths (`known_blobs`) |
+| **Depends on** | `worktrees` (`main_checkout`), `exceptions`; `git`, with the user's own credentials |
+| **Never** | Publishes, pushes or moves a branch: it fetches and reads |
+| **Entry points** | `labs.publishing` (`known_blobs`), `deckz labs publish`/`videos publish`, `status` (the Labs section compares the upstream's notebooks) |
+| **Fails with** | [`RemoteError`][deckz.exceptions] when the fetch fails |
 
 ## `remotes`
 

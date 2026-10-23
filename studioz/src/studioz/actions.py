@@ -31,16 +31,20 @@ DEFAULT_KINDS = frozenset({"handout", "presentation", "print"})
 PUBLISHABLE = {
     "labs": (
         "les TP",
-        "Les carnets du dernier commit de l'espace remplacent ceux que "
-        "les stagiaires ouvrent depuis les PDF (Colab).",
+        "Les carnets de la branche partagée remplacent ceux que les "
+        "stagiaires ouvrent depuis les PDF (Colab, Codespaces), quel que soit "
+        "l'espace d'où l'on publie.",
     ),
     "videos": (
         "les vidéos",
-        "Les rendus des scènes du dernier commit remplacent ceux "
-        "que les QR codes des PDF ouvrent.",
+        "Les rendus de l'espace remplacent ceux que les QR codes des PDF "
+        "ouvrent ; deckz refuse si ses scènes ne sont pas celles de la "
+        "branche partagée.",
     ),
 }
-"""What can be published, and what publishing does, in French."""
+"""What can be published, and what publishing does, in French: deckz publishes
+the labs of the main checkout's upstream branch, and the renders of a checkout
+whose scenes are that branch's (`deckz.upstream`)."""
 
 _PLAN_TIMEOUT = 300
 

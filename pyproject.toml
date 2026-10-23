@@ -101,6 +101,7 @@ layers = [
   "pipelines",
   "analyzing",
   "checking | course_notes | labs | videos | hooks_install",
+  "upstream",
   "components | extras | worktrees | commits | remotes",
   "drive_links | stamps",
   "configuring",

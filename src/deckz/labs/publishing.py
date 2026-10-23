@@ -10,6 +10,12 @@ sits in it. A published notebook name may already be in PDFs handed to
 trainees, so a publish refuses to drop any the remote branch already has,
 unless told to; the other files come and go freely.
 
+The files come from one commit, the source: `deckz labs publish` takes the
+upstream branch's (`deckz.upstream`), so that where it runs doesn't matter.
+A publish refuses to replace a published version the source's history
+doesn't hold (someone published commits that were never pushed), unless
+told to.
+
 Shells out to `git` (fetch and push need the user's own credentials/ssh
 agent, which `git` already picks up from the environment) rather than using
 pygit2, which deckz otherwise relies on for read-only repository discovery.
@@ -26,6 +32,7 @@ from pathlib import Path
 
 from ..exceptions import LabPublishRefusedError
 from ..remotes import branch_tip, replace_branch
+from ..upstream import known_blobs
 
 
 def _git(
@@ -86,8 +93,9 @@ def _published_notebooks(
     id_metadata_key: str,
     id_pattern: str,
     not_secrets: Iterable[str] = (),
+    source: str = "HEAD",
 ) -> dict[str, str]:
-    """The notebooks committed at HEAD, by ID.
+    """The notebooks committed at `source`, by ID.
 
     Returns:
         The blob sha of each ID's notebook.
@@ -103,7 +111,7 @@ def _published_notebooks(
     published: dict[str, str] = {}
     paths: dict[str, str] = {}
     problems = []
-    listing = _git(git_dir, "ls-tree", "-r", "HEAD", "--", notebooks_rel)
+    listing = _git(git_dir, "ls-tree", "-r", source, "--", notebooks_rel)
     for line in listing.splitlines():
         info, path = line.split("\t", 1)
         sha = info.split()[2]
@@ -129,8 +137,10 @@ def _published_notebooks(
     return published
 
 
-def _published_files(git_dir: Path, published_dir: Path | None) -> dict[str, str]:
-    """The files committed at HEAD under `published_dir`, by published path.
+def _published_files(
+    git_dir: Path, published_dir: Path | None, source: str = "HEAD"
+) -> dict[str, str]:
+    """The files committed at `source` under `published_dir`, by published path.
 
     Returns:
         The `<mode> blob <sha>` of each file, by its path relative to \
@@ -143,7 +153,7 @@ def _published_files(git_dir: Path, published_dir: Path | None) -> dict[str, str
     if published_dir is None:
         return {}
     published_rel = published_dir.relative_to(git_dir).as_posix()
-    listing = _git(git_dir, "ls-tree", "-r", "HEAD", "--", published_rel)
+    listing = _git(git_dir, "ls-tree", "-r", source, "--", published_rel)
     files = {}
     for line in listing.splitlines():
         info, path = line.split("\t", 1)
@@ -183,6 +193,57 @@ def _is_tree(git_dir: Path, tip: str | None, tree: str) -> bool:
     )
 
 
+def _blobs(git_dir: Path, tip: str | None) -> dict[str, str]:
+    # The blob of each file a published commit holds, by path.
+    if not tip:
+        return {}
+    blobs = {}
+    for line in _git(git_dir, "ls-tree", "-r", tip).splitlines():
+        info, path = line.split("\t", 1)
+        blobs[path] = info.split()[2]
+    return blobs
+
+
+def _unknown(
+    git_dir: Path, tip: str | None, entries: dict[str, str], known: set[str]
+) -> list[str]:
+    # The published files a publish of `entries` would change, whose published
+    # version `known` (the source's history) doesn't hold.
+    return sorted(
+        path
+        for path, blob in _blobs(git_dir, tip).items()
+        if path in entries and entries[path].split()[2] != blob and blob not in known
+    )
+
+
+def _refuse_uncommitted(git_dir: Path, directories: Iterable[Path | None]) -> None:
+    for directory in directories:
+        if directory is None:
+            continue
+        rel = directory.relative_to(git_dir).as_posix()
+        if _git(git_dir, "status", "--porcelain", "--", rel):
+            msg = (
+                f"{rel} has uncommitted changes: commit them (and push them, "
+                "to publish them) first"
+            )
+            raise LabPublishRefusedError(msg)
+
+
+def _refuse_unknown(unknown: list[str], source_name: str) -> None:
+    if not unknown:
+        return
+    shown = ", ".join(unknown[:8]) + (
+        f" and {len(unknown) - 8} more" if len(unknown) > 8 else ""
+    )
+    msg = (
+        f"the published version of {shown} isn't in {source_name}'s history: it "
+        f"was published from commits {source_name} doesn't have. Push them and "
+        "publish again, or pass --replace-unknown to replace it with "
+        f"{source_name}'s version"
+    )
+    raise LabPublishRefusedError(msg)
+
+
 def _replace(
     git_dir: Path,
     tree: str,
@@ -208,9 +269,12 @@ def publish(
     files_remote: str | None = None,
     files_branch: str = "main",
     break_published_links: bool = False,
+    replace_unknown: bool = False,
     not_secrets: Iterable[str] = (),
+    source: str = "HEAD",
+    source_name: str = "HEAD",
 ) -> bool:
-    """Replace `remote`'s `branch` with one commit of HEAD's lab notebooks.
+    """Replace `remote`'s `branch` with one commit of `source`'s lab notebooks.
 
     The files committed under `published_dir` go into the same commit, at
     the same paths, or, given a `files_remote`, into a commit of their own
@@ -226,16 +290,12 @@ def publish(
             `published_dir` has uncommitted changes, a committed notebook \
             has no valid or unique ID or holds what looks like a credential \
             (see `labs.secrets`), `published_dir` holds a notebook at its \
-            root, or the publish would drop an already-published notebook \
-            (unless `break_published_links`).
+            root, the publish would drop an already-published notebook \
+            (unless `break_published_links`), or replace a published file \
+            whose version `source`'s history doesn't hold (unless \
+            `replace_unknown`).
     """
-    for directory in (notebooks_dir, published_dir):
-        if directory is None:
-            continue
-        rel = directory.relative_to(git_dir).as_posix()
-        if _git(git_dir, "status", "--porcelain", "--", rel):
-            msg = f"{rel} has uncommitted changes"
-            raise LabPublishRefusedError(msg)
+    _refuse_uncommitted(git_dir, (notebooks_dir, published_dir))
     tip = branch_tip(git_dir, remote, branch)
     published = _published_notebooks(
         git_dir,
@@ -243,12 +303,14 @@ def publish(
         id_metadata_key=id_metadata_key,
         id_pattern=id_pattern,
         not_secrets=not_secrets,
+        source=source,
     )
-    files = _published_files(git_dir, published_dir)
+    files = _published_files(git_dir, published_dir, source)
     notebooks = {
         f"{lab_id}.ipynb": f"100644 blob {sha}" for lab_id, sha in published.items()
     }
-    tree = _tree(git_dir, notebooks if files_remote else {**files, **notebooks})
+    entries = notebooks if files_remote else {**files, **notebooks}
+    tree = _tree(git_dir, entries)
     # Only the notebooks' names are links handed out.
     previous = {
         name
@@ -260,6 +322,18 @@ def publish(
     if (removed := sorted(previous - notebooks.keys())) and not break_published_links:
         msg = "would break these published links: " + ", ".join(removed)
         raise LabPublishRefusedError(msg)
+    files_tip = (
+        branch_tip(git_dir, files_remote, files_branch) if files_remote else None
+    )
+    if not replace_unknown:
+        paths = [notebooks_dir.relative_to(git_dir).as_posix()]
+        if published_dir is not None:
+            paths.append(published_dir.relative_to(git_dir).as_posix())
+        known = known_blobs(git_dir, source, paths)
+        unknown = _unknown(git_dir, tip, entries, known)
+        if files_remote:
+            unknown += _unknown(git_dir, files_tip, files, known)
+        _refuse_unknown(unknown, source_name)
     today = datetime.now(tz=UTC).date().isoformat()
     pushed = False
     if not _is_tree(git_dir, tip, tree):
@@ -273,7 +347,6 @@ def publish(
         )
         pushed = True
     if files_remote:
-        files_tip = branch_tip(git_dir, files_remote, files_branch)
         files_tree = _tree(git_dir, files)
         if not _is_tree(git_dir, files_tip, files_tree):
             _replace(

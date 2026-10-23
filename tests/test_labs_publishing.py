@@ -247,7 +247,7 @@ def test_publish_command_refuses_a_notebook_with_check_problems(
         main(("labs", "publish", "--workdir", str(work)))
 
     assert exc_info.value.code == 1
-    assert "problems in the notebooks" in caplog.text
+    assert "problems in HEAD's notebooks" in caplog.text
     assert "lab-pairs: labs/notebooks/topic/demo-en.ipynb: missing" in caplog.text
     assert not _git(remote, "branch", "--list")
 
@@ -296,3 +296,133 @@ def test_publish_command_names_a_missing_remote_and_its_fix(
         "no `labs` remote in this clone: `deckz setup` adds it "
         "(`git remote add labs git@example.com:owner/labs.git`)"
     ) in caplog.text
+
+
+def _with_origin(tmp_path: Path, work: Path) -> Path:
+    # `work`'s main tracks an `origin`, as a clone's does.
+    origin = tmp_path / "origin.git"
+    _git(tmp_path, "init", "--bare", "-b", "main", str(origin))
+    _git(work, "remote", "add", "origin", str(origin))
+    _git(work, "push", "--quiet", "-u", "origin", "main")
+    return origin
+
+
+def _commit_notebook(work: Path, text: str, message: str) -> None:
+    notebook = work / "labs" / "notebooks" / "topic" / "demo-fr.ipynb"
+    content = json.loads(notebook.read_text())
+    content["cells"] = [{"cell_type": "markdown", "metadata": {}, "source": [text]}]
+    notebook.write_text(json.dumps(content))
+    _git(work, "commit", "-qam", message)
+
+
+def _published_cell(work: Path) -> str:
+    text = _git(work, "show", "labs/main:topic-demo-fr.ipynb")
+    return json.loads(text)["cells"][0]["source"][0]
+
+
+def test_publish_command_publishes_the_upstream_s_notebooks_from_a_stale_worktree(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    import appdirs
+
+    from deckz.cli import main
+
+    monkeypatch.setattr(appdirs, "user_config_dir", lambda _: str(tmp_path))
+    _remote, work = _make_repos(tmp_path)
+    _with_origin(tmp_path, work)
+    stale = tmp_path / "work--stale"
+    _git(work, "worktree", "add", "-q", "-b", "ws/stale", str(stale))
+    _commit_notebook(work, "newer", "Improve the demo")
+    _git(work, "push", "--quiet", "origin", "main")
+
+    main(("labs", "publish", "--skip-checks", "--workdir", str(stale)))
+
+    assert _published_cell(work) == "newer"
+
+
+def test_publish_command_refuses_lab_commits_not_pushed(
+    tmp_path: Path, monkeypatch: Any, caplog: Any
+) -> None:
+    import appdirs
+
+    from deckz.cli import main
+
+    monkeypatch.setattr(appdirs, "user_config_dir", lambda _: str(tmp_path))
+    remote, work = _make_repos(tmp_path)
+    _with_origin(tmp_path, work)
+    _commit_notebook(work, "local", "Improve the demo, not pushed")
+
+    with raises(SystemExit) as exc_info:
+        main(("labs", "publish", "--skip-checks", "--workdir", str(work)))
+
+    assert exc_info.value.code == 1
+    assert "aren't on origin/main yet" in caplog.text
+    assert "Improve the demo, not pushed" in caplog.text
+    assert not _git(remote, "branch", "--list")
+
+
+def test_publish_refuses_to_replace_a_version_the_source_s_history_lacks(
+    tmp_path: Path,
+) -> None:
+    _remote, work = _make_repos(tmp_path)
+    base = _git(work, "rev-parse", "HEAD").strip()
+    # Someone publishes a commit that never reaches the source's history.
+    _commit_notebook(work, "unpushed", "Improve the demo elsewhere")
+    _publish(work)
+
+    def publish_base(*, replace_unknown: bool = False) -> bool:
+        return publish(
+            work,
+            work / "labs" / "notebooks",
+            id_metadata_key="shuuchuu.id",
+            id_pattern=ID_PATTERN,
+            remote="labs",
+            branch="main",
+            replace_unknown=replace_unknown,
+            source=base,
+            source_name="origin/main",
+        )
+
+    _git(work, "reset", "-q", "--hard", base)
+    _git(work, "reflog", "expire", "--expire=now", "--all")
+    with raises(
+        LabPublishRefusedError,
+        match=r"published version of topic-demo-fr\.ipynb isn't in origin/main's",
+    ):
+        publish_base()
+
+    assert publish_base(replace_unknown=True) is True
+
+
+def test_publish_replaces_an_older_published_version(tmp_path: Path) -> None:
+    _remote, work = _make_repos(tmp_path)
+    _publish(work)
+    _commit_notebook(work, "newer", "Improve the demo")
+
+    assert _publish(work) is True
+    assert _published_cell(work) == "newer"
+
+
+def test_publish_command_checks_the_upstream_s_notebooks_when_they_differ(
+    tmp_path: Path, monkeypatch: Any, caplog: Any
+) -> None:
+    import appdirs
+
+    from deckz.cli import main
+
+    monkeypatch.setattr(appdirs, "user_config_dir", lambda _: str(tmp_path))
+    remote, work = _make_repos(tmp_path)
+    _with_origin(tmp_path, work)
+    stale = tmp_path / "work--stale"
+    _git(work, "worktree", "add", "-q", "-b", "ws/stale", str(stale))
+    _commit_notebook(work, "newer", "Improve the demo")
+    _git(work, "push", "--quiet", "origin", "main")
+
+    with raises(SystemExit) as exc_info:
+        main(("labs", "publish", "--workdir", str(stale)))
+
+    assert exc_info.value.code == 1
+    assert "problems in origin/main's notebooks" in caplog.text
+    assert "lab-pairs: labs/notebooks/topic/demo-en.ipynb: missing" in caplog.text
+    assert (stale / ".check" / "upstream" / "labs").is_dir()
+    assert not _git(remote, "branch", "--list")

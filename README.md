@@ -1367,12 +1367,21 @@ The main commands:
 - `deckz labs missing`: every notebook present in only one language.
 - `deckz labs dump NOTEBOOKS...`: a compact, readable view of one or more
   notebooks.
-- `deckz labs publish [--break-published-links] [--skip-checks]`: replace
-  the labs remote's branch with one commit of HEAD's lab notebooks, named
-  by ID, and publish the files committed under `paths.labs_published_dir`
-  (with them, or to `labs.published_files_remote`). Refuses while the
-  content checks report a problem in a notebook (deferred ones included),
-  unless `--skip-checks`; a credential is refused regardless.
+- `deckz labs publish [--break-published-links] [--replace-unknown]
+  [--skip-checks]`: replace the labs remote's branch with one commit of the
+  upstream branch's lab notebooks (the main checkout's branch's upstream,
+  fetched first, e.g. `origin/main`; HEAD's in a repository with none),
+  named by ID, and publish the files committed there under
+  `paths.labs_published_dir` (with them, or to
+  `labs.published_files_remote`). Whichever checkout it runs in publishes
+  the same: one behind the upstream can't put older notebooks back. Refuses
+  while HEAD has commits changing the labs that the upstream lacks (push
+  them first), while the content checks report a problem in the upstream's
+  notebooks (deferred ones included; checked on an export of that commit
+  when it differs from the checkout), unless `--skip-checks`, and to
+  replace a published version the upstream's history doesn't hold
+  (published from commits never pushed), unless `--replace-unknown`; a
+  credential is refused regardless.
 - `deckz labs gpu up|queue|run|status|fetch|report|down` (extra:
   `deckz[gpu]`): run notebooks on a rented GPU machine the way Colab runs
   them -- Colab's runtime image, `labs.gpu.cpus` CPUs per run, peak RAM
@@ -1442,8 +1451,11 @@ The main commands:
   line (quality stamp or `-`, path under `videos.videos_dir`, class name).
 - `deckz videos publish [--break-published-links]`: replace the videos
   remote's branch with one commit of every scene's current renders,
-  refusing one missing, stale, at the wrong quality, or over the publish
-  size limit, or that would drop an already-published render's path.
+  refusing while the scenes' sources differ from the upstream branch's
+  (fetched first: a render fresh here is then fresh for the upstream; the
+  message says to update the checkout or push its commits), and refusing a
+  render missing, stale, at the wrong quality, or over the publish size
+  limit, or that would drop an already-published render's path.
 
 ## Documentation
 
