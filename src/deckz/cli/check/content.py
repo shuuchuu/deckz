@@ -1,4 +1,7 @@
 from pathlib import Path
+from typing import Annotated
+
+from cyclopts import Parameter
 
 from . import app
 
@@ -9,6 +12,9 @@ def content(
     checks: list[str] | None = None,
     /,
     *,
+    file: Annotated[
+        tuple[Path, ...], Parameter(consume_multiple=True, negative="")
+    ] = (),
     staged: bool = False,
     plain: bool = False,
     json: bool = False,
@@ -24,14 +30,19 @@ def content(
     asset credit lines free of LaTeX (`asset-credits`), no raw LaTeX in
     content (`raw-latex`, `lab-urls`), content files' Jinja tags
     (`jinja-syntax`), every deck parsing in French (`deck-definitions`),
-    and, with `review.dir`, review reports' front matter well formed and
-    naming existing files (`review-headers`).
+    with `review.dir`, review reports' front matter well formed and
+    naming existing files (`review-headers`), course notes chapters
+    writing out a content file (`course-notes-files`) and existing in fr
+    and en (`course-notes-pairs`), and their Python code printing what they
+    show (`course-notes-code`, opt-in: it runs the code, see
+    `course_notes.code` in `deckz.yml`).
     A `templates/checks.py` module (see `GlobalPaths.checks_module`) can
     add the repository's own, merged in under their own names.
 
     With no CHECKS given, runs every one, deckz's built-ins first, except
-    those `deckz.yml` lists under `checks.opt_in`, which run only when
-    named, and exits 1 if a blocking check reports a problem. A deferred
+    the opt-in ones (`course-notes-code`, and those `checks.opt_in`
+    lists), which run only when named, and exits 1 if a blocking check reports a
+    problem. A deferred
     check's problems (`checks.deferred`; by default every built-in but
     `lab-secrets`, `jinja-syntax`, `deck-definitions` and `review-headers`)
     are printed
@@ -41,6 +52,10 @@ def content(
 
     Args:
         checks: Only run these checks, by name, instead of every one
+        file: Limit the checks that read files to these ones (`--file a.md
+            b.md`), e.g. `deckz check course-notes-code --file
+            supports/x.md` to run one chapter's code; the other checks
+            still read the whole repository
         staged: Check the git index's staged version of every tracked
             file, exported to a scratch directory, instead of the working
             tree: other sessions' unfinished edits neither block this nor
@@ -60,26 +75,35 @@ def content(
     from sys import stderr
 
     from ...checking import export_staged
+    from ...components.checks import run_check
     from ...components.factory import GlobalSettingsFactory
     from ...configuring.settings import GlobalSettings
     from .._presentation import print_checks
 
     settings = GlobalSettings.from_yaml(workdir)
+    paths = [(workdir / path).resolve() for path in file] or None
     if staged:
+        git_dir = settings.paths.git_dir.resolve()
         exported = export_staged(settings.paths.git_dir)
         settings = GlobalSettings.from_yaml(exported, git_dir=exported)
+        if paths is not None:
+            paths = [exported / path.relative_to(git_dir) for path in paths]
 
     available = GlobalSettingsFactory(settings).checks_runner().checks()
     selected = (
         checks
         if checks is not None
-        else [name for name in available if name not in settings.checks.opt_in]
+        else [name for name in available if settings.checks.runs_unnamed(name)]
     )
     if unknown := [name for name in selected if name not in available]:
         print(f"unknown checks {unknown}: pick from {sorted(available)}", file=stderr)
         sys_exit(2)
 
-    results = {name: problems for name in selected if (problems := available[name]())}
+    results = {
+        name: problems
+        for name in selected
+        if (problems := run_check(available[name], paths))
+    }
     blocking = {
         name: problems
         for name, problems in results.items()

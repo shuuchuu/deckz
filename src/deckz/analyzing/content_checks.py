@@ -549,6 +549,22 @@ def course_notes_pairs(settings: "GlobalSettings", paths: Paths = None) -> list[
     return sorted(problems)
 
 
+def course_notes_code(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
+    # Each course notes chapter's Python code runs, and prints what the
+    # chapter shows it printing (see `deckz.course_notes_code`). Opt-in: it
+    # runs the chapters' code, with their libraries, for minutes.
+    from ..course_notes import chapter_path, chapters
+    from ..course_notes_code import check_chapters
+
+    if not _any(paths, lambda path: _under(path, settings.paths.course_notes_dir)):
+        return []
+    every = [chapter_path(settings, path, lang) for path, lang in chapters(settings)]
+    if paths is not None:
+        wanted = {path.resolve() for path in paths}
+        every = [chapter for chapter in every if chapter.resolve() in wanted]
+    return check_chapters(settings, every)
+
+
 def _has_chapter(settings: "GlobalSettings", directory: Path) -> bool:
     # Whether `directory` (a chapters' `en/`) holds a chapter.
     return directory.is_dir() and any(
@@ -580,6 +596,7 @@ CHECKS: dict[str, Callable[["GlobalSettings", Paths], list[str]]] = {
     "lab-urls": lab_urls,
     "course-notes-files": course_notes_files,
     "course-notes-pairs": course_notes_pairs,
+    "course-notes-code": course_notes_code,
     "review-headers": review_headers,
 }
 
@@ -593,6 +610,7 @@ DEFERRED = (
     "lab-urls",
     "course-notes-files",
     "course-notes-pairs",
+    "course-notes-code",
 )
 """The built-in checks whose findings don't fail `deckz check` by default.
 
@@ -604,4 +622,15 @@ then. Those left out block a commit, the point of their harm:
 `review-headers` (a malformed report stops `deckz review` for everyone
 after a pull, and a renamed file's review is best carried over by whoever
 renames it). `deckz.yml`'s `checks.deferred` replaces this list.
+"""
+
+OPT_IN = ("course-notes-code",)
+"""The built-in checks `deckz check` runs only when named.
+
+`course-notes-code` runs every chapter's code, with the libraries
+`course_notes.code.python` installs, for minutes: `deckz check
+course-notes-code --file <chapter>` checks one chapter as it's written.
+They stay opt-in whatever the repository sets: `deckz.yml`'s
+`checks.opt_in` adds to them, so a repository listing its own opt-in checks
+doesn't start running every chapter's code on each commit.
 """

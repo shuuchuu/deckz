@@ -17,7 +17,7 @@ flavors, marking a translation synced).
 
 | Module | Backs | What it does |
 |---|---|---|
-| [`content_checks`][deckz.analyzing.content_checks] | `deckz check` | Generic content checks, each a `(settings, paths) -> list[str]` in `CHECKS`: `lab-ids`, `lab-pairs`, `lab-outputs`, `lab-secrets`, `lab-format`, `asset-credits`, `raw-latex`, `jinja-syntax`, `deck-definitions`, `lab-urls`, `course-notes-files`, `course-notes-pairs`, `review-headers` |
+| [`content_checks`][deckz.analyzing.content_checks] | `deckz check` | Generic content checks, each a `(settings, paths) -> list[str]` in `CHECKS`: `lab-ids`, `lab-pairs`, `lab-outputs`, `lab-secrets`, `lab-format`, `asset-credits`, `raw-latex`, `jinja-syntax`, `deck-definitions`, `lab-urls`, `course-notes-files`, `course-notes-pairs`, `course-notes-code`, `review-headers` |
 | [`affected`][deckz.analyzing.affected] | `deckz show affected`, `status`, `upload` | Which decks a change of some files reaches (in French: an `en/` file counts as its French sibling), and their findings |
 | [`i18n_stale`][deckz.analyzing.i18n_stale] | `deckz i18n stale`, `mark-synced`, the commit-msg hook | fr/en pairs, and their staleness from the history's `Lang-sync` trailers |
 | [`i18n_coverage`][deckz.analyzing.i18n_coverage] | `deckz i18n missing-en`, `status` | French content, titles and variables with no English counterpart |
@@ -74,7 +74,11 @@ flowchart TB
   notebooks directory, and `deckz status DECK` (`status.deck_status`) the deck's.
 - A check in `checks.opt_in` (a slow, networked, or not yet passing check) runs only
   when named on the command line: `deckz check`, the pre-commit hook and the post-edit
-  agent hook skip it.
+  agent hook skip it (`ChecksSettings.runs_unnamed`). The built-in opt-in checks
+  (`content_checks.OPT_IN`: `course-notes-code`, which runs code) stay opt-in whatever
+  the repository lists, unlike `DEFERRED`, which `checks.deferred` replaces: a
+  repository listing its own would otherwise start running every chapter's code on
+  each commit. `deckz check --file` passes its files as `paths`.
 - `--staged` runs the checks on the staged tree exported to `.check/staged/`
   (`checking.export_staged`), so another session's unfinished edits neither block a
   commit nor hide a problem.

@@ -10,7 +10,7 @@ The [guide](../guide/index.md) is for the people running a deckz-managed reposit
 | This page | The context, the layers, and the rules that hold them |
 | [Command line](cli.md) | `deckz.cli`: wiring, the error boundary, output |
 | [Tasks](tasks.md) | `status`, `setting_up`, `scaffolding`, `ci_report`, the agent hooks, `hooks_install` |
-| [Build pipeline](pipelines.md) | `pipelines`, `checking`, `course_notes`: planning and building decks |
+| [Build pipeline](pipelines.md) | `pipelines`, `checking`, `course_notes`, `course_notes_code`, `code_runner`: planning and building decks, running the course notes' code |
 | [Analyses and checks](analyzing.md) | `analyzing`: read-only analyses, content checks |
 | [Components](components.md) | `components`: protocols, factories, and their implementations |
 | [Domain libraries](libraries.md) | `labs`, `videos`, `upstream`, `extras`, `worktrees`, `commits`, `remotes` |
@@ -64,14 +64,14 @@ flowchart TB
     tasks["<b>status</b> | <b>setting_up</b> | <b>scaffolding</b> | <b>ci_report</b><br/>task-level operations"]
     pipelines["<b>pipelines</b><br/>plan and build decks"]
     analyzing["<b>analyzing</b><br/>read-only analyses, content checks"]
-    mid["<b>checking</b> | <b>course_notes</b> | <b>labs</b> | <b>videos</b> | <b>hooks_install</b>"]
+    mid["<b>checking</b> | <b>course_notes</b> | <b>course_notes_code</b> | <b>labs</b> | <b>videos</b> | <b>hooks_install</b>"]
     upstream["<b>upstream</b><br/>the branch labs and videos are published from"]
     components["<b>components</b> | <b>extras</b> | <b>worktrees</b> | <b>commits</b> | <b>remotes</b>"]
     low["<b>drive_links</b> | <b>stamps</b>"]
     configuring["<b>configuring</b><br/>settings, variables"]
     utils["<b>utils</b>"]
     exceptions["<b>exceptions</b>"]
-    models["<b>models</b>"]
+    models["<b>models</b> | <b>code_runner</b>"]
     cli --> agent --> tasks --> pipelines --> analyzing --> mid --> upstream --> components --> low --> configuring --> utils --> exceptions --> models
 ```
 

@@ -227,7 +227,9 @@ class ChecksSettings(BaseModel):
 
     Built-in or plugin checks too slow, networked or not yet passing to \
     run on every commit (the pre-commit hook runs `deckz check --staged`, \
-    i.e. every other check). A name no check has is ignored."""
+    i.e. every other check). They add to deckz's own opt-in checks \
+    (`content_checks.OPT_IN`: `course-notes-code`, which runs the course \
+    notes' code), which stay opt-in. A name no check has is ignored."""
     deferred: tuple[str, ...] | None = None
     """Checks whose findings `deckz check` prints without failing, unless named.
 
@@ -235,6 +237,16 @@ class ChecksSettings(BaseModel):
     those whose harm comes after the commit); a list replaces them, `[]` \
     making every check block a commit. A plugin check blocks unless listed. \
     A name no check has is ignored."""
+
+    def runs_unnamed(self, name: str) -> bool:
+        """Whether `deckz check`, run without naming checks, runs check `name`.
+
+        Returns:
+            True unless it's opt-in.
+        """
+        from ..analyzing.content_checks import OPT_IN
+
+        return name not in OPT_IN and name not in self.opt_in
 
     def blocking(self, name: str) -> bool:
         """Whether a finding of check `name` fails `deckz check` run unnamed.
@@ -245,6 +257,37 @@ class ChecksSettings(BaseModel):
         from ..analyzing.content_checks import DEFERRED
 
         return name not in (DEFERRED if self.deferred is None else self.deferred)
+
+
+class CourseNotesCodeSettings(BaseModel):
+    """How `deckz check course-notes-code` runs the chapters' Python code.
+
+    Each chapter runs in a process of its own, in a scratch working \
+    directory, its `pycon` sessions and `python` blocks compared with the \
+    outputs it shows (see `deckz.code_runner`).
+    """
+
+    model_config = ConfigDict(frozen=True)
+    python: tuple[str, ...] = ()
+    """The command running Python with the libraries the chapters use, at \
+    the versions their labs use; deckz adds the runner script and its \
+    arguments. `{git_dir}` stands for the repository's root, e.g. `[uv, run, \
+    --no-project, --with-requirements, "{git_dir}/requirements.txt", \
+    python]`. Unset, deckz's own interpreter."""
+    timeout: int = 30
+    """Seconds one example may run (a `pycon` prompt, a `python` block)."""
+    jobs: int = 4
+    """Chapters run at the same time. Each loads its libraries and data: \
+    lower it for chapters with big data sets."""
+    setup: dict[str, tuple[str, ...]] = Field(default_factory=dict)
+    """What chapters need before their own code: `<pattern>: [<path>...]`. \
+    The patterns match chapters' paths relative to the course notes \
+    directory, without extension nor `en/`, as `PurePosixPath.full_match` \
+    reads them (`python/pandas/**`). The paths, relative to the repository's \
+    root, are chapters, whose code runs first, in the same namespace, its \
+    outputs unchecked (an English chapter runs the setup chapter's English \
+    version when there is one), or other files, linked into the working \
+    directory (a data set the examples read)."""
 
 
 class CourseNotesSettings(BaseModel):
@@ -270,6 +313,8 @@ class CourseNotesSettings(BaseModel):
     suffix: str = "course-notes"
     """What a deck's course notes PDF is named after: `<deck>-<suffix>.pdf`, \
     in `paths.course_notes_pdf_dir`."""
+    code: CourseNotesCodeSettings = Field(default_factory=CourseNotesCodeSettings)
+    """How `deckz check course-notes-code` runs the chapters' code."""
 
 
 class VideosSettings(BaseModel):

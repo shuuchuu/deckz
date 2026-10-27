@@ -133,7 +133,7 @@ class ChecksRunner(ChecksRunnerProtocol):
             if (
                 name in names
                 if names is not None
-                else name not in settings.checks.opt_in
+                else settings.checks.runs_unnamed(name)
             )
             for problem in run_check(check, paths)
         ]

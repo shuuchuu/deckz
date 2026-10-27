@@ -131,6 +131,15 @@ chapters' (`run file` given a chapter's path builds it alone,
 follows, and `course-notes-files` and `course-notes-pairs` are deferred built-in
 checks.
 
+[`course_notes_code`][deckz.course_notes_code] backs the opt-in
+`course-notes-code` check: it runs each chapter in a child process of its own, through
+[`code_runner`][deckz.code_runner], with the interpreter `course_notes.code.python`
+names (not deckz's: it has the chapters' libraries), in a scratch working directory
+(`deckz-code-*` in the system's temporary directory, removed after). `code_runner` is
+a standalone, standard-library-only script for that reason, at the bottom layer: it
+imports nothing from deckz. Each child's session is killed past its time limit, so a
+chapter starting a server or a GUI leaves nothing running.
+
 ## `watch`
 
 [`watch`][deckz.pipelines] is generic: it reruns a function whenever a file under

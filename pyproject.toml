@@ -100,14 +100,14 @@ layers = [
   "status | setting_up | scaffolding | ci_report",
   "pipelines",
   "analyzing",
-  "checking | course_notes | labs | videos | hooks_install",
+  "checking | course_notes | course_notes_code | labs | videos | hooks_install",
   "upstream",
   "components | extras | worktrees | commits | remotes",
   "drive_links | stamps",
   "configuring",
   "utils",
   "exceptions",
-  "models",
+  "models | code_runner",
 ]
 # Known inversions, each a lazy import inside a function. Fixing one means
 # removing its line here (an unmatched ignore fails the contract).

@@ -351,8 +351,8 @@ def _content_problems(
 
     The conversions run in parallel. Each check runs once, on `paths` alone
     when it takes them (see `ChecksRunner`), the whole repository otherwise;
-    those under `checks.opt_in` don't run. A problem is kept when its leading
-    path (`Finding.path`) is one of `paths`.
+    the opt-in ones (`ChecksSettings.runs_unnamed`) don't run. A problem is
+    kept when its leading path (`Finding.path`) is one of `paths`.
 
     Returns:
         Each problem, as `[check] problem`, by the path (relative to the git \

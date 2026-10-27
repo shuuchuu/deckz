@@ -458,7 +458,8 @@ def print_checks(
 
     Deferred checks' findings don't fail it, which the output says: a header
     mark, a `deferred` column (`plain`) or key (`json`), and a closing log
-    line when nothing blocks.
+    line when nothing blocks. A problem spanning several lines (what code
+    printed) keeps one line in `plain`, its newlines escaped.
     """
     if json:
         print_json({"blocking": blocking, "deferred": deferred})
@@ -467,7 +468,8 @@ def print_checks(
         for level, found in (("blocking", blocking), ("deferred", deferred)):
             for name, problems in found.items():
                 for problem in problems:
-                    print(f"{level}\t{name}\t{problem}")
+                    one_line = problem.replace("\n", "\\n")
+                    print(f"{level}\t{name}\t{one_line}")
         return
     for found, mark in (
         (blocking, ""),

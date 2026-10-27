@@ -3,7 +3,10 @@
 `deckz check` runs every check (the pre-commit hook runs it on the staged files);
 `deckz check <name>` runs one. Each problem it reports ends with how to fix it.
 Checks a repository lists under `deckz.yml`'s `checks.opt_in` only run when named (or
-nightly in CI): they're slow, or need the network.
+nightly in CI): they're slow, or need the network. So does deckz's own
+`course-notes-code`, which runs the course notes' code. `--file <path>...` limits the
+checks that read files to those: `deckz check course-notes-code --file
+course-notes/topic/intro.md` runs one chapter's code.
 No check compiles a deck: when `ci.builds` is set, CI builds every Sunday (or every
 night) the handouts of the decks the period's commits reach, and fails naming the deck
 that doesn't build (`deckz run decks --since <rev>` does the same before you push).
@@ -42,6 +45,21 @@ a repository's own checks block unless it lists them.
 | `lab-urls` | no | labs linked through the repository's templating, not a pasted URL | use the repository's lab link |
 | `course-notes-files` | no | each course notes chapter is named after a content file; `course_notes.same_as` names content files with no chapter of their own | move the chapter after its renamed file; fix `same_as` |
 | `course-notes-pairs` | no | each course notes chapter exists in French and English (a directory with no English chapter yet: one line, and none in the post-edit hook) | translate the missing one |
+| `course-notes-code` | no, and opt-in | each course notes chapter's Python code runs, and prints what the chapter shows (see below) | show what it prints; mark the block `.output-varies` or `.no-run` |
+
+## A chapter's code
+
+`deckz check course-notes-code` runs each chapter's Python as a reader typing it in
+would, in a scratch directory, with the interpreter `course_notes.code.python` names
+(the README's "Course notes"): each `pycon` prompt, its output compared with the one
+shown under it (`...` stands for any text: an address, a long tail), and each `python`
+block, compared with the `text` block right after it, or else expected to print
+nothing. A shown error counts by its last line. A block whose first line names a file
+(`# greeting.py`) is written to that file, for the blocks after it to import. Classes
+on the fence opt a block out: `{.python .no-run}` isn't run (a GUI's main loop, a
+server, `input()`, a deliberate fragment), `{.pycon .output-varies}` runs without its
+output compared (timings, the machine's own state); neither shows in the PDF. Each
+problem shows what the code printed, ready to paste into the chapter.
 
 A repository adds its own checks in `templates/checks.py`; `deckz check --help` lists
 them all.

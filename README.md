@@ -656,7 +656,10 @@ which makes the hooks wait for it.
 Checks too slow, networked or not yet passing to run on every commit can
 be listed in `deckz.yml`, by name, under `checks.opt_in`: `deckz check`
 (hence the pre-commit hook) and the post-edit Claude Code hook skip them,
-and `deckz check <name>` still runs them:
+and `deckz check <name>` still runs them. deckz's own `course-notes-code`,
+which runs the course notes' code, is always opt-in; the list adds to it.
+`deckz check --file <path>...` limits the checks that take paths to those
+files:
 
 ```yaml
 checks:
@@ -877,6 +880,18 @@ course_notes:
     some-section/intro-short: some-section/intro
   # The PDF's name: <deck>-<suffix>.pdf.
   suffix: course-notes
+  # How `deckz check course-notes-code` runs the chapters' Python code.
+  code:
+    # The command running Python with the chapters' libraries; deckz adds
+    # the runner script. Unset: deckz's own interpreter.
+    python: [uv, run, --no-project, --with-requirements,
+             "{git_dir}/requirements.txt", python]
+    timeout: 30  # seconds per example
+    jobs: 4      # chapters at a time
+    # What chapters need first: chapters whose code runs before theirs (the
+    # example data they build), or files linked into the working directory.
+    setup:
+      "pandas/**": [course-notes/pandas/example-data.md, data/sales.csv]
 ```
 
 Chapters are fr/en pairs like content files: `deckz i18n stale`, the
@@ -888,6 +903,18 @@ English one at all is still being written or translated: `course-notes-pairs`
 reports it as one line, and not at all on the files of a post-edit hook
 (`deckz check` given paths), while each chapter missing from a directory that
 has English ones is a line of its own.
+
+`deckz check course-notes-code` (opt-in: it runs code, for minutes on a large
+repository) runs each chapter's Python, in a scratch working directory, as a
+reader typing it in would: `pycon` sessions prompt by prompt, `python` blocks
+whole, all in one namespace, and compares each with the output the chapter
+shows (a `text` block right after a `python` one; `...` matches any text; a
+shown error counts by its last line). A block whose first line names a file
+(`# greeting.py`) is written to that file. `{.python .no-run}` keeps a block
+from running, `{.pycon .output-varies}` from having its output compared; the
+PDF shows neither class. `deckz check course-notes-code --file
+course-notes/<path>.md` runs one chapter: what an author runs after writing
+one, instead of trying each snippet by hand.
 
 ### Drive links
 
