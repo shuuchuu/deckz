@@ -299,7 +299,9 @@ def _alarm(signum: int, frame: FrameType | None) -> None:
 
 
 def _shell(example: Example, timeout: int) -> tuple[str, str | None]:
-    # Run a console command in `bash`, `$?` the previous command's status.
+    # Run a console command in `bash`, `$?` the previous command's status. Its
+    # Python programs write their lines in a terminal's order: without a
+    # terminal, stdout would be held in a buffer while stderr goes out.
     global _status
     try:
         done = subprocess.run(
@@ -307,6 +309,7 @@ def _shell(example: Example, timeout: int) -> tuple[str, str | None]:
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
+            env={**os.environ, "PYTHONUNBUFFERED": "1"},
             timeout=timeout,
             check=False,
         )

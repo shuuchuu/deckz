@@ -407,6 +407,20 @@ $ echo $?
     assert _check(repo, chapter, commands=("python", "echo")) == []
 
 
+def test_a_python_program_writes_its_streams_in_a_terminal_s_order(
+    repo: Path,
+) -> None:
+    chapter = """# C
+
+```console
+$ python -c "import sys; print('out'); print('err', file=sys.stderr)"
+out
+err
+```
+"""
+    assert _check(repo, chapter, commands=("python",)) == []
+
+
 def test_programs_names_each_chained_program() -> None:
     assert programs("A=1 uv run ruff check . && echo $? | cat") == [
         "ruff",
