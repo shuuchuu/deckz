@@ -13,7 +13,7 @@ def task_check():
         "actions": [
             "uv run ruff check src/deckz tests studioz/src studioz/tests",
             "uv run ruff format --check src/deckz tests studioz/src studioz/tests",
-            "uv run ty check src/deckz tests studioz/src studioz/tests",
+            "uv run pyrefly check src/deckz tests studioz/src studioz/tests",
         ],
     }
 
@@ -77,13 +77,15 @@ def task_vendor():
 
 
 def task_install_hooks():
-    import os
+    import subprocess
 
-    actions = ["git config core.hooksPath .githooks"]
-    if os.name == "posix":
-        actions.append("chmod +x .githooks/*")
+    def unset_hooks_path():
+        # Projects generated before the switch to prek pointed git at .githooks,
+        # and prek refuses to install while core.hooksPath is set.
+        subprocess.run(["git", "config", "--unset-all", "core.hooksPath"], check=False)
+
     return {
-        "actions": actions,
+        "actions": [unset_hooks_path, "uv run prek install"],
     }
 
 
