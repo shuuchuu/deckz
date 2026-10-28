@@ -251,6 +251,38 @@ def test_matches_compares_an_error_by_its_last_line() -> None:
     assert not matches("", "", "KeyError: 'a'")
 
 
+def test_a_module_written_into_an_imported_package_is_found(repo: Path) -> None:
+    # The import system caches the package's directory listing: the module
+    # written right after its first import must still be found.
+    chapter = """# C
+
+```python
+# paquet/__init__.py
+```
+
+```python
+# paquet/a.py
+A = 1
+```
+
+```pycon
+>>> from paquet import a
+```
+
+```python
+# paquet/b.py
+B = 2
+```
+
+```pycon
+>>> from paquet import b
+>>> a.A + b.B
+3
+```
+"""
+    assert _check(repo, chapter) == []
+
+
 def test_a_data_file_block_is_written_without_its_name_line(repo: Path) -> None:
     chapter = """# C
 

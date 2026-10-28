@@ -49,6 +49,7 @@ limit tells where it was.
 
 import argparse
 import doctest
+import importlib
 import io
 import json
 import os
@@ -318,6 +319,17 @@ def _shell(example: Example, timeout: int) -> tuple[str, str | None]:
     return done.stdout.decode("utf-8", errors="replace"), None
 
 
+def _write(example: Example) -> None:
+    # Write a file block. The import system caches each directory's listing,
+    # by its modification time: a module written in the same instant as an
+    # earlier one, or into a package already imported, would stay unseen.
+    assert example.file_name is not None
+    path = Path(example.file_name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(example.source, encoding="utf-8")
+    importlib.invalidate_caches()
+
+
 def _run(
     example: Example, namespace: dict[str, object], timeout: int
 ) -> tuple[str, str | None]:
@@ -325,10 +337,7 @@ def _run(
     if example.mode == "shell":
         return _shell(example, timeout)
     if example.mode == "file":
-        assert example.file_name is not None
-        path = Path(example.file_name)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(example.source, encoding="utf-8")
+        _write(example)
         return "", None
     with tempfile.TemporaryFile() as capture:
         sys.stdout.flush()
@@ -347,7 +356,7 @@ def _run(
         try:
             if example.mode == "script":
                 assert example.file_name is not None
-                Path(example.file_name).write_text(example.source, encoding="utf-8")
+                _write(example)
                 sys.argv = [example.file_name]
                 runpy.run_path(example.file_name, run_name="__main__")
             else:
