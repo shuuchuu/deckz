@@ -177,7 +177,14 @@ def test_report_flags_a_missing_notebook_and_statement(tmp_path: Path) -> None:
 def test_report_notes_a_readme_older_than_its_notebook(tmp_path: Path) -> None:
     upstream = _lab_repo(tmp_path)
     git_dir = _content_repo(tmp_path)
-    _git(upstream, "commit", "--quiet", "--amend", "--no-edit", "--date=2000-01-01")
+    _git(
+        upstream,
+        "commit",
+        "--quiet",
+        "--amend",
+        "--no-edit",
+        "--date=2000-01-01T12:00:00Z",
+    )
     repo = LabRepoSettings(repo="acme/lab", lab=LAB, url=str(upstream))
 
     notes = report(_settings(git_dir, repo), repo).notes
