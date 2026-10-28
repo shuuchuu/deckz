@@ -54,13 +54,26 @@ def test_create_shows_what_setup_left_missing(
 ) -> None:
     from deckz.setting_up import SetupItem, Status
 
-    missing = [SetupItem("pandoc", Status.MISSING, "install pandoc")]
+    missing = [SetupItem("uv sync", Status.FAILED, "`uv sync` exited 2")]
     monkeypatch.setattr("studioz.workspaces.setup", lambda *_, **__: missing)
 
     response = client.post("/espaces", data={"name": "demo"}, headers=ORIGIN)
 
-    assert "install pandoc" in response.text
+    assert "`uv sync` exited 2" in response.text
     assert 'href="/espaces/demo"' in response.text
+
+
+def test_create_opens_a_workspace_the_machine_lacks_a_tool_for(
+    client: TestClient, monkeypatch: Any
+) -> None:
+    from deckz.setting_up import SetupItem, Status
+
+    missing = [SetupItem("xelatex", Status.MISSING, "install it", shared=True)]
+    monkeypatch.setattr("studioz.workspaces.setup", lambda *_, **__: missing)
+
+    response = client.post("/espaces", data={"name": "demo"}, headers=ORIGIN)
+
+    assert response.headers["HX-Redirect"] == "/espaces/demo"
 
 
 def test_workspace_page_lists_decks_and_changes(

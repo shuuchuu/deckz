@@ -2245,6 +2245,17 @@ phase 7".
    scratch clone, a worktree missing 6 Typst figures); Claude Code's
    `WorktreeRemove` hook (`deckz hooks worktree-remove`) prints to stderr what it
    copied and set aside (`agent_checkouts.remove_worktree` returns `Removed`).
+6. **A tool the machine lacks no longer blocks a workspace**: done 2026-10-28.
+   `Created.ready` counted every `deckz setup` item, so on a machine without
+   xelatex (needed only to render videos) every new workspace opened on
+   `_setup.html`, and a workflow didn't start. deckz's `SetupItem.shared` (the
+   machine's or what every checkout shares: deckz's checkout, the executables,
+   the remotes, the videos) now leaves those out, as for `deckz worktree add` and
+   Claude Code's WorktreeCreate hook (`plans/archive/worktree-create-setup.md`):
+   `ready` is `not incomplete(setup, shared=False)`, so only a step that failed
+   or the git hooks stop it. The shared ones are listed by an update's banner.
+   Tests: a failed step still shows `_setup.html`, a missing shared tool opens the
+   workspace.
 
 ## Risks
 

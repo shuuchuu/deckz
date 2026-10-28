@@ -54,7 +54,13 @@ class Created:
 
     @property
     def ready(self) -> bool:
-        return not incomplete(self.setup)
+        """Whether its setup lacks nothing of its own (a step, its git hooks).
+
+        What every checkout lacks alike (a tool the machine doesn't have, a \
+        video never rendered: `SetupItem.shared`) doesn't stop it, as it \
+        doesn't stop `deckz worktree add`; an update's banner lists it.
+        """
+        return not incomplete(self.setup, shared=False)
 
 
 def _git(cwd: Path, *args: str) -> str | None:
