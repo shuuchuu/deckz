@@ -85,16 +85,12 @@ class Uploader:
 
     def _check_folders(self) -> tuple[str, str]:
         self._logger.info("Checking/creating folder hierarchy")
-        folders = [app_name]
-        folders.extend(
-            self._settings.paths.current_dir.relative_to(
-                self._settings.paths.git_dir
-            ).parts
-        )
-        parent = "root"
-        for folder in folders:
-            folder_id, folder_link = self._get_or_create_folder(parent, folder)
-            parent = folder_id
+        folder = app_name
+        folder_id, folder_link = self._get_or_create_folder("root", folder)
+        for folder in self._settings.paths.current_dir.relative_to(
+            self._settings.paths.git_dir
+        ).parts:
+            folder_id, folder_link = self._get_or_create_folder(folder_id, folder)
         self._logger.debug(f"Setting permissions for {folder}")
         self._service.permissions().create(
             fileId=folder_id, body={"type": "anyone", "role": "reader"}

@@ -43,15 +43,14 @@ class GitHubAPI:
     ) -> str:
         self._logger.info("Retrieving repository id")
         repo_id = self.get_repo_id(owner=owner, repo=repo)
-        if project_number is not None:
-            self._logger.info("Retrieving project id")
-            project_id = self.get_project_id(owner=owner, project_number=project_number)
-        self._logger.info("Creating issue")
         extras = ""
         if body is not None:
             extras += f'body: "{body}"\n'
         if project_number is not None:
+            self._logger.info("Retrieving project id")
+            project_id = self.get_project_id(owner=owner, project_number=project_number)
             extras += f'projectIds: ["{project_id}"]\n'
+        self._logger.info("Creating issue")
         response = self._run_query(
             f"""
             mutation {{

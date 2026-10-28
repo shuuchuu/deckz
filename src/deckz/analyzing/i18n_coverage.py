@@ -48,7 +48,7 @@ def missing_en_files(settings: "DeckSettings") -> list[tuple[Path, Path]]:
         `(fr_path, expected_en_path)` pairs, sorted by `fr_path`.
     """
     deck = _audit_deck(settings)
-    missing = []
+    missing: list[tuple[Path, Path]] = []
     for path in sorted(resolved_files(deck)):
         candidate = path.parent / "en" / path.name
         if not candidate.exists():

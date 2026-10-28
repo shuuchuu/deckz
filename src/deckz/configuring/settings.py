@@ -369,7 +369,7 @@ class GlobalSettings(BaseModel):
     """What `deckz worktree add` brings into a new worktree."""
     ci: CiSettings = Field(default_factory=CiSettings)
     """What `deckz hooks install --ci`'s workflow runs and needs."""
-    paths: GlobalPaths = Field(default_factory=GlobalPaths)
+    paths: GlobalPaths
 
     @classmethod
     def from_yaml(cls, path: Path, *, git_dir: Path | None = None) -> Self:
@@ -413,7 +413,7 @@ class GlobalSettings(BaseModel):
 
 
 class DeckSettings(GlobalSettings):
-    paths: DeckPaths = Field(default_factory=DeckPaths)
+    paths: DeckPaths
 
     def with_output_dirs(self, build_dir: Path, pdf_dir: Path, html_dir: Path) -> Self:
         """Copy of these settings writing to other build and output directories.

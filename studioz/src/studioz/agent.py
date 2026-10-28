@@ -509,8 +509,8 @@ def _sdk_client(options: ClaudeAgentOptions) -> Client:
 async def _refuse_git(  # ruff: ignore[unused-async]
     hook_input: HookInput, _tool_use_id: str | None, _context: HookContext
 ) -> HookJSONOutput:
-    tool_input = hook_input.get("tool_input") or {}
-    command = str(tool_input.get("command", ""))
+    tool_input = hook_input.get("tool_input")
+    command = str(tool_input.get("command", "")) if isinstance(tool_input, dict) else ""
     verb = refused_git(command)
     if verb is not None:
         reason = (

@@ -50,9 +50,8 @@ def random(
     )
     console.print(Markdown(f"Here are the possible participants:\n\n{names_list_str}"))
     print()
-    ok = False
     default = ", ".join(map(str, range(1, len(names) + 1)))
-    while not ok:
+    while True:
         answer = Prompt().ask(
             "Please enter a comma separated list of numbers to select participants "
             f"(default: {default})",
@@ -64,7 +63,7 @@ def random(
             if not all(0 < n <= len(names) for n in numbers):
                 msg = "all numbers should be between 1 and the number of participants"
                 raise ValueError(msg)
-            ok = True
+            break
         except ValueError:
             console.print("Could not parse your selection, please try again.")
     selected_names = [names[i - 1] for i in numbers]

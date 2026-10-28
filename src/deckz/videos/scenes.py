@@ -156,7 +156,7 @@ def scenes(settings: "GlobalSettings") -> list[Scene]:
 
 def _render_file(videos_dir: Path, scene: Scene, language: Lang | None) -> Path:
     path = Path(scene.video)
-    if language in (None, DEFAULT_LANGUAGE):
+    if language is None or language == DEFAULT_LANGUAGE:
         return videos_dir / path.with_suffix(".mp4")
     return videos_dir / path.parent / language / f"{path.name}.mp4"
 

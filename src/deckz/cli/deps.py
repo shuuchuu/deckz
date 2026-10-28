@@ -112,7 +112,9 @@ def _print_unused_report(
         content = Table("Section", "Flavors")
         for path, flavors in unused_flavors.items():
             content.add_row(str(path), " ".join(sorted(flavors)))
-    console.print(Padding(content if unused_flavors else "None.", (0, 0, 0, 2)))
+    else:
+        content = "None."
+    console.print(Padding(content, (0, 0, 0, 2)))
 
 
 def _print_unused_files_report(
@@ -131,7 +133,9 @@ def _print_unused_files_report(
                 f"[link=file://{path}]{path.relative_to(git_dir)}[/link]",
                 str(_frame_count(path)),
             )
-    console.print(Padding(content if paths else "None.", (0, 0, 0, 2)))
+    else:
+        content = "None."
+    console.print(Padding(content, (0, 0, 0, 2)))
 
 
 def _frame_count(path: Path) -> int:
@@ -172,4 +176,6 @@ def _print_section_report(
         content = Table("Deck", "Parts")
         for deck, part_names in using.items():
             content.add_row(str(deck), " ".join(sorted(part_names)))
-    console.print(Padding(content if using else "None.", (0, 0, 0, 2)))
+    else:
+        content = "None."
+    console.print(Padding(content, (0, 0, 0, 2)))
