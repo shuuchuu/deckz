@@ -229,6 +229,31 @@ def test_an_example_running_too_long_is_stopped(repo: Path) -> None:
     assert "still running after 1 s, stopped: mark the block" in problems[0]
 
 
+def test_an_example_ignoring_the_alarm_is_killed_after_its_grace(
+    repo: Path, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.setattr("deckz.course_notes_code._GRACE", 1)
+    chapter = """# C
+
+```python
+import signal, time
+signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGALRM})
+time.sleep(60)
+```
+
+```pycon
+>>> 1
+1
+```
+"""
+
+    problems = _check(repo, chapter, timeout=1)
+
+    assert len(problems) == 1
+    assert problems[0].startswith("course-notes/topic/chapter.md:3: still running")
+    assert "after 1 s, stopped: mark the block" in problems[0]
+
+
 def test_an_interpreter_that_cant_start_names_the_setting(repo: Path) -> None:
     problems = _check(
         repo, "# C\n\n```pycon\n>>> 1\n1\n```\n", python=("no-such-python-here",)

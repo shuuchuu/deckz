@@ -43,8 +43,8 @@ with `line`, `source`, `expected`, `got`, `error`, the last line of the error
 it raised if any, `console`, whether it's a console command, and `setup`, the
 setup chapter it comes from if any) and
 `cascaded` (the `NameError`s counted after a failure). Before each example,
-`RESULT.at` receives `path:line`, so that a chapter killed by its overall time
-limit tells where it was.
+`RESULT.at` receives `path:line`, so that a chapter killed for staying too long on
+one example tells where it was.
 """
 
 import argparse

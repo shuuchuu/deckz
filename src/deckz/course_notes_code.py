@@ -37,6 +37,11 @@ if TYPE_CHECKING:
 _SHOWN_LINES = 30
 _STARTUP_LIMIT = 1800
 """Seconds the interpreter may take to start (its environment installed)."""
+_GRACE = 10
+"""Seconds an example may run past its timeout before the chapter is killed.
+
+The runner's own alarm stops an example at its timeout, unless it's stuck in C
+(a GUI's main loop) or ignores the signal."""
 _LINKED_SIZE = 50 * 2**20
 """Data files bigger than this are linked into the working directory, not copied."""
 _SPARSE_CLONE = re.compile(r"bash \S*ghsparse\.sh (?P<path>[\w.-]+)")
@@ -377,7 +382,7 @@ def _run(settings: "GlobalSettings", chapter: Path) -> list[str]:
             command += ["--setup", str(setup.resolve())]
         for program in code.commands:
             command += ["--command", program]
-        problems += _execute(settings, chapter, command, result, count)
+        problems += _execute(settings, chapter, command, result)
         problems += _overwritten(linked, settings, rel)
     return problems
 
@@ -387,9 +392,8 @@ def _execute(
     chapter: Path,
     command: list[str],
     result: Path,
-    count: int,
 ) -> list[str]:
-    # Run `command`, the code runner on `chapter` (`count` examples), in the
+    # Run `command`, the code runner on `chapter`, in the
     # `work` directory next to `result`: what it found.
     git_dir = settings.paths.git_dir
     rel = _rel(chapter, git_dir)
@@ -420,13 +424,18 @@ def _execute(
             f"{rel}: can't run {command[0]} ({error}): set "
             "course_notes.code.python in deckz.yml to a command running Python"
         ]
-    timed_out = _wait(process, progress, timeout * (count + 1))
+    timed_out = _wait(process, progress, timeout + _GRACE)
     _, stderr = process.communicate()
     if timed_out:
-        where = progress.read_text(encoding="utf-8") if progress.is_file() else rel
+        if not progress.is_file():
+            return [
+                f"{rel}: the interpreter hasn't started after {_STARTUP_LIMIT} s, "
+                "stopped: check course_notes.code.python in deckz.yml"
+            ]
+        where = progress.read_text(encoding="utf-8")
         return [
             f"{_relative_where(where, git_dir)}: still running after "
-            f"{timeout * (count + 1)} s, stopped: mark the block that "
+            f"{timeout} s, stopped: mark the block that "
             "waits (a GUI's main loop, a server, `input()`) `.no-run`"
         ]
     if not result.is_file():
@@ -456,17 +465,18 @@ def _relative_where(where: str, git_dir: Path) -> str:
 
 
 def _wait(process: subprocess.Popen[bytes], progress: Path, limit: int) -> bool:
-    # Wait for `process`; kill its session and return True once it has run
-    # its examples for more than `limit` seconds (from its first one).
-    started = time.monotonic()
-    first: float | None = None
+    # Wait for `process`; kill its session and return True once it has stayed
+    # on one example for more than `limit` seconds, or hasn't reached its first
+    # one after `_STARTUP_LIMIT`. The runner writes the example it starts into
+    # `progress`.
+    current: str | None = None
+    since = time.monotonic()
     while process.poll() is None:
         now = time.monotonic()
-        if first is None and progress.is_file():
-            first = now
-        if (
-            first is not None and now - first > limit
-        ) or now - started > _STARTUP_LIMIT + limit:
+        at = progress.read_text(encoding="utf-8") if progress.is_file() else None
+        if at != current:
+            current, since = at, now
+        if now - since > (_STARTUP_LIMIT if current is None else limit):
             os.killpg(process.pid, signal.SIGKILL)
             process.wait()
             return True
