@@ -259,23 +259,45 @@ class ChecksSettings(BaseModel):
         return name not in (DEFERRED if self.deferred is None else self.deferred)
 
 
+class DatasetsSettings(BaseModel):
+    """The repository holding the data sets course notes chapters read.
+
+    A chapter links each file or directory it reads to that repository \
+    (`<url>/raw/refs/heads/main/<path>` for a file, `<url>/tree/main/<path>` \
+    for a directory, or `bash /tmp/ghsparse.sh <directory>`, the sparse \
+    clone script the repository serves): `deckz check course-notes-code` \
+    puts each in the chapter's working directory under the name a download \
+    gives it, from a local clone, and `deckz setup` reports that clone \
+    missing or behind its upstream.
+    """
+
+    model_config = ConfigDict(frozen=True)
+    url: str
+    """Its web address (`https://github.com/<owner>/<repository>`)."""
+    path: str = "{git_dir}/../datasets"
+    """Its local clone; `{git_dir}` stands for the repository's root."""
+
+
 class CourseNotesCodeSettings(BaseModel):
     """How `deckz check course-notes-code` runs the chapters' Python code.
 
     Each chapter runs in a process of its own, in a scratch working \
-    directory, its `pycon` sessions and `python` blocks compared with the \
-    outputs it shows (see `deckz.code_runner`).
+    directory, its `pycon` sessions, `python` blocks and `console` commands \
+    compared with the outputs it shows (see `deckz.code_runner`).
     """
 
     model_config = ConfigDict(frozen=True)
     python: tuple[str, ...] = ()
     """The command running Python with the libraries the chapters use, at \
     the versions their labs use; deckz adds the runner script and its \
-    arguments. `{git_dir}` stands for the repository's root, e.g. `[uv, run, \
-    --no-project, --with-requirements, "{git_dir}/requirements.txt", \
-    python]`. Unset, deckz's own interpreter."""
+    arguments. `{git_dir}` stands for the repository's root, and an element \
+    `{with}` for `--with <package>` for each of the chapter's \
+    `requirements` (or for nothing), e.g. `[uv, run, --no-project, \
+    --with-requirements, "{git_dir}/requirements.txt", "{with}", python]`. \
+    Unset, deckz's own interpreter."""
     timeout: int = 30
-    """Seconds one example may run (a `pycon` prompt, a `python` block)."""
+    """Seconds one example may run (a `pycon` prompt, a `python` block, a \
+    console command)."""
     jobs: int = 4
     """Chapters run at the same time. Each loads its libraries and data: \
     lower it for chapters with big data sets."""
@@ -288,6 +310,17 @@ class CourseNotesCodeSettings(BaseModel):
     outputs unchecked (an English chapter runs the setup chapter's English \
     version when there is one), or other files, linked into the working \
     directory (a data set the examples read)."""
+    requirements: dict[str, tuple[str, ...]] = Field(default_factory=dict)
+    """The packages chapters need beyond `python`'s: `<pattern>: \
+    [<requirement>...]`, the patterns as `setup`'s (`python/web/flask/**: \
+    [flask >= 3, < 4]`), passed to `python` where its `{with}` stands."""
+    commands: tuple[str, ...] = ()
+    """The programs a ```` ```console ```` block may run (`python`, \
+    `pytest`, `ruff`): its commands run, their outputs compared, only when \
+    each program it runs is listed. Leave out those changing a project or \
+    reaching outside the machine (`uv add`, `git push`)."""
+    datasets: DatasetsSettings | None = None
+    """The data sets repository chapters link to, if any."""
 
 
 class CourseNotesSettings(BaseModel):

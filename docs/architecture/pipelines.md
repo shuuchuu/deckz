@@ -138,7 +138,13 @@ names (not deckz's: it has the chapters' libraries), in a scratch working direct
 (`deckz-code-*` in the system's temporary directory, removed after). `code_runner` is
 a standalone, standard-library-only script for that reason, at the bottom layer: it
 imports nothing from deckz. Each child's session is killed past its time limit, so a
-chapter starting a server or a GUI leaves nothing running.
+chapter starting a server or a GUI leaves nothing running. The parent prepares the
+working directory: the data sets the chapter links to, copied from the
+`course_notes.code.datasets` clone (or linked, past 50 MB, and compared after the
+run), once their links resolve to committed and pushed files; and the interpreter's
+command, the chapter's `requirements` in place of `{with}`. The runner runs the
+`console` commands itself, in `bash`, when every program they run is in
+`course_notes.code.commands`.
 
 ## `watch`
 

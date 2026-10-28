@@ -13,6 +13,9 @@ for you:
 - deckz itself, when it runs from a git checkout (the sibling checkout above): one
   behind its upstream branch is reported with the `git pull` to run, since the
   repository may rely on fixes newer than your copy;
+- the clone of the data sets repository the course notes link to, when `deckz.yml`
+  names one (`course_notes.code.datasets`): a missing one is reported with the `git
+  clone` to run, one behind its upstream with the `git pull`;
 - the executables (git, pandoc, and those the repository lists in `deckz.yml`'s
   `setup.requires`): a missing one is reported with how to install it;
 - the git hooks, which check every commit (see [Before committing](before-you-commit.md));

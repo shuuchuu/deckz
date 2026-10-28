@@ -554,15 +554,17 @@ def course_notes_code(settings: "GlobalSettings", paths: Paths = None) -> list[s
     # chapter shows it printing (see `deckz.course_notes_code`). Opt-in: it
     # runs the chapters' code, with their libraries, for minutes.
     from ..course_notes import chapter_path, chapters
-    from ..course_notes_code import check_chapters
+    from ..course_notes_code import check_chapters, unmatched_patterns
 
     if not _any(paths, lambda path: _under(path, settings.paths.course_notes_dir)):
         return []
     every = [chapter_path(settings, path, lang) for path, lang in chapters(settings)]
-    if paths is not None:
-        wanted = {path.resolve() for path in paths}
-        every = [chapter for chapter in every if chapter.resolve() in wanted]
-    return check_chapters(settings, every)
+    if paths is None:
+        return unmatched_patterns(settings, every) + check_chapters(settings, every)
+    wanted = {path.resolve() for path in paths}
+    return check_chapters(
+        settings, [chapter for chapter in every if chapter.resolve() in wanted]
+    )
 
 
 def _has_chapter(settings: "GlobalSettings", directory: Path) -> bool:

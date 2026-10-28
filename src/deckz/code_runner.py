@@ -15,7 +15,12 @@ a reader typing them in would:
 - a block whose first line names a file (`# bavard.py`, `# integrer.pyx`) is that
   file: it's written to the working directory, for the blocks after it to import
   or read, and runs as a script (in a namespace of its own) only when an output
-  block follows it.
+  block follows it;
+- each ```` ```console ```` block, command by command (each after `$ `, its
+  output under it), when every program it runs is one `--command` allows: in the
+  working directory, with the interpreter's own programs (`python`, `pytest`)
+  first on the `PATH`, `uv run <program>` running the program itself. A block
+  with any other command (`uv add`, `git push`) isn't run.
 
 A shown error counts by its last line (`ValueError: ...`), the traceback above it
 varying with the interpreter. Classes on the block's fence opt out: `{.python
@@ -30,10 +35,12 @@ unchecked: the example data another chapter builds. Each output (stdout and
 stderr, the chapter's own and its subprocesses') is captured at the file
 descriptor level, as a terminal shows it.
 
-Usage: `python code_runner.py RESULT [--timeout S] [--setup CHAPTER]... CHAPTER`.
+Usage: `python code_runner.py RESULT [--timeout S] [--setup CHAPTER]...
+[--command PROGRAM]... CHAPTER`.
 RESULT receives one JSON object: `examples` (how many ran), `problems` (each
 with `line`, `source`, `expected`, `got`, `error`, the last line of the error
-it raised if any, and `setup`, the setup chapter it comes from if any) and
+it raised if any, `console`, whether it's a console command, and `setup`, the
+setup chapter it comes from if any) and
 `cascaded` (the `NameError`s counted after a failure). Before each example,
 `RESULT.at` receives `path:line`, so that a chapter killed by its overall time
 limit tells where it was.
@@ -46,7 +53,9 @@ import json
 import os
 import re
 import runpy
+import shlex
 import signal
+import subprocess
 import sys
 import tempfile
 import traceback
@@ -64,6 +73,13 @@ _OUTPUT_LANGS = frozenset({"text", "output"})
 _FLAGS = doctest.ELLIPSIS
 _FENCE = re.compile(r"^(?P<fence>`{3,}|~{3,})[ \t]*(?P<info>[^\n]*)\n", re.MULTILINE)
 _FILE_HEADER = re.compile(r"#\s*(?P<name>[\w.-]+(?:/[\w.-]+)*\.\w+)\s*")
+_PROMPT = "$ "
+_UV_RUN = re.compile(r"(^|[|&;(]\s*)((?:\w+=\S*\s+)*)uv run (?=[^-\s])")
+_CHAINING = frozenset({"|", "||", "&&", ";", "&", "(", ")"})
+_REDIRECTION = frozenset({">", ">>", "<", ">&", "<&", "&>"})
+_ASSIGNMENT = re.compile(r"\w+=\S*")
+_status = 0
+"""The exit status of the last command run, for an `echo $?` after it."""
 
 
 @dataclass(frozen=True)
@@ -97,9 +113,12 @@ class Example:
     expected: str | None
     """What it should print; None when its output isn't compared."""
     mode: str
-    """`single` (a prompt), `exec` (a block) or `script` (a file block run)."""
+    """`single` (a prompt), `exec` (a block), `script` (a file block run), \
+    `file` (a file block written) or `shell` (a console command)."""
     file_name: str | None = None
     """The file a block is written to, if it's one."""
+    status_shown: bool = False
+    """A console command followed by `echo $?`, which shows how it exited."""
 
 
 def blocks(text: str) -> list[Block]:
@@ -144,11 +163,69 @@ def blocks(text: str) -> list[Block]:
     return result
 
 
-def examples(text: str) -> Iterator[Example]:
+def _without_uv_run(command: str) -> str:
+    # `uv run ruff check` runs `ruff check`: the environment is already there.
+    return _UV_RUN.sub(r"\1\2", command)
+
+
+def programs(command: str) -> list[str] | None:
+    """The programs a console command runs.
+
+    Returns:
+        The first word of each command it chains (`|`, `&&`, `;`), past \
+        variable assignments and `uv run`; None if it runs others it can't \
+        name (`$(...)`, backquotes) or doesn't parse.
+    """
+    command = _without_uv_run(command.replace("\\\n", " "))
+    if "$(" in command or "`" in command:
+        return None
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    try:
+        tokens = list(lexer)
+    except ValueError:
+        return None
+    found = []
+    starts, skip = True, False
+    for token in tokens:
+        if skip:
+            skip = False
+        elif token in _CHAINING:
+            starts = True
+        elif token in _REDIRECTION:
+            skip = True
+        elif starts and not _ASSIGNMENT.fullmatch(token):
+            found.append(token)
+            starts = False
+    return found
+
+
+def _commands(block: Block) -> list[tuple[int, str, str]]:
+    # Each command of a console block: its line, the command (continued past
+    # a final `\`, the shell's `> ` prompt left out), what it prints.
+    found: list[tuple[int, list[str], list[str]]] = []
+    for index, line in enumerate(block.body.splitlines()):
+        if found and not found[-1][2] and found[-1][1][-1].endswith("\\"):
+            found[-1][1].append(line.removeprefix("> "))
+        elif line.startswith(_PROMPT) or line.rstrip() == _PROMPT.strip():
+            found.append((block.line + 1 + index, [line[len(_PROMPT) :]], []))
+        elif found:
+            found[-1][2].append(line)
+    return [
+        (line, "\n".join(command), "\n".join(output)) for line, command, output in found
+    ]
+
+
+def examples(text: str, commands: frozenset[str] = frozenset()) -> Iterator[Example]:
     """The examples of `text` to run, in order.
 
+    Args:
+        text: A chapter.
+        commands: The programs a console block may run.
+
     Yields:
-        Each prompt of a `pycon` block, each `python` block, each file block.
+        Each prompt of a `pycon` block, each `python` block, each file block, \
+        each command of a console block running `commands` only.
     """
     parser = doctest.DocTestParser()
     for block in blocks(text):
@@ -181,6 +258,23 @@ def examples(text: str) -> Iterator[Example]:
                 (block.output or "") if compared else None,
                 "exec",
             )
+        elif block.lang == "console":
+            found = _commands(block)
+            ran = [programs(command) for _, command, _ in found]
+            if found and all(
+                names is not None and set(names) <= commands for names in ran
+            ):
+                after = [command for _, command, _ in found[1:]] + [""]
+                for (line, command, output), following in zip(
+                    found, after, strict=True
+                ):
+                    yield Example(
+                        line,
+                        command,
+                        output if compared else None,
+                        "shell",
+                        status_shown=following.startswith("echo $?"),
+                    )
 
 
 class _TimeoutError(Exception):
@@ -191,10 +285,32 @@ def _alarm(signum: int, frame: FrameType | None) -> None:
     raise _TimeoutError
 
 
+def _shell(example: Example, timeout: int) -> tuple[str, str | None]:
+    # Run a console command in `bash`, `$?` the previous command's status.
+    global _status
+    try:
+        done = subprocess.run(
+            ["bash", "-c", f"(exit {_status}); {_without_uv_run(example.source)}"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as expired:
+        _status = 124
+        got = (expired.stdout or b"").decode("utf-8", errors="replace")
+        return got, f"TimeoutError: still running after {timeout} s, stopped"
+    _status = done.returncode
+    return done.stdout.decode("utf-8", errors="replace"), None
+
+
 def _run(
     example: Example, namespace: dict[str, object], timeout: int
 ) -> tuple[str, str | None]:
     # Run `example`; return what it printed and the last line of its error.
+    if example.mode == "shell":
+        return _shell(example, timeout)
     if example.mode == "file":
         assert example.file_name is not None
         path = Path(example.file_name)
@@ -276,8 +392,9 @@ def run_chapter(
     progress: Path,
     *,
     checked: bool = True,
+    commands: frozenset[str] = frozenset(),
 ) -> tuple[int, list[dict[str, object]], int]:
-    """Run `path`'s examples in `namespace`.
+    """Run `path`'s examples in `namespace`, its console blocks running `commands`.
 
     Returns:
         How many examples ran, the problems (all of them if `checked`, its \
@@ -288,7 +405,7 @@ def run_chapter(
     problems: list[dict[str, object]] = []
     cascaded = 0
     failed = False
-    for example in examples(text):
+    for example in examples(text, commands):
         count += 1
         progress.write_text(f"{path}:{example.line}", encoding="utf-8")
         got, error = _run(example, namespace, timeout)
@@ -296,6 +413,16 @@ def run_chapter(
             good = error is None
         else:
             good = matches(example.expected, got, error)
+        if (
+            good
+            and example.mode == "shell"
+            and _status
+            and checked
+            and not example.status_shown
+            and not (example.expected or "").strip()
+        ):
+            # A command failing silently: its error isn't shown.
+            good, error = False, f"exit status {_status}"
         if good:
             continue
         if failed and error is not None and error.startswith("NameError"):
@@ -309,6 +436,7 @@ def run_chapter(
                 "expected": example.expected or "",
                 "got": got + (error + "\n" if error else ""),
                 "error": error,
+                "console": example.mode == "shell",
             }
         )
     return count, problems, cascaded
@@ -320,13 +448,18 @@ def main() -> None:
     parser.add_argument("chapter", type=Path)
     parser.add_argument("--timeout", type=int, default=30)
     parser.add_argument("--setup", type=Path, action="append", default=[])
+    parser.add_argument("--command", action="append", default=[])
     args = parser.parse_args()
+    commands = frozenset(args.command)
     # Like an interactive session: the working directory first on the path
     # (for the file blocks), not this script's own directory, and no
     # arguments. Figures draw nowhere, without `show()` warning about it.
     sys.path[0] = ""
     sys.argv = [""]
+    # The console blocks' `python`, `pytest`, `ruff` are the interpreter's.
     os.environ.setdefault("MPLBACKEND", "Agg")
+    bin_dir = str(Path(sys.executable).parent)
+    os.environ["PATH"] = os.pathsep.join([bin_dir, os.environ.get("PATH", "")])
     warnings.filterwarnings("ignore", "FigureCanvasAgg is non-interactive")
     progress = args.result.with_name(args.result.name + ".at")
     namespace: dict[str, object] = {
@@ -336,11 +469,11 @@ def main() -> None:
     problems: list[dict[str, object]] = []
     for setup in args.setup:
         _, setup_problems, _ = run_chapter(
-            setup, namespace, args.timeout, progress, checked=False
+            setup, namespace, args.timeout, progress, checked=False, commands=commands
         )
         problems.extend({**problem, "setup": str(setup)} for problem in setup_problems)
     count, chapter_problems, cascaded = run_chapter(
-        args.chapter, namespace, args.timeout, progress
+        args.chapter, namespace, args.timeout, progress, commands=commands
     )
     problems.extend(chapter_problems)
     args.result.write_text(

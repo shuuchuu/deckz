@@ -892,13 +892,24 @@ course_notes:
     # The command running Python with the chapters' libraries; deckz adds
     # the runner script. Unset: deckz's own interpreter.
     python: [uv, run, --no-project, --with-requirements,
-             "{git_dir}/requirements.txt", python]
+             "{git_dir}/requirements.txt", "{with}", python]
     timeout: 30  # seconds per example
     jobs: 4      # chapters at a time
     # What chapters need first: chapters whose code runs before theirs (the
     # example data they build), or files linked into the working directory.
     setup:
       "pandas/**": [course-notes/pandas/example-data.md, data/sales.csv]
+    # The packages a chapter needs beyond `python`'s, passed where `{with}`
+    # stands (`--with flask`).
+    requirements:
+      "web/flask": [flask]
+    # The programs a `console` block may run: a block running any other
+    # isn't run.
+    commands: [python, pytest, ruff]
+    # The data sets repository chapters link to, and its local clone.
+    datasets:
+      url: https://github.com/owner/datasets
+      path: "{git_dir}/../datasets"
 ```
 
 Chapters are fr/en pairs like content files: `deckz i18n stale`, the
@@ -917,11 +928,22 @@ reader typing it in would: `pycon` sessions prompt by prompt, `python` blocks
 whole, all in one namespace, and compares each with the output the chapter
 shows (a `text` block right after a `python` one; `...` matches any text; a
 shown error counts by its last line). A block whose first line names a file
-(`# greeting.py`) is written to that file. `{.python .no-run}` keeps a block
-from running, `{.pycon .output-varies}` from having its output compared; the
-PDF shows neither class. `deckz check course-notes-code --file
-course-notes/<path>.md` runs one chapter: what an author runs after writing
-one, instead of trying each snippet by hand.
+(`# greeting.py`) is written to that file. A `console` block runs command by
+command (each after `$ `, its output under it) when `commands` lists every
+program it runs. `{.python .no-run}` keeps a block from running, `{.pycon
+.output-varies}` from having its output compared; the PDF shows neither class.
+`deckz check course-notes-code --file course-notes/<path>.md` runs one
+chapter: what an author runs after writing one, instead of trying each snippet
+by hand.
+
+A chapter reads its data sets from the `datasets` repository through links to
+it: `<url>/raw/refs/heads/main/<dir>/<file>` gives the file `<file>` (the name a
+download gives it), `<url>/tree/main/<dir>` the directory `<dir>`. The check
+places each in the chapter's working directory from the local clone, and
+reports a linked file not committed or not pushed there (the reader's link
+leads nowhere until then), and two links downloaded under the same name.
+`deckz setup` reports the clone missing or behind its upstream, without that
+stopping a worktree being made.
 
 ### Drive links
 
@@ -1089,7 +1111,9 @@ The main commands:
 - `deckz setup`: set up a clone, and run it again after pulling. It
   fetches the deckz checkout it runs from (an editable install) and
   reports it when it's behind its upstream branch, with the `git pull`
-  to run; checks the executables deckz and the repository need (`setup.requires`
+  to run, and the course notes' data sets clone (`course_notes.code.datasets`)
+  likewise, or with the `git clone` to run when it's missing;
+  checks the executables deckz and the repository need (`setup.requires`
   above), saying how to install a missing one; installs the git hooks;
   adds the git remotes `setup.remotes` lists that the clone lacks;
   runs the repository's `setup.steps` not done yet; reports the

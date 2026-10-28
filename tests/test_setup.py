@@ -202,6 +202,55 @@ def test_a_deckz_branch_with_no_upstream_is_ok(
     assert item.status is Status.OK
 
 
+def _with_datasets(repo: Path, clone: Path) -> GlobalSettings:
+    from deckz.configuring.settings import (
+        CourseNotesCodeSettings,
+        CourseNotesSettings,
+        DatasetsSettings,
+    )
+
+    datasets = DatasetsSettings(url="https://example.com/datasets", path=str(clone))
+    return GlobalSettings.from_yaml(repo).model_copy(
+        update={
+            "course_notes": CourseNotesSettings(
+                code=CourseNotesCodeSettings(datasets=datasets)
+            )
+        }
+    )
+
+
+def test_a_missing_datasets_clone_says_how_to_clone_it(repo: Path) -> None:
+    from deckz.setting_up import datasets_checkout
+
+    item = datasets_checkout(_with_datasets(repo, repo.parent / "datasets"))
+
+    assert item is not None
+    assert item.status is Status.MISSING
+    assert item.shared  # It doesn't stop a worktree being made.
+    assert "`git clone https://example.com/datasets ../datasets`" in item.detail
+
+
+def test_a_datasets_clone_behind_its_upstream_is_missing(
+    repo: Path, deckz_clone: tuple[Path, Path]
+) -> None:
+    from deckz.setting_up import datasets_checkout
+
+    clone, pusher = deckz_clone
+    _git(pusher, "commit", "--allow-empty", "-m", "new data")
+    _git(pusher, "push", "origin", "HEAD:main")
+
+    item = datasets_checkout(_with_datasets(repo, clone))
+
+    assert item is not None
+    assert item.status is Status.MISSING
+    assert "1 commit behind origin/main" in item.detail
+    assert "may lack data sets the course notes link to" in item.detail
+
+
+def test_no_datasets_item_without_datasets(repo: Path) -> None:
+    assert "datasets" not in _by_name(repo, check=True)
+
+
 def _steps(repo: Path, *entries: dict[str, Any], **kwargs: Any) -> list[Any]:
     from deckz.configuring.settings import SetupSettings, SetupStep
     from deckz.setting_up import steps

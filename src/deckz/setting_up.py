@@ -2,7 +2,9 @@
 
 Every step is idempotent and reports what it found or did as a
 [`SetupItem`][deckz.setting_up.SetupItem]: whether deckz itself, when it runs
-from a git checkout, is behind its upstream branch; deckz's own executables (git,
+from a git checkout, is behind its upstream branch; whether the clone of the
+data sets the course notes link to (`course_notes.code.datasets`) is there and
+up to date; deckz's own executables (git,
 pandoc), those the repository declares (`deckz.yml`'s `setup.requires`), the
 git hooks, the git remotes it declares (`setup.remotes`, e.g. those the labs
 and videos are published to), the repository's own steps (`setup.steps`), the
@@ -81,6 +83,8 @@ def setup(
         the videos and the builds set aside.
     """
     items = [deckz_checkout(settings)]
+    if (datasets := datasets_checkout(settings)) is not None:
+        items.append(datasets)
     items.extend(requirements(settings))
     items.append(git_hooks(settings, check=check))
     items.extend(remotes(settings, check=check))
@@ -140,11 +144,60 @@ def deckz_checkout(
     checkout = checkout or _own_checkout()
     if checkout is None:
         return SetupItem("deckz", Status.OK, "not run from a git checkout", shared=True)
+    return _up_to_date(
+        "deckz", checkout, settings, "may lack fixes this repository needs"
+    )
+
+
+def datasets_checkout(settings: "GlobalSettings") -> SetupItem | None:
+    """Whether the clone of the data sets the course notes link to is there and current.
+
+    `deckz check course-notes-code` places in each chapter's working \
+    directory the data sets it links to (`course_notes.code.datasets`) from \
+    that clone: without it, or behind, the chapters reading them fail. \
+    Fetches like `deckz_checkout`; cloning and pulling are left to the \
+    person (the repository may be big, the clone may hold their own work).
+
+    Args:
+        settings: The repository's settings.
+
+    Returns:
+        Its item, or None when the repository names no data sets.
+    """
+    datasets = settings.course_notes.code.datasets
+    if datasets is None:
+        return None
+    clone = Path(datasets.path.replace("{git_dir}", str(settings.paths.git_dir)))
+    if not clone.is_dir():
+        path = _shown(clone, settings)
+        return SetupItem(
+            "datasets",
+            Status.MISSING,
+            f"{path} doesn't exist, and `deckz check course-notes-code` reads the "
+            f"data sets the course notes link to from it: `git clone {datasets.url} "
+            f"{path}`",
+            shared=True,
+        )
+    return _up_to_date(
+        "datasets", clone, settings, "may lack data sets the course notes link to"
+    )
+
+
+def _shown(checkout: Path, settings: "GlobalSettings") -> str:
+    # `../deckz` for the usual sibling checkout, the full path for any other.
+    path = relpath(checkout, settings.paths.git_dir)
+    return str(checkout) if path.count("..") > 1 else path
+
+
+def _up_to_date(
+    name: str, checkout: Path, settings: "GlobalSettings", lacks: str
+) -> SetupItem:
+    # Whether `checkout` is behind its upstream branch, once fetched.
     upstream = _git(
         checkout, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"
     )
     if not upstream:
-        return SetupItem("deckz", Status.OK, "its branch has no upstream", shared=True)
+        return SetupItem(name, Status.OK, "its branch has no upstream", shared=True)
     try:
         fetched = not run(
             ["git", "-C", str(checkout), "fetch", "--quiet"],
@@ -158,21 +211,18 @@ def deckz_checkout(
     behind = int(_git(checkout, "rev-list", "--count", f"HEAD..{upstream}") or 0)
     if not behind:
         return SetupItem(
-            "deckz",
+            name,
             Status.OK,
             "" if fetched else "compared with the last fetch",
             shared=True,
         )
-    # `../deckz` for the usual sibling checkout, the full path for any other.
-    path = relpath(checkout, settings.paths.git_dir)
-    if path.count("..") > 1:
-        path = str(checkout)
+    path = _shown(checkout, settings)
     detail = (
         f"{path} is {behind} commit{'s' if behind > 1 else ''} behind {upstream}"
-        f"{'' if fetched else ' (as of the last fetch)'}, and may lack fixes this "
-        f"repository needs: `git -C {path} pull`, then `deckz setup` again"
+        f"{'' if fetched else ' (as of the last fetch)'}, and {lacks}: "
+        f"`git -C {path} pull`, then `deckz setup` again"
     )
-    return SetupItem("deckz", Status.MISSING, detail, shared=True)
+    return SetupItem(name, Status.MISSING, detail, shared=True)
 
 
 def _requirement(requirement: "SetupRequirement") -> SetupItem:
