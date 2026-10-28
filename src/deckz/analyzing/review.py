@@ -559,13 +559,14 @@ def read_report(settings: "GlobalSettings", path: Path) -> Report:
         when, base, files, problems = _validated(value)
     except ReviewError as error:
         problems = [str(error)]
-    if problems:
-        msg = (
-            f"{rel}: {'; '.join(problems)}: fix the front matter by hand "
-            "(`deckz check review-headers`)"
-        )
-        raise ReviewError(msg)
-    return Report(rel, when, base, dict(sorted(files.items())))
+    else:
+        if not problems:
+            return Report(rel, when, base, dict(sorted(files.items())))
+    msg = (
+        f"{rel}: {'; '.join(problems)}: fix the front matter by hand "
+        "(`deckz check review-headers`)"
+    )
+    raise ReviewError(msg)
 
 
 def report_paths(settings: "GlobalSettings") -> list[Path]:
