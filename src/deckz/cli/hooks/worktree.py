@@ -12,14 +12,16 @@ def worktree_create(*, workdir: Path = Path()) -> None:
     <name>`, EnterWorktree with a name and a subagent's worktree isolation
     get a `deckz worktree`, builds included, instead of git's bare one;
     `claude --worktree <name> --resume <session>` gets the existing one back.
-    Prints its path, as Claude Code expects; anything else goes to stderr.
+    Prints its path, as Claude Code expects; anything else goes to stderr,
+    such as what `deckz setup` left missing for every checkout (a tool the
+    machine lacks), which doesn't fail the creation.
 
     Args:
         workdir: Path to move into before resolving settings
 
     Raises:
-        SystemExit: With code 1 when the worktree can't be made, which
-            Claude Code reports as a failed creation.
+        SystemExit: With code 1 when the worktree can't be made or its own
+            setup failed, which Claude Code reports as a failed creation.
     """
     from contextlib import redirect_stdout
     from sys import stderr
@@ -29,13 +31,19 @@ def worktree_create(*, workdir: Path = Path()) -> None:
 
     try:
         with redirect_stdout(stderr):
-            path = create_worktree(
+            created = create_worktree(
                 GlobalSettings.from_yaml(workdir), read_payload().get("name") or ""
             )
     except Exception as error:
         print(f"deckz hooks worktree-create: {error}", file=stderr)
         raise SystemExit(1) from error
-    print(path)
+    for item in created.unset:
+        print(
+            f"deckz hooks worktree-create: warning: {item.name} {item.status.value}, "
+            f"in every checkout: {item.detail}",
+            file=stderr,
+        )
+    print(created.path)
 
 
 @app.command(name="worktree-remove")

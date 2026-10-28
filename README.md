@@ -719,7 +719,9 @@ repo-specific knowledge:
   (`claude --worktree <name>`, EnterWorktree with a name, a subagent's
   worktree isolation) are `deckz worktree add`'s, `../<repo>--<name>`
   with the builds copied and `deckz setup` run (or the existing one of
-  that name, for `claude --worktree <name> --resume`), and are removed by
+  that name, for `claude --worktree <name> --resume`; only a setup step
+  that failed or the git hooks fail the creation, not what every checkout
+  lacks alike, such as a tool the machine doesn't have), and are removed by
   `deckz worktree remove`, which keeps one holding work nothing else has.
 - With `worktree.required_for_agents`, the main checkout is the user's:
   agents change files only in a worktree of their own.

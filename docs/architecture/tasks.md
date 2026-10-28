@@ -29,7 +29,10 @@ verdicts), which the CLI renders and studioz reads as `--json`.
 [`agent_checkouts`][deckz.agent_checkouts] holds the rule that an agent changes a
 repository only from its own worktree (`deckz.yml`'s `worktree.required_for_agents`).
 It refuses edits and commands that change the main checkout, reports what a command
-changed there anyway, and maps Claude Code's worktrees onto `deckz worktree`'s.
+changed there anyway, and maps Claude Code's worktrees onto `deckz worktree`'s: the
+WorktreeCreate hook fails only on what the worktree lacks of its own, and prints the
+`shared` setup items left missing to stderr, which Claude Code doesn't show the agent
+after a hook that succeeded.
 
 These hooks are for the risks only agents create. Every repository rule they apply is
 also applied by a git hook or a check, which every contributor passes.
@@ -56,11 +59,18 @@ decks; studioz shows only the keys it knows.
 | | |
 |---|---|
 | **Responsibility** | Set up a clone: every step idempotent, `check=True` changes nothing |
-| **Owns** | `SetupItem` (`ok`, `done`, `missing`, `failed`, with its fix) |
+| **Owns** | `SetupItem` (`ok`, `done`, `missing`, `failed`, with its fix; `shared` when it's about the machine or what every checkout shares) |
 | **Depends on** | `hooks_install`, `remotes` (`setup.remotes`), `videos` (renders a build needs), `deckz.yml`'s `setup.requires`/`setup.steps` |
 | **Never** | Fails half-way silently: each step reports its own item |
 | **Entry points** | [`setup`][deckz.setting_up.setup] (`deckz setup`), [`incomplete`][deckz.setting_up.incomplete] |
 | **Fails with** | Items with status `failed`, the CLI exiting 1 |
+
+Most items are `shared`: deckz's own checkout, the executables, the remotes, the
+videos, the builds set aside. A new worktree has them as the main checkout does, and
+can't fix them, so `incomplete(items, shared=False)` leaves them out: it's what
+`deckz worktree add` and the WorktreeCreate hook fail on, only a step that failed or
+the git hooks. Otherwise one tool the machine lacks would block every agent's
+worktree. `deckz setup` itself, and studioz's workspaces, still count every item.
 
 ## `scaffolding`
 

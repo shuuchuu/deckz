@@ -46,6 +46,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .configuring.settings import GlobalSettings
+    from .setting_up import SetupItem
     from .worktrees import Removed
 
 # Programs that change the files they name: refused when one is in the main
@@ -655,7 +656,14 @@ def main_changes_report(
     )
 
 
-def create_worktree(settings: "GlobalSettings", name: str) -> Path:
+@dataclass(frozen=True)
+class CreatedWorktree:
+    path: Path
+    unset: "list[SetupItem]"
+    """What its `deckz setup` left missing or failed: only `shared` items."""
+
+
+def create_worktree(settings: "GlobalSettings", name: str) -> CreatedWorktree:
     """Create the worktree Claude Code asks for, the `deckz worktree add` way.
 
     Its name is `name` with what `deckz worktree` doesn't take turned to
@@ -663,27 +671,42 @@ def create_worktree(settings: "GlobalSettings", name: str) -> Path:
     A `deckz worktree` of that name already there is reused as it is:
     `claude --worktree <name> --resume <session>` asks for it again.
 
+    Only what the worktree needs of its own (its setup steps, its git hooks) \
+    blocks it. A `shared` item missing (a tool the machine lacks, `../deckz` \
+    behind, a video never rendered) is missing from every checkout alike: \
+    blocking on it would block every agent's worktree until a person fixes it, \
+    so it's returned instead, for the caller to warn about.
+
     Returns:
-        Its path.
+        Its path, and the `shared` items its setup left missing or failed.
 
     Raises:
-        WorktreeError: If its setup leaves something missing (`deckz worktree \
-            add`'s own errors propagate too).
+        WorktreeError: If its setup leaves something of its own missing or \
+            failed (`deckz worktree add`'s own errors propagate too).
     """
     from .configuring.settings import GlobalSettings
     from .exceptions import WorktreeError
-    from .setting_up import incomplete, setup
+    from .setting_up import Status, incomplete, setup
     from .worktrees import add, worktrees
 
     name = re.sub(r"[^A-Za-z0-9_-]", "-", name).strip("-") or "agent"
     for worktree in worktrees(settings):
         if worktree.name == name and worktree.path.is_dir():
-            return worktree.path
+            return CreatedWorktree(worktree.path, [])
     added = add(settings, name)
-    if incomplete(setup(GlobalSettings.from_yaml(added.path))):
-        msg = f"`deckz setup` left something missing in {added.path}"
+    items = setup(GlobalSettings.from_yaml(added.path))
+    unset = [i for i in items if i.status in (Status.MISSING, Status.FAILED)]
+    if incomplete(items, shared=False):
+        problems = "; ".join(
+            f"{i.name} {i.status.value}: {i.detail}" for i in unset if not i.shared
+        )
+        msg = (
+            f"`deckz setup` left {added.path} incomplete ({problems}). Fix it there "
+            "and run `deckz setup` again, then enter it by its path (EnterWorktree "
+            f"with `path`); or remove it: `deckz worktree remove {name}`"
+        )
         raise WorktreeError(msg)
-    return added.path
+    return CreatedWorktree(added.path, unset)
 
 
 def remove_worktree(settings: "GlobalSettings", path: Path) -> "Removed":

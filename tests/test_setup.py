@@ -90,8 +90,9 @@ def test_setup_installs_the_hooks_and_runs_the_steps_once(repo: Path) -> None:
 
     assert second["git hooks"].status is Status.OK
     assert second["make the marker"].status is Status.OK
-    # A tool a person must install stays missing.
+    # A tool a person must install stays missing, for every checkout alike.
     assert incomplete(second.values())
+    assert not incomplete(second.values(), shared=False)
 
 
 def test_setup_adds_a_missing_remote_and_keeps_one_there(repo: Path) -> None:

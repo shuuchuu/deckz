@@ -17,9 +17,13 @@ def add(name: str, /, *, base: str | None = None, workdir: Path = Path()) -> Non
         base: Revision to start from (default: the main checkout's HEAD)
         workdir: Path to move into before running the command
 
+    What `deckz setup` reports missing for every checkout alike (a tool
+    the machine lacks, a video never rendered) is listed, but doesn't make
+    the command fail: the worktree is ready all the same.
+
     Raises:
-        SystemExit: With code 1 when `deckz setup` leaves something missing
-            or failed in the new worktree.
+        SystemExit: With code 1 when `deckz setup` leaves something of the
+            worktree's own missing or failed (a setup step, its git hooks).
     """
     from ...configuring.settings import GlobalSettings
     from ...setting_up import incomplete, setup
@@ -31,5 +35,10 @@ def add(name: str, /, *, base: str | None = None, workdir: Path = Path()) -> Non
     print(f"copied {added.copied} built file(s) from the main checkout")
     items = setup(GlobalSettings.from_yaml(added.path), progress=RichProgress())
     print_setup(items)
-    if incomplete(items):
+    if incomplete(items, shared=False):
         raise SystemExit(1)
+    if incomplete(items):
+        print(
+            "the worktree is ready: what's missing above is missing from every "
+            "checkout, and `deckz setup` says how to fix it"
+        )

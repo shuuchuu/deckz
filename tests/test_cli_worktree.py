@@ -43,9 +43,8 @@ def test_add_list_and_remove(tmp_path: Path, capsys: Any, monkeypatch: Any) -> N
     main_dir = _make_repo(tmp_path)
     monkeypatch.chdir(main_dir)
 
-    # Exits 1 if `deckz setup` finds something missing (pandoc, say).
-    with suppress(SystemExit):
-        main(("worktree", "add", "demo"))
+    # Exits 0 even when the machine lacks something (pandoc, say).
+    main(("worktree", "add", "demo"))
     out = capsys.readouterr().out
     path = tmp_path / "repo--demo"
     assert f"created {path} on ws/demo" in out

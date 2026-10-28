@@ -9,6 +9,10 @@ and videos are published to), the repository's own steps (`setup.steps`), the
 videos a deck build needs rendered, and the builds a removed worktree set
 aside that no checkout needs anymore. With `check`, nothing is changed: each
 item only says what's missing, and how to fix it.
+
+Most items are `shared`: about the machine, or about what every checkout of the
+repository shares. A new worktree can't fix those, and works without them, so
+only the others stop one being made (`incomplete(items, shared=False)`).
 """
 
 from collections.abc import Iterable
@@ -45,6 +49,12 @@ class SetupItem:
     status: Status
     detail: str = ""
     """What's missing or failed and how to fix it, or what was done."""
+    shared: bool = False
+    """About the machine or what every checkout shares, rather than this checkout.
+
+    The same in a new worktree as in the main checkout: missing there, it \
+    doesn't stop the worktree being made (`incomplete`).
+    """
 
 
 def setup(
@@ -129,12 +139,12 @@ def deckz_checkout(
     """
     checkout = checkout or _own_checkout()
     if checkout is None:
-        return SetupItem("deckz", Status.OK, "not run from a git checkout")
+        return SetupItem("deckz", Status.OK, "not run from a git checkout", shared=True)
     upstream = _git(
         checkout, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"
     )
     if not upstream:
-        return SetupItem("deckz", Status.OK, "its branch has no upstream")
+        return SetupItem("deckz", Status.OK, "its branch has no upstream", shared=True)
     try:
         fetched = not run(
             ["git", "-C", str(checkout), "fetch", "--quiet"],
@@ -148,7 +158,10 @@ def deckz_checkout(
     behind = int(_git(checkout, "rev-list", "--count", f"HEAD..{upstream}") or 0)
     if not behind:
         return SetupItem(
-            "deckz", Status.OK, "" if fetched else "compared with the last fetch"
+            "deckz",
+            Status.OK,
+            "" if fetched else "compared with the last fetch",
+            shared=True,
         )
     # `../deckz` for the usual sibling checkout, the full path for any other.
     path = relpath(checkout, settings.paths.git_dir)
@@ -159,16 +172,16 @@ def deckz_checkout(
         f"{'' if fetched else ' (as of the last fetch)'}, and may lack fixes this "
         f"repository needs: `git -C {path} pull`, then `deckz setup` again"
     )
-    return SetupItem("deckz", Status.MISSING, detail)
+    return SetupItem("deckz", Status.MISSING, detail, shared=True)
 
 
 def _requirement(requirement: "SetupRequirement") -> SetupItem:
     if which(requirement.command):
-        return SetupItem(requirement.command, Status.OK)
+        return SetupItem(requirement.command, Status.OK, shared=True)
     detail = f"needed for {requirement.why}"
     if requirement.install:
         detail += f"; install it: {requirement.install}"
-    return SetupItem(requirement.command, Status.MISSING, detail)
+    return SetupItem(requirement.command, Status.MISSING, detail, shared=True)
 
 
 def requirements(settings: "GlobalSettings") -> list[SetupItem]:
@@ -193,6 +206,10 @@ def requirements(settings: "GlobalSettings") -> list[SetupItem]:
 
 def git_hooks(settings: "GlobalSettings", *, check: bool) -> SetupItem:
     """The pre-commit and commit-msg hooks `deckz hooks install` writes.
+
+    Not `shared`, although a worktree usually runs the main checkout's \
+    (`hooks_dir`): a checkout whose commits skip the repository's checks isn't \
+    one to work in.
 
     Returns:
         Their item.
@@ -242,15 +259,22 @@ def remotes(settings: "GlobalSettings", *, check: bool) -> list[SetupItem]:
     for name, url in settings.setup.remotes.items():
         label = f"remote {name}"
         if remote_url(git_dir, name) is not None:
-            items.append(SetupItem(label, Status.OK))
+            items.append(SetupItem(label, Status.OK, shared=True))
         elif check:
-            items.append(SetupItem(label, Status.MISSING, add_remote_fix(name, url)))
+            items.append(
+                SetupItem(label, Status.MISSING, add_remote_fix(name, url), shared=True)
+            )
         elif _git(git_dir, "remote", "add", name, url) is None:
             items.append(
-                SetupItem(label, Status.FAILED, f"`git remote add {name} {url}` failed")
+                SetupItem(
+                    label,
+                    Status.FAILED,
+                    f"`git remote add {name} {url}` failed",
+                    shared=True,
+                )
             )
         else:
-            items.append(SetupItem(label, Status.DONE, f"added, at {url}"))
+            items.append(SetupItem(label, Status.DONE, f"added, at {url}", True))
     return items
 
 
@@ -320,7 +344,9 @@ def rendered_videos(
 
     Only the renders that don't exist at all count; `deckz videos render` also \
     redoes outdated ones. One up to date in another checkout of the repository \
-    is copied from there (`deckz.stamps.adopt`) rather than counted.
+    is copied from there (`deckz.stamps.adopt`) rather than counted. `shared`: \
+    a worktree gets the main checkout's renders (`worktree.seed`), and one never \
+    rendered is missing from every checkout alike.
 
     Returns:
         Their item.
@@ -335,7 +361,7 @@ def rendered_videos(
         if not r.file.is_file() and state(r, quality) == "missing"
     ]
     if not missing:
-        return SetupItem("videos", Status.OK)
+        return SetupItem("videos", Status.OK, shared=True)
     if not render:
         return SetupItem(
             "videos",
@@ -344,6 +370,7 @@ def rendered_videos(
             "`deckz videos fetch` puts the published ones in place, `deckz setup "
             "--videos` (or `deckz videos render`) renders them (slow at the "
             "published quality, `--quality l` for drafts)",
+            shared=True,
         )
     from .videos.rendering import render_all
 
@@ -351,8 +378,8 @@ def rendered_videos(
         missing, settings.videos.published_quality, settings.paths.scenes_dir, progress
     )
     if failed:
-        return SetupItem("videos", Status.FAILED, "\n".join(failed))
-    return SetupItem("videos", Status.DONE, f"rendered {len(missing)}")
+        return SetupItem("videos", Status.FAILED, "\n".join(failed), shared=True)
+    return SetupItem("videos", Status.DONE, f"rendered {len(missing)}", shared=True)
 
 
 def set_aside_builds(settings: "GlobalSettings", *, check: bool) -> SetupItem:
@@ -367,21 +394,31 @@ def set_aside_builds(settings: "GlobalSettings", *, check: bool) -> SetupItem:
     from .stamps import prune
 
     if check:
-        return SetupItem("builds set aside", Status.OK)
+        return SetupItem("builds set aside", Status.OK, shared=True)
     dropped = prune(settings.paths.git_dir)
     if not dropped:
-        return SetupItem("builds set aside", Status.OK)
+        return SetupItem("builds set aside", Status.OK, shared=True)
     return SetupItem(
         "builds set aside",
         Status.DONE,
         f"dropped {len(dropped)} a checkout holds again, or kept 30 days",
+        shared=True,
     )
 
 
-def incomplete(items: Iterable[SetupItem]) -> bool:
+def incomplete(items: Iterable[SetupItem], *, shared: bool = True) -> bool:
     """Whether anything is still missing or failed.
+
+    Args:
+        items: What `setup` reported.
+        shared: Count the `shared` items too. Without them, it's whether the \
+            checkout lacks something of its own (a step that failed, its git \
+            hooks): what keeps a new worktree from being worked in.
 
     Returns:
         True if so.
     """
-    return any(item.status in (Status.MISSING, Status.FAILED) for item in items)
+    return any(
+        item.status in (Status.MISSING, Status.FAILED) and (shared or not item.shared)
+        for item in items
+    )

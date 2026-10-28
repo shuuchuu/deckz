@@ -1,11 +1,12 @@
 import subprocess
 from pathlib import Path
 
-from pytest import CaptureFixture, MonkeyPatch
+from pytest import CaptureFixture, MonkeyPatch, raises
 
 from deckz.agent_checkouts import create_worktree, edit_denial, remove_worktree
 from deckz.agent_hooks import bash_denial, commands, post_bash_report
 from deckz.configuring.settings import GlobalPaths, GlobalSettings, WorktreeSettings
+from deckz.exceptions import WorktreeError
 
 
 def _git(cwd: Path, *args: str) -> None:
@@ -263,7 +264,7 @@ def test_a_session_may_restore_what_it_changed_only(tmp_path: Path) -> None:
 def test_create_worktree_makes_a_deckz_worktree(tmp_path: Path) -> None:
     main, _ = _checkouts(tmp_path)
 
-    path = create_worktree(_settings(main, required=False), "feature/x.y")
+    path = create_worktree(_settings(main, required=False), "feature/x.y").path
 
     assert path == tmp_path / "repo--feature-x-y"
     assert (path / "a.md").is_file()
@@ -276,10 +277,66 @@ def test_create_worktree_reuses_an_existing_one(tmp_path: Path) -> None:
     main, worktree = _checkouts(tmp_path)
     (worktree / "b.md").write_text("work\n", encoding="utf8")
 
-    path = create_worktree(_settings(main, required=False), "x")
+    path = create_worktree(_settings(main, required=False), "x").path
 
     assert path == worktree
     assert (path / "b.md").read_text(encoding="utf8") == "work\n"
+
+
+def _repo_with_setup(tmp_path: Path, setup: str) -> Path:
+    main = tmp_path / "repo"
+    _git(tmp_path, "init", "--quiet", "-b", "main", str(main))
+    (main / "deckz.yml").write_text(f"setup:\n{setup}", encoding="utf8")
+    _git(main, "add", "deckz.yml")
+    _git(main, "commit", "-m", "Init")
+    return main
+
+
+def test_create_worktree_returns_what_every_checkout_lacks(tmp_path: Path) -> None:
+    main = _repo_with_setup(
+        tmp_path,
+        "  requires:\n    - command: deckz-absent-tool\n      why: the videos\n",
+    )
+
+    created = create_worktree(_settings(main, required=False), "x")
+
+    assert created.path == tmp_path / "repo--x"
+    assert "deckz-absent-tool" in [item.name for item in created.unset]
+    assert all(item.shared for item in created.unset)
+
+
+def test_create_worktree_fails_on_a_failing_step(tmp_path: Path) -> None:
+    main = _repo_with_setup(
+        tmp_path, "  steps:\n    - name: sync\n      run: ['false']\n"
+    )
+
+    with raises(WorktreeError) as error:
+        create_worktree(_settings(main, required=False), "x")
+
+    assert "sync failed" in str(error.value)
+    assert "deckz worktree remove x" in str(error.value)
+
+
+def test_worktree_create_hook_warns_of_what_every_checkout_lacks(
+    tmp_path: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    from io import StringIO
+    from json import dumps
+
+    from deckz.cli import main as deckz
+
+    main = _repo_with_setup(
+        tmp_path,
+        "  requires:\n    - command: deckz-absent-tool\n      why: the videos\n",
+    )
+    monkeypatch.setattr("sys.stdin", StringIO(dumps({"name": "x"})))
+
+    deckz(("hooks", "worktree-create", "--workdir", str(main)))
+
+    captured = capsys.readouterr()
+    assert captured.out == f"{tmp_path / 'repo--x'}\n"
+    assert "warning: deckz-absent-tool missing" in captured.err
+    assert "needed for the videos" in captured.err
 
 
 def test_worktree_remove_hook_reports_the_builds_handed_over(

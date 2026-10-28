@@ -61,7 +61,10 @@ deckz worktree remove pnd-2026  # once its work is committed and pushed (or merg
 It starts from the main checkout's current commit (`--base` picks another), with
 the main checkout's builds copied in (rendered figures and videos, so nothing is
 rebuilt for hours), then `deckz setup` runs there (its own Python environment, for
-instance, which takes a second). Afterwards, a figure or a video missing or out of
+instance, which takes a second). `add` fails only when the worktree lacks something
+of its own (a setup step that failed, its git hooks); what every checkout lacks alike
+(a tool your machine doesn't have, a video never rendered) is listed, and the
+worktree is ready all the same. Afterwards, a figure or a video missing or out of
 date in one checkout but up to date in another, for the same sources, is copied from
 there when a build or a render needs it: render a video in the main checkout, publish
 it from a worktree. The worktree shares nothing else with the main
