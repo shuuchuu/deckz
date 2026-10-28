@@ -929,8 +929,9 @@ whole, all in one namespace, and compares each with the output the chapter
 shows (a `text` block right after a `python` one; `...` matches any text; a
 shown error counts by its last line). A block whose first line names a file
 (`# greeting.py`) is written to that file. A `console` block runs command by
-command (each after `$ `, its output under it) when `commands` lists every
-program it runs. `{.python .no-run}` keeps a block from running, `{.pycon
+command (each after `$ `, its output under it, as an 80-column terminal shows
+it) when `commands` lists every program it runs. `{.python .no-run}` keeps a
+block from running, `{.pycon
 .output-varies}` from having its output compared; the PDF shows neither class.
 `deckz check course-notes-code --file course-notes/<path>.md` runs one
 chapter: what an author runs after writing one, instead of trying each snippet

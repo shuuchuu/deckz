@@ -407,18 +407,25 @@ $ echo $?
     assert _check(repo, chapter, commands=("python", "echo")) == []
 
 
-def test_a_python_program_writes_its_streams_in_a_terminal_s_order(
-    repo: Path,
-) -> None:
+def test_a_console_command_writes_to_a_terminal(repo: Path) -> None:
+    # Line-buffered on the terminal, block-buffered through a pipe: stdout's
+    # line comes first, then last. A `\r` writes over its line, a tab aligns.
     chapter = """# C
 
 ```console
 $ python -c "import sys; print('out'); print('err', file=sys.stderr)"
 out
 err
+$ python -c "import sys; print('out'); print('err', file=sys.stderr)" 2>&1 | cat
+err
+out
+$ printf 'collecting ...\\rcollected 2 items\\n'
+collected 2 items
+$ printf 'a\\tb\\n'
+a       b
 ```
 """
-    assert _check(repo, chapter, commands=("python",)) == []
+    assert _check(repo, chapter, commands=("python", "cat", "printf")) == []
 
 
 def test_programs_names_each_chained_program() -> None:

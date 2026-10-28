@@ -58,7 +58,8 @@ nothing. A shown error counts by its last line. A block whose first line names a
 (`# greeting.py`) is written to that file, for the blocks after it to import (a file
 other than Python source, `# example.txt`, without that first line). The programs run
 in English (`LC_ALL=C.UTF-8`), as on Colab. A `console` block runs command by command
-(`$ pytest -v`, its output under it) when `course_notes.code.commands` lists every
+(`$ pytest -v`, its output under it, as an 80-column terminal shows it: line-buffered,
+`ls` in columns) when `course_notes.code.commands` lists every
 program it runs, `uv run <program>` running
 the program itself; a command that fails with nothing shown is a problem, unless an
 `echo $?` follows it. Classes on the fence opt a block out: `{.python .no-run}` isn't

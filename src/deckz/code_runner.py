@@ -20,8 +20,9 @@ a reader typing them in would:
 - each ```` ```console ```` block, command by command (each after `$ `, its
   output under it), when every program it runs is one `--command` allows: in the
   working directory, with the interpreter's own programs (`python`, `pytest`)
-  first on the `PATH`, `uv run <program>` running the program itself. A block
-  with any other command (`uv add`, `git push`) isn't run.
+  first on the `PATH`, `uv run <program>` running the program itself, its
+  output going to a terminal of 80 columns and compared as that terminal shows
+  it. A block with any other command (`uv add`, `git push`) isn't run.
 
 A shown error counts by its last line (`ValueError: ...`), the traceback above it
 varying with the interpreter. Classes on the block's fence opt out: `{.python
@@ -49,17 +50,23 @@ one example tells where it was.
 
 import argparse
 import doctest
+import fcntl
 import importlib
 import io
 import json
 import os
+import pty
 import re
 import runpy
+import select
 import shlex
 import signal
+import struct
 import subprocess
 import sys
 import tempfile
+import termios
+import time
 import traceback
 import warnings
 from collections.abc import Iterator
@@ -298,28 +305,79 @@ def _alarm(signum: int, frame: FrameType | None) -> None:
     raise _TimeoutError
 
 
+def _terminal() -> tuple[int, int]:
+    # A pseudo-terminal of 80 columns, its `\n` not turned into `\r\n`: what a
+    # command writes there is what a reader's terminal would show.
+    leader, follower = pty.openpty()
+    attributes = termios.tcgetattr(follower)
+    attributes[1] &= ~termios.ONLCR
+    termios.tcsetattr(follower, termios.TCSANOW, attributes)
+    fcntl.ioctl(follower, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
+    return leader, follower
+
+
+def _displayed(text: str) -> str:
+    # What a terminal shows of `text`: after a `\r`, the line is written over
+    # from its start (pytest's "collecting ..." replaced by "collected 2 items").
+    shown = []
+    for line in text.split("\n"):
+        cells: list[str] = []
+        column = 0
+        for char in line:
+            if char == "\r":
+                column = 0
+                continue
+            if column < len(cells):
+                cells[column] = char
+            else:
+                cells.append(char)
+            column += 1
+        shown.append("".join(cells))
+    return "\n".join(shown)
+
+
 def _shell(example: Example, timeout: int) -> tuple[str, str | None]:
-    # Run a console command in `bash`, `$?` the previous command's status. Its
-    # Python programs write their lines in a terminal's order: without a
-    # terminal, stdout would be held in a buffer while stderr goes out.
+    # Run a console command in `bash`, `$?` the previous command's status, its
+    # output going to a terminal, as the chapter shows it: a program writing
+    # there is line-buffered, through `| cat` or `> file` block-buffered.
     global _status
-    try:
-        done = subprocess.run(
-            ["bash", "-c", f"(exit {_status}); {_without_uv_run(example.source)}"],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            env={**os.environ, "PYTHONUNBUFFERED": "1"},
-            timeout=timeout,
-            check=False,
-        )
-    except subprocess.TimeoutExpired as expired:
+    leader, follower = _terminal()
+    process = subprocess.Popen(
+        ["bash", "-c", f"(exit {_status}); {_without_uv_run(example.source)}"],
+        stdin=subprocess.DEVNULL,
+        stdout=follower,
+        stderr=follower,
+        env={**os.environ, "TERM": "dumb"},
+        start_new_session=True,
+    )
+    os.close(follower)
+    output = bytearray()
+    deadline = time.monotonic() + timeout
+    timed_out = False
+    # Read until every process holding the terminal has closed it (EIO).
+    while True:
+        left = deadline - time.monotonic()
+        if left <= 0:
+            timed_out = True
+            os.killpg(process.pid, signal.SIGKILL)
+            break
+        if select.select([leader], [], [], min(left, 0.1))[0]:
+            try:
+                chunk = os.read(leader, 65536)
+            except OSError:
+                break
+            if not chunk:
+                break
+            output += chunk
+    os.close(leader)
+    returncode = process.wait()
+    got = _displayed(output.decode("utf-8", errors="replace"))
+    if timed_out:
         _status = 124
-        got = (expired.stdout or b"").decode("utf-8", errors="replace")
         return got, f"TimeoutError: still running after {timeout} s, stopped"
     # A command killed by a signal (bash ran it in its place): the shell's 128 + n.
-    _status = done.returncode if done.returncode >= 0 else 128 - done.returncode
-    return done.stdout.decode("utf-8", errors="replace"), None
+    _status = returncode if returncode >= 0 else 128 - returncode
+    return got, None
 
 
 def _write(example: Example) -> None:
@@ -405,8 +463,9 @@ def matches(expected: str, got: str, error: str | None) -> bool:
 
 def _normalized(text: str) -> str:
     # Without trailing spaces, which a Markdown file doesn't keep (pandas pads
-    # its index's header line), and with one final newline.
-    lines = [line.rstrip() for line in text.rstrip().splitlines()]
+    # its index's header line), tabs shown as a terminal does (`ls`'s columns),
+    # and with one final newline.
+    lines = [line.rstrip() for line in text.expandtabs().rstrip().splitlines()]
     return "\n".join(lines) + "\n" if lines else ""
 
 
