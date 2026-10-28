@@ -313,7 +313,8 @@ def _shell(example: Example, timeout: int) -> tuple[str, str | None]:
         _status = 124
         got = (expired.stdout or b"").decode("utf-8", errors="replace")
         return got, f"TimeoutError: still running after {timeout} s, stopped"
-    _status = done.returncode
+    # A command killed by a signal (bash ran it in its place): the shell's 128 + n.
+    _status = done.returncode if done.returncode >= 0 else 128 - done.returncode
     return done.stdout.decode("utf-8", errors="replace"), None
 
 

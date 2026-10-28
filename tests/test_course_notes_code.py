@@ -338,6 +338,18 @@ $ python -c "import sys; sys.exit(2)"
     )
 
 
+def test_a_command_killed_by_a_signal_has_a_shell_status(repo: Path) -> None:
+    chapter = """# C
+
+```console
+$ python -c "import os, signal; os.kill(os.getpid(), signal.SIGTERM)"
+$ echo $?
+143
+```
+"""
+    assert _check(repo, chapter, commands=("python", "echo")) == []
+
+
 def test_programs_names_each_chained_program() -> None:
     assert programs("A=1 uv run ruff check . && echo $? | cat") == [
         "ruff",
