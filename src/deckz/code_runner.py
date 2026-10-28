@@ -15,7 +15,8 @@ a reader typing them in would:
 - a block whose first line names a file (`# bavard.py`, `# integrer.pyx`) is that
   file: it's written to the working directory, for the blocks after it to import
   or read, and runs as a script (in a namespace of its own) only when an output
-  block follows it;
+  block follows it; a file other than Python source (`# exemple.txt`, `#
+  somme.c`) is written without that first line;
 - each ```` ```console ```` block, command by command (each after `$ `, its
   output under it), when every program it runs is one `--command` allows: in the
   working directory, with the interpreter's own programs (`python`, `pytest`)
@@ -73,6 +74,7 @@ _OUTPUT_LANGS = frozenset({"text", "output"})
 _FLAGS = doctest.ELLIPSIS
 _FENCE = re.compile(r"^(?P<fence>`{3,}|~{3,})[ \t]*(?P<info>[^\n]*)\n", re.MULTILINE)
 _FILE_HEADER = re.compile(r"#\s*(?P<name>[\w.-]+(?:/[\w.-]+)*\.\w+)\s*")
+_PYTHON_SUFFIXES = (".py", ".pyi", ".pyx", ".pxd")
 _PROMPT = "$ "
 _UV_RUN = re.compile(r"(^|[|&;(]\s*)((?:\w+=\S*\s+)*)uv run (?=[^-\s])")
 _CHAINING = frozenset({"|", "||", "&&", ";", "&", "(", ")"})
@@ -104,6 +106,16 @@ class Block:
         if match is None or ".." in match["name"].split("/"):
             return None
         return match["name"]
+
+    @property
+    def file_content(self) -> str:
+        # What its file holds: a Python source keeps its `# name.py` line (a
+        # comment, and the line numbers stay those shown), any other file
+        # (`exemple.txt`, `somme.c`) starts after it.
+        name = self.file_name or ""
+        if name.endswith(_PYTHON_SUFFIXES):
+            return self.body
+        return self.body.partition("\n")[2]
 
 
 @dataclass(frozen=True)
@@ -244,7 +256,7 @@ def examples(text: str, commands: frozenset[str] = frozenset()) -> Iterator[Exam
         elif (file_name := block.file_name) is not None:
             yield Example(
                 block.line,
-                block.body,
+                block.file_content,
                 (block.output if compared else None)
                 if block.output is not None
                 else "",

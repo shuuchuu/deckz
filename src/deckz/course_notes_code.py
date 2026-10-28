@@ -395,13 +395,15 @@ def _execute(
     rel = _rel(chapter, git_dir)
     timeout = settings.course_notes.code.timeout
     progress = result.with_name(result.name + ".at")
-    # Qt draws nowhere: a GUI chapter's widgets build without a display.
+    # Qt draws nowhere: a GUI chapter's widgets build without a display. The
+    # programs speak English, as on Colab, whatever the machine's language.
     env = {
         **os.environ,
         "PYTHONHASHSEED": "0",
         "PYTHONDONTWRITEBYTECODE": "1",
         "NO_COLOR": "1",
         "QT_QPA_PLATFORM": "offscreen",
+        "LC_ALL": "C.UTF-8",
     }
     try:
         process = subprocess.Popen(

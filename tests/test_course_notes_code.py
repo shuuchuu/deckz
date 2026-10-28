@@ -4,7 +4,7 @@ from subprocess import run
 from typing import Any
 
 from pygit2 import init_repository
-from pytest import CaptureFixture, fixture, raises
+from pytest import CaptureFixture, MonkeyPatch, fixture, raises
 
 from deckz.analyzing.content_checks import course_notes_code
 from deckz.cli import main
@@ -249,6 +249,36 @@ def test_examples_skip_other_languages() -> None:
 def test_matches_compares_an_error_by_its_last_line() -> None:
     assert matches("Traceback ...\nKeyError: 'a'\n", "", "KeyError: 'a'")
     assert not matches("", "", "KeyError: 'a'")
+
+
+def test_a_data_file_block_is_written_without_its_name_line(repo: Path) -> None:
+    chapter = """# C
+
+```text
+# notes.txt
+12
+15
+```
+
+```pycon
+>>> open("notes.txt").read().splitlines()
+['12', '15']
+```
+"""
+    assert _check(repo, chapter) == []
+
+
+def test_programs_speak_english(repo: Path, monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setenv("LC_ALL", "fr_FR.UTF-8")
+    chapter = """# C
+
+```pycon
+>>> import os
+>>> os.environ["LC_ALL"]
+'C.UTF-8'
+```
+"""
+    assert _check(repo, chapter) == []
 
 
 def test_console_commands_run_when_their_programs_are_allowed(repo: Path) -> None:

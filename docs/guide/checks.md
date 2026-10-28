@@ -55,9 +55,11 @@ would, in a scratch directory, with the interpreter `course_notes.code.python` n
 shown under it (`...` stands for any text: an address, a long tail), and each `python`
 block, compared with the `text` block right after it, or else expected to print
 nothing. A shown error counts by its last line. A block whose first line names a file
-(`# greeting.py`) is written to that file, for the blocks after it to import. A
-`console` block runs command by command (`$ pytest -v`, its output under it) when
-`course_notes.code.commands` lists every program it runs, `uv run <program>` running
+(`# greeting.py`) is written to that file, for the blocks after it to import (a file
+other than Python source, `# example.txt`, without that first line). The programs run
+in English (`LC_ALL=C.UTF-8`), as on Colab. A `console` block runs command by command
+(`$ pytest -v`, its output under it) when `course_notes.code.commands` lists every
+program it runs, `uv run <program>` running
 the program itself; a command that fails with nothing shown is a problem, unless an
 `echo $?` follows it. Classes on the fence opt a block out: `{.python .no-run}` isn't
 run (a GUI's main loop, a server, `input()`, a deliberate fragment), `{.pycon
