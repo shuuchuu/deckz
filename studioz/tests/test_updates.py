@@ -22,7 +22,7 @@ def _git(cwd: Path, *args: str) -> str:
 
 
 def _studio(client: TestClient) -> Any:
-    return client.app.state.studio  # ty: ignore[unresolved-attribute]
+    return client.app.state.studio  # pyrefly: ignore[missing-attribute]
 
 
 def _push_theirs(remote: Path, name: str = "theirs.md") -> None:

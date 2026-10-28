@@ -55,12 +55,12 @@ class _GitHub:
         self.calls: list[tuple[str, str, Any]] = []
 
     def __call__(self, request: Request) -> BytesIO:
-        data = json.loads(request.data) if request.data else None  # ty: ignore[invalid-argument-type]
+        data = json.loads(request.data) if request.data else None  # pyrefly: ignore[bad-argument-type]
         self.calls.append((request.get_method(), request.full_url, data))
         assert request.get_header("Authorization") == "Bearer token"
         if self.refuse and request.get_method() == "POST":
             self.refuse -= 1
-            raise HTTPError(request.full_url, 422, "Unprocessable", {}, None)  # ty: ignore[invalid-argument-type]
+            raise HTTPError(request.full_url, 422, "Unprocessable", {}, None)  # pyrefly: ignore[bad-argument-type]
         if request.get_method() == "GET":
             return BytesIO(json.dumps(self.open_issues).encode())
         return BytesIO(json.dumps({"html_url": "https://github.com/x"}).encode())
