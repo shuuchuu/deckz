@@ -87,7 +87,7 @@ def _render(client: TestClient, *, final: bool = False) -> str:
         "jobs-changed": None,
         "job-started": None,
     }
-    job = client.app.state.studio.jobs._jobs[-1]  # ty: ignore[unresolved-attribute]
+    job = client.app.state.studio.jobs._jobs[-1]  # pyrefly: ignore[missing-attribute]
     deadline = monotonic() + 30
     while not job.finished:
         assert monotonic() < deadline, "the render never finished"
@@ -156,7 +156,7 @@ def test_a_final_render_at_the_published_quality(
     title = _render(client, final=True)
 
     assert title == "Rendu final de la vidéo nn/demo (h)"
-    job = client.app.state.studio.jobs._jobs[-1]  # ty: ignore[unresolved-attribute]
+    job = client.app.state.studio.jobs._jobs[-1]  # pyrefly: ignore[missing-attribute]
     assert job.steps[0][-4:] == ("render", "nn/demo", "--quality", "h")
     assert "à jour" in client.get(f"{BASE}/videos").text
     player = _player(client)

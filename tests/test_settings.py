@@ -31,9 +31,9 @@ def test_loading_settings_does_not_create_the_user_config_dir(
 def test_settings_are_frozen(tmp_path: Path) -> None:
     settings = DeckSettings.from_yaml(_deck_dir(tmp_path))
     with raises(ValidationError):
-        settings.paths.pdf_dir = tmp_path  # ty: ignore[invalid-assignment]
+        settings.paths.pdf_dir = tmp_path  # pyrefly: ignore[read-only]
     with raises(ValidationError):
-        settings.file_extensions = (".typ",)  # ty: ignore[invalid-assignment]
+        settings.file_extensions = (".typ",)  # pyrefly: ignore[read-only]
 
 
 def test_with_output_dirs_leaves_the_original_untouched(tmp_path: Path) -> None:

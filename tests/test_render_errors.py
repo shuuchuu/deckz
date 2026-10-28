@@ -34,8 +34,8 @@ def _render(tmp_path: Path, text: str) -> tuple[Path, Path]:
     copy.parent.mkdir()
     copy.write_text(text, encoding="utf8")
     render_dependencies(
-        _Renderer(),  # ty: ignore[invalid-argument-type]
-        _Converter(),  # ty: ignore[invalid-argument-type]
+        _Renderer(),  # pyrefly: ignore[bad-argument-type]
+        _Converter(),  # pyrefly: ignore[bad-argument-type]
         [CopiedDependency(copy, source)],
         ".typ",
         {},

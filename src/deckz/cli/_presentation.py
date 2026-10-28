@@ -163,7 +163,7 @@ def open_path(path: Path) -> None:
         path: File or directory to open.
     """
     if sys.platform == "win32":
-        from os import startfile  # ty: ignore[unresolved-import]
+        from os import startfile
 
         startfile(path)
         return

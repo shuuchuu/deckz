@@ -152,7 +152,7 @@ def test_a_dialog_asks_the_agent(repository: Path, workspace: Path) -> None:
             headers=ORIGIN,
         )
         assert response.status_code == 204
-        conversation = client.app.state.studio.agents.conversation(workspace)  # ty: ignore[unresolved-attribute]
+        conversation = client.app.state.studio.agents.conversation(workspace)  # pyrefly: ignore[missing-attribute]
         for _ in range(200):
             if not conversation.running:
                 break

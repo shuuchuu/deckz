@@ -130,7 +130,7 @@ def fake_deckz(workspace: Path, repository: Path) -> Path:
 
 def _job(client: TestClient, response_text: str) -> Job:
     # The job the response shows: the last one started.
-    job = client.app.state.studio.jobs._jobs[-1]  # ty: ignore[unresolved-attribute]
+    job = client.app.state.studio.jobs._jobs[-1]  # pyrefly: ignore[missing-attribute]
     assert f'id="job-{job.id}"' in response_text
     _wait(job)
     return job
@@ -184,7 +184,7 @@ def test_build_needs_a_language_and_a_document(
         headers=ORIGIN,
     ).text
     assert "Choisissez au moins une langue" in page
-    assert not client.app.state.studio.jobs._jobs  # ty: ignore[unresolved-attribute]
+    assert not client.app.state.studio.jobs._jobs  # pyrefly: ignore[missing-attribute]
 
 
 def test_upload_shows_the_pdfs_and_refuses_outdated_ones(
@@ -239,7 +239,7 @@ def test_jobs_refused_from_another_site(fake_deckz: Path, client: TestClient) ->
         headers={"Origin": "https://evil.example"},
     )
     assert response.status_code == 403
-    assert not client.app.state.studio.jobs._jobs  # ty: ignore[unresolved-attribute]
+    assert not client.app.state.studio.jobs._jobs  # pyrefly: ignore[missing-attribute]
 
 
 def test_jobs_outlive_studioz(tmp_path: Path) -> None:
@@ -365,7 +365,7 @@ def test_build_every_deck(fake_deckz: Path, client: TestClient) -> None:
     rerun = client.post(f"/espaces/demo/taches/{job.id}/relancer", headers=ORIGIN)
     assert rerun.status_code == 200
     assert rerun.headers["HX-Trigger-After-Settle"] == "jobs-changed"
-    _wait(client.app.state.studio.jobs._jobs[-1])  # ty: ignore[unresolved-attribute]
+    _wait(client.app.state.studio.jobs._jobs[-1])  # pyrefly: ignore[missing-attribute]
 
 
 def test_an_upload_starts_again_from_its_dialog(
@@ -456,7 +456,7 @@ def test_a_build_waits_for_memory_one_at_a_time(tmp_path: Path) -> None:
 def test_a_held_job_says_so(
     fake_deckz: Path, client: TestClient, workspace: Path
 ) -> None:
-    jobs = client.app.state.studio.jobs  # ty: ignore[unresolved-attribute]
+    jobs = client.app.state.studio.jobs  # pyrefly: ignore[missing-attribute]
     jobs._read_memory = _Machine(1 * GIB)
     job = jobs.submit(workspace, "build", [_python("print('built')")])
 

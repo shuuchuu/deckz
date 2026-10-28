@@ -382,7 +382,7 @@ def agent_client(
 
 
 def _conversation(client: TestClient, workspace: Path) -> Conversation:
-    return client.app.state.studio.agents.conversation(workspace)  # ty: ignore[unresolved-attribute]
+    return client.app.state.studio.agents.conversation(workspace)  # pyrefly: ignore[missing-attribute]
 
 
 def test_the_pages_show_the_panel(agent_client: TestClient) -> None:
@@ -603,7 +603,7 @@ def test_the_question_form(agent_client: TestClient, workspace: Path) -> None:
     conversation = _conversation(agent_client, workspace)
     _wait_question(conversation)
     form = _agent_question(conversation.question)
-    assert f'name="question" value="{conversation.question.id}"' in form  # ty: ignore[unresolved-attribute]
+    assert f'name="question" value="{conversation.question.id}"' in form  # pyrefly: ignore[missing-attribute]
     assert '<input type="radio" name="q0" value="Rouge">' in form
     assert '<input type="checkbox" name="q1" value="Kiwi">' in form
     assert f'<input type="radio" name="q0" value="{OTHER}">' in form

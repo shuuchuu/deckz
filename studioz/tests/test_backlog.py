@@ -139,7 +139,7 @@ def test_the_panel_and_its_button(
             headers=ORIGIN,
         )
         assert sent.status_code == 204
-        conversation = client.app.state.studio.agents.conversation(workspace)  # ty: ignore[unresolved-attribute]
+        conversation = client.app.state.studio.agents.conversation(workspace)  # pyrefly: ignore[missing-attribute]
         deadline = monotonic() + 10
         while conversation.running:
             assert monotonic() < deadline

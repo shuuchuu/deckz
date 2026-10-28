@@ -190,7 +190,7 @@ def test_the_modal_says_what_deckz_refuses(
 
 def _wait(predicate: object, timeout: float = 20) -> None:
     deadline = monotonic() + timeout
-    while not predicate():  # ty: ignore[call-non-callable]
+    while not predicate():  # pyrefly: ignore[not-callable]
         assert monotonic() < deadline
         sleep(0.05)
 
@@ -198,7 +198,7 @@ def _wait(predicate: object, timeout: float = 20) -> None:
 def test_a_pass_runs_as_a_job_and_is_stopped_after_a_question(
     lab: Path, workspace: Path, client: TestClient
 ) -> None:
-    jobs = client.app.state.studio.jobs  # ty: ignore[unresolved-attribute]
+    jobs = client.app.state.studio.jobs  # pyrefly: ignore[missing-attribute]
     # A build running doesn't hold the pass back: lanes.
     build = jobs.submit(
         workspace, "build", [[sys.executable, "-c", "import time; time.sleep(30)"]]
@@ -290,7 +290,7 @@ def test_a_machine_no_pass_runs_is_destroyed_at_once(
 
     page = client.post(f"{BASE}/gpu/arreter", data={"machine": "main"}, headers=ORIGIN)
     assert "data-job-started" in page.text
-    jobs = client.app.state.studio.jobs  # ty: ignore[unresolved-attribute]
+    jobs = client.app.state.studio.jobs  # pyrefly: ignore[missing-attribute]
     job = jobs.jobs(workspace)[0]
     _wait(lambda: job.finished)
 
@@ -303,7 +303,7 @@ def test_a_machine_no_pass_runs_is_destroyed_at_once(
 def test_a_pass_job_is_stopped_from_the_dialog(
     lab: Path, workspace: Path, client: TestClient
 ) -> None:
-    jobs = client.app.state.studio.jobs  # ty: ignore[unresolved-attribute]
+    jobs = client.app.state.studio.jobs  # pyrefly: ignore[missing-attribute]
     client.post(
         f"{BASE}/gpu/lancer",
         data={"carnet": [f"{LAB}/demo-fr.ipynb"], "mode": "court", "plafond": "1"},

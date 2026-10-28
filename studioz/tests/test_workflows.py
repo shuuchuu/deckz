@@ -156,7 +156,7 @@ def studio(
 
 
 def _conversation(client: TestClient, workspace: Path) -> Conversation:
-    return client.app.state.studio.agents.conversation(workspace)  # ty: ignore[unresolved-attribute]
+    return client.app.state.studio.agents.conversation(workspace)  # pyrefly: ignore[missing-attribute]
 
 
 def _wait_idle(conversation: Conversation) -> None:

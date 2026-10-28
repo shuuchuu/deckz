@@ -146,7 +146,7 @@ def test_deck_filter_rejects_unknown_parts() -> None:
 
 def test_deck_is_frozen() -> None:
     with raises(FrozenInstanceError):
-        _deck().name = "other"  # ty: ignore[invalid-assignment]
+        _deck().name = "other"  # pyrefly: ignore[read-only]
 
 
 def test_schema_version_defaults_to_the_current_one() -> None:
