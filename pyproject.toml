@@ -110,7 +110,8 @@ convention = "google"
 # it stops treating the project root as an import root, so tests couldn't
 # import tests.conftest without search-path.
 [tool.pyrefly]
-search-path = ["."]
+# studioz/tests too, for the helpers its tests import as top-level modules.
+search-path = [".", "studioz/tests"]
 
 [bumpver]
 commit = true
