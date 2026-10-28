@@ -29,7 +29,7 @@ from .hooks_install import HOOKS, hooks_dir, install_claude_hooks, install_hooks
 
 if TYPE_CHECKING:
     from .components.protocols import ProgressReporterProtocol
-    from .configuring.settings import GlobalSettings, SetupRequirement
+    from .configuring.settings import GlobalSettings, SetupRequirement, SetupStep
 
 
 class Status(Enum):
@@ -71,7 +71,7 @@ def setup(
     Args:
         settings: The repository's settings.
         check: Only report, change nothing.
-        force: Run the steps whose `creates` path already exists too.
+        force: Run the steps already done (their `creates`, `check`) too.
         videos: Render the videos never rendered (otherwise only reported).
         claude: Also add deckz's Claude Code hooks to `.claude/settings.json`.
         progress: Advanced while rendering videos.
@@ -296,8 +296,28 @@ def claude_hooks(settings: "GlobalSettings", *, check: bool) -> SetupItem:
     return SetupItem("Claude Code hooks", Status.DONE, f"in {path}")
 
 
+def _step_done(step: "SetupStep", git_dir: Path) -> bool:
+    """Whether the step's `creates` and `check` say it's done: both, if both given.
+
+    Returns:
+        True if so; False for a step with neither, which can't tell.
+    """
+    if step.creates is None and step.check is None:
+        return False
+    if step.creates is not None and not (git_dir / step.creates).exists():
+        return False
+    if step.check is None:
+        return True
+    if not which(step.check[0]):
+        return False
+    return not run(step.check, cwd=git_dir, capture_output=True, check=False).returncode
+
+
 def steps(settings: "GlobalSettings", *, check: bool, force: bool) -> list[SetupItem]:
     """The repository's own `setup.steps`, in order.
+
+    A step done (`_step_done`) is skipped unless `force`. With `check`, one \
+    not done is reported as to run, and so is one that can't tell.
 
     Returns:
         One item per step.
@@ -305,14 +325,18 @@ def steps(settings: "GlobalSettings", *, check: bool, force: bool) -> list[Setup
     git_dir = settings.paths.git_dir
     items = []
     for step in settings.setup.steps:
-        if step.creates and (git_dir / step.creates).exists() and not force:
+        if not force and _step_done(step, git_dir):
             items.append(SetupItem(step.name, Status.OK))
             continue
         command = " ".join(step.run)
         if check:
-            items.append(
-                SetupItem(step.name, Status.MISSING, f"run `deckz setup` ({command})")
-            )
+            detail = f"run `deckz setup` ({command})"
+            if step.creates is None and step.check is None:
+                detail += (
+                    "; whether it's needed can't be told: its deckz.yml entry has "
+                    "no `creates` nor `check`"
+                )
+            items.append(SetupItem(step.name, Status.MISSING, detail))
             continue
         if not which(step.run[0]):
             items.append(

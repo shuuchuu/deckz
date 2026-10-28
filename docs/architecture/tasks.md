@@ -70,7 +70,8 @@ videos, the builds set aside. A new worktree has them as the main checkout does,
 can't fix them, so `incomplete(items, shared=False)` leaves them out: it's what
 `deckz worktree add` and the WorktreeCreate hook fail on, only a step that failed or
 the git hooks. Otherwise one tool the machine lacks would block every agent's
-worktree. `deckz setup` itself, and studioz's workspaces, still count every item.
+worktree. studioz's workspaces follow the same rule (`Created.ready`); `deckz setup`
+itself counts every item.
 
 ## `scaffolding`
 

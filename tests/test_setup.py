@@ -200,3 +200,60 @@ def test_a_deckz_branch_with_no_upstream_is_ok(
     item = deckz_checkout(GlobalSettings.from_yaml(repo), clone)
 
     assert item.status is Status.OK
+
+
+def _steps(repo: Path, *entries: dict[str, Any], **kwargs: Any) -> list[Any]:
+    from deckz.configuring.settings import SetupSettings, SetupStep
+    from deckz.setting_up import steps
+
+    settings = GlobalSettings.from_yaml(repo)
+    settings = settings.model_copy(
+        update={"setup": SetupSettings(steps=tuple(SetupStep(**e) for e in entries))}
+    )
+    return [item.status for item in steps(settings, **kwargs)]
+
+
+_MARK = ("python3", "-c", "open('marker', 'w').close()")
+_PASS = ("python3", "-c", "pass")
+_FAIL = ("python3", "-c", "raise SystemExit(1)")
+
+
+def test_a_step_s_check_tells_whether_it_is_done(repo: Path) -> None:
+    done = {"name": "done", "run": _MARK, "check": _PASS}
+    to_do = {"name": "to do", "run": _MARK, "check": _FAIL}
+
+    assert _steps(repo, done, to_do, check=True, force=False) == [
+        Status.OK,
+        Status.MISSING,
+    ]
+    assert not (repo / "marker").exists()
+    assert _steps(repo, done, check=False, force=False) == [Status.OK]
+    assert not (repo / "marker").exists()
+    assert _steps(repo, to_do, check=False, force=False) == [Status.DONE]
+    assert (repo / "marker").exists()
+    assert _steps(repo, done, check=False, force=True) == [Status.DONE]
+
+
+def test_a_step_is_done_only_when_its_creates_and_check_both_hold(repo: Path) -> None:
+    (repo / "made").mkdir()
+    both = {"name": "both", "run": _MARK, "creates": "made", "check": _FAIL}
+    absent = {"name": "absent", "run": _MARK, "check": ("no-such-command-deckz",)}
+
+    assert _steps(repo, both, absent, check=True, force=False) == [
+        Status.MISSING,
+        Status.MISSING,
+    ]
+
+
+def test_check_says_a_step_without_creates_nor_check_can_t_tell(repo: Path) -> None:
+    from deckz.configuring.settings import SetupSettings, SetupStep
+    from deckz.setting_up import steps
+
+    settings = GlobalSettings.from_yaml(repo).model_copy(
+        update={"setup": SetupSettings(steps=(SetupStep(name="sync", run=_MARK),))}
+    )
+
+    (item,) = steps(settings, check=True, force=False)
+
+    assert item.status is Status.MISSING
+    assert "no `creates` nor `check`" in item.detail

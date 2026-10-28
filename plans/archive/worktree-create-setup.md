@@ -1,6 +1,6 @@
 # Handoff: a machine without the videos' tools can't create agent worktrees
 
-Found 2026-10-27 in a slides session; not started. For whoever fixes it.
+Found 2026-10-27 in a slides session; done 2026-10-28.
 
 ## Status (2026-10-28)
 
@@ -13,18 +13,22 @@ lists them and exits 0. The error on a real failure now names the problem, how t
 enter the worktree anyway, and `deckz worktree remove <name>`. Tried on slides (no
 xelatex here): exit 0, the path on stdout, both warnings on stderr.
 
-Left:
+Then, the same day:
 
-- **The agent doesn't see the warnings.** Claude Code's hooks reference: "Claude
-  never sees stderr from a hook that exits 0", and a WorktreeCreate hook's JSON
-  `systemMessage` is discarded. Passing them on would take another hook (e.g.
-  PostToolUse on EnterWorktree reading a note the WorktreeCreate hook left). Low
-  stakes: `deckz setup` and a failing video render say the same.
-- **studioz's workspaces** (`studioz.workspaces.Created.ready`) still count every
-  item, so a machine without xelatex gets the "setup incomplete" page and a workflow
-  doesn't start. Following would be `incomplete(self.setup, shared=False)`, with the
-  shared items shown without blocking.
-- The first "Also" below (`setup --check` and steps without `creates`) is untouched.
+- **studioz's workspaces** follow: `Created.ready` is `not incomplete(setup,
+  shared=False)` (`plans/studioz.md`, phase 8, increment 6).
+- **`setup --check` and steps without `creates`**: a step can declare `check`, a
+  command exiting 0 when it's done (`SetupStep.check`); then it's skipped, as with
+  `creates` (both must hold when both are given), and `--check` reports it ok. A step
+  with neither is still reported as to run, its detail saying it can't tell. slides'
+  `uv sync` declares `check: [uv, sync, --check]` (0.03 s): `deckz setup --check`
+  there now exits 0 on a synced checkout.
+
+Not done, on purpose: **the agent doesn't see the hook's warnings.** Claude Code's
+hooks reference: "Claude never sees stderr from a hook that exits 0", and a
+WorktreeCreate hook's JSON `systemMessage` is discarded. Passing them on would take
+another hook (e.g. PostToolUse on EnterWorktree reading a note the WorktreeCreate
+hook left), for little: `deckz setup` and a failing video render say the same.
 
 ## Symptom
 

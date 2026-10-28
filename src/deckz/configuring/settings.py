@@ -351,8 +351,13 @@ class SetupStep(BaseModel):
     """Command to run, from the git root (no shell)."""
     creates: str | None = None
     """Path, relative to the git root, the step creates: when it exists, \
-    the step is done and skipped (`deckz setup --force` runs it anyway). \
-    Without it, the step runs every time."""
+    the step is done and skipped (`deckz setup --force` runs it anyway)."""
+    check: tuple[str, ...] | None = None
+    """Command, from the git root (no shell), that exits 0 when the step is \
+    done, e.g. `[uv, sync, --check]`: then the step is skipped, as with \
+    `creates` (both must hold when both are given). What `deckz setup \
+    --check` runs to tell. Without `creates` nor `check`, the step runs \
+    every time, and `--check` can only report it as to run."""
 
 
 class SetupSettings(BaseModel):
@@ -360,8 +365,9 @@ class SetupSettings(BaseModel):
     requires: tuple[SetupRequirement, ...] = ()
     """Executables the repository needs besides deckz's own (pandoc, git)."""
     steps: tuple[SetupStep, ...] = ()
-    """Commands that set up a clone or a worktree, e.g. `uv sync` (no \
-    `creates`: runs every time) or vendoring JavaScript."""
+    """Commands that set up a clone or a worktree, e.g. `uv sync` (its \
+    `check`: `uv sync --check`) or vendoring JavaScript (its `creates`: the \
+    vendor directory)."""
     remotes: dict[str, str] = Field(default_factory=dict)
     """Git remotes a clone needs besides `origin`, by name: their URLs, e.g. \
     `labs: git@github.com:owner/labs.git` for the remotes `deckz labs \

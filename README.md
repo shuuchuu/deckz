@@ -339,6 +339,9 @@ typst_ignore_system_fonts: true
         why: the SVG versions of the PDF figures, for HTML decks
         install: apt install poppler-utils
     steps:
+      - name: Python environment
+        run: [uv, sync]
+        check: [uv, sync, --check]
       - name: reveal.js for HTML decks
         run: [npm, ci]
         creates: node_modules
@@ -357,8 +360,10 @@ typst_ignore_system_fonts: true
     `deckz labs publish`, `deckz videos publish` and `deckz status` name
     a missing one with the fix.
   - `steps`: commands run from the git root, without a shell, in order.
-    A step whose `creates` path exists is done and skipped (`deckz setup
-    --force` runs it anyway); one without `creates` runs every time.
+    A step is done and skipped when its `creates` path exists, or its
+    `check` command exits 0 (both, when both are given; `deckz setup
+    --force` runs it anyway), and `deckz setup --check` reports it ok. One
+    with neither runs every time, and `--check` reports it as to run.
 - `worktree`: what `deckz worktree add` copies into a new worktree, on
   top of the checkout:
 
