@@ -11,6 +11,7 @@ from deckz.stamps import digest, write_stamp
 from deckz.status import (
     changed_paths,
     checks_section,
+    course_notes_section,
     deck_status,
     decks_section,
     status,
@@ -240,3 +241,65 @@ def test_checks_name_the_problems_of_your_changes_first(repo: Path) -> None:
     assert section.items[1].text.startswith("raw-latex: content/old-00.tex")
     assert not section.items[1].blocks_commit
     assert section.items[-1].text == "... and 6 more"
+
+
+def _chapter(repo: Path, path: str) -> None:
+    chapter = repo / "course-notes" / f"{path}.md"
+    chapter.parent.mkdir(parents=True, exist_ok=True)
+    chapter.write_text("# Chapter\n", encoding="utf8")
+
+
+def test_deck_status_lists_the_files_missing_a_chapter(repo: Path) -> None:
+    # abc has 4 content files: 3 chapters in French, 2 in English.
+    for path in ("intro", "advanced", "conclusion", "en/intro", "en/advanced"):
+        _chapter(repo, f"first-section/{path}")
+
+    _, sections = deck_status(
+        DeckSettings.from_yaml(repo / "company" / "abc"), checks=False, decks=False
+    )
+
+    notes = next(s for s in sections if s.key == "course-notes")
+    assert notes.summary == "3 chapters to write"
+    assert [item.text for item in notes.items] == [
+        "fr: about has no chapter (course-notes/about.md)",
+        "en: first-section/conclusion has no chapter "
+        "(course-notes/first-section/en/conclusion.md)",
+        "en: about has no chapter (course-notes/en/about.md)",
+    ]
+    assert "course_notes" in notes.items[0].fix
+
+
+def test_course_notes_flag_only_the_decks_that_have_some(repo: Path) -> None:
+    decks = [
+        DeckSettings.from_yaml(repo / "company" / name) for name in ("abc", "bilingual")
+    ]
+    # No course notes directory: no section.
+    assert course_notes_section(_settings(repo), decks) is None
+    # 1 of abc's 4 files with a chapter: abc has no course notes.
+    _chapter(repo, "first-section/intro")
+    section = course_notes_section(_settings(repo), decks)
+    assert section is not None
+    assert section.items == ()
+    # 2 of 4 in French: the 2 others are missing; English has no course notes.
+    _chapter(repo, "first-section/advanced")
+
+    section = course_notes_section(_settings(repo), decks)
+
+    assert section is not None
+    assert section.summary == "1 deck with course notes chapters to write"
+    assert [item.text for item in section.items] == [
+        "company/abc: content files with no course notes chapter, 2 in fr"
+    ]
+    assert "--workdir company/abc --lang fr" in section.items[0].fix
+
+
+def test_deck_status_without_course_notes_says_so(repo: Path) -> None:
+    (repo / "course-notes").mkdir()
+
+    _, sections = deck_status(
+        DeckSettings.from_yaml(repo / "company" / "abc"), checks=False, decks=False
+    )
+
+    notes = next(s for s in sections if s.key == "course-notes")
+    assert notes.summary.startswith("none: fewer than half")
+    assert notes.items == ()

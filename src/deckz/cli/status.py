@@ -35,6 +35,11 @@ def status(
     content files never reviewed or changed since their review (`deckz
     review status DECK` lists them).
 
+    With a course notes directory (`paths.course_notes_dir`), both also
+    list the decks' content files with no chapter, in each language where
+    at least half of a deck's files have theirs (`deckz show course-notes`
+    lists a deck's chapters).
+
     Args:
         deck: Report on this deck only
         since: Count your changes from this revision (e.g. `HEAD~5`, a

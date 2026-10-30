@@ -43,7 +43,7 @@ also applied by a git hook or a check, which every contributor passes.
 |---|---|
 | **Responsibility** | Where a person's work stands, and what is left to do, each item with its fix |
 | **Owns** | `StatusSection`/`StatusItem` (sections told apart by their `key`); "your changes" (`base_revision`, `changed_paths`) |
-| **Depends on** | `pipelines` (what is outdated), `analyzing` (checks, i18n, affected decks, overflow, reviews), `labs`, `videos`, `remotes`, the factories |
+| **Depends on** | `pipelines` (what is outdated), `analyzing` (checks, i18n, affected decks, overflow, reviews), `course_notes`, `labs`, `videos`, `remotes`, the factories |
 | **Never** | Touches the network unless `fetch` |
 | **Entry points** | [`status`][deckz.status.status], [`deck_status`][deckz.status.deck_status] (`deckz status [DECK]`) |
 | **Fails with** | `DeckzError` from what it reads (settings, git) |
@@ -52,7 +52,9 @@ studioz's Problems panel is `deckz status --json --no-decks`, so the JSON shape 
 section is a contract with studioz (see [studioz](studioz.md)). The `review` section
 (only with `review.dir`) is computed even under `--no-decks`: it parses each deck
 once and hashes only the files a report records, under a second for a few dozen
-decks; studioz shows only the keys it knows.
+decks; studioz shows only the keys it knows. The `course-notes` section (only with
+a course notes directory) is too: it parses each deck once more, and looks up both
+languages' chapters.
 
 ## `setting_up`
 

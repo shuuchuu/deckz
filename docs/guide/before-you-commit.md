@@ -17,7 +17,10 @@ says where your work stands, item by item, each with what to do:
   you changed whose code no longer matches their outputs;
 - the PDFs of the decks your changes reach that don't match them anymore;
 - with `review.dir` set, the content of those decks never reviewed, or changed since
-  its review (see [Reviews](reviews.md)).
+  its review (see [Reviews](reviews.md));
+- the content files of those decks with no course notes chapter, once a deck has
+  course notes in a language: at least half of its files (those not skipped) have
+  their chapter in it (`deckz show course-notes --workdir <deck>` lists them).
 
 "Your changes" are your uncommitted files plus the commits you haven't pushed
 (`--since <revision>` to look further back).
@@ -31,7 +34,8 @@ checks' problems in its files (deferred ones included: they're due now), what fa
 its English build, its files waiting for a port to the other language, and its built
 PDFs that don't match its
 content, with their shrunk frames and header or footer lines that wrap, and how many
-of its content files aren't reviewed at their current version.
+of its content files aren't reviewed at their current version, and, once it has course
+notes, its content files with no chapter.
 
 ## Committing
 

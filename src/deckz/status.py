@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from .analyzing.i18n_stale import StaleFile
     from .components.checks import Finding
     from .configuring.settings import DeckSettings, GlobalSettings
+    from .models import Lang
     from .upstream import Source
 
 _MAX_ITEMS = 15
@@ -38,7 +39,7 @@ class StatusSection:
     items: tuple[StatusItem, ...] = field(default=())
     key: str = ""
     """What the section is about, for a program, whatever its title: `checks`, \
-    `translation`, `labs`, `videos`, `decks` or `review`."""
+    `translation`, `labs`, `videos`, `decks`, `review` or `course-notes`."""
 
 
 def _git(git_dir: Path, *args: str, strip: bool = True) -> str | None:
@@ -680,6 +681,126 @@ def review_section(
     return StatusSection("Review", summary, _capped(items))
 
 
+_CHAPTER_FIX = (
+    "write it, or list the file under `deckz.yml`'s `course_notes`: `skip` (no "
+    "chapter ever) or `same_as` (another file's chapter covers it)"
+)
+
+
+def _missing_chapters(settings: "DeckSettings") -> dict["Lang", list[str]] | None:
+    """The deck's content files with no chapter, in its course notes' languages.
+
+    A deck has course notes in a language once at least half of its files
+    needing a chapter (those `course_notes.skip` doesn't skip) have one in
+    it: chapters are shared, so the few a deck gets from others don't make
+    a deck nobody writes course notes for behind.
+
+    Returns:
+        For each language the deck has course notes in, French first, its \
+        files with no chapter; None if the deck doesn't parse.
+    """
+    from .components.factory import DeckSettingsFactory
+    from .course_notes import ChapterStatus, entries
+    from .exceptions import DeckzError
+    from .models import LANGS
+
+    try:
+        deck = (
+            DeckSettingsFactory(settings, lang="fr")
+            .parser()
+            .from_deck_definition(settings.paths.deck_definition)
+        )
+    except DeckzError:
+        return None  # The `deck-definitions` check says why.
+    missing: dict[Lang, list[str]] = {}
+    # A deck's content paths are the same in both languages: one parse does.
+    for lang in LANGS:
+        needed = [
+            entry
+            for entry in entries(settings, deck, lang)
+            if entry.status is not ChapterStatus.SKIPPED
+        ]
+        absent = [e.path for e in needed if e.status is ChapterStatus.MISSING]
+        if needed and 2 * len(absent) <= len(needed):
+            missing[lang] = absent
+    return missing
+
+
+def course_notes_section(
+    settings: "GlobalSettings", decks: Sequence["DeckSettings"]
+) -> StatusSection | None:
+    """The decks with course notes that have content files with no chapter.
+
+    One item per deck, pointing to `deckz show course-notes`: a content file
+    added to a deck with course notes needs its chapter too. A deck has
+    course notes in a language once at least half of its files have their
+    chapter in it (`_missing_chapters`).
+
+    Returns:
+        Its section, None when the repository has no course notes directory.
+    """
+    if not settings.paths.course_notes_dir.is_dir():
+        return None
+    git_dir = settings.paths.git_dir
+    items = []
+    for deck in decks:
+        found = _missing_chapters(deck) or {}
+        missing = {lang: paths for lang, paths in found.items() if paths}
+        if not missing:
+            continue
+        where = deck.paths.current_dir.relative_to(git_dir)
+        counts = ", ".join(f"{len(paths)} in {lang}" for lang, paths in missing.items())
+        show = " or ".join(
+            f"`deckz show course-notes --workdir {where} --lang {lang}`"
+            for lang in missing
+        )
+        items.append(
+            StatusItem(
+                f"{where}: content files with no course notes chapter, {counts}",
+                f"{show} lists them; write each chapter, or list the file under "
+                "`deckz.yml`'s `course_notes` (`skip` or `same_as`)",
+            )
+        )
+    if not decks:
+        summary = "your changes reach no deck"
+    elif items:
+        summary = f"{_count(len(items), 'deck')} with course notes chapters to write"
+    else:
+        summary = "the decks your changes reach with course notes have every chapter"
+    return StatusSection("Course notes", summary, _capped(items))
+
+
+def _deck_course_notes_section(settings: "DeckSettings") -> StatusSection:
+    from .course_notes import chapter_path
+
+    missing = _missing_chapters(settings)
+    if missing is None:
+        return StatusSection("Course notes", "the deck doesn't parse")
+    if not missing:
+        return StatusSection(
+            "Course notes",
+            "none: fewer than half of its content files have a chapter, in either "
+            "language",
+        )
+    git_dir = settings.paths.git_dir
+    items = [
+        StatusItem(
+            f"{lang}: {path} has no chapter "
+            f"({chapter_path(settings, path, lang).relative_to(git_dir)})",
+            _CHAPTER_FIX,
+        )
+        for lang, paths in missing.items()
+        for path in paths
+    ]
+    langs = " and ".join(missing)
+    summary = (
+        f"{_count(len(items), 'chapter')} to write"
+        if items
+        else f"every content file of the deck has its chapter in {langs}"
+    )
+    return StatusSection("Course notes", summary, _capped(items))
+
+
 def status(
     settings: "GlobalSettings",
     *,
@@ -718,6 +839,8 @@ def status(
         sections["decks"] = decks_section(settings, changed, affected)
     if (review := review_section(settings, affected)) is not None:
         sections["review"] = review
+    if (notes := course_notes_section(settings, affected)) is not None:
+        sections["course-notes"] = notes
     return f"{_count(len(changed), 'changed file')}, {scope}", [
         replace(section, key=key) for key, section in sections.items()
     ]
@@ -786,8 +909,9 @@ def deck_status(
     """`deckz status DECK`: what's left before the deck is taught or uploaded.
 
     The checks' problems in its files (deferred ones included: they're due
-    now), its files waiting for a port to the other language, and its built
-    PDFs: outdated, or with shrunk frames and wrapping lines.
+    now), its files waiting for a port to the other language, its built
+    PDFs: outdated, or with shrunk frames and wrapping lines, and once it
+    has course notes, its content files with no chapter.
 
     Args:
         settings: The deck's settings.
@@ -846,6 +970,8 @@ def deck_status(
         sections["decks"] = StatusSection("Built decks", summary, _capped(items))
     if (review := review_section(settings, [settings])) is not None:
         sections["review"] = review
+    if settings.paths.course_notes_dir.is_dir():
+        sections["course-notes"] = _deck_course_notes_section(settings)
     return f"deck {where}", [
         replace(section, key=key) for key, section in sections.items()
     ]

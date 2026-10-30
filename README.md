@@ -884,7 +884,11 @@ repository's own main template, `templates/jinja2/course-notes.typ`
 PDF is `pdf/course-notes/<deck>-course-notes.pdf` (`paths.course_notes_pdf_dir`;
 `pdf/course-notes/en/` in English), which `--sync` leaves alone and `deckz
 upload` uploads next to the slides of its language. `deckz show course-notes` lists each content file of the deck with its
-chapter: `written`, `covered`, `skipped` or `missing`.
+chapter: `written`, `covered`, `skipped` or `missing`. A deck has course
+notes in a language once at least half of its files not skipped have their
+chapter in it (chapters are shared: a few come to any deck from the others);
+`deckz status` then flags its `missing` ones, so a content file added to the
+deck later doesn't go without its chapter.
 
 `deckz run --course-notes` builds them along with the slides, in one command
 (`--watch` then also watches the chapters), and `deckz run decks --course-notes`
@@ -1120,6 +1124,9 @@ The main commands:
   with their shrunk frames and wrapping lines. With `review.dir` set,
   both also count, for each deck, its content files never reviewed or
   changed since their review (`deckz review status DECK` lists them).
+  Once a deck has [course notes](#course-notes) (half of its chapters
+  written, in a language), both also list its content files with no
+  chapter (`deckz show course-notes` lists them).
   `deckz show affected
   [PATH...] [--since REV]` prints the decks a change to PATHs, or the
   changes since REV, reach.
