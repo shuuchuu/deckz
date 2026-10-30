@@ -113,6 +113,21 @@ SyntaxError: invalid decimal literal
     assert _check(repo, chapter) == []
 
 
+def test_a_shown_error_keeps_python_s_suggestion(repo: Path) -> None:
+    # A NameError's "Did you mean" needs the frame the name was looked up in.
+    chapter = """# C
+
+```pycon
+>>> total = 3
+>>> totl
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+NameError: name 'totl' is not defined. Did you mean: 'total'?
+```
+"""
+    assert _check(repo, chapter) == []
+
+
 def test_an_unexpected_error_is_reported_and_its_cascade_counted(repo: Path) -> None:
     chapter = """# C
 

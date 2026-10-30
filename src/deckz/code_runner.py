@@ -428,7 +428,10 @@ def _run(
             if exit_.code not in (None, 0):
                 error = f"SystemExit: {exit_.code}"
         except BaseException as exception:
-            error = traceback.format_exception_only(exception)[-1].strip()
+            # From the traceback, unlike `format_exception_only`: a
+            # NameError's "Did you mean" looks the name up in its frame.
+            shown = traceback.TracebackException.from_exception(exception)
+            error = [*shown.format_exception_only()][-1].strip()
         finally:
             signal.alarm(0)
             sys.argv = [""]
