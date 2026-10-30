@@ -250,6 +250,28 @@ def test_status_ranks_sections_by_decks_times_frames_to_review(repo: Path) -> No
     assert ranked["sec"].reports == (REPORT,)
 
 
+def test_a_stale_file_counts_the_frames_its_changes_touch(repo: Path) -> None:
+    _write(repo / A, "# A1\n\nOne.\n\n# A2\n\nTwo.\n\n# A3\n\nThree.\n")
+    _commit(repo, "three frames", A)
+    _mark(repo, A)
+
+    def changed() -> int | None:
+        found = review_status(_settings(repo), [repo / A])
+        return found.targets[0].files[0].changed_frames
+
+    _write(repo / A, "# A1\n\nOne.\n\n# A2\n\nTwo, changed.\n\n# A3\n\nThree.\n")
+    assert changed() == 1
+    _write(repo / A, "# A1\n\nOne.\n\n# A2\n\nTwo.\n\nMore.\n\n# A3\n\nThree.\n")
+    assert changed() == 1
+    _write(repo / A, "# A1\n\nOne.\n")
+    assert changed() == 2
+    _write(repo / A, "# A1\n\nOne!\n\n# A2\n\nTwo.\n\n# A3\n\nThree!\n")
+    assert changed() == 2
+    ranked = {r.section: r for r in review_status(_settings(repo), []).ranked}
+    # b.md (1 frame), unreviewed, counts whole; a.md its 2 changed frames.
+    assert (ranked["sec"].frames, ranked["sec"].score) == (3, 6)
+
+
 def test_diff_shows_what_changed_since_the_review(repo: Path) -> None:
     _mark(repo, A, B, C)
     _write(repo / A, "# A1\n\nText changed.\n\n# A2\n\nMore.\n")

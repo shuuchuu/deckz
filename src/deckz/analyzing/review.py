@@ -37,6 +37,7 @@ the reports covering them record.
 
 import re
 import subprocess
+from bisect import bisect_right
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
@@ -93,6 +94,10 @@ class FileReview:
     removed: int | None = None
     frames: int | None = None
     """A content file's frames (`# ` headings outside code blocks)."""
+    changed_frames: int | None = None
+    """Stale content file: the frames its changes since the review touch, in \
+    the reviewed or the current version, whichever has more; None if the \
+    reviewed version isn't in the repository's objects."""
 
     @property
     def report(self) -> str | None:
@@ -128,7 +133,7 @@ class RankedSection:
     files: tuple[FileReview, ...]
     """Its files some deck includes."""
     score: int
-    """`decks` times the frames of its stale and unreviewed files."""
+    """`decks` times its `frames` to review."""
 
     def count(self, state: State) -> int:
         """How many of its files are in `state`.
@@ -140,12 +145,8 @@ class RankedSection:
 
     @property
     def frames(self) -> int:
-        """The frames of its stale and unreviewed files."""
-        return sum(
-            review.frames or 0
-            for review in self.files
-            if review.state in ("stale", "unreviewed")
-        )
+        """The frames to review: all its unreviewed files', its stale ones' changed."""
+        return sum(_frames_to_review(review) for review in self.files)
 
     @property
     def reports(self) -> tuple[str, ...]:
@@ -758,6 +759,43 @@ def _line_counts(old: bytes, new: bytes) -> tuple[int, int]:
     return added, removed
 
 
+def _touched(starts: list[int], lines: list[str], begin: int, end: int) -> set[int]:
+    # The frames (0: the lines before the first heading) of lines[begin:end]
+    # that aren't blank; an empty range falls in the frame of the line before.
+    if begin == end:
+        return {bisect_right(starts, begin - 1)}
+    return {bisect_right(starts, i) for i in range(begin, end) if lines[i].strip()}
+
+
+def _changed_frames(old: bytes, new: bytes) -> int:
+    # The frames a line added or removed falls in, counted in each version.
+    from ..components.frame_markers import frame_headings
+
+    old_text = old.decode("utf8", "replace")
+    new_text = new.decode("utf8", "replace")
+    old_lines, new_lines = old_text.splitlines(), new_text.splitlines()
+    old_starts = [line for line, _ in frame_headings(old_text)]
+    new_starts = [line for line, _ in frame_headings(new_text)]
+    in_old: set[int] = set()
+    in_new: set[int] = set()
+    matcher = SequenceMatcher(None, old_lines, new_lines)
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag != "equal":
+            in_old |= _touched(old_starts, old_lines, i1, i2)
+            in_new |= _touched(new_starts, new_lines, j1, j2)
+    return max(len(in_old), len(in_new))
+
+
+def _frames_to_review(review: FileReview) -> int:
+    if review.state == "unreviewed":
+        return review.frames or 0
+    if review.state == "stale":
+        if review.changed_frames is not None:
+            return review.changed_frames
+        return review.frames or 0
+    return 0
+
+
 def review_files(
     settings: "GlobalSettings",
     paths: Sequence[str],
@@ -801,8 +839,12 @@ def review_files(
         elif (reviewed := old.get(stale[path])) is None:
             found.append(FileReview(path, "stale", marks, frames=frames))
         else:
-            added, removed = _line_counts(reviewed, absolute.read_bytes())
-            found.append(FileReview(path, "stale", marks, added, removed, frames))
+            text = absolute.read_bytes()
+            added, removed = _line_counts(reviewed, text)
+            changed = None if frames is None else _changed_frames(reviewed, text)
+            found.append(
+                FileReview(path, "stale", marks, added, removed, frames, changed)
+            )
     return found
 
 
@@ -964,8 +1006,9 @@ def ranking(
 
     A file belongs to the innermost shared section whose directory holds it
     (its own directory, when no section's does). A section's score is the
-    number of decks including at least one of its files times the frames of
-    its stale and unreviewed files.
+    number of decks including at least one of its files times its frames to
+    review: all those of its unreviewed files, and those the changes of its
+    stale files touch.
 
     Returns:
         The sections, by score, then decks, then path.
@@ -994,14 +1037,10 @@ def ranking(
     ranked = []
     for section, files in grouped.items():
         reviews = tuple(by_path[path] for path in files)
-        not_fresh = sum(
-            review.frames or 0
-            for review in reviews
-            if review.state in ("stale", "unreviewed")
-        )
+        to_review = sum(_frames_to_review(review) for review in reviews)
         ranked.append(
             RankedSection(
-                section, len(decks[section]), reviews, len(decks[section]) * not_fresh
+                section, len(decks[section]), reviews, len(decks[section]) * to_review
             )
         )
     ranked.sort(key=lambda r: (-r.score, -r.decks, r.section))

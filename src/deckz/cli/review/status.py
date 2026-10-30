@@ -46,13 +46,16 @@ def status(
             separated by tabs: per file, its state, path, `+<added>`,
             `-<removed>` (empty unless stale) and report (empty if none);
             per section, with no TARGET, its score, path, decks, fresh,
-            stale and unreviewed files, and frames to review
+            stale and unreviewed files, and frames to review (all of an
+            unreviewed file's, those a stale file's changes touch)
         json: Print one JSON object instead: with no TARGET, `{"sections":
             [{section, decks, score, frames, fresh, stale, unreviewed,
             reports, files}]}`; else `{"targets": [{target, kind ("deck" or
             "paths"), sections: [{section, files}] and others (a deck), or
             files (paths)}]}`. A file is `{path, state, added, removed,
-            frames, report, reports: [{report, date, base, blob}]}`, its
+            frames, changed_frames, report, reports: [{report, date, base,
+            blob}]}` (`changed_frames`: the frames a stale content file's
+            changes touch), its
             reports the most recent mark first. Both have `problems`: the
             reports that couldn't be read
         workdir: Path to move into before running the command
@@ -100,6 +103,7 @@ def _file_json(review: "FileReview") -> dict[str, object]:
         "added": review.added,
         "removed": review.removed,
         "frames": review.frames,
+        "changed_frames": review.changed_frames,
         "report": review.report,
         "reports": [
             {
@@ -150,7 +154,10 @@ def _state(review: "FileReview") -> str:
         return review.state
     if review.added is None:
         return "stale (reviewed version not in this clone)"
-    return f"stale +{review.added} -{review.removed}"
+    if review.changed_frames is None:
+        return f"stale +{review.added} -{review.removed}"
+    frames = "frame" if review.changed_frames == 1 else "frames"
+    return f"stale +{review.added} -{review.removed}, {review.changed_frames} {frames}"
 
 
 def _plain_line(review: "FileReview") -> str:
@@ -236,7 +243,8 @@ def _print_ranking(
             f"{r.count('unreviewed'):>10}  {r.frames:>16}"
         )
     print(
-        "\nscore: the decks including the section times the frames of its stale "
-        f"and unreviewed files. `deckz review status {content}/<section>` lists "
-        "them, with its subsections'."
+        "\nscore: the decks including the section times its frames to review "
+        "(all of an unreviewed file's, those a stale file's changes touch). "
+        f"`deckz review status {content}/<section>` lists its files, with its "
+        "subsections'."
     )

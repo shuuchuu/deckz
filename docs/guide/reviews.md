@@ -46,13 +46,16 @@ deckz review status content/python/basics # the files decks include under a dire
 ```
 
 A file is **fresh** when it's at the version reviewed, **stale** when it changed since
-(with the lines added and removed), **unreviewed** when no report records it, and
+(with the lines added and removed, and for a content file the frames those changes
+touch), **unreviewed** when no report records it, and
 **deleted** when a report records a file that's gone. When several reports record a
 file, the most recent mark counts.
 
 With no argument, the sections some deck uses are ranked by the number of decks
-including one of their files, times the frames of their stale and unreviewed files:
-the top of the list is what a review helps most. For a deck, its content files come
+including one of their files, times their frames to review: all the frames of their
+unreviewed files, and those the changes of their stale files touch (a one-line fix
+in a ten-frame file is one frame to review, not ten). The top of the list is what a
+review helps most. For a deck, its content files come
 by section (as `deckz show paths` resolves them), then the other files (lab
 notebooks, say) the reports covering them record: which notebooks go with which
 slides is the repository's own convention, so deckz shows what the reports say.
