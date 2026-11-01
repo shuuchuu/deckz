@@ -337,7 +337,9 @@ function setState(state, lines = []) {
   build.dataset.state = state;
   build.textContent = LABELS[state] ?? state;
   summary.textContent = SUMMARIES[state] ?? state;
-  errors.hidden = failedDot.hidden = state !== "failed";
+  // A stopped build says why: replaced by another page's, or deckz's exit.
+  const explained = state === "failed" || (state === "stopped" && lines.length > 0);
+  errors.hidden = failedDot.hidden = !explained;
   // deckz names the file and line first: a link to them, as in Problems.
   const located = /^([^\s:]+):(\d+):/.exec(lines[0] ?? "");
   if (located) {
@@ -353,8 +355,8 @@ function setState(state, lines = []) {
   }
   errorLines.hidden = lines.length < 2;
   errorLines.textContent = lines.slice(1).join("\n");
-  // A build failing shows why, as VS Code shows a task's output.
-  if (state === "failed" && previous !== "failed") showPanel(true, "construction");
+  // A build failing or stopping shows why, as VS Code shows a task's output.
+  if (explained && state !== previous) showPanel(true, "construction");
 }
 
 const source = new EventSource(deck.dataset.events);

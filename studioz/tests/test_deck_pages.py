@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 from studioz.app import _state, create_app, watch_events
 from studioz.watches import Snapshot, State, Watches
 
+from studioz import watches
+
 ORIGIN = {"Origin": "http://localhost:8421"}
 DECK = "/espaces/demo/formations/client/abc"
 
@@ -96,6 +98,50 @@ def test_events_announce_the_build_and_its_pdf(
     assert ("state", {"state": "built", "errors": []}) in events
     assert events[-1] == ("pdf", {"url": f"/x/pdf?lang=fr&v={pdf.stat().st_mtime_ns}"})
     assert watch.clients == 0
+
+
+def test_events_restart_a_watch_that_stopped_by_itself(
+    repository: Path, workspace: Path, tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(watches, "_RESTART_AFTER", 0.0)
+    script = tmp_path / "fake_deckz.py"
+    script.write_text(_FAKE_DECKZ, encoding="utf8")
+    dying = tmp_path / "dying_deckz.py"
+    dying.write_text('print("13:00:00 INFO     Initial build", flush=True)\n')
+    pdf = workspace / "client" / "abc" / "pdf" / "abc-handout.pdf"
+    commands = iter([[sys.executable, str(dying)]])
+    manager = Watches(
+        lambda *_: next(commands, [sys.executable, str(script), str(pdf)])
+    )
+    deck = workspace / "client" / "abc"
+    first = manager.watch(workspace, deck, "fr")
+    events: list[tuple[str, Any]] = []
+
+    async def disconnected() -> bool:
+        await asyncio.sleep(0)
+        return any(name == "pdf" for name, _ in events)
+
+    async def follow() -> None:
+        async for event in watch_events(
+            first,
+            "/x/pdf?lang=fr",
+            disconnected,
+            restart=lambda: manager.watch(workspace, deck, "fr"),
+        ):
+            name, data = (line.split(": ", 1)[1] for line in event.split("\n")[:2])
+            events.append((name, json.loads(data)))
+
+    try:
+        asyncio.run(asyncio.wait_for(follow(), 10))
+        restarted = manager.get(workspace)
+        assert restarted is not None
+        assert restarted is not first
+        assert restarted.clients == 0
+    finally:
+        manager.stop_all()
+
+    assert ("state", {"state": "built", "errors": []}) in events
+    assert first.clients == 0
 
 
 def test_closing_studioz_stops_its_watches(

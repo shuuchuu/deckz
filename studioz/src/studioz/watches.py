@@ -7,6 +7,12 @@ deck or language is opened there, and stopped once no page has followed it
 for a while (`Watches.stop_idle`). It runs the workspace's own deckz, so it
 goes through the machine-wide compilation limit like any other build.
 
+A watch that ends says why on the page: replaced by another page's, or deckz
+stopped by itself, with its exit code and last lines. The page then starts a
+new one by itself (`Watch.restartable`), unless the watch ended within
+`_RESTART_AFTER` of its start: a deckz that can't even start is an error to
+show, not to retry in a loop.
+
 What a page shows of a build comes from the watch's log, the one a person
 sees in a terminal: deckz logs when a build starts, ends, or fails. A new PDF
 is announced only once its build finished, never while it's being written.
@@ -40,6 +46,10 @@ _RECORD = re.compile(
 _STARTED = frozenset({"Initial build", "Detected changes, starting a new build"})
 _FINISHED = frozenset({"Initial build finished", "Build finished"})
 _STOP_TIMEOUT = 5.0
+_RESTART_AFTER = 30.0
+"""Seconds a watch must have run for a page to start another once it stopped."""
+_TAIL = 15
+"""The log lines a watch that stopped by itself shows."""
 
 
 class State(Enum):
@@ -55,7 +65,7 @@ class Snapshot:
 
     state: State
     errors: tuple[str, ...]
-    """The failed build's error lines, empty unless FAILED."""
+    """The failed build's error lines when FAILED; when STOPPED, why."""
     built: int
     """How many builds finished: a new value means a new PDF to show."""
     pdf_version: int
@@ -150,6 +160,10 @@ class Watch:
         self.clients = 0
         self.unwatched_since = monotonic()
         self._lock = Lock()
+        self._started = monotonic()
+        self._lifetime: float | None = None
+        self._stopped_by: str | None = None
+        """None until studioz stops it: then why, for the pages following it."""
         self._state = State.BUILDING
         self._errors: list[str] = []
         self._built = 0
@@ -183,8 +197,14 @@ class Watch:
                 self._parse(line)
         code = self._process.wait()
         with self._lock:
+            tail = list(self.log)[-_TAIL:]
             self.log.append(f"(deckz s'est arrêté, code {code})")
             self._state = State.STOPPED
+            self._lifetime = monotonic() - self._started
+            if self._stopped_by is None:
+                self._errors = [f"deckz s'est arrêté de lui-même (code {code}).", *tail]
+            else:
+                self._errors = [self._stopped_by] if self._stopped_by else []
 
     def _parse(self, line: str) -> None:
         with self._lock:
@@ -226,10 +246,30 @@ class Watch:
     def alive(self) -> bool:
         return self._process.poll() is None
 
-    def stop(self) -> None:
-        """Stop the watch and its Typst workers, gently first."""
+    def restartable(self) -> bool:
+        """Whether a page following it should start another one.
+
+        Returns:
+            Whether deckz stopped by itself, after running a while.
+        """
+        with self._lock:
+            return (
+                self._stopped_by is None
+                and self._lifetime is not None
+                and self._lifetime >= _RESTART_AFTER
+            )
+
+    def stop(self, why: str = "") -> None:
+        """Stop the watch and its Typst workers, gently first.
+
+        Args:
+            why: What the pages still following it say, if anything.
+        """
         if not self.alive():
             return
+        with self._lock:
+            if self._stopped_by is None:
+                self._stopped_by = why
         group = os.getpgid(self._process.pid)
         self._process.send_signal(signal.SIGINT)
         try:
@@ -255,6 +295,9 @@ class Watches:
     def watch(self, workspace: Path, deck: Path, lang: Lang) -> Watch:
         """The workspace's watch of `deck` in `lang`, started if needed.
 
+        A page asking for it counts as following it for `idle_after`, until \
+        it does: `stop_idle` mustn't stop a watch a page is about to follow.
+
         Returns:
             The watch, replacing any other one of the workspace.
         """
@@ -266,9 +309,14 @@ class Watches:
                 and current.lang == lang
                 and current.alive()
             ):
+                current.unwatched_since = monotonic()
                 return current
             if current:
-                current.stop()
+                name = deck.relative_to(workspace).as_posix()
+                current.stop(
+                    f"Une autre page de cet espace construit maintenant {name} "
+                    f"({lang}) : rechargez celle-ci pour reprendre sa construction."
+                )
             started = Watch(workspace, deck, lang, self._command(workspace, lang))
             self._watches[workspace] = started
             return started

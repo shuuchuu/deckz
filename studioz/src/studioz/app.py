@@ -414,15 +414,18 @@ async def watch_events(
     pdf_url: str,
     disconnected: Callable[[], Awaitable[bool]],
     on_built: Callable[[], object] | None = None,
+    restart: Callable[[], Watch] | None = None,
 ) -> AsyncIterator[str]:
     """`watch`'s state and new PDFs as server-sent events, until `disconnected`.
 
     Following them keeps the watch running. `on_built` is called, in a \
-    thread, after each new PDF is announced.
+    thread, after each new PDF is announced. When deckz stops by itself \
+    (`Watch.restartable`), `restart` gives the watch to follow instead, \
+    and studioz's terminal says why it stopped.
 
     Yields:
-        `state` events (building, built or failed, with the errors), and \
-        `pdf` events with the URL of a new PDF.
+        `state` events (building, built, failed or stopped, with the \
+        errors), and `pdf` events with the URL of a new PDF.
     """
     watch.follow()
     try:
@@ -431,6 +434,20 @@ async def watch_events(
         quiet = 0.0
         while not await disconnected():
             snapshot = watch.snapshot()
+            if restart is not None and watch.restartable():
+                name = watch.deck.relative_to(watch.workspace).as_posix()
+                print(
+                    f"studioz: construction en direct de {name} ({watch.lang}) "
+                    "relancée :",
+                    *(f"  {line}" for line in snapshot.errors),
+                    sep="\n",
+                    flush=True,
+                )
+                replacement = await asyncio.to_thread(restart)
+                replacement.follow()
+                watch.unfollow()
+                watch = replacement
+                continue
             if (state := _state(snapshot, watch.workspace)) != last_state:
                 last_state = state
                 quiet = 0.0
@@ -471,6 +488,7 @@ async def events(
             lambda: studio.gone(request),
             # A build of a workspace with no change is its last commit's.
             lambda: studio.baselines.capture(found.worktree.path, directory, lang),
+            lambda: studio.watches.watch(found.worktree.path, directory, lang),
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},

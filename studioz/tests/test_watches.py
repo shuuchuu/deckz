@@ -28,6 +28,9 @@ else:
     pdf.write_bytes(b"%PDF-1.4")
     print("Compiling… ━━━━━━━━ 100%", flush=True)
     print("13:00:01 INFO     Initial build finished   pipelines.py:462", flush=True)
+if mode == "exit":
+    print("Traceback: something went wrong", flush=True)
+    sys.exit(3)
 try:
     time.sleep(60)
 except KeyboardInterrupt:
@@ -140,5 +143,61 @@ def test_stop_idle_spares_followed_watches(tmp_path: Path, deck: Path) -> None:
         assert manager.stop_idle() == [watch]
         assert not watch.alive()
         assert manager.get(workspace) is None
+    finally:
+        manager.stop_all()
+
+
+def test_a_watch_ending_by_itself_says_why(
+    tmp_path: Path, deck: Path, monkeypatch: Any
+) -> None:
+    watch = _watch(tmp_path, deck, "exit")
+    _until(lambda: watch.snapshot().state is State.STOPPED)
+
+    errors = watch.snapshot().errors
+    assert errors[0] == "deckz s'est arrêté de lui-même (code 3)."
+    assert errors[-1] == "Traceback: something went wrong"
+    # Too soon after its start: an error to show, not to retry.
+    assert not watch.restartable()
+    monkeypatch.setattr(watches, "_RESTART_AFTER", 0.0)
+    _until(lambda: watch._lifetime is not None)
+    monkeypatch.setattr(watch, "_lifetime", 1.0)
+    assert watch.restartable()
+
+
+def test_a_replaced_watch_names_the_page_that_took_it(
+    tmp_path: Path, deck: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(watches, "_RESTART_AFTER", 0.0)
+    manager = Watches(_fake(tmp_path, deck, "ok"))
+    workspace = deck.parent.parent
+    try:
+        first = manager.watch(workspace, deck, "fr")
+        manager.watch(workspace, deck, "en")
+        _until(lambda: first.snapshot().state is State.STOPPED)
+
+        (why,) = first.snapshot().errors
+        assert why.startswith(
+            "Une autre page de cet espace construit maintenant client/abc (en)"
+        )
+        assert not first.restartable()
+    finally:
+        manager.stop_all()
+
+
+def test_stop_idle_spares_a_watch_a_page_just_asked_for(
+    tmp_path: Path, deck: Path
+) -> None:
+    manager = Watches(_fake(tmp_path, deck, "ok"), idle_after=0.5)
+    workspace = deck.parent.parent
+    try:
+        watch = manager.watch(workspace, deck, "fr")
+        watch.follow()
+        watch.unfollow()
+        sleep(0.6)
+
+        # A page asks for it again, and follows it a moment later.
+        assert manager.watch(workspace, deck, "fr") is watch
+        assert manager.stop_idle() == []
+        assert watch.alive()
     finally:
         manager.stop_all()

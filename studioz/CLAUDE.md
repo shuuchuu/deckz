@@ -30,6 +30,10 @@ own deckz, every option spelled out) for the deck page in front of the person,
 and reads its state from the log (`deckz.pipelines.watch`'s messages: keep them
 in step); the page follows it through server-sent events and shows the
 handout in pdf.js, and the watch stops once no page has followed it for 30 s.
+A watch that ends says why in the Construction tab (replaced by another page's,
+or deckz's exit code and last lines), and one where deckz stopped by itself
+after running 30 s is started again by the page following it, studioz's
+terminal printing why.
 A link out of studioz (the PDF's, the agent's Markdown, a notebook's) opens a new
 tab.
 The PDF's own outline (Typst's headings: parts and sections, not frames) is the
