@@ -13,7 +13,7 @@ from pypdfium2 import PdfDocument
 from pytest import fixture, raises
 
 from deckz.checking import preview_settings
-from deckz.cli import main
+from deckz.cli import _home_relative, main
 from deckz.configuring.settings import DeckSettings
 from deckz.pipelines import OutputKinds, run
 
@@ -576,7 +576,7 @@ def test_run_defaults_come_from_the_user_dotenv_after_the_checkouts(
     main(("run", "--dry-run"))
 
     assert "DECKZ_LANG=en (.env)" in caplog.text
-    assert f"DECKZ_RUN_PRINT=false ({user_dir / '.env'})" in caplog.text
+    assert f"DECKZ_RUN_PRINT=false ({_home_relative(user_dir / '.env')})" in caplog.text
 
 
 def test_run_announces_the_defaults_a_dotenv_file_set(
