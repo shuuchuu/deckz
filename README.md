@@ -1557,7 +1557,9 @@ The main commands:
 - `deckz labs gpu up|queue|run|status|fetch|report|down` (extra:
   `deckz[gpu]`): run notebooks on a rented GPU machine the way Colab runs
   them -- Colab's runtime image, `labs.gpu.cpus` CPUs per run, peak RAM
-  and GPU memory recorded (Colab's T4 runtime has 12.7 GB and 15 GB). `up` rents the cheapest
+  and GPU memory recorded (Colab's T4 runtime has 12.7 GB and 15 GB; GPU memory
+  is what the card had in use, nearly all of it with TensorFlow, which reserves
+  it whatever the model needs). `up` rents the cheapest
   reliable offer (a machine that fails to boot is destroyed and avoided
   from then on); `queue [--short] NOTEBOOKS...` sends notebooks (`--short`
   sets their `SHORT_RUN = False` line to `True`; a notebook's metadata can

@@ -3,10 +3,12 @@
 The machine boots Colab's own runtime image by default (`labs.gpu.image`), so
 the packages are Colab's, and each notebook runs on as many CPUs as Colab's
 T4 runtime has (`labs.gpu.cpus`), with its peak RAM recorded to compare with
-Colab's 12.7 GB, and its peak GPU memory with a T4's 15 GB. A pass rents a
-machine (`up`), queues notebooks (`queue`), starts the queue (`start`), follows
-it (`status`, `fetch`, `note_finished`),
-reports on the executed copies (`report`), and destroys the machine (`down`).
+Colab's 12.7 GB, and its peak GPU memory with a T4's 15 GB: what the GPU had in
+use, which says little of a framework reserving more than it needs (TensorFlow
+takes nearly all of it, whatever the model; PyTorch keeps what it freed). A pass
+rents a machine (`up`), queues notebooks (`queue`), starts the queue (`start`),
+follows it (`status`, `fetch`, `note_finished`), reports on the executed copies
+(`report`), and destroys the machine (`down`).
 A machine bills until it is destroyed.
 
 Renting goes through a `GpuBackend`; `VastBackend` (Vast.ai, through the
@@ -222,9 +224,10 @@ PICK
   # Every process the run starts inherits the tag, a server it leaves behind too.
   run_tag="$name.$start"
   # GPU memory has no `ru_maxrss`: sampled, in MiB, the whole GPU's (a run has it
-  # alone). A peak shorter than the interval goes unseen.
+  # alone). A peak shorter than the interval goes unseen. Without the queue's lock:
+  # outliving a queue killed, it would keep any new one from starting.
   nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits -l 2 \\
-    > "out/$name.gpumem" 2>/dev/null &
+    > "out/$name.gpumem" 2>/dev/null 9>&- &
   sampler=$!
   # llama.cpp starts a thread per host CPU, not per CPU it may use: dozens on 2.
   (cd /content && DECKZ_GPU_RUN="$run_tag" LLAMA_ARG_THREADS=@CPUS@ \\

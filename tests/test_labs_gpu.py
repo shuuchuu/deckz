@@ -594,7 +594,10 @@ def test_queue_samples_gpu_memory_until_the_run_ends(tmp_path: Path) -> None:
     stop = QUEUE[QUEUE.index('  kill "$sampler"') :].split("\n", 1)[0]
     fake = tmp_path / "bin" / "nvidia-smi"
     fake.parent.mkdir()
-    fake.write_text("#!/bin/bash\necho 512\nexec sleep 300\n")
+    # Holding the queue's lock, it would keep a new queue from starting.
+    fake.write_text(
+        "#!/bin/bash\n[ -e /proc/$$/fd/9 ] && echo locked || echo 512\nexec sleep 300\n"
+    )
     fake.chmod(0o755)
     (tmp_path / "out").mkdir()
 
@@ -602,7 +605,7 @@ def test_queue_samples_gpu_memory_until_the_run_ends(tmp_path: Path) -> None:
         [
             "bash",
             "-c",
-            f"name=nb.ipynb\n{sampling}\n"
+            f"exec 9>queue.lock\nname=nb.ipynb\n{sampling}\n"
             'until [ -s "out/$name.gpumem" ]; do sleep 0.01; done\n'
             f'{stop}\nwait "$sampler"\necho stopped $?',
         ],
