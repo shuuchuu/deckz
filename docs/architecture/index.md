@@ -67,12 +67,13 @@ flowchart TB
     mid["<b>checking</b> | <b>course_notes</b> | <b>course_notes_code</b> | <b>labs</b> | <b>videos</b> | <b>hooks_install</b>"]
     upstream["<b>upstream</b><br/>the branch labs and videos are published from"]
     components["<b>components</b> | <b>extras</b> | <b>worktrees</b> | <b>commits</b> | <b>remotes</b>"]
+    inputs["<b>render_inputs</b><br/>what a fragment's rendering read"]
     low["<b>drive_links</b> | <b>stamps</b>"]
     configuring["<b>configuring</b><br/>settings, variables"]
     utils["<b>utils</b>"]
     exceptions["<b>exceptions</b>"]
     models["<b>models</b> | <b>code_runner</b>"]
-    cli --> agent --> tasks --> pipelines --> analyzing --> mid --> upstream --> components --> low --> configuring --> utils --> exceptions --> models
+    cli --> agent --> tasks --> pipelines --> analyzing --> mid --> upstream --> components --> inputs --> low --> configuring --> utils --> exceptions --> models
 ```
 
 Imports into deckz's core are mostly lazy (inside the function that needs them), so

@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Literal, overload
 
 from ..exceptions import VideoSceneError
 from ..models import Lang
+from ..render_inputs import depends_on
 from ..stamps import digest, is_fresh, python_sources
 
 if TYPE_CHECKING:
@@ -187,6 +188,8 @@ def video_file(settings: "GlobalSettings", video: str, language: Lang) -> Path:
     if scene is None:
         msg = f"no scene under {settings.paths.scenes_dir} renders the video {video!r}"
         raise LookupError(msg)
+    # Its languages decide the render a fragment names.
+    depends_on(scene.module)
     if not scene.languages:
         return settings.paths.videos_dir / f"{video}.mp4"
     if language not in scene.languages:

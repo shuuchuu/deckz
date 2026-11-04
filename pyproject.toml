@@ -103,6 +103,7 @@ layers = [
   "checking | course_notes | course_notes_code | labs | videos | hooks_install",
   "upstream",
   "components | extras | worktrees | commits | remotes",
+  "render_inputs",
   "drive_links | stamps",
   "configuring",
   "utils",

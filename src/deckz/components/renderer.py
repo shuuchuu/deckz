@@ -8,6 +8,7 @@ from jinja2 import BaseLoader, Environment, TemplateNotFound
 
 from ..exceptions import HookError
 from ..models import AssetsMetadata
+from ..render_inputs import file_digest
 from .hooks import load_hook
 from .protocols import GlobalFactoryProtocol, RendererProtocol
 
@@ -83,6 +84,10 @@ class Renderer(_BaseRenderer):
     what keeps `deckz asset search`/`deckz asset deps` and the i18n tooling \
     accurate.
 
+    Any other file a filter reads, it declares with \
+    [`depends_on`][deckz.render_inputs.depends_on], or the fragments reading \
+    it aren't rendered again when it changes.
+
     See [`hooks`][deckz.components.hooks] for the contract's versioning and \
     trust boundary.
     """
@@ -107,6 +112,14 @@ class Renderer(_BaseRenderer):
             ),
             assets_metadata_retriever.assets_metadata,
         )
+
+    def fingerprint(self) -> str:
+        """What every render depends on: the source of the Jinja environment module.
+
+        Returns:
+            Its digest, empty if it's missing (rendering then fails).
+        """
+        return file_digest(self._jinja_env_module_path) or ""
 
     def environment_for(self, suffix: str) -> Environment:
         """The target repo's Jinja environment for a content suffix (e.g. `.md`).

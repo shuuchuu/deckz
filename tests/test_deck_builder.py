@@ -26,6 +26,7 @@ from deckz.models import (
     ResolvedPath,
     UnresolvedPath,
 )
+from deckz.render_inputs import depends_on
 
 
 class FakeRenderer:
@@ -33,6 +34,9 @@ class FakeRenderer:
         self.fragments: list[Path] = []
         self.links: dict[str, Any] = {}
         self.fail_next = False
+        self.environment_version = "1"
+        self.reads: dict[str, Path] = {}
+        """The file a fragment, by name, reads while it renders."""
 
     def render_to_str(self, template_path: Path, /, **_: Any) -> tuple[str, Any]:
         return template_path.read_text(encoding="utf8"), {}
@@ -42,6 +46,8 @@ class FakeRenderer:
     ) -> Any:
         if template_path.suffix == ".j2":
             self.fragments.append(template_path)
+            if (read := self.reads.get(template_path.name.split(".")[0])) is not None:
+                depends_on(read)
             if self.fail_next:
                 self.fail_next = False
                 msg = "oops"
@@ -59,6 +65,9 @@ class FakeRenderer:
             )
         output_path.write_text(f"{text}{kwargs.get('variables', {})}", encoding="utf8")
         return {}
+
+    def fingerprint(self) -> str:
+        return self.environment_version
 
     def environment_for(self, suffix: str) -> Any:
         raise NotImplementedError
@@ -347,6 +356,149 @@ def test_a_missing_fragment_is_rendered_again(tmp_path: Path) -> None:
     assert planned.changed_fragments == (repo.content / "a.md",)
     assert [p.name for p in repo.renderer.fragments] == ["a.md.j2"]
     assert (build_dir / "a.typ").read_text(encoding="utf8") == "A{}"
+
+
+def test_a_changed_input_renders_the_fragments_reading_it(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    notebook = tmp_path / "notebook.ipynb"
+    notebook.write_text("GPU", encoding="utf8")
+    repo.renderer.reads["a"] = notebook
+    files = (repo.file("a.md"), repo.file("b.md"))
+    repo.builder(*files, part_handouts=False).build_deck()
+    repo.renderer.fragments.clear()
+
+    notebook.write_text("no GPU", encoding="utf8")
+    builder = repo.builder(*files, part_handouts=False)
+    [planned] = builder.plan()
+    assert builder.build_deck()
+
+    assert not planned.full_render
+    assert planned.changed_fragments == (repo.content / "a.md",)
+    assert [p.name for p in repo.renderer.fragments] == ["a.md.j2"]
+
+
+def test_a_rebuild_with_no_change_renders_nothing(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    notebook = tmp_path / "notebook.ipynb"
+    notebook.write_text("GPU", encoding="utf8")
+    repo.renderer.reads["a"] = notebook
+    repo.renderer.reads["b"] = tmp_path / "no-such-file"
+    repo.write("c.md", "C")
+    files = (repo.file("a.md"), repo.file("b.md"), repo.file("c.md"))
+    repo.builder(*files).build_deck()
+    repo.renderer.fragments.clear()
+    repo.converter.converted.clear()
+
+    builder = repo.builder(*files)
+    planned = builder.plan()
+    assert builder.build_deck()
+
+    assert not any(p.full_render or p.changed_fragments for p in planned)
+    assert repo.renderer.fragments == []
+    assert repo.converter.converted == []
+
+
+def test_an_input_appearing_renders_the_fragment_again(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    translation = tmp_path / "notebook-en.ipynb"
+    repo.renderer.reads["a"] = translation
+    files = (repo.file("a.md"), repo.file("b.md"))
+    repo.builder(*files, part_handouts=False).build_deck()
+    repo.renderer.fragments.clear()
+
+    translation.write_text("{}", encoding="utf8")
+    assert repo.builder(*files, part_handouts=False).build_deck()
+
+    assert [p.name for p in repo.renderer.fragments] == ["a.md.j2"]
+
+
+def test_a_fragment_stops_depending_on_what_it_no_longer_reads(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    notebook = tmp_path / "notebook.ipynb"
+    notebook.write_text("GPU", encoding="utf8")
+    repo.renderer.reads["a"] = notebook
+    file = repo.file("a.md")
+    repo.builder(file, part_handouts=False).build_deck()
+
+    del repo.renderer.reads["a"]
+    repo.write("a.md", "A, edited")
+    repo.builder(file, part_handouts=False).build_deck()
+    repo.renderer.fragments.clear()
+    notebook.write_text("no GPU", encoding="utf8")
+    assert repo.builder(file, part_handouts=False).build_deck()
+
+    assert repo.renderer.fragments == []
+
+
+def test_a_build_dir_with_no_record_renders_every_fragment_once(
+    tmp_path: Path,
+) -> None:
+    # A build dir from before the records: its fragments may be stale, and
+    # nothing tells which.
+    repo = _repo(tmp_path)
+    files = (repo.file("a.md"), repo.file("b.md"))
+    repo.builder(*files, part_handouts=False).build_deck()
+    build_dir = tmp_path / "build" / "deck-handout"
+    for record in build_dir.glob("*.inputs"):
+        record.unlink()
+    repo.renderer.fragments.clear()
+
+    assert repo.builder(*files, part_handouts=False).build_deck()
+    assert len(repo.renderer.fragments) == 2
+
+    repo.renderer.fragments.clear()
+    assert repo.builder(*files, part_handouts=False).build_deck()
+    assert repo.renderer.fragments == []
+
+
+def test_a_changed_fragment_killed_before_its_render_is_rendered_next(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    # The copy matches the source, the output is the old one, and no error
+    # handler ran: only the missing record tells.
+    repo = _repo(tmp_path)
+    file = repo.file("a.md")
+    repo.builder(file, part_handouts=False).build_deck()
+    repo.write("a.md", "A, edited")
+
+    def killed(*_: Any) -> None:
+        raise SystemExit
+
+    monkeypatch.setattr(deck_builder, "render_dependencies", killed)
+    with raises(SystemExit):
+        repo.builder(file, part_handouts=False).build_deck()
+    monkeypatch.undo()
+
+    assert repo.builder(file, part_handouts=False).build_deck()
+    build_dir = tmp_path / "build" / "deck-handout"
+    assert (build_dir / "a.typ").read_text(encoding="utf8") == "A, edited{}"
+
+
+def test_a_failed_conversion_leaves_no_record(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    file = repo.file("a.md")
+    repo.converter.fail_next = True
+
+    with raises(DeckzError):
+        repo.builder(file, part_handouts=False).build_deck()
+
+    build_dir = tmp_path / "build" / "deck-handout"
+    assert not list(build_dir.glob("*.inputs"))
+
+
+def test_a_jinja_environment_change_renders_everything(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    files = (repo.file("a.md"), repo.file("b.md"))
+    repo.builder(*files, part_handouts=False).build_deck()
+    repo.renderer.fragments.clear()
+
+    repo.renderer.environment_version = "2"
+    builder = repo.builder(*files, part_handouts=False)
+    [planned] = builder.plan()
+    builder.build_deck()
+
+    assert planned.full_render
+    assert len(repo.renderer.fragments) == 2
 
 
 def test_html_inlines_converted_fragments_and_publishes_a_directory(

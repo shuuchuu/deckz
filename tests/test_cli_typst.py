@@ -23,7 +23,13 @@ from deckz.components.compiler import keep_warm
 from deckz.components.factory import GlobalSettingsFactory
 from deckz.configuring.settings import DeckSettings
 from deckz.exceptions import CompilationError
-from deckz.pipelines import OutputKinds, _run_once, run
+from deckz.pipelines import (
+    OutputKinds,
+    _run_once,
+    deck_targets,
+    outdated_pdfs,
+    run,
+)
 
 _NO_PDF = ("--no-presentation", "--no-print")
 _RUN_ARGS = ("run", *_NO_PDF)
@@ -166,6 +172,66 @@ def test_filter_change_reconverts_unchanged_fragments(working_dir: Path) -> None
     text = _handout_text(working_dir)
     assert "the answer is 42! FILTERED" in text
     assert "Markdown too! FILTERED" in text
+
+
+_READING_ENVIRONMENT = """
+from pathlib import Path
+
+from deckz.render_inputs import depends_on
+from jinja2 import Environment
+
+
+def _marking(path):
+    depends_on(Path(path))
+    return Path(path).read_text(encoding="utf8").strip()
+
+
+def environment_for(suffix):
+    env = Environment(autoescape=False, trim_blocks=True, lstrip_blocks=True)
+    env.filters["marking"] = _marking
+    return env
+"""
+
+
+def test_a_file_a_filter_read_reaches_the_pdf(
+    working_dir: Path, capsys: CaptureFixture[str]
+) -> None:
+    # In one process, like a `--watch`, through pandoc and Typst.
+    root = working_dir.parent.parent
+    (root / "templates" / "jinja2" / "env.py").write_text(
+        _READING_ENVIRONMENT, encoding="utf8"
+    )
+    marking = root / "marking.txt"
+    marking.write_text("Colab alone\n", encoding="utf8")
+    (working_dir / "content" / "about.md").write_text(
+        f'# About\n\n{{{{ "{marking}" | marking }}}}\n', encoding="utf8"
+    )
+    main(_RUN_ARGS)
+    assert "Colab alone" in _handout_text(working_dir)
+    targets = deck_targets(DeckSettings.from_yaml(working_dir), ["fr"])
+    assert outdated_pdfs(targets) == []
+
+    marking.write_text("Colab and Codespaces\n", encoding="utf8")
+
+    assert working_dir / "pdf" / "abc-handout.pdf" in outdated_pdfs(targets)
+    capsys.readouterr()
+    main((*_RUN_ARGS, "--dry-run"))
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[:2] == [
+        "company/abc/pdf/abc-handout.pdf: render 1 of 2 fragments",
+        "  company/abc/content/about.md",
+    ]
+
+    main(_RUN_ARGS)
+    text = _handout_text(working_dir)
+    assert "Colab and Codespaces" in text
+    assert "Colab alone" not in text
+
+    capsys.readouterr()
+    main((*_RUN_ARGS, "--dry-run"))
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "company/abc/pdf/abc-handout.pdf: render 0 of 2 fragments"
+    assert outdated_pdfs(targets) == []
 
 
 _BROKEN_TYPST = "```{=typst}\n#no-such-function()\n```\n"

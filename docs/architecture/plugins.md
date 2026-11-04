@@ -19,6 +19,12 @@ caller also checks what the function returns.
 | `templates/checks.py` | `checks(settings) -> Mapping[str, Callable[..., list[str]]]` | [`ChecksRunner`][deckz.components.checks.ChecksRunner] | House-rule checks, blocking unless `checks.deferred` lists them |
 | `templates/hooks.py` | `deny_bash(words, cwd, settings) -> str \| None` | [`agent_hooks`][deckz.agent_hooks] | Further Bash commands an agent may not run |
 
+A Jinja filter reading a file declares it with
+[`depends_on`][deckz.render_inputs.depends_on], before reading, even if the file may not
+exist: deckz then renders again the fragments that read it when it changes. A read that
+isn't declared leaves those fragments stale. `env.py` itself needs no declaration: a
+change of it renders every fragment.
+
 Loading a plugin runs arbitrary code from the repository, with the user's permissions.
 This is a trust boundary: deckz runs only on repositories one trusts, like any build
 script.
@@ -50,6 +56,7 @@ In shuuchuu/slides, the plugins and scripts import:
 | `deckz.configuring.settings` | `GlobalSettings` |
 | `deckz.exceptions` | `DeckzError` |
 | `deckz.models` | `File`, `Node`, `NodeInclude`, `Section`, `SectionDefinition`, `SectionInclude`… |
+| `deckz.render_inputs` | `depends_on` |
 | `deckz.stamps` | `digest`, `is_fresh`, `python_sources`, `write_stamp` |
 | `deckz.utils` | `all_decks`, `load_yaml`, `copy_file_if_changed`, `import_module_and_submodules` |
 | `deckz.videos` | `register_scene`, `scenes`, `renders`, `video_file`, `quality`, `site_path`, `fetch_published`, `published_blobs`, `unpublished_reason` |

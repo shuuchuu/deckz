@@ -35,6 +35,7 @@ from ..models import (
     Title,
     TitleOrContent,
 )
+from ..render_inputs import inputs_changed, recording, write_record
 from ..utils import copy_file_if_changed, file_changed, sync_tree
 from .protocols import (
     CompilerProtocol,
@@ -98,21 +99,26 @@ class OutputFormat:
         return self.output_dir / f"{name}{self.output_suffix}"
 
 
-def render_fingerprint(converter_fingerprint: str, variables: Mapping[str, Any]) -> str:
+def render_fingerprint(
+    converter_fingerprint: str, renderer_fingerprint: str, variables: Mapping[str, Any]
+) -> str:
     """A stable hash of what renders every fragment besides its own source.
 
     A build copy is re-rendered when its source changed, but a change of the \
-    Markdown converter's command or filters, or of the deck's variables, \
-    touches no source: a build dir whose stored fingerprint differs renders \
-    every fragment again.
+    Markdown converter's command or filters, of the Jinja environment, or of \
+    the deck's variables, touches no source: a build dir whose stored \
+    fingerprint differs renders every fragment again. What only some \
+    fragments read is their inputs instead (`deckz.render_inputs`).
 
     Returns:
-        A hex digest of `converter_fingerprint` and `variables`'s content.
+        A hex digest of both fingerprints and `variables`'s content.
     """
     return sha256(
-        dumps([converter_fingerprint, variables], sort_keys=True, default=str).encode(
-            "utf8"
-        )
+        dumps(
+            [converter_fingerprint, renderer_fingerprint, variables],
+            sort_keys=True,
+            default=str,
+        ).encode("utf8")
     ).hexdigest()
 
 
@@ -160,11 +166,12 @@ class PlannedCompile:
 
     full_render: bool
     """Whether every fragment would be rendered: on a first build, or after a \
-    change of the Markdown converter's command or filters."""
+    change of the Markdown converter's command or filters, of the Jinja \
+    environment or of the variables."""
 
     changed_fragments: tuple[ResolvedPath, ...]
-    """Fragments new or changed since this output's last build, rendered even \
-    without `full_render`."""
+    """Fragments new or changed since this output's last build, or reading a \
+    file that did (`deckz.render_inputs`), rendered even without `full_render`."""
 
     links_changed: bool = False
     """Whether the Drive links the output shows changed since its last build \
@@ -253,9 +260,7 @@ class DeckBuilder(DeckBuilderProtocol):
             fingerprint_path = build_dir / ".render-fingerprint"
             full_render = not fingerprint_path.is_file() or fingerprint_path.read_text(
                 encoding="utf8"
-            ) != render_fingerprint(
-                output_format.markdown_converter.fingerprint(), self._variables
-            )
+            ) != self._render_fingerprint(output_format)
             changed = tuple(
                 sorted(
                     dependency
@@ -292,10 +297,7 @@ class DeckBuilder(DeckBuilderProtocol):
             )
             return True
         self._render_fingerprints = {
-            output_format: render_fingerprint(
-                self._formats[output_format].markdown_converter.fingerprint(),
-                self._variables,
-            )
+            output_format: self._render_fingerprint(self._formats[output_format])
             for output_format in {item.compile_type.format for item in items.values()}
         }
         results = []
@@ -328,6 +330,13 @@ class DeckBuilder(DeckBuilderProtocol):
                 )
                 self._failures.append((item_name, result.diagnostics))
         return all(result.ok for _, result in results)
+
+    def _render_fingerprint(self, output_format: OutputFormat) -> str:
+        return render_fingerprint(
+            output_format.markdown_converter.fingerprint(),
+            self._renderer.fingerprint(),
+            self._variables,
+        )
 
     def _build_item_pair(self, pair: tuple[str, CompileItem]) -> CompileResult:
         return self._build_item(*pair)
@@ -385,8 +394,8 @@ class DeckBuilder(DeckBuilderProtocol):
         build_dir = setup_build_dir(self._build_dir, name, self._dirs_to_link)
         main_path = build_dir / f"{name}{output_format.template.suffix}"
         # `copy_dependencies` only re-copies (and so re-renders/re-converts) a
-        # fragment whose source differs from its build copy, but a pandoc
-        # command, filter or variable change doesn't touch any source: force
+        # fragment whose source or render inputs changed, but a pandoc command,
+        # filter, Jinja environment or variable change touches neither: force
         # a full pass whenever the render fingerprint moved since this item's
         # last successful render.
         fingerprint_path = build_dir / ".render-fingerprint"
@@ -397,7 +406,7 @@ class DeckBuilder(DeckBuilderProtocol):
         if render_stale:
             self._logger.debug(
                 "%s: rendering every fragment, first build or the Markdown "
-                "converter or the variables changed",
+                "converter, the Jinja environment or the variables changed",
                 name,
             )
         copied = copy_dependencies(
@@ -584,19 +593,32 @@ def _rendered_outputs(build_path: Path, fragment_suffix: str) -> list[Path]:
     return [rendered_path]
 
 
+def _inputs_record(build_path: Path) -> Path:
+    # What rendering a build copy read (`deckz.render_inputs`), next to it.
+    return build_path.with_suffix(".inputs")
+
+
 def needs_render(dependency: Path, build_path: Path, fragment_suffix: str) -> bool:
     """Whether `dependency`'s build copy must be rendered (and converted) again.
 
     A build copy matching its source stands for a rendered and converted \
     fragment (`render_dependencies` removes the copies it couldn't render), \
-    unless one of its outputs is missing, e.g. after a build killed midway.
+    unless one of its outputs is missing, or what its rendering read changed \
+    (`deckz.render_inputs`). Its record of those inputs is written last and \
+    removed before a copy changes, so a build killed midway leaves none, and \
+    a build dir from before these records renders every fragment once.
 
     Returns:
-        True if the copy is missing or differs from `dependency`, or an \
-        output of its rendering is missing.
+        True if the copy is missing or differs from `dependency`, an output \
+        of its rendering is missing, or its inputs changed or aren't known.
     """
-    return file_changed(dependency, build_path) or not all(
-        output.is_file() for output in _rendered_outputs(build_path, fragment_suffix)
+    return (
+        file_changed(dependency, build_path)
+        or not all(
+            output.is_file()
+            for output in _rendered_outputs(build_path, fragment_suffix)
+        )
+        or inputs_changed(_inputs_record(build_path))
     )
 
 
@@ -614,10 +636,15 @@ def copy_dependencies(
         copy = CopiedDependency(build_path, dependency)
         if force:
             build_path.parent.mkdir(parents=True, exist_ok=True)
+            _inputs_record(build_path).unlink(missing_ok=True)
             copyfile(dependency, build_path)
             copied.append(copy)
         elif needs_render(dependency, build_path, fragment_suffix):
-            _logger.debug("Re-rendering %s: new, changed or incomplete", dependency)
+            _logger.debug(
+                "Re-rendering %s: new, changed, incomplete, or an input changed",
+                dependency,
+            )
+            _inputs_record(build_path).unlink(missing_ok=True)
             copy_file_if_changed(dependency, build_path)
             copied.append(copy)
     return copied
@@ -675,7 +702,10 @@ def render_dependencies(
         rendered_path = item_path.with_suffix("")
         try:
             try:
-                renderer.render_to_path(item_path, rendered_path, variables=variables)
+                with recording() as inputs:
+                    renderer.render_to_path(
+                        item_path, rendered_path, variables=variables
+                    )
             except TemplateError as error:
                 msg = _render_message(error, item_path, copied.source)
                 raise RenderError(msg) from error
@@ -683,6 +713,7 @@ def render_dependencies(
                 markdown_converter.convert(
                     rendered_path, rendered_path.with_suffix(fragment_suffix)
                 )
+            write_record(_inputs_record(item_path), inputs)
         except BaseException:
             for unrendered in to_render[index:]:
                 unrendered.build_path.unlink(missing_ok=True)

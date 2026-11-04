@@ -10,7 +10,7 @@ and what keeps them from writing it at the same time.
 
 | Where | What | Written by | Notes |
 |---|---|---|---|
-| `<deck>/.build/` | Copied, rendered and converted fragments, rendered main templates, `.render-fingerprint`, `.links`, `.lock` | `DeckBuilder`, `pipelines.deck_lock` | Scratch: `deckz clean` removes it |
+| `<deck>/.build/` | Copied, rendered and converted fragments, their `.inputs` records, rendered main templates, `.render-fingerprint`, `.links`, `.lock` | `DeckBuilder`, `pipelines.deck_lock` | Scratch: `deckz clean` removes it |
 | `<deck>/pdf/`, `<deck>/pdf/course-notes/` | The PDFs, with `<main>.markers.json` | `DeckBuilder`, `TypstCompiler` | Stale ones removed by `--sync` |
 | `<deck>/html/<name>/` | Packaged HTML decks | `HtmlPackager`, `deck_builder.publish` | |
 | `<git_dir>/.run/{file,section,shared,all}/` | Scratch build trees of previews and synthetic decks | `checking.run_scratch_dir`, `preview_settings` | `deckz clean all` |
@@ -42,9 +42,10 @@ checkout, a `git stash`, or a copy into a worktree changes times:
 
 - a fragment is rendered again when its build copy differs from its source
   (`utils.file_changed` on its `build_copy_path`; `needs_render`, the test both `plan`
-  and `build_deck` apply), when an output of its rendering is missing, or when the build
-  directory's `.render-fingerprint` changed (the converter's command and filters, the
-  deck's variables);
+  and `build_deck` apply), when an output of its rendering is missing, when a file its
+  rendering read changed or its record of them is missing (`render_inputs`), or when the
+  build directory's `.render-fingerprint` changed (the converter's command and filters,
+  the Jinja environment module, the deck's variables);
 - an asset or a video is rebuilt when its stamp doesn't match the digest of its inputs
   (`stamps`), unless another checkout of the repository, or the store of builds a
   removed worktree set aside, holds one whose stamp does, which is copied instead
@@ -57,7 +58,8 @@ checkout, a `git stash`, or a copy into a worktree changes times:
 Every fragment is copied to the build directory before any is rendered. When a render
 fails, the copies of the failing fragment and of those not yet rendered are removed: a
 copy matching its source would otherwise count as rendered, and the next build would
-keep a stale output.
+keep a stale output. A fragment's record of its inputs is removed before its copy is
+touched and written once it is converted, which covers a build killed outright.
 
 ## Locks
 

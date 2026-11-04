@@ -63,6 +63,26 @@ helpers (`parse_deck`, `all_decks`, `all_deck_settings`) belong to a higher laye
 [Known exceptions](index.md#known-exceptions)). A new helper about one domain goes in
 that domain's module, not here.
 
+## `render_inputs`
+
+[`render_inputs`][deckz.render_inputs] tells a fragment's output from its source's: what
+its rendering read besides that source, each file by the digest of its bytes. Filters
+declare their reads with `depends_on`, and deckz's own code does too
+(`AssetsMetadataRetriever` for a credit file, `videos.video_file` for a scene). The deck
+builder writes what a render declared to `<fragment>.md.inputs`, next to the build copy,
+and `inputs_changed` compares it on the next build. A fragment with no record counts as
+changed, which covers a build killed midway and a build directory from before records.
+
+deckz can't see a read without its declaration, so a choice had to be made between
+declaring and observing. Auditing `open()` (`sys.addaudithook`) would need no declaration,
+but misses a file that doesn't exist and anything a memoized function read for an earlier
+fragment, which are the reads that go wrong silently.
+
+The check is on `--watch`'s fast path: digests and records stay in memory while a file's
+time and size don't change, so a rebuild costs one `stat` per fragment and per input.
+Times only ever skip a read within a process, unlike a stored `(time, size)`, which a
+checkout would invalidate.
+
 ## `stamps`
 
 [`stamps`][deckz.stamps] decides whether a built file is up to date from a digest of its

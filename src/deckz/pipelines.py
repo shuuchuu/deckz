@@ -341,7 +341,8 @@ def outdated_pdfs(targets: Iterable[BuildTarget]) -> list[Path]:
 
     Either no build of the deck produces them anymore (see `stale_pdfs`), \
     or a content fragment they include is new or changed since they were \
-    built, or the Drive links they show (`deckz.drive_links`), or they were \
+    built, or a file it read (`deckz.render_inputs`), or the Drive links \
+    they show (`deckz.drive_links`), or they were \
     never built here (no build directory, e.g. after `deckz clean`). Their \
     deck's yaml files and the main template aren't compared, only the \
     content fragments and the links. A course notes target's PDF is \

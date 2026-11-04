@@ -76,7 +76,7 @@ into this checkout only a finished change. Before merging one that changes behav
 | `analyzing.md` | The analyses, the content checks (blocking/deferred, the gates), fr/en pairing and `Lang-sync` |
 | `components.md` | Protocols and factories, each component, the deck builder's outputs, Typst workers |
 | `libraries.md` | `labs`, `videos`, `extras`, `worktrees`, `commits`, `remotes` |
-| `foundations.md` | `configuring`, `models`, `exceptions`, `utils`, `stamps`, `drive_links` |
+| `foundations.md` | `configuring`, `models`, `exceptions`, `utils`, `render_inputs`, `stamps`, `drive_links` |
 | `plugins.md` | What a managed repository plugs in (`templates/*.py`, `deckz.yml` commands), what it imports from deckz |
 | `studioz.md` | How studioz uses deckz, and what deckz keeps stable for it |
 | `state.md` | What deckz writes where, freshness, locks, processes |

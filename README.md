@@ -587,6 +587,25 @@ This is the hook that keeps `deckz asset search`/`deckz asset deps` (and
 the i18n tooling) accurate: skip it, and asset usage/licensing detection
 silently misses whatever your filter references.
 
+A filter reading any other file (a notebook's metadata, a configuration file)
+declares it, right before reading, even if the file may not exist:
+
+```python
+from pathlib import Path
+
+from deckz.render_inputs import depends_on
+
+
+def needs_gpu(notebook: Path) -> bool:
+    depends_on(notebook)
+    return "gpuType" in json.loads(notebook.read_text())["metadata"]
+```
+
+`deckz` then renders the fragments that read a file again when it changes, and
+only those. Skip it, and they silently keep their old output: `deckz` compares
+a fragment with its source, and can't see what a filter reads. A change of
+`env.py` itself renders every fragment.
+
 ### Assets builders
 
 `deckz` itself has no opinion on what assets a deck needs (generated

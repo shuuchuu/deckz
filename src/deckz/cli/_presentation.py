@@ -293,7 +293,8 @@ def print_plan(
         if item.full_render:
             print(
                 f"{display(item.output_path)}: render all {item.fragments} "
-                "fragments (first build or Markdown converter changed)"
+                "fragments (first build, or the Markdown converter, the Jinja "
+                "environment or the variables changed)"
             )
             continue
         links = ", Drive links changed" if item.links_changed else ""

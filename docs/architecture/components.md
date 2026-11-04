@@ -6,8 +6,8 @@ as their only construction points.
 | | |
 |---|---|
 | **Responsibility** | Parse decks, render templates, convert Markdown, compile, package HTML, build and search assets, run checks |
-| **Owns** | A deck's build directory (`.build/`): rendered fragments, `.render-fingerprint`, `.links`, `<main>.markers.json`; the compilation slots; the Typst worker processes |
-| **Depends on** | `configuring`, `models`, `utils`, `stamps`, `drive_links`, `exceptions` |
+| **Owns** | A deck's build directory (`.build/`): rendered fragments and their `.inputs` records, `.render-fingerprint`, `.links`, `<main>.markers.json`; the compilation slots; the Typst worker processes |
+| **Depends on** | `configuring`, `models`, `utils`, `stamps`, `render_inputs`, `drive_links`, `exceptions` |
 | **Never** | Decides what to build (that is `pipelines`), prints, or exits |
 | **Entry points** | [`GlobalSettingsFactory`][deckz.components.factory.GlobalSettingsFactory], [`DeckSettingsFactory`][deckz.components.factory] |
 | **Fails with** | `DeckzError` subclasses: `DeckParsingError`, `RenderError`, `HookError`, `InvalidConfigurationError`… A compilation failure is a `CompileResult` that isn't ok, which `pipelines` turns into a `CompilationError` |
@@ -45,7 +45,7 @@ factory, and nothing else changes.
 | Component | Protocol | Responsibility |
 |---|---|---|
 | [`Parser`][deckz.components.parser.Parser] | `ParserProtocol` | Turn `deck.yml` and section `.yml` files into the `Deck` model, resolving each path to shared or local content. Parses in one language; `lenient` lets a title or translation map missing it fall back |
-| [`Renderer`][deckz.components.renderer.Renderer] | `RendererProtocol` | Render Jinja templates with the repository's own environment (`templates/jinja2/env.py`), injecting `assets_metadata_retriever` |
+| [`Renderer`][deckz.components.renderer.Renderer] | `RendererProtocol` | Render Jinja templates with the repository's own environment (`templates/jinja2/env.py`), injecting `assets_metadata_retriever`; its `fingerprint` invalidates every fragment when that module changes |
 | [`PandocConverter`][deckz.components.markdown_converter] | `MarkdownConverterProtocol` | Convert a rendered fragment with `pandoc_command` (or `html_pandoc_command`) and its filters; its `fingerprint` invalidates every fragment when they change |
 | [`FrameMarkingConverter`][deckz.components.frame_markers.FrameMarkingConverter] | `MarkdownConverterProtocol` | Wraps the Typst converter: an invisible `<deckz-frame>` marker after each `# Title` |
 | [`TypstCompiler`][deckz.components.compiler.TypstCompiler] | `CompilerProtocol` | Compile a main `.typ` to PDF in a child process, query and record its markers |

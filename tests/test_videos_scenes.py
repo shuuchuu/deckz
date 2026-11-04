@@ -7,6 +7,7 @@ from pytest import raises
 
 from deckz.configuring.settings import GlobalPaths, GlobalSettings
 from deckz.exceptions import VideoSceneError
+from deckz.render_inputs import recording
 from deckz.stamps import digest, write_stamp
 from deckz.videos.scenes import (
     out_of_date,
@@ -117,6 +118,18 @@ def test_video_file_default_language_path(tmp_path: Path) -> None:
     path = video_file(settings, "nn/demo", "fr")
 
     assert path == settings.paths.videos_dir / "nn" / "demo.mp4"
+
+
+def test_video_file_is_an_input_of_the_fragment_naming_it(tmp_path: Path) -> None:
+    # A scene's languages decide the render a fragment names.
+    init_repository(str(tmp_path))
+    module = tmp_path / "figures" / "scenes" / "nn" / "demo.py"
+    _write(module, _SIMPLE_SCENE)
+
+    with recording() as inputs:
+        video_file(_settings(tmp_path), "nn/demo", "fr")
+
+    assert set(inputs) == {module}
 
 
 def test_video_file_per_language_path(tmp_path: Path) -> None:

@@ -70,9 +70,11 @@ sequenceDiagram
 2. **Each target** compiles under `deck_lock`, an `flock` on `<build_dir>/.lock`, so
    that two builds of one deck (a `--watch` and a full build) wait for each other.
 3. **The deck builder** copies every fragment into the build directory first. It
-   renders those whose source changed, or all of them when the render fingerprint
-   (`render_fingerprint`, in `.render-fingerprint`) changed (the converter's command and filters, and the deck's variables). It renders
-   the main template last, and then compiles each output.
+   renders those whose source or render inputs changed
+   ([`render_inputs`][deckz.render_inputs]), or all of them when the render fingerprint
+   (`render_fingerprint`, in `.render-fingerprint`) changed (the converter's command and
+   filters, the Jinja environment module, and the deck's variables). It renders the main
+   template last, and then compiles each output.
 4. **Stale PDFs** are removed only after every target compiled (`--sync`, on by
    default): the PDFs of the targets' output directories, in the languages built, that
    no full build of the deck would write. A narrower build (`--parts`, one language)
@@ -149,8 +151,10 @@ command, the chapter's `requirements` in place of `{with}`. The runner runs the
 ## `watch`
 
 [`watch`][deckz.pipelines] is generic: it reruns a function whenever a file under
-the watched directories changes. `run deck`, `run file`, `run section` and `run assets`
-call it with their own one-shot pipeline function, which parses again on each change.
+the watched directories changes. A render input elsewhere (a repository's notebooks)
+triggers no rebuild of its own: the next one sees it. `run deck`, `run file`, `run
+section` and `run assets` call it with their own one-shot pipeline function, which
+parses again on each change.
 The `run`, `run_file`… `run_all` functions are `build` over their targets, kept for
 `watch` to rerun. It holds `compiler.keep_warm()` for its whole run, so each PDF keeps a warm Typst worker
 and rebuilds are incremental. studioz reads the progress of a `deckz run --watch` from
