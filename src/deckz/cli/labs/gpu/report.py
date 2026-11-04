@@ -13,9 +13,9 @@ def report(
     machine: str | None = None,
     workdir: Path = Path(),
 ) -> None:
-    """Report on executed notebooks: exit code, run time, peak RAM, what raised.
+    """Report on executed notebooks: exit code, run time, peak memory, what raised.
 
-    Reads each executed notebook and its `.done`/`.maxrss`/`.shell` files, as
+    Reads each executed notebook and its `.done`/`.gpumem`/`.maxrss`/`.shell` files, as
     fetched into a machine's `out/` (every one fetched by default): the shell
     commands that failed (`!cmd`, `%pip`), which don't raise, are listed too.
     Write a demo's outputs back into the repository with `deckz labs outputs

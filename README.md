@@ -1557,7 +1557,7 @@ The main commands:
 - `deckz labs gpu up|queue|run|status|fetch|report|down` (extra:
   `deckz[gpu]`): run notebooks on a rented GPU machine the way Colab runs
   them -- Colab's runtime image, `labs.gpu.cpus` CPUs per run, peak RAM
-  recorded (Colab's T4 runtime has 12.7 GB). `up` rents the cheapest
+  and GPU memory recorded (Colab's T4 runtime has 12.7 GB and 15 GB). `up` rents the cheapest
   reliable offer (a machine that fails to boot is destroyed and avoided
   from then on); `queue [--short] NOTEBOOKS...` sends notebooks (`--short`
   sets their `SHORT_RUN = False` line to `True`; a notebook's metadata can
@@ -1569,7 +1569,7 @@ The main commands:
   report to `notes.md`, running the hooks of finished runs and sending
   the notebooks held for them, until done under `--watch`; `fetch` copies
   the executed notebooks; `report [--plain]` gives each one's exit code,
-  run time, peak RAM, the cells that raised and the slowest ones; `down`
+  run time, peak RAM and GPU memory, the cells that raised and the slowest ones; `down`
   destroys the machine, which bills until then. `--machine NAME` (default
   `main`) runs several machines at once; `status`, `report` and `down`
   without it act on every one. Each machine's state and files live in

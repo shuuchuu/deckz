@@ -15,6 +15,7 @@ from pytest import (
     MonkeyPatch,
     approx,
     fixture,
+    mark,
     raises,
 )
 
@@ -562,9 +563,59 @@ def test_report_reads_exit_time_ram_errors_and_slowest_cells(tmp_path: Path) -> 
     assert run.slowest[0].seconds == 90
     assert format_report(run).splitlines()[0] == (
         "#### nn__demo-fr.full.ipynb: exit 0, 95 s, peak RAM 13.0 GiB,"
-        " 2/3 code cells ran"
+        " peak GPU memory ?, 2/3 code cells ran"
     )
     assert run.shell_failures == ()
+
+
+def test_report_takes_the_peak_of_the_gpu_memory_samples(tmp_path: Path) -> None:
+    path = _executed(tmp_path)
+    path.with_name(path.name + ".gpumem").write_text("1\n6144\n[N/A]\n2048\n")
+
+    run = report(path)
+
+    assert run.peak_gpu_gib == approx(6)
+    assert "peak GPU memory 6.0 GiB," in format_report(run)
+
+
+@mark.parametrize("samples", ["", "[N/A]\n"])
+def test_report_without_a_gpu_memory_sample_tells_nothing(
+    tmp_path: Path, samples: str
+) -> None:
+    path = _executed(tmp_path)
+    path.with_name(path.name + ".gpumem").write_text(samples)
+
+    assert report(path).peak_gpu_gib is None
+
+
+def test_queue_samples_gpu_memory_until_the_run_ends(tmp_path: Path) -> None:
+    start = QUEUE.index("  nvidia-smi --query-gpu")
+    sampling = QUEUE[start : QUEUE.index("  sampler=$!\n") + len("  sampler=$!\n")]
+    stop = QUEUE[QUEUE.index('  kill "$sampler"') :].split("\n", 1)[0]
+    fake = tmp_path / "bin" / "nvidia-smi"
+    fake.parent.mkdir()
+    fake.write_text("#!/bin/bash\necho 512\nexec sleep 300\n")
+    fake.chmod(0o755)
+    (tmp_path / "out").mkdir()
+
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f"name=nb.ipynb\n{sampling}\n"
+            'until [ -s "out/$name.gpumem" ]; do sleep 0.01; done\n'
+            f'{stop}\nwait "$sampler"\necho stopped $?',
+        ],
+        cwd=tmp_path,
+        env={**os.environ, "PATH": f"{fake.parent}:{os.environ['PATH']}"},
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    )
+
+    assert result.stdout.strip() == "stopped 143"
+    assert (tmp_path / "out" / "nb.ipynb.gpumem").read_text() == "512\n"
 
 
 def test_report_reads_the_failed_shell_commands(tmp_path: Path) -> None:
@@ -802,7 +853,8 @@ def test_queue_again_clears_the_earlier_results(repo: Path) -> None:
     assert clear[0] == "ssh"
     assert clear[-1].endswith(
         "rm -f demo-fr.full.ipynb demo-fr.full.ipynb.done"
-        " demo-fr.full.ipynb.log demo-fr.full.ipynb.maxrss"
+        " demo-fr.full.ipynb.gpumem demo-fr.full.ipynb.log"
+        " demo-fr.full.ipynb.maxrss"
         " demo-fr.full.ipynb.shell"
     )
 

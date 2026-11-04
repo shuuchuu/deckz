@@ -3,8 +3,9 @@
 The machine boots Colab's own runtime image by default (`labs.gpu.image`), so
 the packages are Colab's, and each notebook runs on as many CPUs as Colab's
 T4 runtime has (`labs.gpu.cpus`), with its peak RAM recorded to compare with
-Colab's 12.7 GB. A pass rents a machine (`up`), queues notebooks (`queue`),
-starts the queue (`start`), follows it (`status`, `fetch`, `note_finished`),
+Colab's 12.7 GB, and its peak GPU memory with a T4's 15 GB. A pass rents a
+machine (`up`), queues notebooks (`queue`), starts the queue (`start`), follows
+it (`status`, `fetch`, `note_finished`),
 reports on the executed copies (`report`), and destroys the machine (`down`).
 A machine bills until it is destroyed.
 
@@ -68,7 +69,7 @@ Runner = Callable[..., subprocess.CompletedProcess[str]]
 DEFAULT_MACHINE = "main"
 _MACHINE_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
 
-_RESULT_EXTS = (".done", ".log", ".maxrss", ".shell")
+_RESULT_EXTS = (".done", ".gpumem", ".log", ".maxrss", ".shell")
 """What a run leaves next to its executed notebook in `out/`."""
 
 REDACTED = "[deckz: redacted {}]"
@@ -220,11 +221,17 @@ PICK
   echo "$(date -Is) cpus $cpu_list for $name"
   # Every process the run starts inherits the tag, a server it leaves behind too.
   run_tag="$name.$start"
+  # GPU memory has no `ru_maxrss`: sampled, in MiB, the whole GPU's (a run has it
+  # alone). A peak shorter than the interval goes unseen.
+  nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits -l 2 \\
+    > "out/$name.gpumem" 2>/dev/null &
+  sampler=$!
   # llama.cpp starts a thread per host CPU, not per CPU it may use: dozens on 2.
   (cd /content && DECKZ_GPU_RUN="$run_tag" LLAMA_ARG_THREADS=@CPUS@ \\
     PYTHON_CPU_COUNT=@CPUS@ taskset -c "$cpu_list" timeout @TIMEOUT@ \\
     python3 /work/execute.py "$name" "/work/out/$name") > "out/$name.log" 2>&1
   code=$?
+  kill "$sampler" 2>/dev/null
   # What the run left running (e.g. `ollama serve`, holding GPU memory) would
   # outlive it into the next notebook's, unlike on Colab's fresh VM: kill it.
   for environ in $(grep -lsxzF "DECKZ_GPU_RUN=$run_tag" /proc/[0-9]*/environ); do
@@ -447,6 +454,7 @@ class RunReport:
     exit_code: int | None
     seconds: int | None
     peak_ram_gib: float | None
+    peak_gpu_gib: float | None
     cells_ran: int
     code_cells: int
     errors: tuple[CellError, ...] = ()
@@ -1407,15 +1415,15 @@ def _cell_seconds(cell: dict[str, Any]) -> float:
 
 
 def report(path: Path, *, slowest: int = 5) -> RunReport:
-    """Read an executed notebook and its `.done`/`.maxrss`/`.shell` files.
+    """Read an executed notebook and its `.done`/`.gpumem`/`.maxrss`/`.shell` files.
 
     Args:
         path: The executed notebook, as fetched into `out/`.
         slowest: How many of the slowest cells to report.
 
     Returns:
-        Its exit code and run time, peak RAM, the cells that raised, the \
-        shell commands that failed, and the slowest cells.
+        Its exit code and run time, peak RAM and GPU memory, the cells that \
+        raised, the shell commands that failed, and the slowest cells.
     """
     nb = json.loads(path.read_text(encoding="utf-8"))
     done = path.with_name(path.name + ".done")
@@ -1451,6 +1459,7 @@ def report(path: Path, *, slowest: int = 5) -> RunReport:
             if maxrss.is_file()
             else None
         ),
+        peak_gpu_gib=_peak_gpu_gib(path.with_name(path.name + ".gpumem")),
         cells_ran=sum(1 for _, cell in code if cell.get("execution_count")),
         code_cells=len(code),
         errors=errors,
@@ -1466,6 +1475,15 @@ def report(path: Path, *, slowest: int = 5) -> RunReport:
     )
 
 
+def _peak_gpu_gib(samples: Path) -> float | None:
+    # None for a run from before samples, or a machine with no GPU: an empty file,
+    # or `[N/A]` lines where the driver can't tell.
+    if not samples.is_file():
+        return None
+    mib = [int(line) for line in samples.read_text("utf-8").split() if line.isdigit()]
+    return max(mib) / 2**10 if mib else None
+
+
 def format_report(run: RunReport) -> str:
     """A run's report as compact, stable text lines (notes, `--plain`).
 
@@ -1475,9 +1493,10 @@ def format_report(run: RunReport) -> str:
     exit_code = "?" if run.exit_code is None else run.exit_code
     seconds = "?" if run.seconds is None else run.seconds
     ram = "?" if run.peak_ram_gib is None else f"{run.peak_ram_gib:.1f} GiB"
+    gpu = "?" if run.peak_gpu_gib is None else f"{run.peak_gpu_gib:.1f} GiB"
     lines = [
         f"#### {run.path.name}: exit {exit_code}, {seconds} s, peak RAM {ram},"
-        f" {run.cells_ran}/{run.code_cells} code cells ran"
+        f" peak GPU memory {gpu}, {run.cells_ran}/{run.code_cells} code cells ran"
     ]
     lines += [f"  [{e.index}] raised {e.name}: {e.value}" for e in run.errors]
     lines += [

@@ -354,7 +354,14 @@ def print_gpu_reports(reports: Iterable["RunReport"]) -> None:
     from rich.table import Table
 
     table = Table(
-        "Notebook", "Exit", "Time", "Peak RAM", "Cells", "Raised", "Shell failed"
+        "Notebook",
+        "Exit",
+        "Time",
+        "Peak RAM",
+        "Peak GPU memory",
+        "Cells",
+        "Raised",
+        "Shell failed",
     )
     for run in reports:
         table.add_row(
@@ -362,6 +369,7 @@ def print_gpu_reports(reports: Iterable["RunReport"]) -> None:
             "?" if run.exit_code is None else str(run.exit_code),
             "?" if run.seconds is None else f"{run.seconds / 60:.1f} min",
             "?" if run.peak_ram_gib is None else f"{run.peak_ram_gib:.1f} GiB",
+            "?" if run.peak_gpu_gib is None else f"{run.peak_gpu_gib:.1f} GiB",
             f"{run.cells_ran}/{run.code_cells}",
             "\n".join(f"[{e.index}] {e.name}" for e in run.errors)
             or "[green]none[/green]",
