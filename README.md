@@ -1583,7 +1583,12 @@ The main commands:
   `--max-hours` from the rental (default 4), and on Ctrl-C, SIGTERM or
   SIGHUP, whenever it comes (one arriving while it rents waits until the
   machine is recorded, and only the first one stops the pass: `timeout 60
-  uv run deckz ...` sends two). It refuses a machine already rented
+  uv run deckz ...` sends two). A network cut doesn't stop it: it keeps
+  polling for 30 minutes, `--max-hours` still counting, and retries destroying
+  the machine for 10; a machine that stopped running gets 3 minutes to come
+  back, and a hook failing three polls in a row fails the pass. With
+  `--write-outputs`, the runs noted before a failure are still written
+  back. It refuses a machine already rented
   (`--machine`), one another pass is running, and, before renting, a
   notebook it couldn't run. When nothing could be rented, it says why for
   each GPU (no offer matching `labs.gpu.offer_filter`, or each offer tried

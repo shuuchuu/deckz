@@ -37,8 +37,8 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   `deckz labs gpu pass <notebooks> --write-outputs` then rents the machine, runs
   them, prints each run's report, writes the demos' outputs back, and destroys
   the machine, always: when done, on failure, past `--max-hours` (4 by default),
-  on Ctrl-C. The machine runs Colab's own image, so what runs there runs on
-  Colab. The steps also exist one by one (`up`, `queue`, `run`, `status --watch`,
+  on Ctrl-C. A network cut of up to 30 minutes doesn't stop a pass. The machine
+  runs Colab's own image, so what runs there runs on Colab. The steps also exist one by one (`up`, `queue`, `run`, `status --watch`,
   `fetch`, `down`: see the README), for a machine kept between passes, which
   bills until `down`; `deckz labs gpu status --offline` lists the machines this
   checkout has rented without asking Vast.ai. In studioz, "Exécuter sur GPU…" (a

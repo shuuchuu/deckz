@@ -65,6 +65,13 @@ if TYPE_CHECKING:
 
 _logger = getLogger(__name__)
 
+_VASTAI_TIMEOUT_SECONDS = 120
+"""For the calls a pass polls or retries, and those only: renting isn't one, since \
+giving up on a rental that went through would lose track of a billing machine."""
+
+_DESTROY_ATTEMPTS = 20
+_DESTROY_PAUSE_SECONDS = 30
+
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 """`subprocess.run`'s signature: tests pass a fake one."""
 
@@ -497,14 +504,26 @@ class VastBackend:
         self._gpu = settings.labs.gpu
         self._run = run
 
-    def _call(self, *args: str) -> subprocess.CompletedProcess[str]:
+    def _call(
+        self, *args: str, timeout: float | None = None
+    ) -> subprocess.CompletedProcess[str]:
         if which("vastai") is None and self._run is subprocess.run:
             msg = 'vastai is not installed, install it with `pip install "deckz[gpu]"`'
             raise MissingExtraError(msg)
-        return self._run(["vastai", *args], capture_output=True, text=True, check=False)
+        command = ["vastai", *args]
+        try:
+            return self._run(
+                command, capture_output=True, text=True, check=False, timeout=timeout
+            )
+        except subprocess.TimeoutExpired:
+            return subprocess.CompletedProcess(
+                command, 1, "", f"no answer: {timeout} s"
+            )
 
-    def _vastai(self, *args: str, check: bool = True) -> str:
-        proc = self._call(*args)
+    def _vastai(
+        self, *args: str, check: bool = True, timeout: float | None = None
+    ) -> str:
+        proc = self._call(*args, timeout=timeout)
         if check and proc.returncode:
             msg = f"vastai {' '.join(args[:2])} failed:\n{proc.stdout}{proc.stderr}"
             raise GpuRunError(msg)
@@ -633,7 +652,14 @@ class VastBackend:
         raise GpuRunError(msg)
 
     def info(self, instance_id: int) -> InstanceInfo | None:
-        out = self._vastai("show", "instance", str(instance_id), "--raw", check=False)
+        out = self._vastai(
+            "show",
+            "instance",
+            str(instance_id),
+            "--raw",
+            check=False,
+            timeout=_VASTAI_TIMEOUT_SECONDS,
+        )
         try:
             raw = json.loads(out)
         except json.JSONDecodeError:
@@ -654,7 +680,13 @@ class VastBackend:
         )
 
     def destroy(self, instance_id: int) -> None:
-        self._vastai("destroy", "instance", str(instance_id), "-y")
+        self._vastai(
+            "destroy",
+            "instance",
+            str(instance_id),
+            "-y",
+            timeout=_VASTAI_TIMEOUT_SECONDS,
+        )
 
 
 def _refusal(created: dict[str, Any], proc: subprocess.CompletedProcess[str]) -> str:
@@ -762,6 +794,12 @@ class GpuRun:
             f"UserKnownHostsFile={self._dir / 'known_hosts'}",
             "-o",
             "ConnectTimeout=20",
+            # A cut in the middle of a transfer fails it in a minute: without
+            # this, it hangs past the pass's ceiling, which is checked between polls.
+            "-o",
+            "ServerAliveInterval=15",
+            "-o",
+            "ServerAliveCountMax=4",
         ]
 
     def _ssh(self, command: str, *, check: bool = True) -> str:
@@ -1334,7 +1372,7 @@ class GpuRun:
         with uninterrupted():
             if not booted and state.machine not in self._avoided():
                 self._write_json(self._avoid_file, [*self._avoided(), state.machine])
-            self._backend.destroy(state.id)
+            self._destroy(state.id)
             self._save(None)
         if not booted:
             _logger.warning(
@@ -1344,6 +1382,20 @@ class GpuRun:
             )
         self.finish_hooks(machine_down=True)
         return state.id
+
+    def _destroy(self, instance_id: int) -> None:
+        # A machine left running bills: this outlasts a network cut.
+        for attempts_left in range(_DESTROY_ATTEMPTS - 1, -1, -1):
+            try:
+                self._backend.destroy(instance_id)
+            except GpuRunError as error:
+                if not attempts_left:
+                    raise
+                first_line = str(error).splitlines()[0]
+                _logger.warning("Destroying failed, retrying: %s", first_line)
+                self._sleep(_DESTROY_PAUSE_SECONDS)
+            else:
+                return
 
 
 def _set_short_run(nb: dict[str, Any]) -> int:

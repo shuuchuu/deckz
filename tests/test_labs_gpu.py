@@ -1104,6 +1104,257 @@ def test_pass_destroys_the_machine_at_its_ceiling(repo: Path) -> None:
     assert len(_destroyed(runner)) == 1
 
 
+class CutRunner(PassRunner):
+    """A network cut: from the first fetch on, `calls` polls get no answer."""
+
+    def __init__(self, *args: Any, calls: int, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.cut_calls = calls
+        self.following = False
+
+    def __call__(self, args: list[str], **kwargs: Any) -> Any:
+        self.following = self.following or args[0] == "rsync"
+        polling = args[:3] == ["vastai", "show", "instance"] or args[0] == "rsync"
+        if self.following and polling and self.cut_calls:
+            self.cut_calls -= 1
+            self.calls.append(list(args))
+            return subprocess.CompletedProcess(args, 1, "", "Name resolution failed")
+        return super().__call__(args, **kwargs)
+
+
+def _clocked(repo: Path, runner: FakeRunner, max_hours: float) -> Any:
+    now = [0.0]
+
+    def sleep(seconds: float) -> None:
+        now[0] += seconds
+
+    gpu_run = _gpu_run(repo, runner)
+    return (
+        gpu_run,
+        now,
+        lambda: gpu_pass.run(
+            gpu_run,
+            _settings(repo),
+            [_demo(repo)],
+            max_hours=max_hours,
+            report=lambda _: None,
+            clock=lambda: now[0],
+            sleep=sleep,
+        ),
+    )
+
+
+def test_pass_follows_the_queue_through_a_network_cut(repo: Path) -> None:
+    runner = CutRunner(repo / ".run" / "gpu" / "main" / "out", calls=20)
+
+    _, now, run = _clocked(repo, runner, max_hours=2)
+    result = run()
+
+    assert now[0] >= 20 * 60 - 60  # Twenty minutes, far past the old three polls.
+    assert [r.path.name for r in result.reports] == ["nn__cnn__demo-fr.full.ipynb"]
+    assert result.unfinished == []
+    assert len(_destroyed(runner)) == 1
+
+
+def test_pass_gives_up_on_a_cut_that_lasts(repo: Path) -> None:
+    runner = CutRunner(repo / ".run" / "gpu" / "main" / "out", calls=10_000)
+
+    _, now, run = _clocked(repo, runner, max_hours=4)
+    with raises(GpuRunError):
+        run()
+
+    assert now[0] == 30 * 60
+    assert len(_destroyed(runner)) == 1
+
+
+def test_pass_keeps_its_ceiling_through_a_network_cut(repo: Path) -> None:
+    runner = CutRunner(repo / ".run" / "gpu" / "main" / "out", calls=10_000)
+
+    _, now, run = _clocked(repo, runner, max_hours=0.25)
+    result = run()
+
+    assert result.ceiling_reached
+    assert result.unfinished == ["nn__cnn__demo-fr.full.ipynb"]
+    assert now[0] == 900
+    assert len(_destroyed(runner)) == 1
+
+
+def test_pass_gives_up_soon_on_a_machine_the_backend_says_stopped(repo: Path) -> None:
+    runner = PassRunner(repo / ".run" / "gpu" / "main" / "out", finishes=False)
+
+    gpu_run, now, run = _clocked(repo, runner, max_hours=4)
+    real_status = GpuRun.status
+
+    def stopped(self: GpuRun) -> GpuStatus:
+        real_status(self)
+        return GpuStatus(instance=InstanceInfo(status="exited"), machine=self.machine)
+
+    with MonkeyPatch.context() as patch:
+        patch.setattr(GpuRun, "status", stopped)
+        with raises(GpuRunError, match="stopped running"):
+            run()
+
+    assert now[0] == 180
+    assert gpu_run.state() is None
+
+
+def test_pass_doesnt_take_a_failing_hook_for_a_network_cut(
+    repo: Path, monkeypatch: MonkeyPatch
+) -> None:
+    runner = PassRunner(repo / ".run" / "gpu" / "main" / "out", finishes=False)
+    calls: list[bool] = []
+
+    def failing(self: GpuRun, *, machine_down: bool = False) -> list[str]:
+        calls.append(machine_down)
+        if machine_down:
+            return []
+        msg = "hook dagshub failed (1)"
+        raise GpuRunError(msg)
+
+    monkeypatch.setattr(GpuRun, "finish_hooks", failing)
+    _, now, run = _clocked(repo, runner, max_hours=4)
+
+    with raises(GpuRunError, match="hook dagshub failed"):
+        run()
+
+    assert calls == [False, False, False, True]  # Three tries, then at the `down`.
+    assert now[0] == 120
+    assert len(_destroyed(runner)) == 1
+
+
+def test_pass_doesnt_say_a_destroyed_machine_may_still_bill(
+    repo: Path, monkeypatch: MonkeyPatch
+) -> None:
+    runner = PassRunner(repo / ".run" / "gpu" / "main" / "out")
+
+    def failing(self: GpuRun, *, machine_down: bool = False) -> list[str]:
+        if not machine_down:
+            return []
+        msg = "hook dagshub failed (1)"
+        raise GpuRunError(msg)
+
+    monkeypatch.setattr(GpuRun, "finish_hooks", failing)
+    gpu_run, _, run = _clocked(repo, runner, max_hours=1)
+
+    with raises(GpuRunError) as caught:
+        run()
+
+    assert "hook dagshub failed" in str(caught.value)
+    assert "may still bill" not in str(caught.value)
+    assert gpu_run.state() is None
+
+
+def test_pass_gives_a_machine_back_from_a_cut_its_own_patience(
+    repo: Path, monkeypatch: MonkeyPatch
+) -> None:
+    # 25 minutes cut, then a passing state: the 3 minutes count from that state.
+    runner = PassRunner(repo / ".run" / "gpu" / "main" / "out")
+    gpu_run, now, run = _clocked(repo, runner, max_hours=4)
+    real_status = GpuRun.status
+
+    def status(self: GpuRun) -> GpuStatus:
+        if now[0] < 25 * 60:
+            return GpuStatus(instance=None, machine=self.machine)
+        if now[0] < 26 * 60:
+            info = InstanceInfo(status="loading")
+            return GpuStatus(instance=info, machine=self.machine)
+        return real_status(self)
+
+    monkeypatch.setattr(GpuRun, "status", status)
+
+    result = run()
+
+    assert result.unfinished == []
+    assert gpu_run.state() is None
+
+
+def test_pass_writes_back_the_runs_it_noted_before_failing(
+    repo: Path, monkeypatch: MonkeyPatch
+) -> None:
+    runner = PassRunner(repo / ".run" / "gpu" / "main" / "out")
+    notebook = _demo(repo)
+
+    def failing(self: GpuRun, *, machine_down: bool = False) -> list[str]:
+        if machine_down:
+            return []
+        msg = "hook dagshub failed (1)"
+        raise GpuRunError(msg)
+
+    monkeypatch.setattr(GpuRun, "finish_hooks", failing)
+
+    with raises(GpuRunError, match="hook dagshub failed"):
+        _pass(repo, runner, notebooks=[notebook], write_outputs=True)
+
+    assert json.loads(notebook.read_text())["cells"][0]["outputs"][0]["text"] == ["1\n"]
+    assert len(_destroyed(runner)) == 1
+
+
+def test_down_outlasts_a_vastai_that_hangs(repo: Path) -> None:
+    class Hanging(FakeRunner):
+        hangs = 2
+
+        def __call__(self, args: list[str], **kwargs: Any) -> Any:
+            if args[:2] == ["vastai", "destroy"]:
+                assert kwargs["timeout"] == 120
+                self.calls.append(list(args))
+                if self.hangs:
+                    self.hangs -= 1
+                    raise subprocess.TimeoutExpired(args, 120)
+                return subprocess.CompletedProcess(args, 0, "", "")
+            return super().__call__(args, **kwargs)
+
+    runner = Hanging()
+    runner.instances = [_running()]
+    gpu_run = _gpu_run(repo, runner)
+    gpu_run.up()
+
+    assert gpu_run.down() == 100
+
+    assert len(_destroyed(runner)) == 3
+
+
+def test_down_outlasts_a_network_cut(repo: Path) -> None:
+    class Failing(FakeRunner):
+        failures = 5
+
+        def __call__(self, args: list[str], **kwargs: Any) -> Any:
+            if args[:2] == ["vastai", "destroy"] and self.failures:
+                self.failures -= 1
+                self.calls.append(list(args))
+                return subprocess.CompletedProcess(args, 1, "", "no network")
+            return super().__call__(args, **kwargs)
+
+    runner = Failing()
+    runner.instances = [_running()]
+    gpu_run = _gpu_run(repo, runner)
+    gpu_run.up()
+
+    assert gpu_run.down() == 100
+
+    assert len(_destroyed(runner)) == 6
+    assert gpu_run.state() is None
+
+
+def test_down_says_so_when_the_cut_outlasts_it(repo: Path) -> None:
+    class Failing(FakeRunner):
+        def __call__(self, args: list[str], **kwargs: Any) -> Any:
+            if args[:2] == ["vastai", "destroy"]:
+                self.calls.append(list(args))
+                return subprocess.CompletedProcess(args, 1, "", "no network")
+            return super().__call__(args, **kwargs)
+
+    runner = Failing()
+    runner.instances = [_running()]
+    gpu_run = _gpu_run(repo, runner)
+    gpu_run.up()
+
+    with raises(GpuRunError, match="no network"):
+        gpu_run.down()
+
+    assert len(_destroyed(runner)) == 20
+    assert gpu_run.state() is not None  # Kept: `down` can be run again.
+
+
 def test_pass_destroys_the_machine_on_ctrl_c_and_sigterm(repo: Path) -> None:
     for stop, expected in (
         (KeyboardInterrupt, KeyboardInterrupt),

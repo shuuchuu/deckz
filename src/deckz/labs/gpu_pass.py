@@ -13,6 +13,10 @@ and the second one, raising again or killing the process once its handler is
 restored, would skip the destruction. A machine left running bills until
 someone notices.
 
+A network cut doesn't end a pass: the queue goes on on the machine, so the pass
+keeps polling through it (`_MAX_OUTAGE_SECONDS`), the ceiling still holding,
+and `GpuRun.down` retries the destruction.
+
 Two passes can't share a machine name: the second one is refused while the
 first runs (a lock in the machine's directory, `pass.lock`).
 
@@ -39,6 +43,7 @@ from ..exceptions import GpuRunError, LabOutputsHookError, WorktreeError
 from .gpu import (
     STOP_SIGNALS,
     GpuRun,
+    GpuStatus,
     Offer,
     RunReport,
     format_report,
@@ -54,8 +59,19 @@ SETUP_MINUTES = 10
 """What an estimate adds for renting and booting the machine (pulling Colab's \
 image, snapshotting its packages): a few minutes, up to ten."""
 
-_MAX_MISSES = 3
-"""Polls in a row the machine may be unreachable before the pass gives up."""
+_MAX_HOOK_FAILURES = 3
+"""Polls in a row a hook may fail before the pass gives up: a failure that has \
+nothing to do with the network, and a hook can be heavy (it may reset a remote \
+repository), so it isn't retried for long."""
+
+_MAX_OUTAGE_SECONDS = 30 * 60
+"""How long the machine may stay out of reach before the pass gives up. Its queue \
+goes on meanwhile, and the next poll fetches all of it: on a phone's connection, \
+a cut lasts minutes, and giving up would only lose a run already paid for."""
+
+_MAX_STOPPED_SECONDS = 3 * 60
+"""How long the backend may say the machine isn't running before the pass gives \
+up: unlike a cut, that's the machine lost, unless it's a passing state."""
 
 _NOTE = re.compile(r"^Noted (?P<stamp>.+):$")
 _RUN = re.compile(r"^#### (?P<name>\S+): exit (?P<code>\S+), (?P<seconds>\S+) s,")
@@ -63,6 +79,10 @@ _RUN = re.compile(r"^#### (?P<name>\S+): exit (?P<code>\S+), (?P<seconds>\S+) s,
 
 class GpuPassStoppedError(GpuRunError):
     """The pass was stopped (SIGTERM): its machine was destroyed."""
+
+
+class _MachineStoppedError(GpuRunError):
+    """The backend answered, and the machine isn't running."""
 
 
 @dataclass(frozen=True)
@@ -380,6 +400,7 @@ def run(
     """
     result = PassResult()
     names: dict[str, Path] = {}
+    failure = None
     with _machine_lock(gpu_run), _stopped_once():
         check(gpu_run, notebooks, short=short, write_outputs=write_outputs)
         deadline = clock() + max_hours * 3600
@@ -391,17 +412,23 @@ def run(
                 gpu_run.queued_name(notebook, short=short): notebook
                 for notebook in notebooks
             }
+            result.unfinished = list(names)
             for notebook in held:
                 report(f"held {notebook} until its hook's current run is done")
             remaining = max(60, int(deadline - clock()))
             gpu_run.start(timeout=remaining)
             _logger.info("Running %s notebook(s)", len(queued))
             _follow(gpu_run, result, deadline, interval, report, clock, sleep)
+        except GpuRunError as error:
+            failure = error  # Raised once the runs already noted are written back.
         finally:
             with uninterrupted():
                 try:
                     result.instance = gpu_run.down()
                 except GpuRunError as error:
+                    if gpu_run.state() is None:  # Destroyed: its hook failed.
+                        _logger.info("Machine destroyed: nothing is billed")
+                        raise
                     msg = (
                         f"{error}\nThe machine may still bill: `deckz labs gpu down"
                         f" --machine {gpu_run.machine}`, and check the backend's"
@@ -414,6 +441,8 @@ def run(
                     )
     if write_outputs:
         _write_back(settings, gpu_run, result, names, report)
+    if failure is not None:
+        raise failure
     return result
 
 
@@ -427,38 +456,67 @@ def _follow(
     sleep: Callable[[float], None],
 ) -> None:
     # Poll until the queue and its hooks are done, the ceiling is reached,
-    # or the machine is lost.
-    misses = 0
+    # or the machine is lost. `info` can't tell a backend out of reach from an
+    # instance gone: both count as a cut.
+    failing: tuple[type[GpuRunError], float] | None = None
+    hook_failures = 0
     while True:
         try:
-            current = gpu_run.status()
-            if current.instance is None or current.instance.status != "running":
-                state = current.instance.status if current.instance else "gone"
-                msg = f"the machine stopped running ({state})"
-                raise GpuRunError(msg)
-            gpu_run.fetch()
+            current = _reach(gpu_run)
+        except GpuRunError as error:
+            failing = _still_patient(error, failing, clock())
+        else:
+            failing = None
             for noted in gpu_run.note_finished():
                 result.reports.append(noted)
                 report(format_report(noted))
-            for line in gpu_run.finish_hooks():
-                report(line)
-            misses = 0
-        except GpuRunError as error:
-            misses += 1
-            if misses >= _MAX_MISSES:
-                raise
-            _logger.warning("Machine unreachable (%s)", str(error).splitlines()[0])
-            sleep(interval)
-            continue
-        result.unfinished = [e.name for e in current.queue if e.state != "done"]
-        if not result.unfinished and not gpu_run.hooks_pending():
-            return
+            result.unfinished = [e.name for e in current.queue if e.state != "done"]
+            try:
+                for line in gpu_run.finish_hooks():
+                    report(line)
+                hook_failures = 0
+                if not result.unfinished and not gpu_run.hooks_pending():
+                    return
+            except GpuRunError as error:
+                hook_failures += 1
+                if hook_failures >= _MAX_HOOK_FAILURES:
+                    raise
+                _logger.warning("Hook failed (%s)", str(error).splitlines()[0])
         left = deadline - clock()
         if left <= 0:
             result.ceiling_reached = True
             report(f"ceiling reached: {', '.join(result.unfinished)} not finished")
             return
         sleep(min(interval, left))
+
+
+def _still_patient(
+    error: GpuRunError,
+    failing: tuple[type[GpuRunError], float] | None,
+    now: float,
+) -> tuple[type[GpuRunError], float]:
+    # Each kind of failure has its own patience, counted from its first poll.
+    if failing is None or failing[0] is not type(error):
+        failing = (type(error), now)
+    stopped = isinstance(error, _MachineStoppedError)
+    patience = _MAX_STOPPED_SECONDS if stopped else _MAX_OUTAGE_SECONDS
+    if now - failing[1] >= patience:
+        raise error
+    _logger.warning("Machine unreachable (%s)", str(error).splitlines()[0])
+    return failing
+
+
+def _reach(gpu_run: GpuRun) -> GpuStatus:
+    # What a network cut interrupts: everything else in a poll is local, or a hook.
+    current = gpu_run.status()
+    if current.instance is None:
+        msg = "no answer about the machine"
+        raise GpuRunError(msg)
+    if current.instance.status != "running":
+        msg = f"the machine stopped running ({current.instance.status})"
+        raise _MachineStoppedError(msg)
+    gpu_run.fetch()
+    return current
 
 
 def _write_back(
