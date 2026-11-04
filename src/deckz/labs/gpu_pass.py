@@ -422,28 +422,37 @@ def run(
         except GpuRunError as error:
             failure = error  # Raised once the runs already noted are written back.
         finally:
-            with uninterrupted():
-                try:
-                    result.instance = gpu_run.down()
-                except GpuRunError as error:
-                    if gpu_run.state() is None:  # Destroyed: its hook failed.
-                        _logger.info("Machine destroyed: nothing is billed")
-                        raise
-                    msg = (
-                        f"{error}\nThe machine may still bill: `deckz labs gpu down"
-                        f" --machine {gpu_run.machine}`, and check the backend's"
-                        " instances"
-                    )
-                    raise GpuRunError(msg) from error
-                if result.instance is not None:
-                    _logger.info(
-                        "Instance %s destroyed: nothing is billed", result.instance
-                    )
+            try:
+                _give_back(gpu_run, result)
+            except GpuRunError:
+                # A hook that failed the pass usually fails again at `down`.
+                if failure is not None:
+                    _logger.error("The pass had failed first: %s", failure)
+                if write_outputs:
+                    _write_back(settings, gpu_run, result, names, report)
+                raise
     if write_outputs:
         _write_back(settings, gpu_run, result, names, report)
     if failure is not None:
         raise failure
     return result
+
+
+def _give_back(gpu_run: GpuRun, result: PassResult) -> None:
+    with uninterrupted():
+        try:
+            result.instance = gpu_run.down()
+        except GpuRunError as error:
+            if gpu_run.state() is None:  # Destroyed: its hook failed.
+                _logger.info("Machine destroyed: nothing is billed")
+                raise
+            msg = (
+                f"{error}\nThe machine may still bill: `deckz labs gpu down"
+                f" --machine {gpu_run.machine}`, and check the backend's instances"
+            )
+            raise GpuRunError(msg) from error
+        if result.instance is not None:
+            _logger.info("Instance %s destroyed: nothing is billed", result.instance)
 
 
 def _follow(

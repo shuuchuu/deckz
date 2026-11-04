@@ -1584,8 +1584,8 @@ The main commands:
   SIGHUP, whenever it comes (one arriving while it rents waits until the
   machine is recorded, and only the first one stops the pass: `timeout 60
   uv run deckz ...` sends two). A network cut doesn't stop it: it keeps
-  polling for 30 minutes, `--max-hours` still counting, and retries destroying
-  the machine for 10; a machine that stopped running gets 3 minutes to come
+  polling for 30 minutes, `--max-hours` still counting, and tries destroying
+  the machine 20 times; a machine that stopped running gets 3 minutes to come
   back, and a hook failing three polls in a row fails the pass. With
   `--write-outputs`, the runs noted before a failure are still written
   back. It refuses a machine already rented

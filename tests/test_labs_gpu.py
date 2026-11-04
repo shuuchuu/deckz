@@ -1268,14 +1268,15 @@ def test_pass_gives_a_machine_back_from_a_cut_its_own_patience(
     assert gpu_run.state() is None
 
 
+@mark.parametrize("hook_recovers", [True, False])
 def test_pass_writes_back_the_runs_it_noted_before_failing(
-    repo: Path, monkeypatch: MonkeyPatch
+    repo: Path, monkeypatch: MonkeyPatch, hook_recovers: bool
 ) -> None:
     runner = PassRunner(repo / ".run" / "gpu" / "main" / "out")
     notebook = _demo(repo)
 
     def failing(self: GpuRun, *, machine_down: bool = False) -> list[str]:
-        if machine_down:
+        if machine_down and hook_recovers:
             return []
         msg = "hook dagshub failed (1)"
         raise GpuRunError(msg)
