@@ -23,34 +23,51 @@ The deck builder renders each fragment within `recording`, and records what was
 declared next to the build copy (`write_record`). The next build renders the
 fragment again when one of those files changed (`inputs_changed`).
 
-A file counts by its bytes, as in `deckz.stamps` and for the same reasons. Its
-digest, and what a record holds, stay in memory for as long as the file's time
+A file counts by its bytes, as in `deckz.stamps` and for the same reasons, unless
+the code reading it says it reads less: `depends_on_json` for one value of a JSON
+file, `depends_on_presence` for whether the file exists. A notebook's outputs
+written back then leave alone the fragments that only read its metadata. The part
+is declared as data, not as a function: a later build checks a record without the
+code that wrote it having run.
+
+A digest, and what a record holds, stay in memory for as long as the file's time
 and size don't change, so that a `--watch` rebuild costs one `stat` per fragment
 and per input, unless a file was written too recently for its time to tell a
 further edit (`_SETTLED_NS`).
 """
 
+from collections import defaultdict
 from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
+from hashlib import sha256
 from json import dumps, loads
 from os import fspath, stat
-from os.path import normpath, relpath
+from os.path import isfile, normpath, relpath
 from pathlib import Path
 from time import time_ns
 
 from .stamps import digest
 from .utils import write_atomic
 
-type Inputs = dict[Path, str | None]
-"""Each file a render read, with its `file_digest`."""
+type Input = Path | tuple[Path, str]
+"""A file a render read: all of it, or the part of it a `str` describes."""
+type Inputs = dict[Input, str | None]
+"""Each input a render read, with its digest."""
 
 # Per thread: fragments of several outputs render at once, in the deck builder's.
 _recording: ContextVar[Inputs | None] = ContextVar("render_inputs", default=None)
 # By plain strings: building `Path`s took longer than the `stat`s they're for, on a
 # `--watch` rebuild.
 _digests: dict[str, tuple[tuple[int, int], str]] = {}
+_json_digests: defaultdict[str, dict[str, tuple[tuple[int, int], str]]] = defaultdict(
+    dict
+)
 _records: dict[str, tuple[tuple[int, int], list[tuple[str, str | None]]]] = {}
+_PRESENCE = "presence"
+"""The part of a file `depends_on_presence` declares; any other is JSON keys."""
+_PART_SEPARATOR = "\0"
+"""Between a path and its part in a record: no path holds it."""
 _SETTLED_NS = 2_000_000_000
 """A file written less than this ago isn't kept in memory: an edit of the same \
 size would leave its time as it is, a time being a few milliseconds coarse here \
@@ -91,19 +108,75 @@ def file_digest(path: Path | str) -> str | None:
         return None
 
 
+def _read_json_digest(name: str, part: str) -> str:
+    # A file that isn't JSON counts by its bytes: an edit of it is still seen.
+    try:
+        value = loads(Path(name).read_text(encoding="utf8"))
+    except ValueError:
+        return digest([Path(name)])
+    for key in loads(part):
+        value = value.get(key) if isinstance(value, dict) else None
+    return sha256(dumps(value, sort_keys=True).encode("utf8")).hexdigest()
+
+
+def part_digest(path: Path | str, part: str) -> str | None:
+    """The digest of `part` of `path`, as `file_digest` gives its bytes'.
+
+    Returns:
+        The digest, or None if there's no such file (a directory isn't one).
+    """
+    name = fspath(path)
+    if part == _PRESENCE:
+        # ruff: ignore[os-path-isfile] (see `_digests`)
+        return _PRESENCE if isfile(name) else None
+    try:
+        return _settled(
+            _json_digests[part], name, lambda name: _read_json_digest(name, part)
+        )
+    except (FileNotFoundError, NotADirectoryError, IsADirectoryError):
+        return None
+
+
+def _declare(path: Path, part: str | None) -> None:
+    inputs = _recording.get()
+    if inputs is None:
+        return
+    absolute = path.absolute()
+    declared = absolute if part is None else (absolute, part)
+    if declared not in inputs:
+        inputs[declared] = (
+            file_digest(absolute) if part is None else part_digest(absolute, part)
+        )
+
+
 def depends_on(*paths: Path) -> None:
     """Declare that the fragment being rendered reads `paths`, existing or not.
 
     Part of deckz's API for a repository's Jinja environment: see the module's \
     documentation. Does nothing outside a render.
     """
-    inputs = _recording.get()
-    if inputs is None:
-        return
     for path in paths:
-        absolute = path.absolute()
-        if absolute not in inputs:
-            inputs[absolute] = file_digest(absolute)
+        _declare(path, None)
+
+
+def depends_on_json(path: Path, *keys: str) -> None:
+    """Declare that the fragment being rendered reads one value of a JSON file.
+
+    Like `depends_on`, for the value at `keys` only: the rest of `path` can change \
+    without the fragment being rendered again. A key missing counts as a null \
+    value, and a file that isn't JSON by its bytes.
+    """
+    _declare(path, dumps(keys))
+
+
+def depends_on_presence(*paths: Path) -> None:
+    """Declare that the fragment being rendered reads whether `paths` exist.
+
+    Like `depends_on`, for their existence only: their content can change without \
+    the fragment being rendered again.
+    """
+    for path in paths:
+        _declare(path, _PRESENCE)
 
 
 @contextmanager
@@ -121,13 +194,20 @@ def recording() -> Generator[Inputs]:
         _recording.reset(token)
 
 
-def write_record(record: Path, inputs: Mapping[Path, str | None]) -> None:
+def write_record(record: Path, inputs: Mapping[Input, str | None]) -> None:
     """Write `inputs` to the file `record`.
 
     Paths are kept relative to `record`: a build directory copied along with \
     its checkout still names that checkout's files.
     """
-    relative = {relpath(path, record.parent): value for path, value in inputs.items()}
+
+    def key(declared: Input) -> str:
+        if isinstance(declared, Path):
+            return relpath(declared, record.parent)
+        path, part = declared
+        return f"{relpath(path, record.parent)}{_PART_SEPARATOR}{part}"
+
+    relative = {key(declared): value for declared, value in inputs.items()}
     write_atomic(record, dumps(relative, sort_keys=True).encode("utf8"))
 
 
@@ -137,7 +217,16 @@ def _read_record(name: str) -> list[tuple[str, str | None]]:
     if not isinstance(recorded, dict):
         msg = f"{name} isn't a record of render inputs"
         raise ValueError(msg)
-    return [(normpath(record.parent / path), value) for path, value in recorded.items()]
+    entries = []
+    for key, value in recorded.items():
+        path, separator, part = key.partition(_PART_SEPARATOR)
+        entries.append((normpath(record.parent / path) + separator + part, value))
+    return entries
+
+
+def _current_digest(entry: str) -> str | None:
+    path, separator, part = entry.partition(_PART_SEPARATOR)
+    return part_digest(path, part) if separator else file_digest(path)
 
 
 def inputs_changed(record: Path) -> bool:
@@ -151,4 +240,4 @@ def inputs_changed(record: Path) -> bool:
         inputs = _settled(_records, fspath(record), _read_record)
     except (OSError, ValueError):
         return True
-    return any(file_digest(path) != value for path, value in inputs)
+    return any(_current_digest(entry) != value for entry, value in inputs)

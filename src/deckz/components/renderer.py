@@ -85,8 +85,9 @@ class Renderer(_BaseRenderer):
     accurate.
 
     Any other file a filter reads, it declares with \
-    [`depends_on`][deckz.render_inputs.depends_on], or the fragments reading \
-    it aren't rendered again when it changes.
+    [`depends_on`][deckz.render_inputs.depends_on] (or, reading less than \
+    the whole file, `depends_on_json` or `depends_on_presence`), or the \
+    fragments reading it aren't rendered again when it changes.
 
     See [`hooks`][deckz.components.hooks] for the contract's versioning and \
     trust boundary.

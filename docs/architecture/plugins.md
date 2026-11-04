@@ -22,8 +22,11 @@ caller also checks what the function returns.
 A Jinja filter reading a file declares it with
 [`depends_on`][deckz.render_inputs.depends_on], before reading, even if the file may not
 exist: deckz then renders again the fragments that read it when it changes. A read that
-isn't declared leaves those fragments stale. `env.py` itself needs no declaration: a
-change of it renders every fragment.
+isn't declared leaves those fragments stale. A filter reading less than the whole file
+says so, and the rest of the file can change freely:
+[`depends_on_json`][deckz.render_inputs.depends_on_json] for one value of a JSON file,
+[`depends_on_presence`][deckz.render_inputs.depends_on_presence] for whether it exists.
+`env.py` itself needs no declaration: a change of it renders every fragment.
 
 Loading a plugin runs arbitrary code from the repository, with the user's permissions.
 This is a trust boundary: deckz runs only on repositories one trusts, like any build
@@ -56,7 +59,7 @@ In shuuchuu/slides, the plugins and scripts import:
 | `deckz.configuring.settings` | `GlobalSettings` |
 | `deckz.exceptions` | `DeckzError` |
 | `deckz.models` | `File`, `Node`, `NodeInclude`, `Section`, `SectionDefinition`, `SectionInclude`… |
-| `deckz.render_inputs` | `depends_on` |
+| `deckz.render_inputs` | `depends_on`, `depends_on_json`, `depends_on_presence` |
 | `deckz.stamps` | `digest`, `is_fresh`, `python_sources`, `write_stamp` |
 | `deckz.utils` | `all_decks`, `load_yaml`, `copy_file_if_changed`, `import_module_and_submodules` |
 | `deckz.videos` | `register_scene`, `scenes`, `renders`, `video_file`, `quality`, `site_path`, `fetch_published`, `published_blobs`, `unpublished_reason` |

@@ -66,8 +66,9 @@ that domain's module, not here.
 ## `render_inputs`
 
 [`render_inputs`][deckz.render_inputs] tells a fragment's output from its source's: what
-its rendering read besides that source, each file by the digest of its bytes. Filters
-declare their reads with `depends_on`, and deckz's own code does too
+its rendering read besides that source, each file by the digest of its bytes, or of the
+part it read: `depends_on_json` for a value of a JSON file, `depends_on_presence` for its
+existence. Filters declare their reads with `depends_on`, and deckz's own code does too
 (`AssetsMetadataRetriever` for a credit file, `videos.video_file` for a scene). The deck
 builder writes what a render declared to `<fragment>.md.inputs`, next to the build copy,
 and `inputs_changed` compares it on the next build. A fragment with no record counts as
