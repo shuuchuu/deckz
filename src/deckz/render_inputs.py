@@ -8,9 +8,9 @@ guess those reads, so the code doing one declares it, right before reading:
 ```python
 from deckz.render_inputs import depends_on
 
-def needs_gpu(notebook: Path) -> bool:
-    depends_on(notebook)
-    return "gpuType" in json.loads(notebook.read_text())["metadata"]
+def license_of(page: Path) -> str:
+    depends_on(page)
+    return page.read_text().splitlines()[0]
 ```
 
 Before the read, so that an edit racing the render is seen by the next build,
@@ -233,11 +233,12 @@ def inputs_changed(record: Path) -> bool:
     """Whether a file of `record` changed, appeared or went away since it was written.
 
     Returns:
-        True as well if `record` is missing or unreadable: nothing tells what \
-        the render read, and a fragment rendered with no input has a record.
+        True as well if `record` is missing or unreadable, or names a part it \
+        can't be read for: nothing tells what the render read, and a fragment \
+        rendered with no input has a record.
     """
     try:
         inputs = _settled(_records, fspath(record), _read_record)
-    except (OSError, ValueError):
+        return any(_current_digest(entry) != value for entry, value in inputs)
+    except (OSError, TypeError, ValueError):
         return True
-    return any(_current_digest(entry) != value for entry, value in inputs)

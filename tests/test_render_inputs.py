@@ -389,6 +389,63 @@ def test_a_json_value_is_read_once_per_process(
     assert not inputs_changed(record)
     assert read == []
 
+    _notebook(path, {"id": "b"}, [])
+    utime(path, (2, 2))
+    assert inputs_changed(record)
+    assert inputs_changed(record)
+    assert read == [str(path)]
+
+
+def test_two_parts_of_a_file_kept_in_memory_stay_apart(tmp_path: Path) -> None:
+    first, second = tmp_path / "first", tmp_path / "second"
+    path = tmp_path / "notebook"
+    _notebook(path, {"a": 1, "b": 2}, [])
+    utime(path, (1, 1))
+    with recording() as inputs:
+        depends_on_json(path, "metadata", "a")
+    write_record(first, inputs)
+    with recording() as inputs:
+        depends_on_json(path, "metadata", "b")
+    write_record(second, inputs)
+    assert not inputs_changed(first)
+    assert not inputs_changed(second)
+
+    _notebook(path, {"a": 1, "b": 3}, [])
+    utime(path, (2, 2))
+
+    assert not inputs_changed(first)
+    assert inputs_changed(second)
+
+
+def test_a_directory_is_not_present(tmp_path: Path) -> None:
+    record = tmp_path / "record"
+    with recording() as inputs:
+        depends_on_presence(tmp_path)
+    write_record(record, inputs)
+
+    assert inputs == {(tmp_path, "presence"): None}
+    assert not inputs_changed(record)
+
+
+@mark.parametrize("part", ["garbage", "5"])
+def test_a_part_unusable_tells_nothing(tmp_path: Path, part: str) -> None:
+    record, path = tmp_path / "record", tmp_path / "notebook"
+    _notebook(path, {}, [])
+    record.write_text(dumps({f"notebook\0{part}": "a digest"}), encoding="utf8")
+
+    assert inputs_changed(record)
+
+
+def test_a_record_from_before_parts_still_reads(tmp_path: Path) -> None:
+    record, path = tmp_path / "record", tmp_path / "input"
+    path.write_text("before", encoding="utf8")
+    record.write_text(dumps({"input": file_digest(path)}), encoding="utf8")
+    assert not inputs_changed(record)
+
+    path.write_text("edited", encoding="utf8")
+
+    assert inputs_changed(record)
+
 
 class _Converter:
     def convert(self, source: Path, destination: Path) -> None:
