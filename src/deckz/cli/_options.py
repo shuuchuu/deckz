@@ -49,6 +49,16 @@ class _Invocation:
 invocation = _Invocation()
 
 
+def given(option: str) -> bool:
+    """Whether the command line gives `--option` or `--no-option`.
+
+    Returns:
+        Whether it does, whatever its value.
+    """
+    tokens = {token.split("=", 1)[0] for token in invocation.tokens}
+    return bool({f"--{option}", f"--no-{option}"} & tokens)
+
+
 def environment_defaults(variables: Iterable[str]) -> list[str]:
     """The `variables` that set an option's value in this invocation.
 
@@ -60,7 +70,6 @@ def environment_defaults(variables: Iterable[str]) -> list[str]:
         One `NAME=value (source)` per such variable, the source being \
         `.env` or `environment`.
     """
-    given = {token.split("=", 1)[0] for token in invocation.tokens}
     defaults = []
     for name in variables:
         if name not in environ:
@@ -70,7 +79,7 @@ def environment_defaults(variables: Iterable[str]) -> list[str]:
             if name == "DECKZ_LANG"
             else name.removeprefix("DECKZ_RUN_").lower().replace("_", "-")
         )
-        if {f"--{option}", f"--no-{option}"} & given:
+        if given(option):
             continue
         source = invocation.from_dotenv.get(name, "environment")
         defaults.append(f"{name}={environ[name]} ({source})")

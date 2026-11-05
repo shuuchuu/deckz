@@ -46,7 +46,8 @@ no variables of its own: every file of a deck renders with the same
 
 ## Commands you'll actually reach for while iterating
 
-- `deckz run` -- compile the current deck (`--parts` to restrict).
+- `deckz run` -- compile the current deck (`--parts` to restrict; `--all`
+  for every output in every language, whatever `.env` sets, before an upload).
 - `deckz run file PATH` / `deckz run section SECTION FLAVOR` -- preview a
   single file or section+flavor standalone, without touching the current
   deck's own build output. Output goes under `<git_dir>/.run/`; add

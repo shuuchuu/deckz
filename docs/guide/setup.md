@@ -46,7 +46,8 @@ DECKZ_RUN_PRINT=false
 ```
 
 Every `deckz run` starts by saying what it builds and which of these values it used,
-so a default you forgot about never goes unnoticed.
+so a default you forgot about never goes unnoticed. `deckz run --all` ignores them, but
+for `DECKZ_RUN_SYNC`, to build everything (see [Editing](editing.md#a-real-build)).
 
 ## A second checkout for a separate piece of work
 

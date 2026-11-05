@@ -1,8 +1,18 @@
 from pathlib import Path
 
-from ...models import PartName
-from .._options import Langs, unique
+from ...models import LANGS, PartName
+from .._options import Langs, given, unique
 from . import app
+
+_EVERY_OUTPUT = (
+    "handout",
+    "part_handouts",
+    "presentation",
+    "print",
+    "html",
+    "course_notes",
+)
+"""What `--all` turns on: `OutputKinds`' fields, but `sync`, which removes files."""
 
 
 @app.command(name="deck")
@@ -10,6 +20,7 @@ from . import app
 def run(
     *,
     parts: list[PartName] | None = None,
+    all: bool = False,  # ruff: ignore[builtin-argument-shadowing]
     handout: bool = True,
     presentation: bool = True,
     print: bool = True,  # ruff: ignore[builtin-argument-shadowing]
@@ -26,6 +37,12 @@ def run(
 
     Args:
         parts: Restrict deck compilation to these parts
+        all: Compile every output of this deck in every language, e.g. before
+            `deckz upload`, whatever the environment or a .env file set: the
+            handouts, part handouts, presentations, printable PDFs, HTML and
+            course notes. An option given next to it still applies: --lang fr
+            for a deck not translated yet, --no-html to skip one output.
+            --sync isn't affected
         handout: Produce PDFs without animations
         presentation: Produce PDFs with animations
         print: Produce printable PDFs
@@ -52,7 +69,11 @@ def run(
         workdir: Path to move into before running the command
 
     """
+    from dataclasses import replace
+    from logging import getLogger
+
     from ...configuring.settings import DeckSettings
+    from ...exceptions import DeckParsingError
     from ...pipelines import BuildTarget, OutputKinds, build, deck_targets
     from ...pipelines import run as _run
     from .._presentation import (
@@ -63,7 +84,7 @@ def run(
     )
 
     settings = DeckSettings.from_yaml(workdir)
-    langs = unique(langs)
+    langs = LANGS if all and not given("lang") else unique(langs)
     outputs = OutputKinds(
         handout=handout,
         presentation=presentation,
@@ -73,16 +94,39 @@ def run(
         sync=sync,
         course_notes=course_notes,
     )
+    if all:
+        outputs = replace(
+            outputs,
+            **{
+                kind: True
+                for kind in _EVERY_OUTPUT
+                if not given(kind.replace("_", "-"))
+            },
+        )
     announce_build(
         str(settings.paths.current_dir.relative_to(settings.paths.git_dir)),
         langs,
         outputs,
+        every_output=all,
     )
+    # Not with --all alone: a deck may well have no course notes, and nobody asked.
     if course_notes:
         warn_missing_chapters(settings, langs)
 
     def targets() -> list[BuildTarget]:
-        return deck_targets(settings, langs, parts, course_notes=course_notes)
+        try:
+            return deck_targets(
+                settings, langs, parts, course_notes=outputs.course_notes
+            )
+        except DeckParsingError:
+            # The parsing error names a file, not the language that lacks it.
+            if all and not given("lang"):
+                getLogger(__name__).warning(
+                    "--all builds every language: if a translation is missing, "
+                    "`deckz i18n missing-en` lists what's left, and "
+                    "`deckz run --all --lang fr` builds the French only"
+                )
+            raise
 
     if dry_run:
         print_plan_of(targets(), outputs)
@@ -91,8 +135,6 @@ def run(
     if not watch:
         build(targets(), outputs, RichProgress())
         return
-
-    from logging import getLogger
 
     from ...pipelines import watch as _watch
 
@@ -103,7 +145,7 @@ def run(
         settings.paths.assets_dir,
         settings.paths.current_dir,
     ]
-    if course_notes and settings.paths.course_notes_dir.is_dir():
+    if outputs.course_notes and settings.paths.course_notes_dir.is_dir():
         to_watch.append(settings.paths.course_notes_dir)
     if settings.paths.user_config_dir.exists():
         to_watch.append(settings.paths.user_config_dir)

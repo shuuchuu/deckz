@@ -384,6 +384,7 @@ _RUN_VARIABLES = (
     *(
         f"DECKZ_RUN_{option}"
         for option in (
+            "ALL",
             "HANDOUT",
             "PART_HANDOUTS",
             "PRESENTATION",
@@ -395,11 +396,22 @@ _RUN_VARIABLES = (
 )
 
 
-def announce_build(what: str, langs: "Sequence[Lang]", outputs: "OutputKinds") -> None:
+_EVERY_OUTPUT_VARIABLES = ("DECKZ_RUN_ALL", "DECKZ_RUN_SYNC")
+"""Those of `_RUN_VARIABLES` that still count with `deckz run --all`."""
+
+
+def announce_build(
+    what: str,
+    langs: "Sequence[Lang]",
+    outputs: "OutputKinds",
+    *,
+    every_output: bool = False,
+) -> None:
     """Log what a `run` command builds, and which settings came from the environment.
 
     A `.env` file can change what `deckz run` does without a word on the \
-    command line: this line says so before anything is built.
+    command line: this line says so before anything is built. `every_output` \
+    (`deckz run --all`) ignores most of them: only those it reads are named.
     """
     from ._options import environment_defaults
 
@@ -418,7 +430,8 @@ def announce_build(what: str, langs: "Sequence[Lang]", outputs: "OutputKinds") -
     message = f"Building {what} in {' + '.join(langs)}: {', '.join(kinds) or 'nothing'}"
     if outputs.sync and outputs.pdfs:
         message += ", then removing the PDFs no build produces anymore"
-    if defaults := environment_defaults(_RUN_VARIABLES):
+    variables = _EVERY_OUTPUT_VARIABLES if every_output else _RUN_VARIABLES
+    if defaults := environment_defaults(variables):
         message += f". From the environment: {', '.join(defaults)}"
     getLogger(__name__).info(message)
 

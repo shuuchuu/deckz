@@ -136,9 +136,9 @@ def upload(
         refusals.append(
             f"these PDFs don't match the deck's content anymore:\n"
             f"{_listed(outdated, git_dir)}\n"
-            "Rebuild them (`deckz run`, with the kinds and languages they "
-            "are, `--course-notes` for the course notes), delete them, or "
-            "pass --include-stale to upload them as they are"
+            "Rebuild them (`deckz run --all`, or `deckz run` with the kinds "
+            "and languages they are, `--course-notes` for the course notes), "
+            "delete them, or pass --include-stale to upload them as they are"
         )
     if unlinked and not include_stale:
         refusals.append(
@@ -151,8 +151,8 @@ def upload(
         refusals.append(
             "these PDFs have a Drive link, which the deck's others may show, "
             f"but aren't built:\n{_listed(unbuilt, git_dir)}\n"
-            "Build them (`deckz run`, `--course-notes` for the course notes), "
-            "or pass --include-stale to upload the others without them"
+            "Build them (`deckz run --all`), or pass --include-stale to upload "
+            "the others without them"
         )
     if problems:
         listed = "\n".join(f"  {problem}" for problem in problems)

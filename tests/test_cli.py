@@ -527,6 +527,73 @@ def test_run_options_override_the_environment(
     }
 
 
+def test_run_all_overrides_the_environment(
+    bilingual_dir: Path, monkeypatch: Any, capsys: Any, caplog: Any
+) -> None:
+    monkeypatch.setenv("DECKZ_LANG", "fr")
+    monkeypatch.setenv("DECKZ_RUN_PART_HANDOUTS", "false")
+    monkeypatch.setenv("DECKZ_RUN_PRESENTATION", "false")
+    monkeypatch.setenv("DECKZ_RUN_PRINT", "false")
+    monkeypatch.setenv("DECKZ_RUN_SYNC", "false")
+
+    main(("run", "--all", "--dry-run"))
+
+    assert {path for path in _planned_pdfs(capsys) if not path.endswith("-html")} == {
+        f"company/bilingual/pdf/{lang}bilingual-{kind}.pdf"
+        for lang in ("", "en/")
+        for kind in ("handout", "p1-handout", "p1-presentation", "print-handout")
+    }
+    assert "in fr + en: handout, part handouts" in caplog.text
+    assert "HTML, course notes" in caplog.text
+    # Nothing it overrode is announced, and it doesn't touch what removes files.
+    assert "DECKZ_RUN_SYNC=false (environment)" in caplog.text
+    assert "DECKZ_RUN_PRINT" not in caplog.text
+    assert "DECKZ_LANG" not in caplog.text
+
+
+def test_run_all_can_come_from_the_environment(
+    bilingual_dir: Path, monkeypatch: Any, caplog: Any
+) -> None:
+    monkeypatch.setenv("DECKZ_RUN_ALL", "true")
+
+    main(("run", "--dry-run"))
+
+    assert "in fr + en: handout" in caplog.text
+    assert "DECKZ_RUN_ALL=true (environment)" in caplog.text
+
+
+def test_run_all_keeps_the_options_given_next_to_it(
+    bilingual_dir: Path, capsys: Any, caplog: Any
+) -> None:
+    main(("run", "--all", "--lang", "fr", "--no-print", "--dry-run"))
+
+    assert _planned_pdfs(capsys) == {
+        "company/bilingual/html/bilingual-html",
+        *(
+            f"company/bilingual/pdf/bilingual-{kind}.pdf"
+            for kind in ("handout", "p1-handout", "p1-presentation")
+        ),
+    }
+    assert "in fr: handout" in caplog.text
+
+
+def test_run_all_names_the_fix_for_a_missing_translation(
+    bilingual_dir: Path, capsys: Any, caplog: Any
+) -> None:
+    (bilingual_dir / "content" / "en" / "hello.md").unlink()
+
+    with raises(SystemExit) as exit_info:
+        main(("run", "--all", "--dry-run"))
+
+    assert exit_info.value.code == 1
+    assert "deckz run --all --lang fr" in caplog.text
+
+    caplog.clear()
+    main(("run", "--all", "--lang", "fr", "--dry-run"))
+
+    assert "--all builds every language" not in caplog.text
+
+
 def test_run_defaults_come_from_a_dotenv_file(
     bilingual_dir: Path, monkeypatch: Any, capsys: Any
 ) -> None:

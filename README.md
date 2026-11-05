@@ -1098,6 +1098,10 @@ line wins over all of them:
   `PRESENTATION` and `PRINT` together to get the same outputs from all of
   them.
 
+`deckz run --all` ignores these, `DECKZ_RUN_SYNC` aside, to build every
+output of the deck in every language; an option given next to it still
+applies (`--all --lang fr`).
+
 `deckz <command> --help` lists the variables each option reads. For
 instance, a `.env` (typically git-ignored) building only each deck's whole
 handout, in both languages, by default:

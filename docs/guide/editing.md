@@ -27,6 +27,16 @@ builds the handouts, presentations and printable handouts, in both languages
 (English PDFs under `pdf/en/`). Narrow it with `--handout`/`--no-presentation`/
 `--no-print`, `--lang fr`, `--parts <part>`; `--dry-run` shows what would be built.
 
+```sh
+deckz run --all --workdir my/deck
+```
+
+builds everything, whatever your [`.env`](setup.md#the-env-file) narrows: handouts,
+part handouts, presentations, printable handouts, HTML and course notes, in every
+language. It's the build to run before `deckz upload`. An option next to it still
+applies: `--all --lang fr` for a deck with no English yet (an English build fails on a
+missing translation), `--all --no-html` to skip an output.
+
 After a build, deckz removes the PDFs that no build of the deck produces anymore: a
 renamed or removed part's, a stray file. A narrower build never removes the rest
 (the other language's, presentations after a handout-only build). `--no-sync` keeps
