@@ -74,6 +74,7 @@ def run_file(
     from ...pipelines import OutputKinds, build, chapters_required, file_targets
     from ...pipelines import run_file as _run_file
     from .._presentation import (
+        RUN_NOTES_VARIABLES,
         RichProgress,
         announce_build,
         print_plan_of,
@@ -98,7 +99,7 @@ def run_file(
         sync=sync,
         course_notes=course_notes or not slides,
     )
-    announce_build(path, langs, outputs)
+    announce_build(path, langs, outputs, RUN_NOTES_VARIABLES)
 
     targets = partial(
         file_targets,

@@ -50,7 +50,10 @@ def run_course_notes(
     paths = settings.paths
     langs = unique(langs)
     announce_build(
-        str(paths.current_dir.relative_to(paths.git_dir)), langs, COURSE_NOTES
+        str(paths.current_dir.relative_to(paths.git_dir)),
+        langs,
+        COURSE_NOTES,
+        ("DECKZ_LANG",),
     )
     warn_missing_chapters(settings, langs)
 

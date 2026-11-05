@@ -77,6 +77,8 @@ def run(
     from ...pipelines import BuildTarget, OutputKinds, build, deck_targets
     from ...pipelines import run as _run
     from .._presentation import (
+        RUN_DECK_VARIABLES,
+        RUN_EVERY_OUTPUT_VARIABLES,
         RichProgress,
         announce_build,
         print_plan_of,
@@ -107,7 +109,7 @@ def run(
         str(settings.paths.current_dir.relative_to(settings.paths.git_dir)),
         langs,
         outputs,
-        every_output=all,
+        RUN_EVERY_OUTPUT_VARIABLES if all else RUN_DECK_VARIABLES,
     )
     # Not with --all alone: a deck may well have no course notes, and nobody asked.
     if course_notes:

@@ -682,6 +682,20 @@ def test_run_announces_the_defaults_the_environment_set(
     assert "DECKZ_RUN_PRESENTATION=false (environment)" in caplog.text
 
 
+def test_run_shared_announces_only_what_it_reads(
+    bilingual_dir: Path, monkeypatch: Any, caplog: Any
+) -> None:
+    monkeypatch.setenv("DECKZ_RUN_ALL", "true")
+    monkeypatch.setenv("DECKZ_RUN_COURSE_NOTES", "true")
+    monkeypatch.setenv("DECKZ_RUN_PRINT", "false")
+
+    main(("run", "shared", "--dry-run"))
+
+    assert "DECKZ_RUN_PRINT=false (environment)" in caplog.text
+    assert "DECKZ_RUN_ALL" not in caplog.text
+    assert "DECKZ_RUN_COURSE_NOTES" not in caplog.text
+
+
 def test_single_view_commands_ignore_deckz_lang(
     bilingual_dir: Path, monkeypatch: Any, capsys: Any
 ) -> None:

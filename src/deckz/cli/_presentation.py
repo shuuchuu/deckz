@@ -379,12 +379,11 @@ def print_gpu_reports(reports: Iterable["RunReport"]) -> None:
     Console(highlight=False).print(table)
 
 
-_RUN_VARIABLES = (
+RUN_VARIABLES = (
     "DECKZ_LANG",
     *(
         f"DECKZ_RUN_{option}"
         for option in (
-            "ALL",
             "HANDOUT",
             "PART_HANDOUTS",
             "PRESENTATION",
@@ -394,24 +393,27 @@ _RUN_VARIABLES = (
         )
     ),
 )
-
-
-_EVERY_OUTPUT_VARIABLES = ("DECKZ_RUN_ALL", "DECKZ_RUN_SYNC")
-"""Those of `_RUN_VARIABLES` that still count with `deckz run --all`."""
+"""What `announce_build` names by default: `run shared` and `run all` read these."""
+RUN_NOTES_VARIABLES = (*RUN_VARIABLES, "DECKZ_RUN_COURSE_NOTES")
+"""What the `run` commands with a `--course-notes` read."""
+RUN_DECK_VARIABLES = (*RUN_NOTES_VARIABLES, "DECKZ_RUN_ALL")
+"""What `deckz run` reads."""
+RUN_EVERY_OUTPUT_VARIABLES = ("DECKZ_RUN_ALL", "DECKZ_RUN_SYNC")
+"""What `deckz run --all` still reads."""
 
 
 def announce_build(
     what: str,
     langs: "Sequence[Lang]",
     outputs: "OutputKinds",
-    *,
-    every_output: bool = False,
+    variables: "Sequence[str]" = RUN_VARIABLES,
 ) -> None:
     """Log what a `run` command builds, and which settings came from the environment.
 
     A `.env` file can change what `deckz run` does without a word on the \
-    command line: this line says so before anything is built. `every_output` \
-    (`deckz run --all`) ignores most of them: only those it reads are named.
+    command line: this line says so before anything is built. `variables` \
+    are those the command reads: one it doesn't read changes nothing, and \
+    naming it would say otherwise.
     """
     from ._options import environment_defaults
 
@@ -430,7 +432,6 @@ def announce_build(
     message = f"Building {what} in {' + '.join(langs)}: {', '.join(kinds) or 'nothing'}"
     if outputs.sync and outputs.pdfs:
         message += ", then removing the PDFs no build produces anymore"
-    variables = _EVERY_OUTPUT_VARIABLES if every_output else _RUN_VARIABLES
     if defaults := environment_defaults(variables):
         message += f". From the environment: {', '.join(defaults)}"
     getLogger(__name__).info(message)

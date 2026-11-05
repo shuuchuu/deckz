@@ -314,7 +314,7 @@ def test_run_course_notes_only(repo: Path) -> None:
 
 
 def test_course_notes_default_from_the_environment(
-    repo: Path, monkeypatch: Any, capsys: CaptureFixture[str]
+    repo: Path, monkeypatch: Any, capsys: CaptureFixture[str], caplog: Any
 ) -> None:
     _chapter(repo, "greeting/hello", "# Hello\n")
     monkeypatch.setenv("DECKZ_RUN_COURSE_NOTES", "true")
@@ -324,6 +324,20 @@ def test_course_notes_default_from_the_environment(
     out = capsys.readouterr().out
     assert "company/abc/pdf/abc-handout.pdf: render all" in out
     assert "company/abc/pdf/course-notes/abc-course-notes.pdf: render all 1" in out
+    assert "DECKZ_RUN_COURSE_NOTES=true (environment)" in caplog.text
+
+
+def test_run_course_notes_announces_only_what_it_reads(
+    repo: Path, monkeypatch: Any, caplog: Any
+) -> None:
+    _chapter(repo, "greeting/hello", "# Hello\n")
+    monkeypatch.setenv("DECKZ_LANG", "fr")
+    monkeypatch.setenv("DECKZ_RUN_PRINT", "false")
+
+    main(("run", "course-notes", "--dry-run"))
+
+    assert "DECKZ_LANG=fr (environment)" in caplog.text
+    assert "DECKZ_RUN_PRINT" not in caplog.text
 
 
 def test_run_decks_with_course_notes(repo: Path) -> None:

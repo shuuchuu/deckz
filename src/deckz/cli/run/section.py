@@ -70,6 +70,7 @@ def run_section(
     from ...pipelines import OutputKinds, build, chapters_required, section_targets
     from ...pipelines import run_section as _run_section
     from .._presentation import (
+        RUN_NOTES_VARIABLES,
         RichProgress,
         announce_build,
         print_plan_of,
@@ -90,7 +91,7 @@ def run_section(
         sync=sync,
         course_notes=course_notes,
     )
-    announce_build(f"{section}@{flavor}", langs, outputs)
+    announce_build(f"{section}@{flavor}", langs, outputs, RUN_NOTES_VARIABLES)
 
     targets = partial(
         section_targets,

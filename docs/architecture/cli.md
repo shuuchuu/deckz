@@ -74,7 +74,9 @@ the fix, and never calls `sys.exit` or prints.
 defaults to `DECKZ_LANG`. The `run` sub-app reads every option of every subcommand from
 `DECKZ_RUN_<OPTION>` (`Env("DECKZ_RUN_", command=False)`, the same names for `deckz run`
 and `deckz run deck`). A default taken from the environment or a `.env` file is
-announced (`environment_defaults`), never silent. `deckz run --all` sets every output
+announced (`environment_defaults`), never silent: each `run` command passes
+`announce_build` the variables it reads, since one it doesn't read changes nothing.
+`deckz run --all` sets every output
 and language over these defaults (only an option given on the command line, `given`,
 still wins), and leaves `--sync` alone: it removes files. A command showing a single resolved
 view (a tree, the settings) takes a plain `lang: Lang` instead, which ignores

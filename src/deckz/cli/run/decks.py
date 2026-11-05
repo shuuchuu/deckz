@@ -65,7 +65,12 @@ def run_decks(
 
     from ...exceptions import BuildsFailedError
     from ...pipelines import OutputKinds, build, decks_targets, failure_report
-    from .._presentation import RichProgress, announce_build, print_plan_of
+    from .._presentation import (
+        RUN_NOTES_VARIABLES,
+        RichProgress,
+        announce_build,
+        print_plan_of,
+    )
 
     langs = unique(langs)
     outputs = OutputKinds(
@@ -78,7 +83,7 @@ def run_decks(
         course_notes=course_notes,
     )
     what = "every deck" if since is None else f"the decks changed since {since}"
-    announce_build(what, langs, outputs)
+    announce_build(what, langs, outputs, RUN_NOTES_VARIABLES)
     targets = decks_targets(workdir, langs, course_notes=course_notes, since=since)
     if not targets:
         # Not even the assets: nothing would use them.
