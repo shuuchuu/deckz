@@ -77,6 +77,19 @@ def test_code_difference_counts_imported_names() -> None:
     assert code_difference("from m import a, b", "from m import x") is not None
 
 
+def test_code_difference_allows_a_trailing_comma() -> None:
+    wrapped = "fonction(\n  premier_argument,\n  deuxieme_argument,\n)"
+    assert code_difference(wrapped, "function(first, second)") is None
+
+
+def test_code_difference_accepts_empty_cells() -> None:
+    assert code_difference("", "") is None
+
+
+def test_code_difference_still_counts_the_other_commas() -> None:
+    assert code_difference("f(a, b)", "f(a)") is not None
+
+
 def test_code_difference_compares_what_yield_from_names() -> None:
     fr = "def f(a, b):\n  yield from a"
     en = "def f(a, b):\n  yield from b"

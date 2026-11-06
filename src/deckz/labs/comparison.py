@@ -85,12 +85,14 @@ def code_tokens(code: str) -> list[str] | None:
     translation may reshape, e.g. a mapping of English values that only the
     fr side needs. The names a `from … import` lists all become `N`: a
     formatter sorts them, so a translation may reorder them, and the code
-    that uses them still pairs each fr name with its en name.
+    that uses them still pairs each fr name with its en name. A comma before a
+    closing bracket goes too: the formatter adds one when a longer name wraps
+    the call, at the price of not telling `(x,)` from `(x)`.
 
     Returns:
-        The cell's tokens, without comments, every string literal or run of \
-        them as `S`, every name a `from … import` lists as `N`, or None if the \
-        cell doesn't tokenize.
+        The cell's tokens, without comments or trailing commas, every string \
+        literal or run of them as `S`, every name a `from … import` lists as \
+        `N`, or None if the cell doesn't tokenize.
     """
     lines = [
         # Shell lines and magics aren't Python: tokenize them as a plain string.
@@ -125,7 +127,20 @@ def code_tokens(code: str) -> list[str] | None:
             tokenize.ENDMARKER,
         }:
             kept.append(token.string)
-    return collapse_literal_runs(kept)
+    return collapse_literal_runs(without_trailing_commas(kept))
+
+
+def without_trailing_commas(tokens: list[str]) -> list[str]:
+    """Drop each comma that comes right before a closing bracket.
+
+    Returns:
+        The tokens, without those commas.
+    """
+    return [
+        token
+        for i, token in enumerate(tokens)
+        if not (token == "," and tokens[i + 1 : i + 2] in (["]"], [")"], ["}"]))
+    ]
 
 
 def collapse_literal_runs(tokens: list[str]) -> list[str]:
