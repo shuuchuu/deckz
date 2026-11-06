@@ -61,6 +61,28 @@ def test_code_difference_none_when_identical() -> None:
     assert code_difference("x = 1", "x = 1") is None
 
 
+def test_code_difference_allows_imported_names_sorted_differently() -> None:
+    fr = "from m import decale, trouve_cle\ntrouve_cle(decale(1))"
+    en = "from m import crack, rotate\ncrack(rotate(1))"
+    assert code_difference(fr, en) is None
+
+
+def test_code_difference_still_pairs_imported_names_in_the_code() -> None:
+    fr = "from m import a, b\na(1)\nb(1)\na(2)"
+    en = "from m import x, y\nx(1)\ny(1)\ny(2)"
+    assert code_difference(fr, en) is not None
+
+
+def test_code_difference_counts_imported_names() -> None:
+    assert code_difference("from m import a, b", "from m import x") is not None
+
+
+def test_code_difference_compares_what_yield_from_names() -> None:
+    fr = "def f(a, b):\n  yield from a"
+    en = "def f(a, b):\n  yield from b"
+    assert code_difference(fr, en) is not None
+
+
 def test_pair_problems_reports_cell_count_mismatch(tmp_path: Path) -> None:
     fr = tmp_path / "fr.ipynb"
     en = tmp_path / "en.ipynb"

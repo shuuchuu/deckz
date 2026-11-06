@@ -49,6 +49,33 @@ def missing_notebooks(notebooks_dir: Path) -> Iterator[Path]:
                 yield rel.parent / f"{rel.name}-{lang}.ipynb"
 
 
+def imported_names(tokens: list[tokenize.TokenInfo]) -> set[int]:
+    """Find the names `from … import` statements list.
+
+    Returns:
+        Their indices in `tokens`.
+    """
+    indices: set[int] = set()
+    at_start, in_from, in_list = True, False, False
+    for i, token in enumerate(tokens):
+        if token.type == tokenize.NEWLINE:
+            at_start, in_from, in_list = True, False, False
+        elif token.type not in {
+            tokenize.NL,
+            tokenize.COMMENT,
+            tokenize.INDENT,
+            tokenize.DEDENT,
+        }:
+            if at_start:
+                in_from = token.string == "from"
+            elif in_from and token.string == "import":
+                in_list = True
+            elif in_list and token.type == tokenize.NAME and token.string != "as":
+                indices.add(i)
+            at_start = False
+    return indices
+
+
 def code_tokens(code: str) -> list[str] | None:
     """Strip what a translation changes from a code cell.
 
@@ -56,11 +83,14 @@ def code_tokens(code: str) -> list[str] | None:
     one follow the language's grammar ("1 arbre", "1 tree" but "0 trees").
     So does a run of literals (`"Yes": "Oui", "No": "Non"`): data a
     translation may reshape, e.g. a mapping of English values that only the
-    fr side needs.
+    fr side needs. The names a `from … import` lists all become `N`: a
+    formatter sorts them, so a translation may reorder them, and the code
+    that uses them still pairs each fr name with its en name.
 
     Returns:
         The cell's tokens, without comments, every string literal or run of \
-        them as `S`, or None if the cell doesn't tokenize.
+        them as `S`, every name a `from … import` lists as `N`, or None if the \
+        cell doesn't tokenize.
     """
     lines = [
         # Shell lines and magics aren't Python: tokenize them as a plain string.
@@ -73,8 +103,11 @@ def code_tokens(code: str) -> list[str] | None:
         return None
     kept: list[str] = []
     depth = 0
-    for token in tokens:
-        if token.type == FSTRING_START:
+    imported = imported_names(tokens)
+    for i, token in enumerate(tokens):
+        if i in imported:
+            kept.append("N")
+        elif token.type == FSTRING_START:
             depth += 1
             if depth == 1:
                 kept.append("S")
