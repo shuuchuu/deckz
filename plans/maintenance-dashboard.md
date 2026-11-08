@@ -41,6 +41,11 @@ Also: `deckz review status` and `review diff` only read, but `_DECKZ_READ_ONLY_P
 - `deckz show course-notes` with no `--workdir` inside a deck: every deck, plus the
   distinct content files with their status (`--json`).
 
+**Done 2026-11-08** (`ace8f19`, `5b39bea`, not pushed): `status` and `diff` checked
+read-only on slides (nothing written in the checkout, its git directory, objects or
+refs); `course_notes.repository_coverage` behind `show course-notes` run outside a
+deck, which reproduces the 2026-11-08 measurement on slides (925 files, 40 %).
+
 ### 1. Findings
 
 A finding grammar owned by deckz, configured in `deckz.yml` (`review.findings`):
