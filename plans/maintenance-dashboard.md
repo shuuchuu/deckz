@@ -217,6 +217,22 @@ review counts ignore `due` (`deck_counts`), left for the dashboard (phase 5).
   marked, and the sessions no deck matches (with the fix: the mapping or the key).
 - Without the extra or the credentials, everything else works, with no session
   column.
+- **Settled 2026-11-08 (the maintainer):**
+  - `deckz.yml`'s `sessions`: `companies` maps a calendar company key (casing
+    ignored) to its catalog directory (or null: no deck here); a training code
+    names the catalog's deck directory of that name (casing ignored), and
+    `trainings` lists only the exceptions (`<company>/<code>: <deck dir>`, or null:
+    taught without a deck here); sessions ending before `since` are ignored.
+  - The user's settings are their own file, `~/.config/deckz/calendar.yml`
+    (schedz's `CalendarSettings`, plus `intra_pattern`, a regex on the title's
+    extra part, `(?i)^intra\b` by default), which no repository file can set.
+  - An INTRA deck's `calendar: {training, start}` (the code and the first day of the
+    engagement's root session) claims that engagement. An INTRA session no deck
+    claims is an orphan, not a session of the catalog deck (an INTRA's program
+    differs from the catalog's, slightly or a lot): the fix is an INTRA deck with
+    that key, or a `sessions.catalog_intras` entry (`{company, training, start}`, no
+    client name) saying the catalog deck is taught as is. A key or an entry
+    matching no engagement is reported.
 
 ### 5. The command
 

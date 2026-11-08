@@ -168,3 +168,14 @@ class CourseNotesError(DeckzError):
 
 class ReviewError(DeckzError):
     """`deckz review` can't go on: no `review.dir`, or a report it can't read."""
+
+
+class CalendarError(DeckzError):
+    """The user's calendar can't be read: its settings, the network, Google."""
+
+
+class CalendarUnavailableError(CalendarError):
+    """The calendar isn't set up here: no extra, no settings or no login.
+
+    Everything but the sessions works without it.
+    """

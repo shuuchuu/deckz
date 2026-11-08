@@ -818,6 +818,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+calendar = [
+    { name = "schedz", extra = ["google"] },
+]
 extras = [
     { name = "email-validator" },
     { name = "google-api-python-client" },
@@ -843,7 +846,7 @@ videos = [
 [package.dev-dependencies]
 dev = [
     { name = "bumpver" },
-    { name = "deckz", extra = ["extras", "labs", "parity", "videos"] },
+    { name = "deckz", extra = ["calendar", "extras", "labs", "parity", "videos"] },
     { name = "doit" },
     { name = "httpx2" },
     { name = "import-linter" },
@@ -884,16 +887,18 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6,<7" },
     { name = "rich", specifier = ">=14,<15" },
     { name = "ruamel-yaml", specifier = ">=0.18,<1" },
+    { name = "schedz", extras = ["google"], marker = "extra == 'calendar'", specifier = ">=0.1,<1" },
     { name = "sendgrid", marker = "extra == 'extras'", specifier = ">=6,<7" },
     { name = "typst", specifier = ">=0.15,<1" },
     { name = "vastai", marker = "extra == 'gpu'", specifier = ">=1,<2" },
     { name = "watchfiles", specifier = ">=1,<2" },
 ]
-provides-extras = ["extras", "gpu", "labs", "parity", "videos"]
+provides-extras = ["calendar", "extras", "gpu", "labs", "parity", "videos"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "bumpver", specifier = ">=2026.1132" },
+    { name = "deckz", extras = ["calendar"] },
     { name = "deckz", extras = ["extras"] },
     { name = "deckz", extras = ["labs"] },
     { name = "deckz", extras = ["parity"] },
@@ -3497,6 +3502,26 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/0a/e8/1e186578076aff7a80735f625005fde678412ab609cd323ed182eb7d6b87/ruff-0.17.1-py3-none-win32.whl", hash = "sha256:1de0030a8aa78c65c5fecb84b2e5c390ac684c0452875a02afc7c083d49a496a", size = 9895093, upload-time = "2026-10-15T15:23:10.582Z" },
     { url = "https://files.pythonhosted.org/packages/6a/2e/da3d9589bae8e8b58f3a48bd5bc0b980232fb14a83bf02c3be7660f87c1b/ruff-0.17.1-py3-none-win_amd64.whl", hash = "sha256:5df76f16580fab58d0f6c98a3ac254a4abceb7b2489b8b678335869cff77b3d7", size = 10097955, upload-time = "2026-10-15T15:23:13.309Z" },
     { url = "https://files.pythonhosted.org/packages/df/c9/0f2a4dea06a5e12c1191ee3d96b1e1233797d0d5e18f97a2b909a95a9836/ruff-0.17.1-py3-none-win_arm64.whl", hash = "sha256:42400b9a6ff8515ff27796f07f92e0195be011c86e81e381606f58ea5502fef4", size = 9853542, upload-time = "2026-10-15T15:23:16.05Z" },
+]
+
+[[package]]
+name = "schedz"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "platformdirs" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/22/a6/a2bc15b4c4df0e2aafbe80ec3d59bd0a5bcb724fbce0c0b4db58ab7eb821/schedz-0.1.0.tar.gz", hash = "sha256:03fda65b47c1f5deceafe3931b2e05d86e1792a70b07330a120e46b7a486892c", size = 15033, upload-time = "2026-11-08T08:25:20.461Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0c/8e/c3eb5236e3e3e22ecdcfb933cf87073421398a65af58c58cca0d74994491/schedz-0.1.0-py3-none-any.whl", hash = "sha256:15581c5fc3c99b83db61114dcbb25628ff04648085d4d1933283a8e3d98746f0", size = 16887, upload-time = "2026-11-08T08:25:19.106Z" },
+]
+
+[package.optional-dependencies]
+google = [
+    { name = "google-api-python-client" },
+    { name = "google-auth-oauthlib" },
 ]
 
 [[package]]

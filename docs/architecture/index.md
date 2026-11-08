@@ -13,7 +13,7 @@ The [guide](../guide/index.md) is for the people running a deckz-managed reposit
 | [Build pipeline](pipelines.md) | `pipelines`, `checking`, `course_notes`, `course_notes_code`, `code_runner`: planning and building decks, running the course notes' code |
 | [Analyses and checks](analyzing.md) | `analyzing`: read-only analyses, content checks |
 | [Components](components.md) | `components`: protocols, factories, and their implementations |
-| [Domain libraries](libraries.md) | `labs`, `videos`, `upstream`, `extras`, `worktrees`, `commits`, `remotes` |
+| [Domain libraries](libraries.md) | `labs`, `videos`, `sessions`, `upstream`, `extras`, `worktrees`, `commits`, `remotes` |
 | [Foundations](foundations.md) | `configuring`, `models`, `exceptions`, `utils`, `stamps`, `drive_links` |
 | [The repository's plugins](plugins.md) | What a deckz-managed repository plugs in, and what it may import |
 | [studioz](studioz.md) | How studioz uses deckz |
@@ -64,7 +64,7 @@ flowchart TB
     tasks["<b>status</b> | <b>setting_up</b> | <b>scaffolding</b> | <b>ci_report</b><br/>task-level operations"]
     pipelines["<b>pipelines</b><br/>plan and build decks"]
     analyzing["<b>analyzing</b><br/>read-only analyses, content checks"]
-    mid["<b>checking</b> | <b>course_notes</b> | <b>course_notes_code</b> | <b>labs</b> | <b>videos</b> | <b>hooks_install</b>"]
+    mid["<b>checking</b> | <b>course_notes</b> | <b>course_notes_code</b> | <b>labs</b> | <b>videos</b> | <b>hooks_install</b> | <b>sessions</b>"]
     upstream["<b>upstream</b><br/>the branch labs and videos are published from"]
     components["<b>components</b> | <b>extras</b> | <b>worktrees</b> | <b>commits</b> | <b>remotes</b>"]
     inputs["<b>render_inputs</b><br/>what a fragment's rendering read"]

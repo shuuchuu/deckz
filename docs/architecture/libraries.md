@@ -52,6 +52,21 @@ repository's scenes and templates (see [plugins](plugins.md)).
 `extras.uploading` draws its own progress bars with `rich`, an exception to the
 `terminal` contract (see [Known exceptions](index.md#known-exceptions)).
 
+`extras.calendar` is the only module importing schedz (the `deckz[calendar]` extra):
+it reads the user's `calendar.yml` (`UserCalendarSettings`, schedz's
+`CalendarSettings` plus `intra_pattern` and `cache_hours`) and the calendar's events
+and engagements, turning schedz's failures into `CalendarUnavailableError` (not set
+up: no extra, settings or login) or `CalendarError`. `sessions` imports it lazily.
+
+## `sessions`
+
+| | |
+|---|---|
+| **Responsibility** | Which deck each engagement of the user's calendar teaches (`deckz sessions`): [`read_calendar`][deckz.sessions.read_calendar] (the cache, `extras.calendar`), [`read_decks`][deckz.sessions.read_decks] (the decks' `calendar` claims), [`match_sessions`][deckz.sessions.match_sessions] (a pure function: decks, orphans with their fix, claims matching nothing) |
+| **Owns** | The cache of raw events, `<user cache dir>/calendar/<calendar id digest>.json` (0600, in a 0700 directory: the titles name clients) |
+| **Depends on** | `configuring` (`sessions` of `deckz.yml`), `models` (`CalendarClaim`), `utils` (`all_deck_settings`), `exceptions`; `extras.calendar`, lazily |
+| **Never** | Writes in a repository, or logs in to Google unless asked (`login=True`, `deckz sessions --login`): a missing token raises `CalendarUnavailableError`, which a caller such as the dashboard reads as "no sessions" |
+
 ## `worktrees`
 
 | | |

@@ -12,6 +12,9 @@ def _isolated_user_config_dir(tmp_path: Path, monkeypatch: Any) -> None:
     # specific user config patch this again with their own directory.
     user_dir = tmp_path / "isolated-user-config"
     monkeypatch.setattr(appdirs, "user_config_dir", lambda *_, **__: str(user_dir))
+    # Nor the developer's cache (`deckz sessions`'s calendar events).
+    cache_dir = tmp_path / "isolated-user-cache"
+    monkeypatch.setattr(appdirs, "user_cache_dir", lambda *_, **__: str(cache_dir))
 
 
 @fixture(autouse=True)

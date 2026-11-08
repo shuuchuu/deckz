@@ -20,6 +20,7 @@ There are several kinds of types defined in this module:
     - [`FlavorDefinition`][deckz.models.FlavorDefinition]
     - [`SectionDefinition`][deckz.models.SectionDefinition]
     - [`PartDefinition`][deckz.models.PartDefinition]
+    - [`CalendarClaim`][deckz.models.CalendarClaim]
     - [`DeckDefinition`][deckz.models.DeckDefinition]
 
     The only tricky part in those classes is the format used to define includes. The \
@@ -91,10 +92,11 @@ There are several kinds of types defined in this module:
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
+from datetime import date
 from pathlib import Path, PurePath
 from typing import Annotated, Any, Literal, NewType, Protocol, TypeGuard, get_args
 
-from pydantic import BaseModel, ValidationInfo
+from pydantic import BaseModel, ConfigDict, ValidationInfo
 from pydantic.functional_validators import AfterValidator, BeforeValidator
 
 ########################################################################################
@@ -340,6 +342,24 @@ class PartDefinition(BaseModel):
     """The includes pointing to the sections and files in this part."""
 
 
+class CalendarClaim(BaseModel):
+    """The calendar engagement a deck was made for (`deckz sessions`).
+
+    Names it without its client: the training code of its title and the \
+    first day of its root session. A deck made for one session (e.g. an \
+    INTRA's, whose program differs from the catalog's) claims it, so it \
+    is that deck's session rather than the catalog deck's.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    training: str
+    """The training code of the session's title, casing ignored (e.g. `DRN`)."""
+
+    start: date
+    """The first day of the engagement's root session."""
+
+
 class DeckDefinition(BaseModel):
     """Specify the different attributes of a deck."""
 
@@ -351,6 +371,11 @@ class DeckDefinition(BaseModel):
 
     parts: list[PartDefinition]
     """The definition of each part of the deck."""
+
+    calendar: CalendarClaim | None = None
+    """The calendar engagement this deck was made for, if any: its company \
+    is the one whose catalog (`sessions.companies` in `deckz.yml`) holds the \
+    deck."""
 
 
 ########################################################################################

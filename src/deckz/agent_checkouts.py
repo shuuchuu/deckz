@@ -120,7 +120,11 @@ _GIT_LISTING = {
     "stash": {"list", "show"},
     "tag": {"--list", "-l"},
 }
-_DECKZ_READ_ONLY = frozenset({"check", "search-sections", "show", "status", "worktree"})
+# `sessions` writes only the user's cache of calendar events, outside every
+# checkout.
+_DECKZ_READ_ONLY = frozenset(
+    {"check", "search-sections", "sessions", "show", "status", "worktree"}
+)
 _DECKZ_READ_ONLY_PAIRS = {
     "i18n": {"missing-en", "stale"},
     # `mark` writes the reports; `status` and `diff` only run read-only git

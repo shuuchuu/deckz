@@ -474,6 +474,87 @@ class ReviewSettings(BaseModel):
     (`review-dated-facts`). Unset, that check passes."""
 
 
+def _casefold_unique[T](mapping: dict[str, T]) -> dict[str, T]:
+    folded: dict[str, str] = {}
+    for key in mapping:
+        if (other := folded.setdefault(key.casefold(), key)) != key:
+            msg = f"{other!r} and {key!r} are the same key, casing ignored"
+            raise ValueError(msg)
+    return mapping
+
+
+class CatalogIntra(BaseModel):
+    """An INTRA session taught with its catalog's deck, as it is.
+
+    Named without its client: the company and training code of its title, \
+    and the first day of its root session.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    company: str
+    """The company of the session's title, casing ignored (a key of \
+    `companies`)."""
+    training: str
+    """The training code of the session's title, casing ignored."""
+    start: date
+    """The first day of the engagement's root session."""
+
+
+class SessionsSettings(BaseModel):
+    """Which deck each session of the user's calendar teaches (`deckz sessions`).
+
+    A session's title names a company and a training code (the user's \
+    `calendar.yml`, outside the repository, says how). `companies` gives the \
+    company's catalog directory; the training code, casing ignored, names \
+    the deck directory of that name in it, unless `trainings` says \
+    otherwise. An INTRA session (its title's extra part matching the user's \
+    `intra_pattern`) belongs to the deck whose `deck.yml` claims it \
+    (`calendar: {training, start}`), or to its catalog deck when \
+    `catalog_intras` says so; otherwise no deck matches it: its program may \
+    differ from the catalog's. Nothing here names a client.
+    """
+
+    model_config = ConfigDict(frozen=True)
+    companies: Annotated[dict[str, str | None], AfterValidator(_casefold_unique)] = {}
+    """Each calendar company key, casing ignored, and its catalog directory \
+    relative to the git root (e.g. `{orsys: decks/orsys}`), or null for a \
+    company whose sessions use no deck of this repository."""
+    trainings: Annotated[dict[str, str | None], AfterValidator(_casefold_unique)] = {}
+    """The training codes whose deck directory isn't the catalog's directory \
+    of that name, keyed `<company>/<code>` (casing ignored): the deck \
+    directory relative to the git root (e.g. `{orsys/dpl: \
+    decks/orsys/dpl-2026}`), or null for a training taught without a deck of \
+    this repository."""
+    catalog_intras: tuple[CatalogIntra, ...] = ()
+    """The INTRA sessions taught with their catalog's deck as it is."""
+    since: date | None = None
+    """Ignore the sessions ending before this day, e.g. those from before \
+    the repository's decks."""
+
+    @model_validator(mode="after")
+    def _check_companies(self) -> Self:
+        known = {company.casefold() for company in self.companies}
+        unknown = sorted(
+            {
+                key
+                for key in self.trainings
+                if "/" not in key or key.partition("/")[0].casefold() not in known
+            }
+            | {
+                f"{intra.company}/{intra.training}"
+                for intra in self.catalog_intras
+                if intra.company.casefold() not in known
+            }
+        )
+        if unknown:
+            msg = (
+                f"sessions: {', '.join(unknown)} must start with a company of "
+                "sessions.companies, then a slash and the training code"
+            )
+            raise ValueError(msg)
+        return self
+
+
 class ChecksSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
     opt_in: tuple[str, ...] = ()
@@ -812,6 +893,8 @@ class GlobalSettings(BaseModel):
     i18n: I18nSettings = Field(default_factory=I18nSettings)
     review: ReviewSettings = Field(default_factory=ReviewSettings)
     """Where `deckz review`'s reports are."""
+    sessions: SessionsSettings = Field(default_factory=SessionsSettings)
+    """Which deck each session of the user's calendar teaches."""
     videos: VideosSettings = Field(default_factory=VideosSettings)
     course_notes: CourseNotesSettings = Field(default_factory=CourseNotesSettings)
     setup: SetupSettings = Field(default_factory=SetupSettings)

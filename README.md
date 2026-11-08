@@ -34,7 +34,9 @@ chromium`); `deckz labs gpu` needs the `vastai` CLI (`pip install
 "deckz[gpu]"`, then `vastai set api-key`); `deckz videos render` needs
 Manim and `ffmpeg`
 (`pip install "deckz[videos]"`; `ffmpeg` itself isn't pip-installable,
-install it with your system's package manager).
+install it with your system's package manager); `deckz sessions` reads your
+Google Calendar through schedz (`pip install "deckz[calendar]"`, see the guide's
+Sessions page).
 
 Whatever your `templates/assets_builders.py` imports (e.g. matplotlib or
 plotly) is your repository's own dependency: install it alongside deckz.
@@ -431,6 +433,26 @@ typst_ignore_system_fonts: true
   review reports: a shared section's under `sections/`, a deck's at
   `<deck directory>.md`. deckz writes only their front matter's
   `reviewed` key.
+- `sessions`: which deck each session of the user's calendar teaches
+  (`deckz sessions`, see the guide's Sessions page):
+
+  ```yaml
+  sessions:
+    companies: {orsys: decks/orsys, sparks: decks/sparks-formation}
+    trainings: {orsys/dpl: decks/orsys/dpl-2026, sparks/aap: null}
+    catalog_intras:
+      - {company: orsys, training: drn, start: 2026-01-12}
+    since: 2026-01-01
+  ```
+
+  `companies`: each company key of the calendar's titles (casing ignored) and
+  its catalog directory (null: its sessions use no deck here); a training
+  code names the catalog's deck directory of that name (casing ignored),
+  `trainings` lists the exceptions (`<company>/<code>`: a deck directory, or
+  null). `catalog_intras`: the INTRA sessions taught with their catalog's
+  deck as it is. `since`: sessions ending before it are ignored. Nothing here
+  names a client; the calendar's own settings are the user's
+  (`calendar.yml` in their config directory), never the repository's.
 
 `deckz.yml` files are merged, in order, from the git root, from the user's
 config directory (XDG-compliant, e.g.
@@ -488,6 +510,11 @@ title with `path: My title` / `$path@flavor: My title` (or, as with `p2`'s
 title above, a `{fr: ..., en: ...}` map instead of a plain string, when the
 text actually differs by language -- see [Titles, variables and
 `--lang`](#titles-variables-and---lang)).
+
+A deck made for one calendar engagement (e.g. an INTRA session's) claims it,
+so that `deckz sessions` counts it for this deck rather than the catalog's:
+`calendar: {training: DRN, start: 2026-01-12}`, the training code of its
+title and the first day of its root session.
 
 ### Shared sections
 
