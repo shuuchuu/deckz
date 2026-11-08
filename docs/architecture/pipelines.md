@@ -118,8 +118,10 @@ it too.
 course-notes`. A deck's course notes have one chapter per content file, under
 `course-notes/`, mirroring `content/` (`en/` siblings included); `deckz.yml`'s
 `course_notes.skip` lists the files with no chapter, and `course_notes.same_as` those
-another file's chapter covers. `chapters_deck` gives the
-deck's tree with each file replaced by its chapter. `pipelines.course_notes_targets`
+another file's chapter covers. `entries` gives a deck's files with their chapter's
+status, and `repository_coverage` the same for every deck under a directory, each
+parsed in French, plus their distinct files (`deckz show course-notes` outside a deck).
+`chapters_deck` gives the deck's tree with each file replaced by its chapter. `pipelines.course_notes_targets`
 then builds that tree through the deck builder's `CourseNotes` output, which has its own
 main template and output directory (`pdf/course-notes/`); `deckz upload` uploads it
 beside the slides of its language (`pipelines.published_targets`). Such a target has

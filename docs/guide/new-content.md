@@ -28,7 +28,9 @@ to the folder and to the flavor's `includes`; each `# Title` in a file is a fram
 A deck's course notes are written chapter by chapter, one per content file, under
 `course-notes/` at the content file's path (`course-notes/topic/subject/intro.md`
 for `content/topic/subject/intro.md`, its English version in `en/`). `deckz show
-course-notes` lists the deck's files with their chapters, and
+course-notes` lists the deck's files with their chapters (outside a deck, e.g. at the
+repository's root, the coverage of every deck under it and of their distinct files),
+and
 
 ```sh
 deckz run course-notes --watch

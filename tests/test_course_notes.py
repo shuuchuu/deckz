@@ -6,7 +6,7 @@ from typing import Any
 import appdirs
 from pygit2 import init_repository
 from pypdfium2 import PdfDocument
-from pytest import CaptureFixture, fixture, raises
+from pytest import CaptureFixture, approx, fixture, raises
 
 from deckz.analyzing.content_checks import course_notes_files, course_notes_pairs
 from deckz.analyzing.i18n_stale import lang_pairs
@@ -159,6 +159,66 @@ def test_show_course_notes_lists_each_file_s_chapter(
     assert found["about"]["status"] == "missing"
     assert found["greeting/hello"]["status"] == "written"
     assert found["greeting/hello"]["chapter"] == "course-notes/greeting/hello.md"
+
+
+def _second_deck(repo: Path, sections: str = "      - $greeting@standard\n") -> None:
+    _write(
+        repo / "company" / "xyz" / "deck.yml",
+        "name: XYZ\nparts:\n  - name: p1\n    title: Part 1\n"
+        f"    sections:\n{sections}",
+    )
+
+
+def test_show_course_notes_outside_a_deck_covers_every_deck_under_it(
+    repo: Path, capsys: CaptureFixture[str], monkeypatch: Any
+) -> None:
+    _chapter(repo, "greeting/hello", "# Hello\n")
+    _second_deck(repo)
+    monkeypatch.chdir(repo)
+
+    main(("show", "course-notes", "--json"))
+
+    found = json.loads(capsys.readouterr().out)
+    decks = {deck["deck"]: deck for deck in found["decks"]}
+    assert list(decks) == ["company/abc", "company/xyz"]
+    assert decks["company/abc"]["counts"]["written"] == 1
+    assert decks["company/abc"]["counts"]["missing"] == 1
+    assert decks["company/abc"]["share"] == approx(0.5)
+    assert decks["company/xyz"]["share"] == 1
+    assert decks["company/xyz"]["error"] is None
+    # greeting/hello is in both decks: once among the distinct files.
+    assert [f["path"] for f in found["files"]] == ["about", "greeting/hello"]
+    assert found["counts"] == {"written": 1, "covered": 0, "skipped": 0, "missing": 1}
+    assert found["share"] == approx(0.5)
+
+    main(("show", "course-notes", "--workdir", "company"))
+
+    out = capsys.readouterr().out
+    assert "company/abc  1 written, 0 covered, 0 skipped, 1 missing: 50% with" in out
+    assert "2 distinct content files: 1 written" in out
+
+
+def test_show_course_notes_reports_a_deck_that_does_not_parse(
+    repo: Path, capsys: CaptureFixture[str], monkeypatch: Any
+) -> None:
+    _second_deck(repo, "      - $nowhere@standard\n")
+    monkeypatch.chdir(repo)
+
+    main(("show", "course-notes"))
+
+    out = capsys.readouterr().out
+    assert "company/xyz  doesn't parse:" in out
+    assert "company/abc  0 written" in out
+
+
+def test_show_course_notes_without_a_deck_under_the_workdir(
+    repo: Path, monkeypatch: Any
+) -> None:
+    (repo / "empty").mkdir()
+    monkeypatch.chdir(repo / "empty")
+
+    with raises(SystemExit):
+        main(("show", "course-notes"))
 
 
 def test_entries_skip_and_same_as(repo: Path) -> None:

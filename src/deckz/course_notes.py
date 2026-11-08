@@ -140,6 +140,89 @@ def entries(settings: "GlobalSettings", deck: Deck, lang: Lang) -> list[ChapterE
     return [entry(settings, path, lang) for path in paths]
 
 
+def coverage_share(found: Iterable[ChapterEntry]) -> float | None:
+    """The share of the files needing a chapter whose chapter is written.
+
+    Returns:
+        `written` and `covered` over every file but the `skipped` ones; None \
+        when no file needs a chapter.
+    """
+    needed = [e for e in found if e.status is not ChapterStatus.SKIPPED]
+    if not needed:
+        return None
+    done = sum(e.status is not ChapterStatus.MISSING for e in needed)
+    return done / len(needed)
+
+
+@dataclass(frozen=True)
+class DeckCoverage:
+    """A deck's content files with their chapter, in the deck's order."""
+
+    deck: str
+    """The deck's directory, relative to the repository."""
+    entries: tuple[ChapterEntry, ...]
+    error: str | None = None
+    """Why the deck doesn't parse (then it has no entries)."""
+
+
+@dataclass(frozen=True)
+class Coverage:
+    """`deckz show course-notes` over several decks."""
+
+    decks: tuple[DeckCoverage, ...]
+    files: tuple[ChapterEntry, ...]
+    """Every content file of those decks once, by path."""
+
+
+def repository_coverage(
+    settings: "GlobalSettings", under: Path, lang: Lang
+) -> Coverage:
+    """The course notes coverage of every deck under a directory.
+
+    Each deck is parsed in French: its content files are the same in both
+    languages, and a deck missing an English file still has its chapters
+    counted. A file in several decks counts once in `files`.
+
+    Args:
+        settings: The repository's settings.
+        under: The directory whose decks to cover, e.g. the repository's root.
+        lang: Language of the chapters.
+
+    Returns:
+        The decks by path, and their distinct files.
+    """
+    from .components.factory import DeckSettingsFactory
+    from .exceptions import DeckzError
+    from .utils import all_deck_settings
+
+    git_dir = settings.paths.git_dir
+    root = under.resolve()
+    decks = []
+    files: dict[str, ChapterEntry] = {}
+    for deck_settings in all_deck_settings(git_dir):
+        directory = deck_settings.paths.current_dir.resolve()
+        if not directory.is_relative_to(root):
+            continue
+        where = str(directory.relative_to(git_dir.resolve()))
+        try:
+            deck = (
+                DeckSettingsFactory(deck_settings, lang="fr")
+                .parser()
+                .from_deck_definition(deck_settings.paths.deck_definition)
+            )
+        except DeckzError as e:
+            decks.append(DeckCoverage(where, (), str(e)))
+            continue
+        found = tuple(entries(deck_settings, deck, lang))
+        decks.append(DeckCoverage(where, found))
+        for item in found:
+            files.setdefault(item.path, item)
+    return Coverage(
+        tuple(sorted(decks, key=lambda d: d.deck)),
+        tuple(files[path] for path in sorted(files)),
+    )
+
+
 def chapters_deck(settings: "GlobalSettings", deck: Deck, lang: Lang) -> Deck:
     """`deck`, each content file replaced by its chapter.
 

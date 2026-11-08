@@ -906,7 +906,11 @@ repository's own main template, `templates/jinja2/course-notes.typ`
 PDF is `pdf/course-notes/<deck>-course-notes.pdf` (`paths.course_notes_pdf_dir`;
 `pdf/course-notes/en/` in English), which `--sync` leaves alone and `deckz
 upload` uploads next to the slides of its language. `deckz show course-notes` lists each content file of the deck with its
-chapter: `written`, `covered`, `skipped` or `missing`. A deck has course
+chapter: `written`, `covered`, `skipped` or `missing`. Outside a deck (at the
+repository's root, or in a catalog's directory), it gives every deck under it
+instead: its counts per status and the share of its files needing a chapter
+that have one, then the same over their distinct content files (`--json` for
+a script or a dashboard). A deck has course
 notes in a language once at least half of its files not skipped have their
 chapter in it (chapters are shared: a few come to any deck from the others);
 `deckz status` then flags its `missing` ones, so a content file added to the
