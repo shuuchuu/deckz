@@ -155,7 +155,11 @@ conversation is about one file: the editor's "Demander à l'agent" names it (`ab
 and from `agent.ASIDE_FROM` a message about another file sets the conversation aside
 (`precedente/`, one, which "Reprendre la précédente" exchanges back) for a new one;
 a follow-up typed in the panel stays, and a workflow's conversation (`MANY`) is never
-set aside. On a deck's page, `deck.js` puts the slide in view (its frame from
+set aside. The person may keep a conversation for other files (`stays`): the panel says
+before sending that a message would start a new one (`agent.js`'s `upcoming` follows
+`Conversation.target` and `afresh_for`, from the state's `afresh`), and its "Rester dans
+celle-ci" keeps it for that file (`Conversation.stay`); taking one back keeps it for the
+file of the one set aside in its place. On a deck's page, `deck.js` puts the slide in view (its frame from
 `/cadres`; none on a frameless page nor in the before/after view) in `body`'s
 `data-slide`, the panel shows it above the message box and posts it: the agent is
 told it in a line before the message (`agent.Slide`), the transcript shows it under

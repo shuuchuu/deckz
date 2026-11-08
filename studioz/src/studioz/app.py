@@ -2207,6 +2207,14 @@ async def agent_events(
                 else 0,
                 "aside": conversation.aside,
                 "context": agent.context_summary(conversation.context),
+                # What `agent.js` needs to say before sending that a message
+                # would start a new conversation (`Conversation.afresh_for`).
+                "afresh": {
+                    "from": conversation.afresh_from,
+                    "about": conversation.about,
+                    "stays": list(conversation.stays),
+                    "seen": conversation.seen,
+                },
                 "loggedIn": ok,
                 "account": account,
                 "sandbox": await studio.sandbox.status(),
@@ -2853,6 +2861,22 @@ async def agent_take_back(studio: StudioDep, name: str) -> Response:
     refused = await studio.agents.conversation(found.worktree.path).take_back()
     if refused:
         return JSONResponse({"error": refused}, status_code=409)
+    return Response(status_code=204)
+
+
+@router.post("/espaces/{name}/agent/rester")
+async def agent_stay(
+    studio: StudioDep, name: str, file: Annotated[str, Form()] = ""
+) -> Response:
+    """Keep the conversation for another `file` (`Conversation.stay`).
+
+    Returns:
+        204, or 422 without a file.
+    """
+    found = studio.workspace(name)
+    if not file.strip():
+        return JSONResponse({"error": "Aucun fichier"}, status_code=422)
+    await studio.agents.conversation(found.worktree.path).stay(file)
     return Response(status_code=204)
 
 

@@ -796,6 +796,98 @@ def test_a_message_names_the_slide_in_view(
     say("Revenons-y", _slide(11, line=9))
     assert conversation.about == "content/c.md"
 
+    # And it is kept for the file it was set aside for: still on b.md's slide,
+    # the person goes on with it.
+    clients = len(factory.clients)
+    assert conversation.stays == ("content/c.md", "content/b.md")
+    say("Et celle-ci, finalement", _slide(20, "content/b.md"))
+    assert len(factory.clients) == clients
+    assert conversation.about == "content/b.md"
+    # Not for a third file (the slide on a.md).
+    say("Et ce cadre", _slide(11, line=9))
+    assert len(factory.clients) == clients + 1
+    assert conversation.about == "content/a.md"
+
+
+def test_the_person_stays_in_the_conversation(
+    agent_client: TestClient, workspace: Path, factory: FakeFactory
+) -> None:
+    def say(message: str, about: str = "") -> None:
+        response = agent_client.post(
+            f"{BASE}/message", data={"message": message, "about": about}, headers=ORIGIN
+        )
+        assert response.status_code == 204
+        _wait_idle(conversation)
+
+    conversation = _conversation(agent_client, workspace)
+    assert not conversation.afresh_from
+    say("Aligne les T", "content/a.md")
+    assert conversation.afresh_from
+    assert conversation.afresh_for("content/b.md")
+    assert not conversation.afresh_for("content/a.md")
+    assert not conversation.afresh_for(None)
+
+    stayed = agent_client.post(
+        f"{BASE}/rester", data={"file": "content/b.md"}, headers=ORIGIN
+    )
+
+    assert stayed.status_code == 204
+    assert conversation.stays == ("content/a.md", "content/b.md")
+    assert not conversation.afresh_for("content/b.md")
+    say("Le schéma de b est moche", "content/b.md")
+    # Back to a.md: the task goes on in the same conversation.
+    say("Et sa référence dans a", "content/a.md")
+    assert len(factory.clients) == 1
+    assert not conversation.aside
+
+    # A third file: a new conversation, which forgets the files kept.
+    say("Autre chose", "content/c.md")
+    assert len(factory.clients) == 2
+    assert conversation.stays == ()
+    assert conversation.aside
+
+
+def test_staying_needs_a_file(agent_client: TestClient) -> None:
+    response = agent_client.post(f"{BASE}/rester", data={"file": " "}, headers=ORIGIN)
+    assert response.status_code == 422
+
+
+def test_a_new_conversation_forgets_the_files_kept(
+    workspace: Path, factory: FakeFactory
+) -> None:
+    conversation = Conversation(workspace, factory)
+
+    async def turns() -> None:
+        await _send_about(conversation, "Un", "content/a.md")
+        await conversation.stay("content/b.md")
+        assert conversation.stays == ("content/a.md", "content/b.md")
+        await conversation.reset()
+
+    asyncio.run(turns())
+    assert conversation.stays == ()
+
+
+def test_a_workflow_conversation_keeps_no_file(
+    workspace: Path, factory: FakeFactory
+) -> None:
+    conversation = Conversation(workspace, factory)
+
+    async def turns() -> None:
+        await _send_about(conversation, "/qa-formation", agent.MANY)
+        await conversation.stay("content/b.md")
+
+    asyncio.run(turns())
+    assert conversation.stays == ()
+    assert not conversation.afresh_from
+
+
+def test_the_panel_says_a_message_would_start_afresh(
+    agent_client: TestClient,
+) -> None:
+    page = agent_client.get("/espaces/demo").text
+    assert 'id="agent-afresh" hidden' in page
+    assert "data-agent-stay" in page
+
 
 def test_a_slide_without_a_source(workspace: Path, factory: FakeFactory) -> None:
     conversation = Conversation(workspace, factory)

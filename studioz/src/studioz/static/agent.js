@@ -24,6 +24,9 @@ if (panel) {
   const about = document.getElementById("agent-about");
   // The slide in view on a deck's page (`deck.js`), which the message names.
   const slide = document.getElementById("agent-slide");
+  // Said before sending: the message would start a new conversation.
+  const afreshLine = document.getElementById("agent-afresh");
+  const afreshFile = afreshLine.querySelector("[data-agent-afresh-file]");
   const base = panel.dataset.base;
   let running = false;
   let asking = false;
@@ -32,6 +35,8 @@ if (panel) {
   // Logged in, with a sandbox that works: the agent can take a turn.
   let ready = false;
   let aside = false;
+  // The state's `afresh` (`app.agent_events`).
+  let afresh = { from: false, about: null, stays: [], seen: null };
 
   const atBottom = () => log.scrollHeight - log.scrollTop - log.clientHeight < 40;
 
@@ -73,6 +78,8 @@ if (panel) {
     context.title = state.context.title;
     context.classList.toggle("warn", state.context.long);
     long.hidden = !state.context.long;
+    afresh = state.afresh;
+    showAfresh();
     usage.textContent = state.usage.text;
     usage.title = state.usage.title;
     usage.classList.toggle("warn", state.usage.warn);
@@ -138,6 +145,7 @@ if (panel) {
     if (await post("message", body)) {
       message.value = "";
       about.value = "";
+      showAfresh();
       log.scrollTop = log.scrollHeight;
     } else {
       running = false;
@@ -153,6 +161,7 @@ if (panel) {
   // Emptied, the message is about nothing in particular any more.
   message.addEventListener("input", () => {
     if (!message.value.trim()) about.value = "";
+    showAfresh();
   });
   stop.addEventListener("click", () => post("arreter"));
   log.addEventListener("click", (event) => {
@@ -160,6 +169,34 @@ if (panel) {
     if (!button) return;
     button.disabled = true;
     post("precedente");
+  });
+
+  // The file a new conversation would be about, if the message typed would
+  // start one: `Conversation.target` and `afresh_for`'s rule, which decides.
+  function upcoming() {
+    if (!afresh.from || !message.value.trim()) return null;
+    const shown = document.body.dataset.slide ? JSON.parse(document.body.dataset.slide) : null;
+    const target = about.value || (shown?.file && shown.file !== afresh.seen ? shown.file : null);
+    if (!target || target === afresh.about || afresh.stays.includes(target)) return null;
+    return target;
+  }
+  function showAfresh() {
+    const target = upcoming();
+    afreshLine.hidden = !target;
+    afreshFile.textContent = target ?? "";
+  }
+  document.body.addEventListener("slide-in-view", showAfresh);
+  afreshLine.querySelector("[data-agent-stay]").addEventListener("click", async () => {
+    const target = upcoming();
+    if (!target) return;
+    const body = new FormData();
+    body.set("file", target);
+    if (await post("rester", body)) {
+      // Until the state says so.
+      afresh = { ...afresh, stays: [...afresh.stays, target] };
+      showAfresh();
+      message.focus();
+    }
   });
 
   // The long conversation's hint: the same as the header's button.
@@ -239,6 +276,7 @@ if (panel) {
     about.value = event.detail.file || "";
     message.focus();
     message.setSelectionRange(event.detail.text.length, event.detail.text.length);
+    showAfresh();
   });
 
   function showSlide() {

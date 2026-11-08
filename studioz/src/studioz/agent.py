@@ -45,7 +45,10 @@ agent the slide in view (`Slide`), and is about its file once the person moved
 to another file's slide since their last message: "cette diapositive est
 moche" needs no more, and "merci" stays a follow-up. A message written
 elsewhere is a follow-up, and a workflow's conversation is about several
-files: neither starts a new one.
+files: neither starts a new one. The person may keep a conversation for another
+file (`stay`: the panel offers it before a message would start a new one), and
+taking one back keeps it for the file of the one set aside in its place: a task
+spanning several files goes on in one conversation (`stays`).
 """
 
 import asyncio
@@ -105,9 +108,11 @@ _SPENT = "spent"
 session, it counts from there."""
 _SLIDE = "slide"
 """The file of the slide in view at the last message sent from a deck's page."""
+_STAYS = "stays"
+"""The files the person kept the conversation for, one a line (`Conversation.stay`)."""
 _ASIDE = "precedente"
 """The conversation set aside for a new one about another file (the last one)."""
-_KEPT = (_SESSION, _TRANSCRIPT, _QUESTION, _ABOUT, _CONTEXT, _SPENT, _SLIDE)
+_KEPT = (_SESSION, _TRANSCRIPT, _QUESTION, _ABOUT, _CONTEXT, _SPENT, _SLIDE, _STAYS)
 """What a conversation set aside takes along. The last turn's checkpoints stay:
 they are the workspace's files, whichever conversation changed them."""
 MANY = "*"
@@ -598,8 +603,9 @@ def context_summary(size: int | None) -> dict[str, object]:
     title = (
         f"L'agent relit les {tokens} jetons de la conversation à chaque appel "
         "(plusieurs par message) : plus elle est longue, plus chaque message "
-        "coûte. Un message depuis l'éditeur sur un autre fichier en commence "
-        f"une nouvelle à partir de {ASIDE_FROM // 1000} k."
+        "coûte. À partir de "
+        f"{ASIDE_FROM // 1000} k, un message sur un autre fichier en commence "
+        "une nouvelle, sauf si vous choisissez d'y rester."
     )
     return {
         "text": f"Contexte : {round(size / 1000)} k",
@@ -1083,6 +1089,78 @@ class Conversation:
             return None
 
     @property
+    def stays(self) -> tuple[str, ...]:
+        """The files the person kept the conversation for, whatever its context."""
+        return tuple((self._read(_STAYS) or "").splitlines())
+
+    @property
+    def seen(self) -> str | None:
+        """The file of the slide in view at the last message from a deck's page."""
+        return self._read(_SLIDE)
+
+    @property
+    def afresh_from(self) -> bool:
+        """Whether a message about another file would start a new conversation.
+
+        Another file, that is: not the conversation's, nor one of its `stays`.
+        """
+        about = self.about
+        return (
+            bool(self.entries)
+            and about not in {None, MANY}
+            and (self.context or 0) >= ASIDE_FROM
+        )
+
+    def target(self, about: str | None, slide: "Slide | None") -> str | None:
+        """The file a message is about.
+
+        Args:
+            about: The editor's file, if the message started from it.
+            slide: The slide in view on the deck's page it was written on.
+
+        Returns:
+            `about`, else the slide's file when the last message from a deck's \
+            page had another file's slide (`agent.js`'s `upcoming` follows \
+            the same rule), else None: a follow-up.
+        """
+        if about is None and slide and slide.file and slide.file != self.seen:
+            return slide.file
+        return about
+
+    def afresh_for(self, about: str | None) -> bool:
+        """Whether a message about a file starts a new conversation.
+
+        Args:
+            about: The file it is about (`target`), None for a follow-up.
+
+        Returns:
+            Whether it is another file than the conversation's and its \
+            `stays`, the conversation past `ASIDE_FROM`.
+        """
+        return (
+            self.afresh_from
+            and about not in {None, MANY, self.about}
+            and about not in self.stays
+        )
+
+    async def stay(self, file: str) -> None:
+        """Keep the conversation for `file`, as well as for its own file.
+
+        A message about either then stays in it, however long it grew; a new
+        conversation, or "Nouvelle conversation", forgets it.
+        """
+        current = self.about
+        if current == MANY or not file.strip():
+            return
+        files = [*self.stays]
+        for kept in (current, file.strip()):
+            if kept and kept not in files:
+                files.append(kept)
+        self._directory.mkdir(parents=True, exist_ok=True)
+        (self._directory / _STAYS).write_text("\n".join(files), encoding="utf8")
+        await self._notify()
+
+    @property
     def aside(self) -> bool:
         """Whether a conversation was set aside, which the person may take back."""
         return (self._directory / _ASIDE / _TRANSCRIPT).is_file()
@@ -1164,7 +1242,7 @@ class Conversation:
             slide: The slide in view on the deck's page the message was \
                 written on, which the agent is told. With no `about`, the \
                 message is about its file if the slide of the last message \
-                written on a deck's page was another file's.
+                written on a deck's page was another file's (`target`).
 
         Returns:
             Whether it was sent: not while the agent is still at work.
@@ -1174,12 +1252,9 @@ class Conversation:
         # The person takes over from a pause, or from a question.
         self.paused_until = None
         self._decline("La personne a écrit un message au lieu de répondre.")
-        seen = self._read(_SLIDE)
-        if slide and slide.file and about is None and slide.file != seen:
-            about = slide.file
+        about = self.target(about, slide)
         current = self.about
-        other = about not in {None, MANY} and current not in {None, about, MANY}
-        if other and self.entries and (self.context or 0) >= ASIDE_FROM:
+        if self.afresh_for(about):
             await self._exchange(fresh=True)
             await self._add(
                 Entry(
@@ -1575,6 +1650,10 @@ class Conversation:
     async def take_back(self) -> str | None:
         """Take back the conversation set aside, setting this one aside instead.
 
+        The person chose it over the one about the file they had moved to: it
+        is kept for that file too (`stay`), else their next message about it
+        would set it aside again.
+
         Returns:
             None once done, else why it wasn't, in French.
         """
@@ -1585,6 +1664,8 @@ class Conversation:
         left = self.about
         self.paused_until = None
         await self._exchange()
+        if left and left != MANY:
+            await self.stay(left)
         about = self.about
         await self._add(
             Entry(

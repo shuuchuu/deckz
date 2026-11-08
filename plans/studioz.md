@@ -18,7 +18,7 @@ Phase 6 (the agent's usage) was planned on 2026-10-21 from the colleague's first
 afternoon; its increments 1 (the model), 2 (a new conversation for a new file), 3
 (the context's size) and 4 (slides' `docs/figures.md`, in slides' main as `b83c29fb`)
 are done, and 6 (a smaller prefix) and 7 (no agent outside its sandbox), both
-2026-10-23. Phase 7's increments 1 (logging in, and errors naming their fix), 2
+2026-10-23, and 8 (staying in a long conversation, 2026-11-08). Phase 7's increments 1 (logging in, and errors naming their fix), 2
 (links in new tabs), 3 (the slide in view) and 4 (the PDF's outline) are done.
 **Next:** phase 8 (planned 2026-10-23 after a publish from a stale workspace
 rolled the labs back, its decisions taken the same day; its 5 increments done,
@@ -1856,6 +1856,28 @@ Each increment is usable on its own, in this order:
    may lack bubblewrap. The AppArmor profile, which this machine (Debian, without
    the restriction) could only parse, fixed the colleague's Ubuntu 24.04.5 (open
    items).
+8. **Staying in a long conversation**: done 2026-11-08. The user, trying increment
+   2's new conversation for another file, had a task going on that they wanted to
+   continue: the message went to a new conversation (its first call paid, its turn
+   running), and "Reprendre la précédente" didn't stick, since the conversation taken
+   back still remembered its own last slide, so the next message from the other
+   file's slide set it aside again; only going back to a slide of its file helped.
+   Now a conversation keeps the files the person chose it for (`stays`, set aside and
+   taken back with it, forgotten by a new conversation), which a message about never
+   sets aside (`Conversation.afresh_for`, `target`). Two ways in: above the message
+   box, as soon as the message typed would start a new conversation (`agent.js`'s
+   `upcoming`, from the state's `afresh`: past `ASIDE_FROM`, the conversation's
+   file, its `stays`, its last slide), a line says so, naming the file, and its
+   "Rester dans celle-ci" (`POST …/agent/rester`, `Conversation.stay`) keeps the
+   conversation for that file and its own; and taking a conversation back keeps it
+   for the file of the one set aside in its place. A third file still starts a new
+   one. Tried in headless Chromium on `studioz-dev`, a conversation faked at 80 k
+   about `guardrails.md` on the Fortinet deck: no line on its own slides, the line
+   naming `instructions.md` on p. 15 once something is typed (not with an empty
+   box), gone after "Rester" (`stays` holding both files), back for `anatomy.md` on
+   p. 30 and for the editor's "Demander à l'agent" on another file; then, after a
+   take-back while on p. 15, no line there, and the line again on p. 30. No real
+   turn: the rule's sending side is in the tests.
 
 ### Phase 7: what the colleague's first afternoon found (noted 2026-10-21)
 

@@ -356,6 +356,8 @@ dialog a.change { font-family: var(--mono); font-size: 0.9em; overflow-wrap: any
 .agent-entry[data-kind="person"] .agent-detail { font: inherit; font-size: 0.75em; white-space: normal; }
 .agent-slide { margin: 0; font-size: 0.75em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .agent-slide::before { content: "Diapositive en vue : "; }
+.agent-afresh { margin: 0; font-size: 0.8em; color: var(--muted); border-left: 3px solid var(--accent); padding-left: 0.5rem; }
+.agent-afresh[hidden] { display: none; }
 .agent-text.markdown { white-space: normal; }
 .agent-text.markdown > :first-child { margin-top: 0; }
 .agent-text.markdown > :last-child { margin-bottom: 0; }
