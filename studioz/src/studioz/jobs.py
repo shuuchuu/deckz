@@ -38,6 +38,8 @@ from threading import Lock, Thread
 from time import sleep
 from typing import Any
 
+from deckz.utils import write_atomic
+
 from . import memory
 from .memory import Memory
 from .watches import workspace_environment
@@ -190,13 +192,17 @@ def _load(workspace: Path) -> list[Job]:
     return sorted(found, key=lambda job: job.id)
 
 
-def _save(job: Job) -> None:
+def _save(job: Job, **final: str) -> None:
+    """Write its record, with `final`'s fields in place of its own.
+
+    In one step: a reader (another studioz, a test) never finds it empty, \
+    and studioz ending midway keeps the old record whole.
+    """
     store = _store(job.workspace)
     try:
         store.mkdir(parents=True, exist_ok=True)
-        (store / f"{job.id}.json").write_text(
-            json.dumps(job.record(), ensure_ascii=False), encoding="utf-8"
-        )
+        record = json.dumps({**job.record(), **final}, ensure_ascii=False)
+        write_atomic(store / f"{job.id}.json", record.encode("utf-8"))
     except OSError:
         pass  # Kept in memory still: a workspace gone, a full disk.
 
@@ -425,9 +431,12 @@ class Jobs:
                 break
         with self._lock:
             job.process = None
+        ended = datetime.now(UTC)
+        # Saved before it shows finished: whoever sees it end reads its record.
+        _save(job, state=state.name, ended=ended.isoformat())
+        with self._lock:
             job.state = state
-            job.ended = datetime.now(UTC)
-        _save(job)
+            job.ended = ended
         self._start_next(job.workspace, job.lane)
 
     def _run_step(self, job: Job, step: tuple[str, ...]) -> int:
