@@ -86,6 +86,46 @@ and `genai` C14, whose text has C15 spliced into it). Open: 369 in 37 reports (1
   sparks-formation/bdm 2026-11-07). It keeps `changed_elsewhere`'s refusal relative to
   that commit.
 
+**Prepared 2026-11-08, after phase 1 (nothing coded yet).** What the code does today,
+and what to settle first.
+
+- *One directory.* Everything goes through `review.review_dir(settings)` (the
+  `review.dir` setting); `report_paths` is an `rglob("*.md")` under it, and
+  `all_reports`, `marks_index` (most recent mark per file: by `date`, then by the
+  `base` commit's time), `ranking`, `deck_review` and `findings.findings_status` read
+  every report it finds. Setting `review.dir: docs/qa` would already pick up
+  `docs/qa/sections/**` and `docs/qa/decks/**` with no new setting. The only thing
+  that needs to know the kind is the dashboard. The kind could come from the
+  subdirectory, or from the content: a report that records a `deck.yml` is that
+  deck's report. Prefer the content rule (no setting) unless phase 3's `supports/`
+  reports need their own rule; decide that here.
+- *Ranking side effects.* A deck report recording `deck.yml`, `variables.yml` and
+  `program.md` doesn't touch `ranking` (none of them is a content file). Recording the
+  deck's own `content/` files makes it a covering report of that deck in `deck_review`
+  (`others`) and in `review findings <deck>`, which is what we want.
+- *Findings of a deck report.* The `review-findings` check and `review findings` read
+  every report under `review.dir` with one grammar (`review.findings`). Slides'
+  three deck reports (`docs/plans/archive/{pyt,pya,bdm}-qa-report.md`) don't follow
+  it: their rubrics are `##` headings with no `## Constats` above them, and pyt and
+  bdm number nothing (pya has 23 ids). Moved as they are, their findings would be
+  invisible (not wrong: items outside the heading aren't findings). Two options:
+  reformat the three into the sections' form (`## Constats`, `###` rubrics, ids,
+  outcomes; one grammar; the recommended one, about 900 lines in all), or a grammar
+  per kind. Their closing section "Constats des sections" (open section findings
+  copied by hand) can then go: `deckz review findings <deck>` produces it.
+- *`mark --at <commit>`.* `mark` writes through `_write_report(path, date, base,
+  files)` with `base` = HEAD and the working-tree blobs (`blobs`, `git hash-object`).
+  `--at` takes the blobs at the commit instead (`git rev-parse <commit>:<path>`, or
+  one `git ls-tree -r`), `base` = the commit, `date` = its commit date. It records
+  that commit's versions, so files changed since then show as stale, which is right.
+  Then `changed_elsewhere` has nothing to refuse: check this, and say so in the
+  docstring rather than keep a refusal with no purpose. A path missing at that commit
+  is an error that names it.
+- *Slides' passes to register:* orsys/pyt on `c6985bae` (2026-10-28, named in its
+  report), orsys/pya on `589afdad`'s parent (2026-11-04, the commit that added the
+  report), sparks-formation/bdm on `26eceac3`'s parent (2026-11-07). Confirm each from
+  `git log` before marking.
+
 ### 3. Rule dates and dated facts
 
 - `review.rules`: `[{paths: <glob>, since: <date>, why: <text>}]`. A file marked before
