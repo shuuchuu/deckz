@@ -90,8 +90,6 @@ lists several `calendars`, it also shows the label of the session's calendar.
   reports, findings, dated_facts, needs_care, opens}`, `dated_facts` being `{ok, due,
   reports: [{report, checked, source, due_on}]}`, `needs_care` whether it's among
   those the human output lists (not fresh, an open finding, or dated facts due).
-  Its `findings` also count the decks' reports' findings that name the section
-  ([Reviews](reviews.md): the verdicts on the flavors decks receive).
 - `problems`: the reports that couldn't be read, the findings breaking the grammar.
 - `opens`, on a deck and a section: `{file, why}`, a file of the repository that
   exists, or null. studioz's Maintenance page opens it in its editor when a row is
