@@ -31,7 +31,9 @@ def findings(
     With no TARGET, every report with findings, those with the most open
     ones first. A TARGET that is a deck's directory lists the open findings
     of its own report (its deck pass) and of the reports recording one of
-    its content files; a path under
+    its content files, but for the findings whose scope (the decks in
+    brackets after the id, `**A3** [orsys/mle]`) leaves it out, and the
+    findings of any other report whose scope names it; a path under
     `review.dir` stands for the reports under it, any other path for the
     reports recording a file under it.
 
@@ -43,12 +45,13 @@ def findings(
         plain: Compact, stable lines for a script or an agent, one per
             finding of the reports shown (open or not), their fields
             separated by tabs: report, line, id, outcome (`open`, `done`,
-            `refused`, or empty if it has none) and summary
+            `refused`, or empty if it has none), summary and scope (its
+            entries joined by commas, empty if it has none)
         json: Print one JSON object instead: with no TARGET, `{"reports":
             [...]}`; else `{"targets": [{target, kind ("deck" or "paths"),
             reports}]}`. A report is `{report, counts: {<letters>: {open,
             done, refused, none}}, findings: [{id, rubric, number, line,
-            outcome, heading, summary}]}`, every finding listed. Both have
+            outcome, heading, summary, scope}]}`, every finding listed. Both have
             `problems`: the unreadable reports and the findings breaking the
             grammar
         workdir: Path to move into before running the command
@@ -124,6 +127,7 @@ def _finding_json(finding: "Finding") -> dict[str, object]:
         "outcome": finding.outcome,
         "heading": finding.heading,
         "summary": finding.summary,
+        "scope": list(finding.scope),
     }
 
 
@@ -149,7 +153,7 @@ def _target_json(
 
 def _plain_line(report: str, finding: "Finding") -> str:
     values = (report, str(finding.line), finding.id, finding.outcome or "")
-    return "\t".join((*values, finding.summary))
+    return "\t".join((*values, finding.summary, ",".join(finding.scope)))
 
 
 def _short(text: str) -> str:
@@ -168,7 +172,7 @@ def _print_target(target: "TargetFindings", grammar: "FindingsSettings") -> None
     reports = target.reports
     opened = sum(r.count("open") for r in reports)
     with_open = [r for r in reports if r.count("open")]
-    covering = "covering its files" if target.kind == "deck" else "it stands for"
+    covering = "concerning it" if target.kind == "deck" else "it stands for"
     rubrics = f" ({_by_rubric(reports, grammar)})" if opened else ""
     print(
         f"{target.target}: {opened} open findings{rubrics}, in {len(with_open)} of "
@@ -179,7 +183,8 @@ def _print_target(target: "TargetFindings", grammar: "FindingsSettings") -> None
         for finding in report.findings:
             if finding.outcome == "open":
                 where = f"{finding.id:<4} l. {finding.line:<4}"
-                print(f"    {where}  {_short(finding.summary)}")
+                scope = f"[{', '.join(finding.scope)}] " if finding.scope else ""
+                print(f"    {where}  {_short(scope + finding.summary)}")
 
 
 def _print_table(

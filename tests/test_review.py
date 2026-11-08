@@ -562,7 +562,7 @@ def test_cli_findings_of_every_report_and_of_a_deck(repo: Path, capsys: Any) -> 
     main(("review", "findings", "company/two"))
     out = capsys.readouterr().out
     assert out.startswith(
-        "company/two: 1 open findings (1 E), in 1 of the 1 reports covering its files"
+        "company/two: 1 open findings (1 E), in 1 of the 1 reports concerning it"
     )
     assert f"  {REPORT}: 1 open\n    E1   l. " in out
 
@@ -573,6 +573,75 @@ def test_cli_findings_of_every_report_and_of_a_deck(repo: Path, capsys: Any) -> 
         (OTHER, "E1", "open", "`c.md`: wrong. *open*"),
         (OTHER, "P1", "done", "fixed. *done* (abc)"),
     ]
+
+
+def test_a_scoped_finding_counts_for_the_decks_it_names(
+    repo: Path, capsys: Any
+) -> None:
+    from deckz.analyzing.findings import findings_problems
+
+    deckz_yml = repo / "deckz.yml"
+    deckz_yml.write_text(
+        deckz_yml.read_text(encoding="utf8").replace(
+            "review:\n  dir: reviews\n", FINDINGS
+        ),
+        encoding="utf8",
+    )
+    # a.md is in both decks: company/abc (`light`) and company/two (`full`).
+    main(("review", "mark", REPORT, A))
+    path = repo / REPORT
+    path.write_text(
+        path.read_text(encoding="utf8")
+        + "\n## Findings\n\n### Errors\n\n- **E1** — `a.md`: wrong. *open*\n"
+        "\n### Pedagogy\n\n"
+        "- **P1** [abc] — `light` too short for it. *open*\n"
+        "- **P2** [company/two] — `full` too long for it. *open*\n"
+        "- **P3** [company/gone] — a past session's. *refused* (gone)\n",
+        encoding="utf8",
+    )
+    capsys.readouterr()
+
+    main(("review", "findings", "company/abc", "--plain"))
+    fields = [line.split("\t") for line in capsys.readouterr().out.splitlines()]
+    assert [(f[2], f[4], f[5]) for f in fields] == [
+        ("E1", "`a.md`: wrong. *open*", ""),
+        ("P1", "`light` too short for it. *open*", "abc"),
+    ]
+    main(("review", "findings", DECK, "--plain"))
+    fields = [line.split("\t") for line in capsys.readouterr().out.splitlines()]
+    assert [f[2] for f in fields] == ["E1", "P2"]
+    # The section's own view keeps every finding.
+    main(("review", "findings", REPORT, "--plain"))
+    assert len(capsys.readouterr().out.splitlines()) == 4
+
+    main(("dashboard", "--json"))
+    rows = {d["deck"]: d for d in loads(capsys.readouterr().out)["decks"]}
+    assert rows["company/abc"]["levels"]["findings"]["open"] == {"E": 1, "P": 1}
+    assert rows[DECK]["levels"]["findings"]["open"] == {"E": 1, "P": 1}
+
+    assert findings_problems(_settings(repo), None) == []
+    path.write_text(
+        path.read_text(encoding="utf8") + "- **P4** [nowhere] — typo. *open*\n",
+        encoding="utf8",
+    )
+    _write(
+        repo / DECK_REPORT,
+        "# QA\n\n## Findings\n\n### Errors\n\n- **E1** [abc] — not its own. *open*\n",
+    )
+    problems = findings_problems(_settings(repo), None)
+    assert len(problems) == 2
+    assert "has a scope, in a deck's report" in problems[0]
+    assert "« nowhere » names no deck" in problems[1]
+
+
+def test_a_scope_entry_names_a_deck_by_its_directory_or_its_end() -> None:
+    from deckz.analyzing.findings import resolve_scope
+
+    decks = ("decks/eni/ml1", "decks/orsys/ml1", "decks/orsys/mle")
+    assert resolve_scope("orsys/mle", decks) == ("decks/orsys/mle",)
+    assert resolve_scope("decks/orsys/mle", decks) == ("decks/orsys/mle",)
+    assert resolve_scope("ml1", decks) == ("decks/eni/ml1", "decks/orsys/ml1")
+    assert resolve_scope("rsys/mle", decks) == ()
 
 
 def test_cli_findings_refuses_without_a_grammar(repo: Path, caplog: Any) -> None:

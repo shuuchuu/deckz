@@ -283,19 +283,22 @@ def _section_state(files: Sequence["FileReview"]) -> SectionState:
 
 
 def _findings_level(
-    settings: "GlobalSettings",
-    by_report: Mapping[str, "ReportFindings"] | None,
-    reports: Iterable[str],
+    settings: "GlobalSettings", found: Sequence["ReportFindings"] | None
 ) -> FindingsLevel | None:
-    if by_report is None or settings.review.findings is None:
+    # `found`: the reports read, each reduced to the findings that count
+    # (a deck's: `findings.deck_findings`).
+    if found is None or settings.review.findings is None:
         return None
     grammar = settings.review.findings
-    read = tuple(sorted(r for r in set(reports) if r in by_report))
     open_ = {
-        rubric: sum(by_report[r].count("open", rubric) for r in read)
+        rubric: sum(report.count("open", rubric) for report in found)
         for rubric in grammar.rubrics
     }
-    return FindingsLevel(read, open_, sum(open_[rubric] for rubric in grammar.critical))
+    return FindingsLevel(
+        tuple(sorted(report.report for report in found)),
+        open_,
+        sum(open_[rubric] for rubric in grammar.critical),
+    )
 
 
 def _facts_level(
@@ -454,7 +457,7 @@ def dashboard(
         and if a deck doesn't parse (as `review.ranking` does).
     """
     from .analyzing.dated_facts import dated_facts
-    from .analyzing.findings import findings_status
+    from .analyzing.findings import deck_dirs, deck_findings, findings_status
     from .analyzing.review import (
         all_reports,
         deck_review,
@@ -476,6 +479,7 @@ def dashboard(
     recorded = {report.path for report in reports}
 
     by_report: dict[str, ReportFindings] | None = None
+    decks = deck_dirs(git_dir)
     if settings.review.findings is not None:
         found = findings_status(settings, [])
         by_report = {r.report: r for r in found.reports}
@@ -498,7 +502,8 @@ def dashboard(
     for review in reviews:
         for section in review.sections:
             section_decks.setdefault(section.section, []).append(review.deck)
-        # As `review findings <deck>`: `review.deck_covered_paths`' reports.
+        # As `review findings <deck>`: `review.deck_covered_paths`' reports,
+        # scoped findings counted for the decks they name only.
         covering = {
             mark.report for f in (*review.content, *review.chapters) for mark in f.marks
         }
@@ -516,7 +521,18 @@ def dashboard(
                 labs=FilesLevel(review.others),
                 deck_pass=review.deck_pass,
                 dated_facts=_facts_level(facts, covering, today),
-                findings=_findings_level(settings, by_report, covering),
+                findings=_findings_level(
+                    settings,
+                    None
+                    if by_report is None
+                    else deck_findings(
+                        review.deck,
+                        review.deck_pass.report,
+                        covering,
+                        by_report,
+                        decks,
+                    ),
+                ),
                 course_notes=by_deck_coverage.get(review.deck),
                 chapters_due=_rules_due(settings, review.chapters),
                 intra=claim is not None,
@@ -556,7 +572,16 @@ def dashboard(
                 ranked=r,
                 decks=tuple(section_decks.get(r.section, ())),
                 state=_section_state(r.files),
-                findings=_findings_level(settings, by_report, r.reports),
+                findings=_findings_level(
+                    settings,
+                    None
+                    if by_report is None
+                    else [
+                        by_report[report]
+                        for report in sorted(set(r.reports))
+                        if report in by_report
+                    ],
+                ),
                 dated_facts=section_facts,
                 opens=_section_opens(
                     settings, r, chapters_by_path, by_report, section_facts

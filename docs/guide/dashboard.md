@@ -43,7 +43,9 @@ Each deck is up to date at five levels, shown each on its own:
 | open | no report covering it has an open finding | how many are open, the `critical` rubrics' in brackets |
 
 The reports covering a deck are those `deckz review findings <deck>` reads: its own,
-and those recording one of its content files or course notes chapters. `—` means
+and those recording one of its content files or course notes chapters; a finding
+scoped to other decks doesn't count for it, one scoped to it counts wherever it is
+([Reviews](reviews.md), « Findings »). `—` means
 nothing to judge: no report records a notebook, or none covers the deck. Then come
 `notes`, its course notes coverage, and `due`, its chapters due under a rule.
 

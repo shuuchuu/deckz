@@ -23,9 +23,20 @@ last outcome word in it, emphasized (`*ouvert*`), wherever it is: after a
 sub-list, or followed by the commit or the reason in parentheses. Other
 list items (a verdict, a list of what was checked) are not findings.
 
+A finding of a shared section's report concerns, by default, every deck
+that report covers. One that concerns only some of them names them, its
+*scope*, in brackets right after its id: `- **A3** [orsys/mle, orsys/iao] —
+…`. An entry is a deck's directory relative to the repository, or its end
+(`orsys/mle` for `decks/orsys/mle`) when one deck only ends so. Then
+`deckz review findings <deck>` and the dashboard count it for those decks
+only, and for them even when their files aren't in its report (a notion a
+deck needs from a section it doesn't include). A deck's own report needs
+no scope: its findings are its deck's.
+
 The `review-findings` check fails on a finding with no outcome, an id two
-findings share in a report, letters no rubric has, and a finding under the
-heading of another rubric, or of none.
+findings share in a report, letters no rubric has, a finding under the
+heading of another rubric, or of none, a scope in a deck's report, and an
+open finding whose scope entry names no deck, or several.
 """
 
 import re
@@ -47,6 +58,7 @@ _ITEM = re.compile(r"^( {0,3}(?:[-*+]|\d{1,9}[.)]))( +|$)")
 _FENCE = re.compile(r"^ *(`{3,}|~{3,})")
 _BREAK = re.compile(r"^ {0,3}([-*_])(?: *\1){2,} *$")
 _ID = re.compile(r"\*\*([A-Z]+)(\d+)\*\*")
+_SCOPE = re.compile(r"[ \t]*\[([^\]\n]*)\]")
 
 
 @dataclass(frozen=True)
@@ -63,7 +75,10 @@ class Finding:
     heading: str | None
     """The rubric heading it's under, None if it's under none."""
     summary: str
-    """Its first paragraph after the id, whitespace collapsed."""
+    """Its first paragraph after the id (and its scope), whitespace collapsed."""
+    scope: tuple[str, ...] = ()
+    """The decks it concerns, as written in brackets after its id; empty: \
+    every deck its report covers (`resolve_scope`)."""
 
 
 @dataclass(frozen=True)
@@ -94,8 +109,10 @@ class TargetFindings:
     kind: Literal["deck", "paths"]
     reports: tuple[ReportFindings, ...]
     """A deck's: its own report and those recording one of its content files \
-    or written French chapters (`review.deck_covered_paths`); else the \
-    reports under the path, or recording a file under it."""
+    or written French chapters (`review.deck_covered_paths`), reduced to the \
+    findings concerning it, and the other reports' findings naming it \
+    (`deck_findings`); else the reports under the path, or recording a file \
+    under it."""
 
 
 @dataclass(frozen=True)
@@ -255,8 +272,17 @@ def _summary(item: _Item) -> str:
             break
         first.append(line.strip())
     text = " ".join(first)
-    text = _ID.sub("", text, count=1).strip()
-    return text.lstrip("\N{EM DASH}\N{EN DASH}-: ").strip()
+    text = _ID.sub("", text, count=1)
+    if scope := _SCOPE.match(text):
+        text = text[scope.end() :]
+    return text.strip().lstrip("\N{EM DASH}\N{EN DASH}-: ").strip()
+
+
+def _scope(item: _Item, id_end: int) -> tuple[str, ...]:
+    match = _SCOPE.match(item.lines[0], id_end)
+    if match is None:
+        return ()
+    return tuple(e.strip() for e in match.group(1).split(",") if e.strip())
 
 
 def parse(
@@ -295,6 +321,7 @@ def parse(
             outcome=outcome_of[found[-1]] if found else None,
             heading=item.heading,
             summary=_summary(item),
+            scope=_scope(item, match.end()),
         )
         findings.append(finding)
         where = f"{report}:{item.line}: {finding.id}"
@@ -349,6 +376,134 @@ def read_findings(settings: "GlobalSettings", path: Path) -> ReportFindings:
     return parse(path.read_text(encoding="utf8"), grammar(settings), rel)
 
 
+########################################################################################
+# Scopes                                                                               #
+########################################################################################
+
+
+def deck_dirs(git_dir: Path) -> tuple[str, ...]:
+    """Every deck's directory, relative to the repository, as scopes name them.
+
+    Returns:
+        The directories holding a `deck.yml` (hidden ones skipped, as
+        `utils.all_deck_settings` does), sorted.
+    """
+    from os import walk
+
+    found = []
+    for root, dirs, files in walk(git_dir):
+        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+        if "deck.yml" in files:
+            found.append(Path(root).relative_to(git_dir).as_posix())
+    return tuple(sorted(found))
+
+
+def resolve_scope(entry: str, decks: Sequence[str]) -> tuple[str, ...]:
+    """The decks a scope entry names.
+
+    Args:
+        entry: As written (`orsys/mle`, or `decks/orsys/mle`).
+        decks: Every deck's directory (`deck_dirs`).
+
+    Returns:
+        The deck whose directory is `entry`, else those whose directory ends
+        with it: one when the entry is good, none or several otherwise.
+    """
+    entry = entry.strip("/")
+    if entry in decks:
+        return (entry,)
+    return tuple(d for d in decks if d.endswith(f"/{entry}"))
+
+
+def concerns(finding: Finding, deck: str, decks: Sequence[str]) -> bool:
+    """Whether a scoped finding names a deck (an unscoped one names none).
+
+    Returns:
+        True if one of its scope's entries resolves to `deck` alone.
+    """
+    return any(resolve_scope(e, decks) == (deck,) for e in finding.scope)
+
+
+def scope_problems(
+    settings: "GlobalSettings", found: ReportFindings, decks: Sequence[str]
+) -> list[str]:
+    """What's wrong with a report's scopes.
+
+    A deck's report has none (its findings are its deck's), and an open
+    finding's entries each name one deck. A closed one may name a deck since
+    removed (a past INTRA session's): it's history.
+
+    Returns:
+        The problems, one line each.
+    """
+    from .review import report_kind
+
+    kind = report_kind(settings, settings.paths.git_dir / found.report)
+    is_deck = kind is not None and kind[0] == "deck"
+    problems = []
+    for finding in found.findings:
+        where = f"{found.report}:{finding.line}: {finding.id}"
+        if finding.scope and is_deck:
+            problems.append(
+                f"{where} has a scope, in a deck's report: its findings are its "
+                "deck's, remove the brackets"
+            )
+            continue
+        if finding.outcome != "open":
+            continue
+        for entry in finding.scope:
+            named = resolve_scope(entry, decks)
+            if not named:
+                problems.append(
+                    f"{where}: its scope's « {entry} » names no deck: write a "
+                    "deck's directory (or its end), or remove it from the scope"
+                )
+            elif len(named) > 1:
+                problems.append(
+                    f"{where}: its scope's « {entry} » names several decks "
+                    f"({', '.join(named)}): write the one's directory"
+                )
+    return problems
+
+
+def deck_findings(
+    deck: str,
+    own: str,
+    covering: Iterable[str],
+    every: Mapping[str, ReportFindings],
+    decks: Sequence[str],
+) -> list[ReportFindings]:
+    """A deck's findings: those of its report, and those that concern it.
+
+    Args:
+        deck: The deck's directory, relative to the repository.
+        own: Its report, relative to the repository.
+        covering: The reports recording one of its files.
+        every: Every report's findings, by report.
+        decks: Every deck's directory (`deck_dirs`).
+
+    Returns:
+        Its own report whole; each covering report reduced to its unscoped
+        findings and those naming the deck (kept even if that leaves none);
+        and any other report reduced to its findings naming the deck, when
+        it has some. By report.
+    """
+    covered = set(covering)
+    shown = []
+    for report, found in sorted(every.items()):
+        if report == own:
+            shown.append(found)
+            continue
+        kept = tuple(
+            f
+            for f in found.findings
+            if (report in covered and not f.scope) or concerns(f, deck, decks)
+        )
+        if report in covered or kept:
+            shown.append(ReportFindings(report, kept))
+    return shown
+
+
 def findings_problems(
     settings: "GlobalSettings", paths: Iterable[Path] | None
 ) -> list[str]:
@@ -367,11 +522,13 @@ def findings_problems(
 
     if settings.review.dir is None or settings.review.findings is None:
         return []
-    return [
-        problem
-        for path in reports_among(settings, paths)
-        for problem in read_findings(settings, path).problems
-    ]
+    decks = deck_dirs(settings.paths.git_dir)
+    problems = []
+    for path in reports_among(settings, paths):
+        found = read_findings(settings, path)
+        problems.extend(found.problems)
+        problems.extend(scope_problems(settings, found, decks))
+    return problems
 
 
 def _covering(
@@ -415,10 +572,12 @@ def findings_status(
     Returns:
         The findings. Fails if `review.dir` or `review.findings` is unset.
     """
-    from .review import read_report, report_paths, review_dir
+    from .review import deck_report_path, read_report, report_paths, review_dir
 
     review_dir(settings)
     grammar(settings)
+    git_dir = settings.paths.git_dir
+    decks = deck_dirs(git_dir)
     every: dict[str, ReportFindings] = {}
     recorded: dict[str, frozenset[str]] = {}
     problems: list[str] = []
@@ -426,6 +585,7 @@ def findings_status(
         found = read_findings(settings, path)
         every[found.report] = found
         problems.extend(found.problems)
+        problems.extend(scope_problems(settings, found, decks))
         try:
             recorded[found.report] = frozenset(read_report(settings, path).files)
         except ReviewError as error:
@@ -436,11 +596,11 @@ def findings_status(
     shown = []
     for target in targets:
         kind, reports = _covering(settings, target, recorded)
-        shown.append(
-            TargetFindings(
-                target.relative_to(settings.paths.git_dir).as_posix() or ".",
-                kind,
-                tuple(every[report] for report in sorted(reports)),
-            )
-        )
+        rel = target.relative_to(git_dir).as_posix()
+        if kind == "deck":
+            own = deck_report_path(settings, rel).relative_to(git_dir).as_posix()
+            found_reports = deck_findings(rel, own, reports, every, decks)
+        else:
+            found_reports = [every[report] for report in sorted(reports)]
+        shown.append(TargetFindings(rel or ".", kind, tuple(found_reports)))
     return FindingsStatus((), tuple(shown), tuple(problems))

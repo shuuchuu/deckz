@@ -271,27 +271,6 @@ emphasized, wherever it is: after a sub-list or a blank line, followed by the co
 or the reason. Other list items (a verdict, what was checked) aren't findings:
 
 ```markdown
-## Deck reports
-
-A section report reviews shared content once for every deck including it; a deck's
-pass reviews what is the deck's own: whether its program is covered, its sections fit
-together, its budget holds. Its report, at `<review.dir>/<deck directory>.md`, records
-the deck's own files: its `deck.yml`, `variables.yml`, program and `content/`, every
-file under its directory that git tracks or doesn't ignore, but not the `en/`
-translations. With no path, `mark` records them all, the new ones included:
-
-```sh
-deckz review mark docs/qa/decks/orsys/pyt.md
-```
-
-The deck's directory stands for the same files there, and `mark` refuses shared
-content in a deck's report: its sections' reports review it. So the pass holds while
-the deck's own files are at the version it read; a change to one of its shared
-sections shows in that section's report, at the content level, not in the deck's.
-`deckz review status <deck>` ends with its pass: none recorded, holds, or out of date
-with the files changed or added since. `deckz review findings <deck>` includes the
-deck's report.
-
 ## Findings
 
 ### Errors
@@ -302,7 +281,20 @@ deck's report.
   - `b.md`, « Loops ».
 
   *done* (4f2a9c1)
+
+### Pedagogy
+
+- **P1** [orsys/mle, orsys/iao] — the `light` flavor is too short for their
+  programs. *open*
 ```
+
+A finding of a section report concerns every deck the report covers, unless it names
+the ones it concerns, its *scope*, in brackets right after its id. A scope entry is a
+deck's directory relative to the repository, or its end when one deck only ends so
+(`orsys/mle` for `decks/orsys/mle`). A verdict on the flavor one deck receives, or a
+lab that assumes what some decks don't teach, is the section's finding (it is about
+the section's content, and its next review reads it there) with the decks it
+concerns as its scope. A deck's own report needs none: its findings are its deck's.
 
 ```sh
 deckz review findings                  # every report, the most open findings first
@@ -311,12 +303,16 @@ deckz review findings docs/qa/sections/python  # the reports under a directory
 ```
 
 For a deck, the reports are its own and those recording one of its content files or
-of its written course notes chapters; for a path outside `review.dir`, those recording
-a file under it. `--json` and `--plain` list
-every finding with its line, id, outcome and first paragraph. The command always
-exits 0.
+of its written course notes chapters, less their findings whose scope leaves the deck
+out, plus the findings of any other report whose scope names it (a section the deck
+should include); `deckz dashboard` counts a deck's findings the same way. For a path
+outside `review.dir`, the reports recording a file under it. `--json` and `--plain`
+list every finding with its line, id, outcome, first paragraph and scope. The command
+always exits 0.
 
 The `review-findings` check (blocking) fails on a finding with no outcome, an id two
 findings of a report share (give the newer one the next free number: ids are never
-renumbered, so other reports can cite them), letters no rubric has, and a finding
-under another rubric's heading, or under none.
+renumbered, so other reports can cite them), letters no rubric has, a finding under
+another rubric's heading, or under none, a scope in a deck's report, and an open
+finding whose scope entry names no deck or several. A closed finding may name a deck
+removed since (a past session's): it's history.
