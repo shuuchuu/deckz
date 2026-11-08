@@ -597,6 +597,28 @@ def all_reports(settings: "GlobalSettings") -> tuple[list[Report], list[str]]:
     return found, problems
 
 
+def reports_among(
+    settings: "GlobalSettings", paths: Iterable[Path] | None
+) -> list[Path]:
+    """The reports among `paths`, as a check given paths reads them.
+
+    Args:
+        settings: The repository's settings.
+        paths: Absolute paths; None for every report.
+
+    Returns:
+        The existing reports among them, sorted.
+    """
+    if paths is None:
+        return report_paths(settings)
+    directory = review_dir(settings)
+    return sorted(
+        path
+        for path in paths
+        if path.suffix == ".md" and path.is_relative_to(directory) and path.is_file()
+    )
+
+
 def header_problems(
     settings: "GlobalSettings", paths: Iterable[Path] | None
 ) -> list[str]:
@@ -615,20 +637,9 @@ def header_problems(
     """
     if settings.review.dir is None:
         return []
-    directory = review_dir(settings)
-    if paths is None:
-        checked = report_paths(settings)
-    else:
-        checked = sorted(
-            path
-            for path in paths
-            if path.suffix == ".md"
-            and path.is_relative_to(directory)
-            and path.is_file()
-        )
     git_dir = settings.paths.git_dir
     problems = []
-    for path in checked:
+    for path in reports_among(settings, paths):
         try:
             report = read_report(settings, path)
         except ReviewError as error:
@@ -861,7 +872,12 @@ def _files_of(deck: "Deck") -> list[Path]:
     )
 
 
-def _deck_files(settings: "DeckSettings") -> list[Path]:
+def deck_files(settings: "DeckSettings") -> list[Path]:
+    """A deck's content files, in French, as `deckz show paths` resolves them.
+
+    Returns:
+        Their absolute paths, in the deck's order, each once.
+    """
     from ..components.factory import DeckSettingsFactory
 
     return _files_of(
@@ -913,7 +929,7 @@ def expand(
             found[_rel(settings, target)] = None
         elif (target / "deck.yml").is_file():
             deck = DeckSettings.from_yaml(target, git_dir=git_dir)
-            for path in _deck_files(deck):
+            for path in deck_files(deck):
                 found[_rel(settings, path)] = None
         elif _in_content_dir(settings, target):
             if used is None:
@@ -968,7 +984,7 @@ def deck_review(
         index = marks_index(git_dir, reports)
     sections = set(shared_section_ids(settings.paths.content_dir))
     grouped: dict[str, list[str]] = {}
-    for path in _deck_files(settings):
+    for path in deck_files(settings):
         grouped.setdefault(_owning_section(settings, path, sections), []).append(
             _rel(settings, path)
         )
@@ -1127,7 +1143,7 @@ def deck_counts(
     from ..exceptions import DeckzError
 
     try:
-        files = _deck_files(settings)
+        files = deck_files(settings)
     except DeckzError:
         return None
     git_dir = settings.paths.git_dir

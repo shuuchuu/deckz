@@ -510,3 +510,65 @@ def test_deps_json_gives_each_flavors_files_and_dependents(
 
     main(("deps", "sec", "light", "--json"))
     assert list(loads(capsys.readouterr().out)["flavors"]) == ["light"]
+
+
+FINDINGS = (
+    "review:\n  dir: reviews\n  findings:\n    heading: Findings\n"
+    "    rubrics: {E: Errors, P: Pedagogy}\n"
+    "    outcomes: {open: open, done: done, refused: refused}\n"
+)
+OTHER = "reviews/other.md"
+
+
+def test_cli_findings_of_every_report_and_of_a_deck(repo: Path, capsys: Any) -> None:
+    deckz_yml = repo / "deckz.yml"
+    deckz_yml.write_text(
+        deckz_yml.read_text(encoding="utf8").replace(
+            "review:\n  dir: reviews\n", FINDINGS
+        ),
+        encoding="utf8",
+    )
+    main(("review", "mark", REPORT, C))
+    main(("review", "mark", OTHER, "labs/notebooks/sec"))
+    capsys.readouterr()
+    for report in (REPORT, OTHER):
+        path = repo / report
+        path.write_text(
+            path.read_text(encoding="utf8")
+            + "\n## Findings\n\n### Errors\n\n- **E1** — `c.md`: wrong. *open*\n"
+            "\n### Pedagogy\n\n- **P1** — fixed. *done* (abc)\n",
+            encoding="utf8",
+        )
+
+    main(("review", "findings", "--json"))
+    found = loads(capsys.readouterr().out)
+    assert [r["report"] for r in found["reports"]] == [OTHER, REPORT]
+    assert found["reports"][1]["counts"] == {
+        "E": {"open": 1, "done": 0, "refused": 0, "none": 0},
+        "P": {"open": 0, "done": 1, "refused": 0, "none": 0},
+    }
+    assert found["problems"] == []
+
+    # company/two includes c.md, which only `REPORT` records.
+    main(("review", "findings", "company/two"))
+    out = capsys.readouterr().out
+    assert out.startswith(
+        "company/two: 1 open findings (1 E), in 1 of the 1 reports covering its files"
+    )
+    assert f"  {REPORT}: 1 open\n    E1   l. " in out
+
+    # Any other path: the reports recording a file under it.
+    main(("review", "findings", "labs", "--plain"))
+    fields = [line.split("\t") for line in capsys.readouterr().out.splitlines()]
+    assert [(f[0], f[2], f[3], f[4]) for f in fields] == [
+        (OTHER, "E1", "open", "`c.md`: wrong. *open*"),
+        (OTHER, "P1", "done", "fixed. *done* (abc)"),
+    ]
+
+
+def test_cli_findings_refuses_without_a_grammar(repo: Path, caplog: Any) -> None:
+    with raises(SystemExit) as exc_info:
+        main(("review", "findings"))
+
+    assert exc_info.value.code == 1
+    assert "set `review.findings` in deckz.yml" in caplog.text

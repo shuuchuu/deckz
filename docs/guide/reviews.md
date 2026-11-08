@@ -120,3 +120,57 @@ deckz review mark docs/qa/sections/python/basics.md --forget content/old.md cont
 
 The new path is recorded at its current version: if the file also changed, review it
 first. `--forget` alone removes a deleted file.
+
+## Findings
+
+What a report says is the repository's, but deckz can count what's left to do if the
+findings follow one grammar, set in `deckz.yml`:
+
+```yaml
+review:
+  dir: docs/qa/sections
+  findings:
+    heading: Findings          # the heading the findings are under, at any level
+    rubrics:                   # the headings one level below it, by letters
+      E: Errors
+      P: Pedagogy
+    outcomes:                  # written emphasized: *open*
+      open: open
+      done: done
+      refused: refused
+```
+
+A finding is a top-level list item under that heading whose text starts with its id
+in bold, its rubric's letters and a number, and it sits under its rubric's heading
+(deeper headings may divide a rubric). Its outcome is the last outcome word in it,
+emphasized, wherever it is: after a sub-list or a blank line, followed by the commit
+or the reason. Other list items (a verdict, what was checked) aren't findings:
+
+```markdown
+## Findings
+
+### Errors
+
+- **E1** — `variables.md`, « Types »: `int` has no size limit. *open*
+- **E2** — three versions of the same frame:
+  - `a.md`, « Loops »;
+  - `b.md`, « Loops ».
+
+  *done* (4f2a9c1)
+```
+
+```sh
+deckz review findings                  # every report, the most open findings first
+deckz review findings decks/orsys/ipy  # the open findings of the reports covering a deck
+deckz review findings docs/qa/sections/python  # the reports under a directory
+```
+
+For a deck, the reports are those recording one of its content files; for a path
+outside `review.dir`, those recording a file under it. `--json` and `--plain` list
+every finding with its line, id, outcome and first paragraph. The command always
+exits 0.
+
+The `review-findings` check (blocking) fails on a finding with no outcome, an id two
+findings of a report share (give the newer one the next free number: ids are never
+renumbered, so other reports can cite them), letters no rubric has, and a finding
+under another rubric's heading, or under none.

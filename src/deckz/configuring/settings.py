@@ -1,3 +1,4 @@
+import re
 from functools import reduce
 from pathlib import Path
 from typing import Annotated, Any, Literal, Self, cast
@@ -318,6 +319,61 @@ class I18nSettings(BaseModel):
     no trailers, yet their one-sided changes were already settled."""
 
 
+class FindingOutcomes(BaseModel):
+    """The words of a finding's outcome, each written emphasized (`*word*`)."""
+
+    model_config = ConfigDict(frozen=True)
+    open: str
+    """Still to do, e.g. `ouvert`."""
+    done: str
+    """Fixed, e.g. `fait`."""
+    refused: str
+    """Decided against, e.g. `refusé`: a later review doesn't propose it \
+    again."""
+
+    @model_validator(mode="after")
+    def _distinct(self) -> Self:
+        words = (self.open, self.done, self.refused)
+        if len(set(words)) < len(words) or not all(w.strip() for w in words):
+            msg = "`review.findings.outcomes` needs three distinct, non-empty words"
+            raise ValueError(msg)
+        return self
+
+
+def _rubric_letters(rubrics: dict[str, str]) -> dict[str, str]:
+    if not rubrics:
+        msg = "`review.findings.rubrics` needs at least one rubric"
+        raise ValueError(msg)
+    if bad := [key for key in rubrics if not re.fullmatch(r"[A-Z]+", key)]:
+        msg = (
+            "`review.findings.rubrics`' keys are a finding id's capital letters "
+            f"(`E`, `CR`…): {', '.join(bad)}"
+        )
+        raise ValueError(msg)
+    return rubrics
+
+
+class FindingsSettings(BaseModel):
+    """The grammar of the review reports' findings (`deckz.analyzing.findings`).
+
+    A finding is a top-level list item, under the findings heading, that \
+    starts with its id in bold: a rubric's letters and a number \
+    (`- **P3** — …`). Its outcome is the last outcome word of the item, \
+    emphasized (`*ouvert*`).
+    """
+
+    model_config = ConfigDict(frozen=True)
+    heading: str
+    """The text of the heading the findings are under, e.g. `Constats` \
+    (any level: the findings run to the next heading of that level or \
+    above)."""
+    rubrics: Annotated[dict[str, str], AfterValidator(_rubric_letters)]
+    """Each rubric's letters and heading, e.g. `{E: Erreurs}`: the \
+    headings one level below the findings heading; a finding under one of \
+    them has its letters."""
+    outcomes: FindingOutcomes
+
+
 class ReviewSettings(BaseModel):
     """The review registry of `deckz review` (`deckz.analyzing.review`)."""
 
@@ -328,6 +384,10 @@ class ReviewSettings(BaseModel):
     report, whose front matter's `reviewed` key deckz writes (`deckz review \
     mark`) and nothing else. Unset, `deckz review` refuses, and the \
     `review-headers` check and `deckz status` leave reviews alone."""
+    findings: FindingsSettings | None = None
+    """The findings grammar of the reports (`deckz review findings`). \
+    Unset, `deckz review findings` refuses and the `review-findings` check \
+    passes."""
 
 
 class ChecksSettings(BaseModel):

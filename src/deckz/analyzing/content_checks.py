@@ -630,6 +630,15 @@ def review_headers(settings: "GlobalSettings", paths: Paths = None) -> list[str]
     return header_problems(settings, paths)
 
 
+def review_findings(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
+    # Every finding of the review reports follows `review.findings`' grammar
+    # (see `deckz.analyzing.findings`): an outcome, an id of its own, its
+    # rubric's letters. Nothing to do without `review.findings`.
+    from .findings import findings_problems
+
+    return findings_problems(settings, paths)
+
+
 CHECKS: dict[str, Callable[["GlobalSettings", Paths], list[str]]] = {
     "lab-ids": lab_ids,
     "lab-pairs": lab_pairs,
@@ -645,6 +654,7 @@ CHECKS: dict[str, Callable[["GlobalSettings", Paths], list[str]]] = {
     "course-notes-pairs": course_notes_pairs,
     "course-notes-code": course_notes_code,
     "review-headers": review_headers,
+    "review-findings": review_findings,
 }
 
 DEFERRED = (
@@ -665,10 +675,12 @@ Their harm comes later than the commit (a lab published, a deck uploaded or
 taught), so a contributor commits freely and the debt is settled before
 then. Those left out block a commit, the point of their harm:
 `lab-secrets` (a secret stays in the history), `jinja-syntax` and
-`deck-definitions` (each `git pull` breaks everyone's builds), and
+`deck-definitions` (each `git pull` breaks everyone's builds),
 `review-headers` (a malformed report stops `deckz review` for everyone
 after a pull, and a renamed file's review is best carried over by whoever
-renames it). `deckz.yml`'s `checks.deferred` replaces this list.
+renames it) and `review-findings` (a finding with no outcome or a shared id
+miscounts what's left to do, and only its writer knows the outcome).
+`deckz.yml`'s `checks.deferred` replaces this list.
 """
 
 OPT_IN = ("course-notes-code",)

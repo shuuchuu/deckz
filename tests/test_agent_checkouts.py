@@ -125,6 +125,7 @@ def test_bash_denial_allows_reading_the_main_checkout(tmp_path: Path) -> None:
         "deckz review status --plain",
         "uv run -q deckz review status decks/x --json",
         "deckz review diff docs/qa/sections/a.md",
+        "deckz review findings decks/x --json",
         "deckz worktree add y",
         "git -C ../repo--x commit -m x",
         "cd ../repo--x && python3 script.py > out.txt",

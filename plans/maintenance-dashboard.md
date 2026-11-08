@@ -61,6 +61,18 @@ findings (slides' *adaptée*) live outside the findings heading.
 - `deckz review findings [TARGET] [--json]`: per report, counts by rubric and outcome;
   with a deck, the open findings of the reports covering its files.
 
+**Done 2026-11-08** (branch `review-findings`, not pushed): `analyzing/findings.py`,
+`FindingsSettings`, the `review-findings` check (blocking, a no-op without
+`review.findings`), `deckz review findings` (allowed to agents in the main checkout).
+Settled on slides' 92 reports: the outcome is the **last** emphasized outcome word of
+the item, the item read as Markdown does (indented lines, blank lines, lazy
+continuation). That reads 2,615 of 2,619 findings; the "37 unreadable" of the hand
+measurement were its parser's (it stopped at a blank line), not the reports'. The 4
+left have no outcome at all (`genai/assistant-config` I2, `nn/generative` C6 and C10,
+and `genai` C14, whose text has C15 spliced into it). Open: 369 in 37 reports (126 P,
+119 C, 90 I, 33 A, 1 E), 2,129 done, 117 refused. List items with no id (slides'
+*adaptée* verdicts) aren't findings, so they need not move.
+
 ### 2. Deck reports
 
 - The registry covers several kinds: `review.dir` becomes the parent (`docs/qa`), with

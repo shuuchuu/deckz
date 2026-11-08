@@ -124,8 +124,9 @@ _DECKZ_READ_ONLY = frozenset({"check", "search-sections", "show", "status", "wor
 _DECKZ_READ_ONLY_PAIRS = {
     "i18n": {"missing-en", "stale"},
     # `mark` writes the reports; `status` and `diff` only run read-only git
-    # (hash-object without -w, cat-file, rev-parse, merge-base, ls-files).
-    "review": {"diff", "status"},
+    # (hash-object without -w, cat-file, rev-parse, merge-base, ls-files),
+    # `findings` reads the reports.
+    "review": {"diff", "findings", "status"},
     "setup": {"--check"},
 }
 _REDIRECTION = re.compile(r"^\d*>>?(.*)$")
