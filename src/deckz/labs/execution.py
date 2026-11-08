@@ -17,9 +17,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .inspecting import roles
+from .needs import RunNeeds, run_needs
 from .notebook import cell_source
 
 if TYPE_CHECKING:
+    from ..configuring.settings import LabsRunSettings
     from .container import Container
 
 EXEC_TIMEOUT = 300
@@ -39,7 +41,9 @@ EVENT = "\x1eQA "
 # runtime image starts) runs them through `_system_commands._run_command`
 # instead, returning a result with a `returncode`; also called by `x = !cmd`
 # there. Defined in a function deleted afterwards, so the notebook's namespace is
-# left as it was.
+# left as it was. The command is logged whole: a secret filled into it
+# (`labs.needs`) is redacted from the whole text, then truncated, as a prefix of
+# it would no longer match.
 SHELL_GUARD = r"""
 def __deckz_shell_guard(log):
     import importlib, json
@@ -50,7 +54,7 @@ def __deckz_shell_guard(log):
             code = exit_code(result)
             if code:
                 with open(log, "a") as f:
-                    f.write(json.dumps([code, str(cmd)[:300]]) + "\n")
+                    f.write(json.dumps([code, str(cmd)]) + "\n")
             return result
 
         guarded.__deckz_guard__ = True
@@ -348,7 +352,7 @@ def report_lines(stderr: str, returncode: int) -> Iterator[str]:
     elif not failures:
         yield "  execution: no code cell raised"
     for i, role, err in failures:
-        yield f"  [{i}] {role} cell raised {err}"
+        yield f"  [{i}] {role} cell raised {err[:300]}"
 
 
 def run_notebook(
@@ -405,13 +409,18 @@ def check_notebook(
     timeout: int = EXEC_TIMEOUT,
     container: "Container | None" = None,
     name: str | None = None,
+    run_settings: "LabsRunSettings | None" = None,
+    hooks_cwd: Path | None = None,
 ) -> Iterator[str]:
     """Structural checks plus an execution report for one notebook.
 
     Structural checks: a `heading` section not collapsed in Colab, an empty
     one, and a stored error output. The execution runs with `python` and
     this module's runner, or, given a `container`, for real in it, as
-    `name` (default: the file's name; see `labs.container`).
+    `name` (default: the file's name; see `labs.container`), its run needs
+    (`labs.needs`, read as `run_settings` says) met, its hooks run from
+    `hooks_cwd` (default: the current directory). This module's runner
+    skips the shell commands needing them: it fills none, and says so.
 
     Yields:
         One report line per problem or execution result.
@@ -436,27 +445,41 @@ def check_notebook(
                 yield f"  [{i}] stored error output: {out.get('ename')}"
     if "solution-heading" not in labels:
         yield f"  no {heading} section at all"
+    needs = (
+        run_needs(notebook, run_settings.metadata_key) if run_settings else RunNeeds()
+    )
     if container is None:
+        if asked := [*sorted(set(needs.envs.values())), *_hook_names(needs)]:
+            yield f"  run needs left unfilled without --container: {', '.join(asked)}"
         yield from run_notebook(notebook, labels, python, smoke=smoke, timeout=timeout)
         return
-    from .container import run_in_container
+    from .container import run_with_needs
 
-    yield from run_in_container(
+    yield from run_with_needs(
         notebook,
         labels,
         name or path.name,
         container,
+        needs,
+        hooks=run_settings.hooks if run_settings else {},
+        hooks_cwd=hooks_cwd or Path(),
         smoke=smoke,
         timeout=timeout,
     )
 
 
+def _hook_names(needs: RunNeeds) -> list[str]:
+    return [] if needs.hook is None else [f"hook {needs.hook}"]
+
+
 # The `check_notebook` lines that state a fact rather than a problem: a shell line the
-# runner without `--container` skips, `nvidia-smi` failing on a CPU, a kernel death a
-# rerun recovers from (as Colab's restart would), the verdict of a clean run, and a
-# notebook without solutions (a demo).
+# runner without `--container` skips, and the run needs it leaves unfilled, a run need
+# left unset (the notebook runs as a trainee's would), `nvidia-smi` failing on a CPU, a
+# kernel death a rerun recovers from (as Colab's restart would), the verdict of a
+# clean run, and a notebook without solutions (a demo).
 _FACT_RE = re.compile(
     r"\s*(?:shell command not run|execution: no code cell raised|no .+ section at all$"
+    r"|run needs left unfilled without --container: |\S+ not set: ran without it"
     r"|\[\d+\] the kernel died: ran the notebook again"
     r"|\[\d+\] shell command exited with code \d+: nvidia-smi)"
 )

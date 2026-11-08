@@ -128,19 +128,45 @@ class LabsGpuSettings(BaseModel):
     runs, and the queue restores before each one, so every notebook starts \
     from the image's state, as on a fresh Colab VM, whatever the ones before \
     it installed or removed (pip installs into `/usr/local`)."""
-    metadata_key: str = "shuuchuu.gpu"
-    """Dotted path, under a notebook's own `metadata`, of what its runs need.
+
+    @model_validator(mode="before")
+    @classmethod
+    def _moved_to_run(cls, data: Any) -> Any:
+        moved = (
+            sorted({"metadata_key", "hooks"}.intersection(data))
+            if isinstance(data, dict)
+            else []
+        )
+        if moved:
+            keys = ", ".join(f"labs.gpu.{key}" for key in moved)
+            msg = (
+                f"{keys} moved to labs.run (`deckz labs check --container` honors"
+                " them too): rename the key in deckz.yml, and the notebooks'"
+                " metadata from shuuchuu.gpu to shuuchuu.run (labs.run.metadata_key)"
+            )
+            raise ValueError(msg)
+        return data
+
+
+class LabsRunSettings(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    metadata_key: str = "shuuchuu.run"
+    """Dotted path, under a notebook's own `metadata`, of what its runs need \
+    (`deckz.labs.needs`).
 
     `variables` and `secrets` each map a variable of the notebook, assigned \
     `""` on a line of its own, to the environment variable (or `.env` entry) \
-    `deckz labs gpu queue` fills it from in the copy it sends; a secret's \
-    value is also redacted from what `fetch` copies back, and `deckz labs \
-    outputs` stores no output that showed it. `hook` names one of `hooks`."""
+    it is filled from in the copy `deckz labs gpu queue` sends, or `deckz \
+    labs check --container` runs; a secret's value is also redacted from what \
+    comes back, and `deckz labs outputs` stores no output that showed it. \
+    `hook` names one of `hooks`. `labs gpu queue` refuses a notebook whose \
+    variable isn't set; `labs check --container` runs it without, as a \
+    trainee would, and says so."""
     hooks: dict[str, str] = Field(default_factory=dict)
     """Shell commands, by name, run from the repository's root before a \
-    notebook naming one is queued and once its run is done, e.g. to reset a \
-    server the notebook writes to. Notebooks naming the same hook run one at \
-    a time, across machines: the next one is held until then."""
+    notebook naming one runs and once its run is done, e.g. to reset a server \
+    the notebook writes to. On GPU machines, notebooks naming the same hook \
+    run one at a time, across machines: the next one is held until then."""
 
 
 class LabsOutputsHook(BaseModel):
@@ -247,6 +273,9 @@ class LabsSettings(BaseModel):
     `deckz.labs.Notebook` library."""
     gpu: LabsGpuSettings = Field(default_factory=LabsGpuSettings)
     """Machines `deckz labs gpu` rents to run notebooks as Colab would."""
+    run: LabsRunSettings = Field(default_factory=LabsRunSettings)
+    """What a notebook's runs need, for `deckz labs gpu` and `deckz labs check \
+    --container`."""
     outputs: LabsOutputsSettings = Field(default_factory=LabsOutputsSettings)
     """What `deckz labs outputs` does to a notebook after writing its outputs."""
     link_snippet: str | None = None

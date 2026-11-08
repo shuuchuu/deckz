@@ -26,6 +26,7 @@ from deckz.configuring.settings import (
     LabsGpuSettings,
     LabsOutputsHook,
     LabsOutputsSettings,
+    LabsRunSettings,
     LabsSettings,
 )
 from deckz.exceptions import GpuRunError, MissingExtraError
@@ -111,7 +112,7 @@ def repo(tmp_path: Path) -> Path:
 def _settings(repo: Path, hooks: dict[str, str] | None = None) -> GlobalSettings:
     return GlobalSettings(
         paths=GlobalPaths(current_dir=repo, git_dir=repo),
-        labs=LabsSettings(gpu=LabsGpuSettings(hooks=hooks or {})),
+        labs=LabsSettings(run=LabsRunSettings(hooks=hooks or {})),
     )
 
 
@@ -680,7 +681,7 @@ def _notebook(path: Path, gpu: dict[str, Any], source: list[str]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     cell = {"cell_type": "code", "source": source, "metadata": {}, "outputs": []}
     path.write_text(
-        json.dumps({"cells": [cell], "metadata": {"shuuchuu": {"gpu": gpu}}})
+        json.dumps({"cells": [cell], "metadata": {"shuuchuu": {"run": gpu}}})
     )
     return path
 

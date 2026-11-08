@@ -107,6 +107,10 @@ class LabOutputsHookError(DeckzError):
     """A `labs.outputs.hooks` command failed on a notebook just written."""
 
 
+class LabRunNeedsError(DeckzError):
+    """A lab notebook's run hook failed, or its secret can't be redacted."""
+
+
 class GpuRunError(DeckzError):
     """`deckz labs gpu` failed: no machine rented or booted, or a remote step failed."""
 

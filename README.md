@@ -275,16 +275,18 @@ typst_ignore_system_fonts: true
     Vast.ai has, default `~/.ssh/id_ed25519`), `fresh_dirs` (directories
     `up` snapshots and the queue restores before each notebook, so each
     one starts from the image's state as on a fresh Colab VM, default
-    `[/usr/local]`, where pip installs), `metadata_key` (where a
-    notebook's own metadata says what its runs need, default
-    `shuuchuu.gpu`) and `hooks` (shell commands by name, run from the
-    repository's root before and after the run of a notebook naming one).
+    `[/usr/local]`, where pip installs).
+  - `run`: what a notebook's runs need, for `deckz labs gpu` and `deckz labs
+    check --container`: `metadata_key` (where a notebook's own metadata says
+    it, default `shuuchuu.run`) and `hooks` (shell commands by name, run
+    from the repository's root before and after the run of a notebook
+    naming one).
 
     What a notebook's runs need, in its metadata:
 
     ```json
     "shuuchuu": {
-      "gpu": {
+      "run": {
         "variables": {"username": "DAGSHUB_USERNAME"},
         "secrets": {"token": "DAGSHUB_TOKEN"},
         "hook": "reset-server"
@@ -294,10 +296,13 @@ typst_ignore_system_fonts: true
 
     `variables` and `secrets` map a variable the notebook assigns `""` on
     a line of its own to the environment variable (or `.env` entry) whose
-    value `deckz labs gpu queue` puts there, in the copy it sends only; a
-    secret's value is then redacted from every file kept locally, and
-    `deckz labs outputs` stores no output that showed it. `hook` runs
-    before the notebook is sent and once its run is done; notebooks naming
+    value `deckz labs gpu queue` and `deckz labs check --container` put
+    there, in the copy they run only; a secret's value is then redacted
+    from every file kept locally and every line reported, and `deckz labs
+    outputs` stores no output that showed it. One that isn't set refuses
+    the notebook in `labs gpu queue`; `labs check --container` runs it as
+    written, as a trainee would, and says so. `hook` runs before the run
+    and once it is done, failed or not; on GPU machines, notebooks naming
     the same hook run one at a time, even on different machines.
   - `outputs.hooks`: commands, by name, that `deckz labs outputs` (and
     `deckz labs gpu pass --write-outputs`) runs on a notebook once it wrote

@@ -5,6 +5,7 @@ from deckz.labs.secrets import find_secrets
 # Built at run time: no token-shaped literal in the repository.
 _GITHUB = "ghp_" + "A1b2" * 9
 _OPENAI = "sk-proj-" + "x9Y8" * 6
+_PYPI = "pypi-AgENdGVzdC5weXBpLm9yZw" + "Ab_1-" * 12
 
 
 def _notebook(*cells: dict[str, Any]) -> dict[str, Any]:
@@ -66,3 +67,12 @@ def test_not_secrets_are_ignored() -> None:
     notebook = _notebook(_code(f'client = Github("{_GITHUB}")'))
 
     assert find_secrets(notebook, not_secrets=[_GITHUB]) == []
+
+
+def test_finds_a_pypi_token_on_a_shell_line() -> None:
+    source = f"!uv publish --index testpypi --token {_PYPI}"
+
+    findings = find_secrets(_notebook(_code(source)))
+
+    assert [f.kind for f in findings] == ["PyPI token"]
+    assert find_secrets(_notebook(_code('jeton = "pypi-AgE"'))) == []

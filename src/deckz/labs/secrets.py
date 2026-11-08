@@ -26,6 +26,8 @@ _TOKEN_FORMATS = {
     "AWS access key": r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b",
     "Google API key": r"\bAIza[0-9A-Za-z_-]{35}",
     "Slack token": r"\bxox[abprs]-[A-Za-z0-9-]{10,}",
+    # PyPI's and Test PyPI's API tokens are macaroons, whose base64 starts `AgE`.
+    "PyPI token": r"\bpypi-AgE[A-Za-z0-9_-]{50,}",
     "private key": r"-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----",
 }
 # Each format's fixed text, looked for first: a substring search is far faster
@@ -37,6 +39,7 @@ _PREFIXES = {
     "AWS access key": ("AKIA", "ASIA"),
     "Google API key": ("AIza",),
     "Slack token": ("xox",),
+    "PyPI token": ("pypi-AgE",),
     "private key": ("PRIVATE KEY",),
 }
 _PATTERNS = {name: re.compile(pattern) for name, pattern in _TOKEN_FORMATS.items()}

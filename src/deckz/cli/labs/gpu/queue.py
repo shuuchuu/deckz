@@ -18,12 +18,13 @@ def queue(
     path under the notebooks directory. A queue already running picks them
     up; otherwise start it with `deckz labs gpu run`.
 
-    A notebook's metadata (`labs.gpu.metadata_key`) can ask for variables
+    A notebook's metadata (`labs.run.metadata_key`) can ask for variables
     and secrets, filled from the environment or `.env` in the copy sent (a
-    secret is redacted from what comes back), and for a hook of
-    `labs.gpu.hooks`, run here before the notebook is sent and once its run
-    is done (`status`, `down`). A notebook naming a hook another run still
-    holds is held, and sent by `status` once that run's hook ran.
+    secret is redacted from what comes back; one that isn't set refuses the
+    notebook), and for a hook of `labs.run.hooks`, run here before the
+    notebook is sent and once its run is done (`status`, `down`). A notebook
+    naming a hook another run still holds is held, and sent by `status` once
+    that run's hook ran.
 
     Args:
         notebooks: The notebooks to run

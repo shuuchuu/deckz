@@ -38,7 +38,7 @@ install) is checked, not only the build.
 - Colab and the Codespace image set `UV_CONSTRAINT` (Colab's versions, e.g. rich
   13.9.4), which applies to a fresh virtual environment too.
 
-## Decisions to take with the maintainer before coding
+## Decisions (taken with the maintainer, 2026-11-08: both as recommended)
 
 1. **Settings and metadata names.** `RunNeeds` and its hooks are no longer GPU
    specific. Recommended: a `labs.run` group (`metadata_key: shuuchuu.run`,
@@ -54,6 +54,33 @@ install) is checked, not only the build.
    flag can refuse instead, if the maintainer wants a run that must publish.
 
 ## Phases (deckz)
+
+Phases 1 to 4 done 2026-11-08 (branch `lab-run-needs`), as written below, with
+these changes:
+
+- `labs.gpu.metadata_key`/`hooks` are refused, the error naming their new place
+  (`LabsGpuSettings`'s validator): ignoring them would have dropped the hooks
+  silently. So slides' `deckz.yml` and its two demos move in the same landing (done:
+  slides' `ws/lab-run-needs`, landed just before deckz's merge).
+- The shared module is `labs/needs.py`; `fill` and `unknown_hook` return what's
+  wrong instead of raising (the container run reports a line, `labs gpu` raises
+  its `GpuRunError`), and `run_hook`/`redact` raise `LabRunNeedsError`, which
+  `labs gpu` converts.
+- Found while redacting: the runs truncated a failed command (`SHELL_GUARD`, 300
+  characters) and a cell's error (the container runner) before the host could
+  redact them, so a token cut at the boundary (a PyPI token is ~200 characters)
+  would have left its prefix in clear. They are now logged whole, redacted, then
+  truncated (`report_lines`, and `_shell_failure` for `labs gpu`'s `.shell`
+  files). `run_in_container` redacts the whole stderr before reading it.
+- A notebook whose hook is unknown, or whose set variable has no `name = ""`
+  line, isn't run (`run needs: ...`, then `execution: not run`). An opening hook
+  that fails stops the run; a closing one that fails is a problem line.
+- Trial (slides worktree, scratch environment with this deckz, the real
+  `TESTPYPI_TOKEN`, a test notebook that never sends it): filled, an unset
+  variable's fact line, the token redacted from a failed `!false --token
+  {jeton_ci}` and from a `ValueError` (no `pypi-AgE` in the report nor in
+  stderr), the hook run before and after; without `--container`, the fact line
+  and no hook. `labs gpu pass --dry-run` on the mlflow-registry demo, unchanged.
 
 ### 1. Share `RunNeeds`
 
@@ -103,7 +130,9 @@ install) is checked, not only the build.
   notebook, or a copy of it), then tell the running slides sessions before merging:
   `labs check --container`'s behavior changes (`ListAgents`, `SendMessage`).
 
-## Phase 5 (slides, once deckz is merged)
+## Phase 5 (slides, once deckz is merged): next
+
+The metadata and hooks move is done (above); what's left is the packaging lab.
 
 In a slides worktree, `labs/notebooks/python/production/packaging/package-creation/`
 (fr first, then en; the code cells must match up to the names: `lab-pairs`):

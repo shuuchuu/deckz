@@ -9,23 +9,29 @@ clone`, `apt install`), as the configuration's `remoteUser`, in
 Run all does in a Codespace, and, for a notebook that needs no GPU, in Colab. Unlike
 `labs.execution`'s runner, nothing is skipped: the container is thrown away after
 the run, and nothing is mounted into it (the notebook and the runner go through
-stdin), so nothing it does reaches this machine.
+stdin), so nothing it does reaches this machine. The notebook's run needs
+(`labs.needs`) are filled in the copy sent through stdin, never on `docker run`'s
+command line or environment, which `ps` and `docker inspect` show; its secrets are
+redacted from everything the run reports.
 
 The image must hold `nbclient` and `ipykernel`.
 """
 
+import copy
 import hashlib
 import json
+import os
 import re
 import subprocess
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..exceptions import LabContainerError
+from ..exceptions import LabContainerError, LabRunNeedsError
 from .execution import SMOKE, report_lines, shell_guard
+from .needs import RunNeeds, fill, redact, run_hook, unknown_hook
 
 DEVCONTAINER_JSON = Path(".devcontainer") / "devcontainer.json"
 SHELL_LOG = "/tmp/deckz-shell-failures.jsonl"
@@ -79,7 +85,8 @@ def executed(cell, cell_index, execute_reply):
         if out.get("output_type") == "error":
             i = cell_index - OFFSET
             role = ROLES.get(str(i), "code")
-            err = f"{out.get('ename')}: {out.get('evalue', '')}"[:300]
+            # Whole: `run_in_container` redacts it, then `report_lines` truncates.
+            err = f"{out.get('ename')}: {out.get('evalue', '')}"
             emit([i, role, err])
             break
 
@@ -225,8 +232,19 @@ def run_in_container(
     *,
     smoke: bool,
     timeout: int,
+    secrets: Sequence[str] = (),
 ) -> Iterator[str]:
     """Run every code cell of `notebook` in `container`, as `name`.
+
+    Args:
+        notebook: The notebook, its run needs already filled.
+        labels: Its cells' roles (`labs.inspecting.roles`).
+        name: The file name it runs as.
+        container: Where it runs.
+        smoke: Whether to cap every Lightning Trainer first.
+        timeout: Seconds after which the run is killed.
+        secrets: The environment variables of the secrets filled in it, \
+            whose values are redacted from the run's output before it's read.
 
     Yields:
         The run's report lines (see `labs.execution.report_lines`).
@@ -270,14 +288,100 @@ def run_in_container(
         subprocess.run(["docker", "kill", run_name], capture_output=True, check=False)
         stderr = e.stderr or b""
         yield f"  execution timed out after {timeout}s, cells run until then:"
-        yield from report_lines(
-            stderr.decode() if isinstance(stderr, bytes) else stderr, 0
-        )
+        text = stderr.decode() if isinstance(stderr, bytes) else stderr
+        yield from report_lines(redact(text, secrets, strict=False), 0)
         return
-    if proc.returncode and "\x1eQA " not in proc.stderr:
+    # Whole, before any line is parsed or truncated: a prefix of a value no
+    # longer matches it.
+    stderr = redact(proc.stderr, secrets, strict=False)
+    if proc.returncode and "\x1eQA " not in stderr:
         # The runner itself failed (no nbclient in the image, the kernel died...).
-        tail = "\n".join(proc.stderr.strip().splitlines()[-5:])
+        tail = "\n".join(stderr.strip().splitlines()[-5:])
         yield f"  execution: the container exited with code {proc.returncode}:"
         yield from (f"    {line}" for line in tail.splitlines())
         return
-    yield from report_lines(proc.stderr, proc.returncode)
+    yield from report_lines(stderr, proc.returncode)
+
+
+def run_with_needs(
+    notebook: dict[str, Any],
+    labels: list[str],
+    name: str,
+    container: Container,
+    needs: RunNeeds,
+    *,
+    hooks: Mapping[str, str],
+    hooks_cwd: Path,
+    smoke: bool,
+    timeout: int,
+) -> Iterator[str]:
+    """Meet a notebook's run needs, then run it in `container`.
+
+    Its variables and secrets are filled from the environment in a copy; one
+    that isn't set keeps its `""` line, as in a trainee's run, and a line
+    says so. Its hook runs before the run, and after it in any case, a failed
+    or timed out run included: container runs are sequential, so nothing is
+    held. Every line is redacted of the secrets' values.
+
+    Args:
+        notebook: The notebook, as read.
+        labels: Its cells' roles (`labs.inspecting.roles`).
+        name: The file name it runs as.
+        container: Where it runs.
+        needs: Its run needs (`labs.needs.run_needs`).
+        hooks: `labs.run.hooks`.
+        hooks_cwd: Where the hooks run: the repository's root.
+        smoke: Whether to cap every Lightning Trainer first.
+        timeout: Seconds after which the run is killed.
+
+    Yields:
+        The report lines: the needs left unset, a need that can't be met (the \
+        notebook then doesn't run), the run's (see `run_in_container`), and \
+        a closing hook's failure.
+    """
+    filled = copy.deepcopy(notebook)
+    if problem := unknown_hook(needs, hooks) or fill(filled, needs):
+        yield f"  run needs: {problem}"
+        yield _NOT_RUN
+        return
+    for env in needs.unset():
+        yield (
+            f"  {env} not set: ran without it (set it in the environment or .env"
+            " for a run with it)"
+        )
+    secrets = [env for env in needs.secret_envs if os.environ.get(env)]
+    if needs.hook is not None:
+        try:
+            run_hook(needs.hook, hooks, hooks_cwd)
+        except LabRunNeedsError as error:
+            yield from _indented(redact(str(error), secrets, strict=False))
+            yield _NOT_RUN
+            return
+    closing: str | None = None
+    try:
+        yield from run_in_container(
+            filled,
+            labels,
+            name,
+            container,
+            smoke=smoke,
+            timeout=timeout,
+            secrets=secrets,
+        )
+    finally:
+        if needs.hook is not None:
+            try:
+                run_hook(needs.hook, hooks, hooks_cwd)
+            except LabRunNeedsError as error:
+                closing = str(error)
+    if closing is not None:
+        yield from _indented(redact(closing, secrets, strict=False))
+
+
+_NOT_RUN = "  execution: not run, its run needs not met"
+
+
+def _indented(message: str) -> Iterator[str]:
+    first, *rest = message.rstrip("\n").splitlines() or [""]
+    yield f"  {first}"
+    yield from (f"    {line}" for line in rest)

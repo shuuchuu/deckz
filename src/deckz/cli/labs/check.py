@@ -29,6 +29,13 @@ def check(
     on: each one gets its own line, `[i] shell command exited with code N:
     cmd`, before the verdict on raising cells.
 
+    With `--container`, a notebook's run needs (`labs.run.metadata_key`:
+    variables and secrets from the environment or `.env`, a hook of
+    `labs.run.hooks` run before and after) are filled in the copy that runs,
+    and a secret's value is redacted from every line; one that isn't set
+    leaves the notebook as a trainee runs it, with a line saying so, which
+    isn't a problem.
+
     Args:
         notebooks: Notebook files, or directories to search recursively
             for notebook files
@@ -79,6 +86,8 @@ def check(
             timeout=timeout,
             container=dev,
             name=f"{lab_id}.ipynb" if lab_id else None,
+            run_settings=settings.labs.run,
+            hooks_cwd=settings.paths.git_dir,
         ):
             print(line)
             if is_problem(line) and (not failed or failed[-1] != path):

@@ -74,3 +74,13 @@ def test_tests_never_see_a_git_hook_environment() -> None:
     assert [name for name in environ if name.startswith("GIT_")] == [
         "GIT_CONFIG_GLOBAL"
     ]
+
+
+def test_the_run_needs_moved_out_of_labs_gpu_name_their_new_place() -> None:
+    from deckz.configuring.settings import LabsSettings
+
+    with raises(ValidationError, match=r"labs\.gpu\.hooks moved to labs\.run"):
+        LabsSettings.model_validate({"gpu": {"hooks": {"reset": "true"}}})
+    labs = LabsSettings.model_validate({"run": {"hooks": {"reset": "true"}}})
+    assert labs.run.hooks == {"reset": "true"}
+    assert labs.run.metadata_key == "shuuchuu.run"

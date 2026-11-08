@@ -55,6 +55,21 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   beyond the translation.
 - Never put a token or password in a notebook: the `lab-secrets` check refuses it,
   and so does publishing. Read secrets from the environment.
+- A lab whose automated runs need a credential or a setting (to publish a package
+  to Test PyPI, to log to a DagsHub account) says so in its metadata,
+  `shuuchuu.run` (`labs.run.metadata_key`): `variables` and `secrets` name the
+  notebook's variables, each assigned `""` on a line of its own, and the
+  environment variables (or `.env` entries, e.g. `~/.config/deckz/.env`) to fill
+  them from, and `hook` a command of `labs.run.hooks` run before and after the run
+  (to reset a server the notebook writes to). `deckz labs check --container` and
+  `deckz labs gpu queue` fill them in the copy they run, never on a command line,
+  and redact a secret's value from every line they report and every file they keep;
+  `deckz labs outputs` stores no output that showed one. One that isn't set: `labs
+  check --container` runs the notebook as written, the `""` line a trainee's run
+  has, with a line `<VARIABLE> not set: ran without it` that doesn't fail the
+  check; `labs gpu queue` refuses the notebook. `deckz labs check` without
+  `--container` skips the shell commands that need them, and fills none. The
+  notebook must keep working without them: that is what trainees run.
 - `deckz labs publish` publishes the notebooks of the shared branch (`origin/main`,
   fetched first), whichever checkout it runs in, and the files committed there
   under `labs/published/` (with them, or to a repository of their own, such as the

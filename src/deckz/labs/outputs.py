@@ -6,7 +6,7 @@ run metadata deckz never wants to store (timestamps, widget state). This
 copies only the outputs themselves, merging each cell's consecutive stream
 writes into one and resolving carriage returns, so a progress bar is stored
 once, as its final state, as Colab shows it. An output showing a secret
-`deckz labs gpu fetch` redacted (`deckz.labs.gpu.REDACTED`) is dropped.
+`deckz labs gpu fetch` redacted (`deckz.labs.needs.REDACTED`) is dropped.
 
 Then the repository's `labs.outputs.hooks` run on the notebook written, for
 what only the repository knows to do to its outputs (e.g. load a library's
@@ -22,8 +22,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..exceptions import LabOutputsHookError, LabOutputsMismatchError
-from .gpu import REDACTED
 from .images import recompress_output_images
+from .needs import REDACTED
 from .notebook import Notebook, cell_source, fmt_notebook
 
 if TYPE_CHECKING:

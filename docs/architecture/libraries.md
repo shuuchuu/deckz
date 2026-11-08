@@ -14,13 +14,14 @@ deckz's extras.
 | **Owns** | The notebooks' canonical JSON form (`notebook.canonical_dump`); `labs/published/`'s assembly; the GPU machines' state in `.run/gpu/<name>/` |
 | **Depends on** | `configuring`, `commits` (`Lab-outputs-current`), `worktrees` (a GPU pass), `upstream` and `remotes` (publishing), `extras` (optional imports), `exceptions` |
 | **Never** | Imports `analyzing` or `pipelines`: `analyzing.content_checks` uses `labs`, not the reverse |
-| **Fails with** | `LabIdConflictError`, `LabContainerError`, `LabPublishRefusedError`, `LabOutputsMismatchError`, `LabOutputsHookError`, `GpuRunError` |
+| **Fails with** | `LabIdConflictError`, `LabContainerError`, `LabPublishRefusedError`, `LabOutputsMismatchError`, `LabOutputsHookError`, `LabRunNeedsError`, `GpuRunError` |
 
 | Module | What it does |
 |---|---|
 | [`notebook`][deckz.labs.notebook] | Read and edit notebooks without churning their JSON; `pair` finds a notebook's other language |
 | [`normalize`][deckz.labs.normalize], [`ids`][deckz.labs.ids], [`inspecting`][deckz.labs.inspecting], [`comparison`][deckz.labs.comparison] | Colab conventions, lab IDs, read-only views, fr/en comparison |
 | [`execution`][deckz.labs.execution], [`container`][deckz.labs.container] | Run a notebook's cells in a scratch directory, or in the published repository's dev container |
+| [`needs`][deckz.labs.needs] | A notebook's run needs (`labs.run`): fill its variables and secrets from the environment in the copy that runs, redact the secrets from what comes back, run its hook; shared by `container` and `gpu` |
 | [`gpu`][deckz.labs.gpu], [`gpu_pass`][deckz.labs.gpu_pass] | Rent a GPU machine (`GpuBackend`, `VastBackend`), run notebooks there as Colab would, destroy it |
 | [`outputs`][deckz.labs.outputs], [`stale_outputs`][deckz.labs.stale_outputs], [`images`][deckz.labs.images] | Write executed outputs back, and find demos whose code changed since |
 | [`secrets`][deckz.labs.secrets] | What looks like a credential (a blocking check, and `labs publish`'s refusal) |

@@ -38,7 +38,7 @@ script.
 |---|---|---|
 | `pandoc_command`, `html_pandoc_command` | `PandocConverter` | Converting Markdown, with the repository's filters |
 | `setup.requires`, `setup.steps`, `setup.remotes` | `setting_up` | Executables to check, the repository's own setup steps, the publish remotes to add |
-| `labs.gpu.hooks` | `labs.gpu` | Local commands before and after a notebook's run on a GPU machine |
+| `labs.run.hooks` | `labs.needs` (for `labs.gpu`, `labs.container`) | Local commands before and after a notebook's run, on a GPU machine or in the dev container |
 | `labs.outputs.hooks` | `labs.outputs` | Commands run on a notebook's executed outputs before writing them back |
 | `ci` | `hooks_install.ci_workflow` | The CI workflow's checks and builds |
 

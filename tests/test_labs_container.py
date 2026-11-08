@@ -205,3 +205,206 @@ def test_the_shell_guard_logs_each_failed_shell_command_in_a_real_kernel(
     assert [code for code, _ in failures] == [1, 1]
     assert failures[0][1] == "false"
     assert "pip install --quiet --no-index deckz-no-such-package" in failures[1][1]
+
+
+# -- run needs (`labs.needs`) -------------------------------------------------
+
+_TOKEN = "pypi-AgE" + "x1" * 100
+"""Longer than any truncation of the report lines: a prefix of it must not show."""
+
+
+def _needs_notebook(tmp_path: Path, needs: dict[str, Any], *sources: str) -> Path:
+    cells = [
+        {"cell_type": "code", "metadata": {}, "outputs": [], "source": source}
+        for source in sources
+    ]
+    path = tmp_path / "lab.ipynb"
+    path.write_text(
+        json.dumps({"cells": cells, "metadata": {"shuuchuu": {"run": needs}}})
+    )
+    return path
+
+
+class _FakeDocker:
+    """`docker run`, reporting the given events; records what it was sent."""
+
+    def __init__(self, *events: list[Any], log: Path | None = None) -> None:
+        self.events = events
+        self.log = log
+        self.sources: list[str] = []
+        self.commands: list[list[str]] = []
+
+    def __call__(self, command: list[Any], **kwargs: Any) -> Any:
+        from deckz.labs.execution import EVENT
+
+        self.commands.append([str(part) for part in command])
+        if command[:2] != ["docker", "run"]:
+            return subprocess.CompletedProcess(command, 0, "", "")
+        self.sources.append(kwargs["input"])
+        if self.log is not None:
+            with self.log.open("a") as f:
+                f.write("run\n")
+        stderr = "".join(EVENT + json.dumps(event) + "\n" for event in self.events)
+        return subprocess.CompletedProcess(command, 0, "", stderr)
+
+
+def _check(
+    path: Path, docker: _FakeDocker, monkeypatch: Any, **kwargs: Any
+) -> list[str]:
+    from deckz.configuring.settings import LabsRunSettings
+    from deckz.labs.container import Container
+    from deckz.labs.execution import check_notebook
+
+    monkeypatch.setattr(subprocess, "run", docker)
+    return list(
+        check_notebook(
+            path,
+            container=Container("image", "root", "/workspaces/labs", ()),
+            run_settings=LabsRunSettings(hooks=kwargs.pop("hooks", {})),
+            hooks_cwd=path.parent,
+            **kwargs,
+        )
+    )
+
+
+def test_a_set_need_is_filled_in_the_copy_sent_through_stdin_only(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setenv("LAB_TOKEN", _TOKEN)
+    path = _needs_notebook(
+        tmp_path, {"secrets": {"jeton": "LAB_TOKEN"}}, 'jeton = ""\nprint(1)'
+    )
+    docker = _FakeDocker()
+
+    lines = _check(path, docker, monkeypatch)
+
+    assert repr(f"jeton = {json.dumps(_TOKEN)}\n") in docker.sources[0]
+    assert all(_TOKEN not in " ".join(command) for command in docker.commands)
+    assert "-e" not in docker.commands[0]
+    assert "  execution: no code cell raised" in lines
+    assert _TOKEN not in path.read_text()
+
+
+def test_an_unset_need_runs_the_notebook_as_written_and_says_so(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    from deckz.labs.execution import is_problem
+
+    monkeypatch.delenv("LAB_TOKEN", raising=False)
+    path = _needs_notebook(tmp_path, {"secrets": {"jeton": "LAB_TOKEN"}}, 'jeton = ""')
+    docker = _FakeDocker()
+
+    lines = _check(path, docker, monkeypatch)
+
+    assert repr('jeton = ""') in docker.sources[0]
+    unset = [line for line in lines if "LAB_TOKEN" in line]
+    assert unset == [
+        "  LAB_TOKEN not set: ran without it (set it in the environment or .env"
+        " for a run with it)"
+    ]
+    assert not is_problem(unset[0])
+
+
+def test_a_secret_is_redacted_from_a_failed_command_and_a_traceback(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setenv("LAB_TOKEN", _TOKEN)
+    path = _needs_notebook(tmp_path, {"secrets": {"jeton": "LAB_TOKEN"}}, 'jeton = ""')
+    command = f"uv publish --index testpypi --token {_TOKEN}"
+    docker = _FakeDocker(
+        ["shell-failed", 0, 1, command],
+        [0, "code", f"CalledProcessError: Command '{command}' returned 1"],
+    )
+
+    lines = _check(path, docker, monkeypatch)
+
+    report = "\n".join(lines)
+    assert "pypi-AgE" not in report
+    assert (
+        "  [0] shell command exited with code 1: uv publish --index testpypi"
+        " --token [deckz: redacted LAB_TOKEN]"
+    ) in lines
+    assert "[0] code cell raised CalledProcessError: Command 'uv publish" in report
+
+
+def test_the_hook_runs_before_and_after_a_failing_run(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    log = tmp_path / "hooks.log"
+    path = _needs_notebook(tmp_path, {"hook": "reset"}, "1 / 0")
+    docker = _FakeDocker([0, "code", "ZeroDivisionError: division by zero"], log=log)
+
+    lines = _check(path, docker, monkeypatch, hooks={"reset": "echo hook >> hooks.log"})
+
+    assert log.read_text().split() == ["hook", "run", "hook"]
+    assert "  [0] code cell raised ZeroDivisionError: division by zero" in lines
+
+
+def test_the_hook_runs_after_a_timed_out_run_and_reports_its_failure(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    log = tmp_path / "hooks.log"
+    path = _needs_notebook(tmp_path, {"hook": "reset"}, "1")
+    docker = _FakeDocker(log=log)
+
+    def timed_out(command: list[Any], **kwargs: Any) -> Any:
+        result = docker(command, **kwargs)
+        if command[:2] == ["docker", "run"]:
+            raise subprocess.TimeoutExpired(command, 1, stderr=b"")
+        return result
+
+    # Fails after the run only: the second time it runs.
+    hook = "echo hook >> hooks.log; test $(wc -l < hooks.log) -lt 2 || exit 3"
+    from deckz.configuring.settings import LabsRunSettings
+    from deckz.labs.container import Container
+    from deckz.labs.execution import check_notebook
+
+    monkeypatch.setattr(subprocess, "run", timed_out)
+    lines = list(
+        check_notebook(
+            path,
+            container=Container("image", "root", "/workspaces/labs", ()),
+            run_settings=LabsRunSettings(hooks={"reset": hook}),
+            hooks_cwd=tmp_path,
+            timeout=1,
+        )
+    )
+
+    assert log.read_text().split() == ["hook", "run", "hook"]
+    assert "  execution timed out after 1s, cells run until then:" in lines
+    assert lines[-1].startswith("  hook reset failed (3): ")
+
+
+def test_an_unknown_hook_or_a_missing_line_doesnt_run(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setenv("LAB_TOKEN", _TOKEN)
+    docker = _FakeDocker()
+    unknown = _needs_notebook(tmp_path, {"hook": "nope"}, "1")
+
+    lines = _check(unknown, docker, monkeypatch)
+
+    assert lines[-2].startswith("  run needs: hook 'nope' is not in labs.run.hooks")
+    assert lines[-1] == "  execution: not run, its run needs not met"
+    missing = _needs_notebook(tmp_path, {"secrets": {"jeton": "LAB_TOKEN"}}, "1")
+    lines = _check(missing, docker, monkeypatch)
+    assert '  run needs: expected exactly one line `jeton = ""`' in lines
+    assert docker.sources == []
+
+
+def test_the_local_runner_fills_no_need_and_says_so(tmp_path: Path) -> None:
+    from deckz.configuring.settings import LabsRunSettings
+    from deckz.labs.execution import check_notebook, is_problem
+
+    path = _needs_notebook(
+        tmp_path,
+        {"secrets": {"jeton": "LAB_TOKEN"}, "hook": "reset"},
+        'jeton = ""',
+    )
+
+    lines = list(check_notebook(path, run_settings=LabsRunSettings()))
+
+    fact = "  run needs left unfilled without --container: LAB_TOKEN, hook reset"
+    assert fact in lines
+    assert not is_problem(fact)
+    assert "  execution: no code cell raised" in lines
