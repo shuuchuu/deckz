@@ -82,6 +82,7 @@ DASHBOARD = {
                 "days": 2,
                 "tentative": True,
                 "intra": False,
+                "calendar": "Alex",
             },
         ),
         _deck("decks/client/two", None),
@@ -169,6 +170,8 @@ def test_the_button_runs_it_and_the_result_stays(
     # The decks in deckz's order, the folder they share not repeated.
     assert board.index(">abc</a>") < board.index(">two</a>")
     assert "20/11 ?" in board
+    # The label of the session's calendar, when several are read.
+    assert '<small class="calendar" title="Agenda">Alex</small>' in board
     assert '<tr data-file="supports/sec/a.md">' in board
     assert ">chapitre dû</a>" in board
     # A deck with nothing to open links to its page.
@@ -181,7 +184,7 @@ def test_the_button_runs_it_and_the_result_stays(
     assert "sans le calendrier : pas de calendrier" in board
     summary = app_client.get(f"{BASE}/maintenance/resume").text
     assert "1 section à soigner" in summary
-    assert "Prochaine session : abc, 20/11" in summary
+    assert "Prochaine session : abc, 20/11 (Alex)" in summary
 
     # It outlives studioz.
     again = TestClient(create_app(repository), base_url="http://localhost:8421")

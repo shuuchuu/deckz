@@ -79,7 +79,7 @@
     <tr{% if row.opens %} data-file="{{ row.opens.file }}"{% endif %}>
       <td class="name"><a href="{{ base }}/formations/{{ row.deck }}" title="{{ row.deck }} : la page de la formation">{{ row.deck[result.deck_root | length:] }}</a></td>
       <td>{{ opens(row, row.deck) }}</td>
-      <td>{% set next = row.next_session %}{% if next %}<span title="du {{ next.start }} au {{ next.end }}">{{ next.start | day }}{% if next.tentative %} ?{% endif %}</span> <small>{{ next.days }} j</small>{% else %}<span class="none">—</span>{% endif %}</td>
+      <td>{% set next = row.next_session %}{% if next %}<span title="du {{ next.start }} au {{ next.end }}">{{ next.start | day }}{% if next.tentative %} ?{% endif %}</span> <small>{{ next.days }} j</small>{% if next.calendar %} <small class="calendar" title="Agenda">{{ next.calendar }}</small>{% endif %}{% else %}<span class="none">—</span>{% endif %}</td>
       <td>{% call level(levels.content) %}{{ levels.content.to_review }}/{{ levels.content.total }}{% endcall %}</td>
       <td>{% call level(levels.labs) %}{{ levels.labs.to_review }}/{{ levels.labs.total }}{% endcall %}</td>
       <td>{% if levels.pass.ok %}<span class="ok" title="Relue le {{ levels.pass.date }}">✓</span>{% elif levels.pass.state == "stale" %}<span class="due" title="Ses fichiers ont changé depuis : {{ levels.pass.stale | join(', ') }}">périmée</span>{% else %}<span class="none" title="Aucune passe enregistrée">—</span>{% endif %}</td>

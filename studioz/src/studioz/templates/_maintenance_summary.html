@@ -23,7 +23,7 @@
     <li>{{ result.sections | length }} section{{ "s" if result.sections | length > 1 }} à soigner</li>
     {% if findings %}<li>{{ findings.open.values() | sum }} constats ouverts{% if findings.critical %}, <span class="due">{{ findings.critical }} critique{{ "s" if findings.critical > 1 }}</span>{% endif %}</li>{% endif %}
     {% if data.totals.course_notes.share is not none %}<li>Supports : {{ (data.totals.course_notes.share * 100) | round | int }} %</li>{% endif %}
-    {% if upcoming %}<li>Prochaine session : {{ upcoming[0].deck[result.deck_root | length:] }}, {{ upcoming[0].next_session.start | day }}</li>{% endif %}
+    {% if upcoming %}<li>Prochaine session : {{ upcoming[0].deck[result.deck_root | length:] }}, {{ upcoming[0].next_session.start | day }}{% if upcoming[0].next_session.calendar %} ({{ upcoming[0].next_session.calendar }}){% endif %}</li>{% endif %}
   </ul>
   <p class="hint">Calculé {{ result.computed | ago }}.</p>
   {% elif not state.running %}

@@ -63,7 +63,8 @@ They come from `deckz sessions`' cache, read again when it's older than `cache_h
 (`--refresh`: now). The dashboard never logs in: without the calendar extra, your
 settings or a login, it says why in one line and shows everything else, with no
 `next` column. A session shows its dates and days only, never its place or the rest
-of its title, so the dashboard's output never names a client.
+of its title, so the dashboard's output never names a client; when `calendar.yml`
+lists several `calendars`, it also shows the label of the session's calendar.
 
 ## The JSON
 
@@ -76,7 +77,8 @@ of its title, so the dashboard's output never names a client.
   (`[{rule, since, why, due}]`), `dated_facts_due` (reports).
 - `decks`, in the order shown: `{deck, intra, past, next_session, sessions, frames,
   levels, course_notes, chapters_due, opens}`. `next_session` is `{start, end, days,
-  tentative, intra}` or null; `sessions` the number of its sessions, null without the
+  tentative, intra, calendar}` or null (`calendar`: its calendar's label, null with
+  `calendar_id`); `sessions` the number of its sessions, null without the
   calendar. `levels` has `content` and `labs` (`{ok, total, to_review, counts}`),
   `pass` (`{ok, state, report, date, stale}`), `dated_facts` (`{ok, due,
   next_due_on}`) and `findings` (`{ok, open, total, critical, reports}`, null without
