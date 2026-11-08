@@ -97,6 +97,15 @@ findings (slides' *adaptée*) live outside the findings heading.
   Creating the GitHub repository, the PyPI project and the first upload are the
   maintainer's. invoicez's gcal tests (`tests/gcal/`, the anonymised
   `events.json` fixture) split along the same line.
+- **Done 2026-11-08, not pushed:** schedz `7222153` (`diagnostics`, `settings` with
+  `CalendarSettings`, `parsing`, `grouping`, `google`, `loading`: `read_events_file`,
+  `fetch_calendar`, `read_engagements`, `google_api(install_hint)`); invoicez branch
+  `schedz` `a7f046f` (in the worktree `../invoicez-schedz`): `GcalSettings` extends
+  `CalendarSettings`, the OAuth files move once to `~/.config/schedz/`,
+  `anonymize.py` and the fixture script stay in invoicez, and its tests no longer
+  inherit a hook's `GIT_DIR`. Left, in order: push schedz and `doit publish` 0.1.0
+  (the maintainer's), drop invoicez's `[tool.uv.sources]` path to `../schedz`, merge
+  the branch, release invoicez.
 - deckz: an optional extra (`deckz[calendar]`, on schedz); `calendar` settings in the user's
   `~/.config/deckz/` (calendar id, title pattern), never in the repository; a mapping
   from (company, training) to a deck directory in `deckz.yml` (company key to catalog
