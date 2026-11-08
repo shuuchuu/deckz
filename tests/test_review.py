@@ -723,6 +723,44 @@ def test_mark_at_refuses_what_it_cant_register(repo: Path) -> None:
         mark(settings, repo / REPORT, [repo / A], at=first)
 
 
+def test_a_sections_findings_include_the_decks_verdicts_naming_it(
+    repo: Path, capsys: Any
+) -> None:
+    deckz_yml = repo / "deckz.yml"
+    deckz_yml.write_text(
+        deckz_yml.read_text(encoding="utf8").replace(
+            "review:\n  dir: reviews\n", FINDINGS
+        ),
+        encoding="utf8",
+    )
+    # A deck report with no `reviewed` header: findings only, no deck pass.
+    _write(
+        repo / DECK_REPORT,
+        "# QA\n\n## Findings\n\n### Pedagogy\n\n"
+        "- **P1** — `sec/sub`, flavor `full`: too deep. *open*\n"
+        "- **P2** — `other`, flavor `full`: too short. *open*\n"
+        "- **P3** — `content/sec/a.md` repeats `b.md`. *done*\n",
+    )
+    capsys.readouterr()
+
+    for target in ("content/sec", "reviews/sections/sec.md"):
+        main(("review", "findings", target, "--plain"))
+        fields = [line.split("\t") for line in capsys.readouterr().out.splitlines()]
+        assert [(f[0], f[2]) for f in fields] == [
+            (DECK_REPORT, "P1"),
+            (DECK_REPORT, "P3"),
+        ]
+    main(("review", "findings", "content/sec/sub", "--plain"))
+    fields = [line.split("\t") for line in capsys.readouterr().out.splitlines()]
+    assert [(f[0], f[2]) for f in fields] == [(DECK_REPORT, "P1")]
+
+    main(("dashboard", "--json", "--sections"))
+    rows = {s["section"]: s for s in loads(capsys.readouterr().out)["sections"]}
+    # The table counts a section's own verdicts, not its subsections'.
+    assert rows["sec/sub"]["findings"]["open"]["P"] == 1
+    assert DECK_REPORT not in rows["sec"]["findings"]["reports"]
+
+
 def test_a_decks_findings_include_its_report(repo: Path, capsys: Any) -> None:
     deckz_yml = repo / "deckz.yml"
     deckz_yml.write_text(

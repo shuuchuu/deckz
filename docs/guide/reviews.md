@@ -312,7 +312,17 @@ deckz review findings docs/qa/sections/python  # the reports under a directory
 
 For a deck, the reports are its own and those recording one of its content files or
 of its written course notes chapters; for a path outside `review.dir`, those recording
-a file under it. `--json` and `--plain` list
+a file under it.
+
+A verdict on the flavor one deck receives (a fitter flavor, a missing notion) belongs
+to that deck, so it is a finding of the deck's report, which can exist before any
+deck pass: without a `reviewed` header it holds findings only, and the dashboard shows
+no pass. Such a finding names the section by its path under the content directory, in
+a code span (`` `nlp/wordembeddings`, flavor `light`: … ``). Then a shared section,
+given by its path (`content/nlp`) or its report (`docs/qa/sections/nlp.md`), also lists
+the findings of the decks' reports that name it or a section under it, each report
+reduced to those findings; the dashboard's sections table counts those naming the
+section itself. `--json` and `--plain` list
 every finding with its line, id, outcome and first paragraph. The command always
 exits 0.
 

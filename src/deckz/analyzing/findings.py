@@ -95,7 +95,9 @@ class TargetFindings:
     reports: tuple[ReportFindings, ...]
     """A deck's: its own report and those recording one of its content files \
     or written French chapters (`review.deck_covered_paths`); else the \
-    reports under the path, or recording a file under it."""
+    reports under the path, or recording a file under it, then, for a \
+    shared section (its path or its report), the decks' reports reduced to \
+    their findings naming it (`deck_findings_naming`)."""
 
 
 @dataclass(frozen=True)
@@ -436,11 +438,81 @@ def findings_status(
     shown = []
     for target in targets:
         kind, reports = _covering(settings, target, recorded)
+        found_reports = [every[report] for report in sorted(reports)]
+        if kind == "paths" and (section := _section_of(settings, target)):
+            found_reports.extend(
+                deck_findings_naming(settings, section, every, skip=set(reports))
+            )
         shown.append(
             TargetFindings(
                 target.relative_to(settings.paths.git_dir).as_posix() or ".",
                 kind,
-                tuple(every[report] for report in sorted(reports)),
+                tuple(found_reports),
             )
         )
     return FindingsStatus((), tuple(shown), tuple(problems))
+
+
+_CODE_SPAN = re.compile(r"`([^`\s]+)`")
+
+
+def _section_of(settings: "GlobalSettings", target: Path) -> str | None:
+    # The shared section a target stands for: a path under the content
+    # directory, or a section's report; None for anything else.
+    from .review import SECTIONS_DIR, review_dir
+
+    for base in (settings.paths.content_dir, review_dir(settings) / SECTIONS_DIR):
+        if target.is_relative_to(base) and target != base:
+            return target.relative_to(base).with_suffix("").as_posix()
+    return None
+
+
+def deck_findings_naming(
+    settings: "GlobalSettings",
+    section: str,
+    every: Mapping[str, ReportFindings],
+    *,
+    nested: bool = True,
+    skip: Iterable[str] = (),
+) -> list[ReportFindings]:
+    """The findings of the decks' reports that name a shared section.
+
+    A verdict on the flavor a deck receives lives in that deck's report,
+    which records none of the section's files: it names the section by its
+    path under the content directory, in a code span (`` `nlp/wordembeddings` ``,
+    or a file of it, `` `content/nlp/wordembeddings/word2vec.md` ``).
+
+    Args:
+        settings: The repository's settings.
+        section: The section's path under the content directory.
+        every: Every report's findings, by report.
+        nested: Also the findings naming a section or file under it.
+        skip: Reports to leave out (already shown whole).
+
+    Returns:
+        Each deck report naming it, reduced to those findings, by path.
+    """
+    from .review import report_kind
+
+    git_dir = settings.paths.git_dir
+    prefix = f"{settings.paths.content_dir.relative_to(git_dir).as_posix()}/"
+    skipped = set(skip)
+
+    def names(finding: Finding) -> bool:
+        for span in _CODE_SPAN.findall(finding.summary):
+            path = span.removeprefix(prefix).removesuffix(".md")
+            if path == section or (nested and path.startswith(f"{section}/")):
+                return True
+        return False
+
+    naming = []
+    for report, found in sorted(every.items()):
+        if report in skipped:
+            continue
+        kind = report_kind(settings, git_dir / report)
+        if kind is None or kind[0] != "deck":
+            continue
+        findings = tuple(f for f in found.findings if names(f))
+        if findings:
+            naming.append(ReportFindings(report, findings))
+    return naming

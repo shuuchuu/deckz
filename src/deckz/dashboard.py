@@ -286,16 +286,27 @@ def _findings_level(
     settings: "GlobalSettings",
     by_report: Mapping[str, "ReportFindings"] | None,
     reports: Iterable[str],
+    extra: Sequence["ReportFindings"] = (),
 ) -> FindingsLevel | None:
+    # `extra`: other reports reduced to some of their findings (a section's
+    # verdicts in the decks' reports, `findings.deck_findings_naming`).
     if by_report is None or settings.review.findings is None:
         return None
     grammar = settings.review.findings
     read = tuple(sorted(r for r in set(reports) if r in by_report))
+    counted = [
+        *(by_report[r] for r in read),
+        *(found for found in extra if found.report not in read),
+    ]
     open_ = {
-        rubric: sum(by_report[r].count("open", rubric) for r in read)
+        rubric: sum(found.count("open", rubric) for found in counted)
         for rubric in grammar.rubrics
     }
-    return FindingsLevel(read, open_, sum(open_[rubric] for rubric in grammar.critical))
+    return FindingsLevel(
+        tuple(sorted(found.report for found in counted)),
+        open_,
+        sum(open_[rubric] for rubric in grammar.critical),
+    )
 
 
 def _facts_level(
@@ -454,7 +465,7 @@ def dashboard(
         and if a deck doesn't parse (as `review.ranking` does).
     """
     from .analyzing.dated_facts import dated_facts
-    from .analyzing.findings import findings_status
+    from .analyzing.findings import deck_findings_naming, findings_status
     from .analyzing.review import (
         all_reports,
         deck_review,
@@ -556,7 +567,16 @@ def dashboard(
                 ranked=r,
                 decks=tuple(section_decks.get(r.section, ())),
                 state=_section_state(r.files),
-                findings=_findings_level(settings, by_report, r.reports),
+                findings=_findings_level(
+                    settings,
+                    by_report,
+                    r.reports,
+                    ()
+                    if by_report is None
+                    else deck_findings_naming(
+                        settings, r.section, by_report, nested=False
+                    ),
+                ),
                 dated_facts=section_facts,
                 opens=_section_opens(
                     settings, r, chapters_by_path, by_report, section_facts
