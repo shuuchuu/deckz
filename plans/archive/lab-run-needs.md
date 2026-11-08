@@ -55,8 +55,8 @@ install) is checked, not only the build.
 
 ## Phases (deckz)
 
-Phases 1 to 4 done 2026-11-08 (branch `lab-run-needs`), as written below, with
-these changes:
+Phases 1 to 4 done 2026-11-08 (branch `lab-run-needs`), phase 5 the same day
+(its own section, below). Phases 1 to 4 as written below, with these changes:
 
 - `labs.gpu.metadata_key`/`hooks` are refused, the error naming their new place
   (`LabsGpuSettings`'s validator): ignoring them would have dropped the hooks
@@ -130,9 +130,39 @@ these changes:
   notebook, or a copy of it), then tell the running slides sessions before merging:
   `labs check --container`'s behavior changes (`ListAgents`, `SendMessage`).
 
-## Phase 5 (slides, once deckz is merged): next
+## Phase 5 (slides, once deckz is merged)
 
-The metadata and hooks move is done (above); what's left is the packaging lab.
+Done 2026-11-08, landed on slides' main (9af29fdd, with 52a8e621 before it), as
+written below, with these changes:
+
+- The step 8 code is a cell of its own, before the publish cell: `jeton_ci = ""`
+  and, when set, the rename, the two tables (one triple-quoted block, as in the
+  solution's TOML) and `uv version --no-sync`. The publish cell only becomes `if
+  PUBLIER or jeton_ci:` and `jeton = jeton_ci or getpass(...)`, so the trainee's
+  path is unchanged.
+- Step 9's retry isn't a `!` line retried on `_exit_code`: deckz's shell guard
+  reports every failed `!` attempt as a problem line, so the check would fail
+  whenever the first attempt does. The solution waits on `uv pip compile` run with
+  `subprocess` (every 15 s, up to 5 minutes, raising with uv's error), then runs the
+  one install, pinned (`exigence`/`requirement`; the sources table keeps the
+  bare name).
+- The first real run waited on Test PyPI's HTML simple page instead. It listed the
+  version at once, but the install failed in both languages; the same install
+  passed from the host and from the image a few minutes later, so the likely cause
+  is the JSON form uv reads, cached apart (the report doesn't keep uv's message).
+  Hence `uv pip compile`. The second run passed: fr and en, `execution: no code cell
+  raised`, no "not set" line.
+- Four dev releases on Test PyPI (`0.2.0.dev20261108120234`, `…120257`, `…120747`,
+  `…120829`): two runs, one per language. No `pypi-AgE` in either run's stdout or
+  stderr, the worktree (outside `.venv`), /tmp, `~/.cache/deckz`, nor in a leftover
+  container (none).
+- Found: 99e2aeb5 wrote the demos' `run` key before `id`, which `lab-format`
+  (deferred in slides: it doesn't block a commit, `labs publish` refuses it)
+  flagged; 52a8e621 is `deckz labs fmt` on them.
+- Before the real run, a run with `TESTPYPI_TOKEN=` (unset) passed with the fact
+  line: the trainee's path.
+
+Left, the maintainer's: pushing deckz then slides, and `deckz labs publish`.
 
 In a slides worktree, `labs/notebooks/python/production/packaging/package-creation/`
 (fr first, then en; the code cells must match up to the names: `lab-pairs`):
