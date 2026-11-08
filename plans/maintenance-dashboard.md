@@ -2,7 +2,7 @@
 
 Planned 2026-11-08 from a status report an agent computed by hand on
 shuuchuu/slides (its measurement and the decisions taken are in slides'
-`docs/plans/tableau-de-bord-maintenance.md`). The goal: one command, and a
+`docs/plans/archive/tableau-de-bord-maintenance.md`). The goal: one command, and a
 studioz page, that tell the maintainer what needs care, without an agent.
 
 ## What the hand-made report needed, and what deckz lacks
