@@ -66,6 +66,9 @@ catalog's, slightly or a lot. So it never goes to the catalog deck silently:
   day of its first session);
 - or, when the catalog deck is taught as is, `deckz.yml` says so:
   `sessions.catalog_intras: [{company: orsys, training: drn, start: 2026-01-12}]`.
+  Without `start`, the entry covers every INTRA of that training, e.g. a client's
+  recurring sessions (`{company: sparks, training: npy}`); a deck claiming one of
+  them still gets it.
 
 Neither names the client: the client's name stays in your calendar.
 

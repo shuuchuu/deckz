@@ -484,10 +484,11 @@ def _casefold_unique[T](mapping: dict[str, T]) -> dict[str, T]:
 
 
 class CatalogIntra(BaseModel):
-    """An INTRA session taught with its catalog's deck, as it is.
+    """INTRA sessions taught with their catalog's deck, as it is.
 
-    Named without its client: the company and training code of its title, \
-    and the first day of its root session.
+    Named without their client: the company and training code of their \
+    title, and the first day of one's root session, or no day for every \
+    INTRA of that training (e.g. a client's recurring sessions).
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -496,8 +497,9 @@ class CatalogIntra(BaseModel):
     `companies`)."""
     training: str
     """The training code of the session's title, casing ignored."""
-    start: date
-    """The first day of the engagement's root session."""
+    start: date | None = None
+    """The first day of the engagement's root session; unset, every INTRA \
+    of the training (a deck's own `calendar` claim still wins)."""
 
 
 class SessionsSettings(BaseModel):
@@ -526,7 +528,8 @@ class SessionsSettings(BaseModel):
     decks/orsys/dpl-2026}`), or null for a training taught without a deck of \
     this repository."""
     catalog_intras: tuple[CatalogIntra, ...] = ()
-    """The INTRA sessions taught with their catalog's deck as it is."""
+    """The INTRA sessions taught with their catalog's deck as it is: one \
+    (with its `start`), or all of a training's (without)."""
     since: date | None = None
     """Ignore the sessions ending before this day, e.g. those from before \
     the repository's decks."""

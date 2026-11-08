@@ -233,6 +233,11 @@ review counts ignore `due` (`deck_counts`), left for the dashboard (phase 5).
     that key, or a `sessions.catalog_intras` entry (`{company, training, start}`, no
     client name) saying the catalog deck is taught as is. A key or an entry
     matching no engagement is reported.
+  - Revised on the real calendar (almost every session is an INTRA, many a
+    client's recurring sessions of one training): a `catalog_intras` entry
+    without `start` covers every INTRA of its training.
+- **Done 2026-11-08** (`c5ec1a3` and its follow-up, branch `sessions`): `deckz
+  sessions`, `extras.calendar`, `sessions`; slides' mapping in its step 4.
 
 ### 5. The command
 

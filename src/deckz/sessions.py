@@ -345,9 +345,10 @@ def match_sessions(
 
     A deck whose `calendar` key names an engagement gets it. Otherwise an
     INTRA engagement goes to its catalog deck only when
-    `sessions.catalog_intras` lists it, and any other to the catalog deck its
-    training code names (`sessions.trainings` first, then the directory of
-    that name, casing ignored).
+    `sessions.catalog_intras` lists it (or its training, with no `start`),
+    and any other to the catalog deck its training code names
+    (`sessions.trainings` first, then the directory of that name, casing
+    ignored).
 
     Args:
         sessions: The repository's `sessions` settings.
@@ -411,7 +412,7 @@ def _deck_of(
     companies: Mapping[str, str | None],
     trainings: Mapping[str, str | None],
     claims: Mapping[tuple[str, str, date], PurePosixPath],
-    intras: set[tuple[str, str, date]],
+    intras: set[tuple[str, str, date | None]],
     decks: RepositoryDecks,
 ) -> PurePosixPath | Orphan | None:
     # The engagement's deck, its orphan, or None when it's ignored.
@@ -437,7 +438,11 @@ def _deck_of(
     else:
         target = f"{PurePosixPath(catalog).as_posix()}/{training}"
         named_by = f"no deck directory {target}"
-    if engagement.intra and engagement.key not in intras:
+    if (
+        engagement.intra
+        and engagement.key not in intras
+        and (company, training, None) not in intras
+    ):
         return Orphan(
             engagement,
             "an INTRA session no deck claims (its program may differ from the "
@@ -446,7 +451,7 @@ def _deck_of(
             f"{engagement.start}}}` to the deck.yml of the deck made for it; or, "
             f"if {target} is taught as is, `{{company: {company}, training: "
             f"{training}, start: {engagement.start}}}` to sessions.catalog_intras "
-            "in deckz.yml",
+            f"in deckz.yml (without `start`: every INTRA of {code})",
         )
     deck = decks.by_folded.get(target.casefold())
     if deck is None:
@@ -462,11 +467,12 @@ def _deck_of(
 def _unmatched(
     sessions: SessionsSettings,
     claims: Mapping[tuple[str, str, date], PurePosixPath],
-    intras: set[tuple[str, str, date]],
+    intras: set[tuple[str, str, date | None]],
     engagements: Sequence[CalendarEngagement],
 ) -> list[str]:
-    # The claims and catalog_intras entries no engagement matches: each one
-    # was meant for a session, likely moved since.
+    # The claims and catalog_intras entries naming a day that no engagement
+    # matches: each one was meant for a session, likely moved since. An entry
+    # without a day covers a training's INTRAs, booked or not.
     keys = {e.key for e in engagements}
 
     def counts(day: date) -> bool:
@@ -482,7 +488,9 @@ def _unmatched(
         f"sessions.catalog_intras in deckz.yml: no {company}/{training} engagement "
         f"starts on {day}{_near(engagements, company, training, day)}: fix its "
         "start, or remove the entry"
-        for company, training, day in sorted(intras)
+        for company, training, day in sorted(
+            (c, t, d) for c, t, d in intras if d is not None
+        )
         if (company, training, day) not in keys and counts(day)
     )
     return problems

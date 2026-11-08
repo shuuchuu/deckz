@@ -365,3 +365,28 @@ def test_cli_prints_the_sessions(
     assert "(tentative)" in captured.out
     assert "3 sessions no deck matches:" in captured.out
     assert "calendar from the events file" in captured.err
+
+
+def test_a_catalog_intras_entry_without_start_covers_the_training(
+    repo: Path, tmp_path: Path
+) -> None:
+    yml = (repo / "deckz.yml").read_text(encoding="utf8")
+    _write(
+        repo / "deckz.yml",
+        yml.replace(
+            "    - {company: acme, training: abc, start: 2026-05-04}\n",
+            "    - {company: acme, training: abc}\n",
+        ),
+    )
+
+    report = _report(repo, tmp_path)
+
+    decks = {str(d.deck): [str(e.start) for e in d.engagements] for d in report.decks}
+    assert decks["decks/acme/abc"] == ["2026-02-02", "2026-05-04", "2026-06-01"]
+    # The claimed one stays its deck's.
+    assert decks["decks/acme/INTRA/2026-03-client"] == ["2026-03-02"]
+    assert {str(o.engagement.start) for o in report.orphans} == {
+        "2026-04-06",
+        "2026-04-20",
+    }
+    assert report.problems == ()

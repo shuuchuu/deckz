@@ -442,6 +442,7 @@ typst_ignore_system_fonts: true
     trainings: {orsys/dpl: decks/orsys/dpl-2026, sparks/aap: null}
     catalog_intras:
       - {company: orsys, training: drn, start: 2026-01-12}
+      - {company: sparks, training: npy}
     since: 2026-01-01
   ```
 
@@ -450,7 +451,8 @@ typst_ignore_system_fonts: true
   code names the catalog's deck directory of that name (casing ignored),
   `trainings` lists the exceptions (`<company>/<code>`: a deck directory, or
   null). `catalog_intras`: the INTRA sessions taught with their catalog's
-  deck as it is. `since`: sessions ending before it are ignored. Nothing here
+  deck as it is, one (with its `start`) or every one of a training (without:
+  a deck's own claim still wins). `since`: sessions ending before it are ignored. Nothing here
   names a client; the calendar's own settings are the user's
   (`calendar.yml` in their config directory), never the repository's.
 
