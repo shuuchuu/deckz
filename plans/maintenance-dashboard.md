@@ -26,7 +26,8 @@ Also: `deckz review status` and `review diff` only read, but `_DECKZ_READ_ONLY_P
 - Deck reports are living reports in the registry (slides: `docs/qa/decks/<deck>.md`),
   not plans.
 - Sessions come from the maintainer's Google Calendar, through the code invoicez
-  already has (`invoicez gcal`), extracted into a library both tools use.
+  already has (`invoicez gcal`), extracted into a library both tools use: **schedz**,
+  in its own repository (see phase 4).
 - A deck is up to date at five levels, each shown on its own: its content is fresh,
   its labs are fresh, its deck pass is newer than its last change, no dated fact is
   due, and no finding of its sections is open (errors counted apart).
@@ -84,11 +85,19 @@ findings (slides' *adaptée*) live outside the findings heading.
   scopes, token cache), `parsing.py` (`Session`, title pattern, durations,
   tentative and continuation), `grouping.py` (`Engagement`), the `--events FILE`
   fixture loading and `anonymize.py`. invoicez keeps billing (`pricing`, `drafting`,
-  `reconcile`, `linking`). The library has its own config directory, so one login
-  serves both tools. Name and home (its own repository from the shuuchuu template,
-  or a package in invoicez's repository as studioz is in deckz's) are the
-  maintainer's call; publishing too.
-- deckz: an optional extra (`deckz[calendar]`); `calendar` settings in the user's
+  `reconcile`, `linking`) and depends on schedz. schedz has its own config directory
+  (`~/.config/schedz/`: OAuth client secrets, token), so one login serves both tools;
+  invoicez's existing token and secrets move there once.
+- schedz's repository, set up like invoicez's: generated from the shuuchuu
+  `template` (Copier, `package` layout, tools `bumpver`, `doit`, `githooks`,
+  `pytest`), pushed to GitHub (`shuuchuu/schedz`) as invoicez is, no CI: the QA runs
+  in the pre-commit hooks (prek, `doit check` and the tests). Releases are uploaded
+  to PyPI with `uv build` and `uv publish`, the PyPI token read from a gitignored
+  `creds.env` (as invoicez's), through a `doit publish` task so nobody types it.
+  Creating the GitHub repository, the PyPI project and the first upload are the
+  maintainer's. invoicez's gcal tests (`tests/gcal/`, the anonymised
+  `events.json` fixture) split along the same line.
+- deckz: an optional extra (`deckz[calendar]`, on schedz); `calendar` settings in the user's
   `~/.config/deckz/` (calendar id, title pattern), never in the repository; a mapping
   from (company, training) to a deck directory in `deckz.yml` (company key to catalog
   directory, training code to deck directory, casing ignored), and an optional
