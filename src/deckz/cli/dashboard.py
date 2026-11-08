@@ -141,6 +141,7 @@ def _session_json(engagement: "CalendarEngagement | None") -> dict | None:
         "days": engagement.days,
         "tentative": engagement.tentative,
         "intra": engagement.intra,
+        "calendar": engagement.calendar,
     }
 
 
@@ -306,7 +307,8 @@ def _notes_cell(row: "DeckRow") -> str:
 def _session_cell(engagement: "CalendarEngagement | None") -> str:
     if engagement is None:
         return "—"
-    return f"{engagement.start}{'?' if engagement.tentative else ''}"
+    calendar = f" {engagement.calendar}" if engagement.calendar else ""
+    return f"{engagement.start}{'?' if engagement.tentative else ''}{calendar}"
 
 
 def _states[K: str](counts: "Mapping[K, int]", order: "Sequence[K]") -> str:
@@ -359,12 +361,21 @@ def _print_totals(found: "Dashboard") -> None:
 def _print_decks(found: "Dashboard") -> None:
     with_sessions = found.sessions.available
     width = max((len(row.deck) for row in found.decks), default=4)
-    head = f"{'next':<12}  " if with_sessions else ""
+    # A session's cell holds its calendar's label when several are read.
+    next_width = max(
+        (len(_session_cell(row.next_session)) for row in found.decks), default=12
+    )
+    next_width = max(next_width, 12)
+    head = f"{'next':<{next_width}}  " if with_sessions else ""
     print(
         f"\n{head}{'deck':<{width}}  content  labs  pass   facts     open  notes  due"
     )
     for row in found.decks:
-        next_cell = f"{_session_cell(row.next_session):<12}  " if with_sessions else ""
+        next_cell = (
+            f"{_session_cell(row.next_session):<{next_width}}  "
+            if with_sessions
+            else ""
+        )
         pass_cell = {"holds": "✓", "stale": "stale", "none": "—"}[_pass_state(row)]
         due = sum(count for _, count in row.chapters_due)
         print(

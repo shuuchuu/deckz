@@ -26,10 +26,11 @@ def sessions(
     training code's deck directory). An INTRA session goes to its catalog's deck
     only when `sessions.catalog_intras` says it is taught as is. The sessions no
     deck matches are listed with the edit that fixes them, and so are the
-    claims matching no session. Tentative sessions are marked.
+    claims matching no session. Tentative sessions are marked, and so is each
+    session's calendar when `calendars` lists several (e.g. a colleague's).
 
     Needs the calendar extra (`pip install "deckz[calendar]"`), your
-    `~/.config/deckz/calendar.yml` (calendar id, title pattern) and a login
+    `~/.config/deckz/calendar.yml` (calendar ids, title pattern) and a login
     (`--login`, once, shared with invoicez). The events are cached in your cache
     directory for `cache_hours` (24 by default).
 
@@ -38,7 +39,8 @@ def sessions(
             orphans: [{session, why, fix}], problems, ignored, calendar_errors,
             fetched_at, note}`, a session being `{event_id, link, company,
             training, place, extra, start, end, days, tentative, intra,
-            upcoming}`
+            calendar, upcoming}`, `calendar` being the label of its calendar in
+            `calendars` (null with `calendar_id`)
         refresh: Read Google Calendar now, even if the cache is recent
         login: Log in to Google Calendar if needed (opens a browser)
         events: Read the events from this JSON file instead of Google Calendar
@@ -62,9 +64,10 @@ def _line(engagement: "CalendarEngagement", today: date) -> str:
     days = f"{engagement.days:g} d"
     place = engagement.place + (f" - {engagement.extra}" if engagement.extra else "")
     tentative = "  (tentative)" if engagement.tentative else ""
+    calendar = f"  — {engagement.calendar}" if engagement.calendar else ""
     return (
         f"  {when:<8}  {engagement.start} → {engagement.end}  {days:>5}  "
-        f"{engagement.training}  {place}{tentative}"
+        f"{engagement.training}  {place}{tentative}{calendar}"
     )
 
 
@@ -118,6 +121,7 @@ def _engagement_json(engagement: "CalendarEngagement", today: date) -> dict:
         "days": engagement.days,
         "tentative": engagement.tentative,
         "intra": engagement.intra,
+        "calendar": engagement.calendar,
         "upcoming": engagement.end >= today,
     }
 

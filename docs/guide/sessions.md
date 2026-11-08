@@ -36,6 +36,21 @@ library invoicez bills from: one login serves both.
 
    If you use invoicez, copy `calendar_id` and `title_pattern` from its
    `settings.yml` (`gcal`).
+
+   To follow a colleague's sessions too (e.g. you review the decks they teach),
+   share their calendar with your Google account, then list every calendar under
+   `calendars` instead of `calendar_id`, each with a short label of your choice:
+
+   ```yaml
+   calendars:
+     Me: someone@example.com
+     Alex: alex@example.com
+   ```
+
+   Their titles must follow the same `title_pattern`. Each calendar is read and
+   cached on its own: a continuation (`->`) only continues a session of its own
+   calendar. invoicez keeps reading `calendar_id` from its own settings, so it bills
+   your sessions only.
 3. Log in once: `deckz sessions --login` opens a browser for Google's consent. The
    token lands in `~/.config/schedz/`, next to the OAuth client secrets that
    schedz's README says how to create. If invoicez already logged in before it read
@@ -81,7 +96,8 @@ deckz sessions --json     # for a script
 ```
 
 Each deck lists its sessions (`upcoming` or `past`, dates, days, code, place,
-`(tentative)` for a booking marked `?`). Then come:
+`(tentative)` for a booking marked `?`, and `— <label>` for its calendar's label
+when `calendars` lists several). Then come:
 
 - **sessions no deck matches**, each with the edit that gives it one: a company or
   a code to map, an INTRA to claim or to declare taught with the catalog deck;
@@ -91,5 +107,5 @@ Each deck lists its sessions (`upcoming` or `past`, dates, days, code, place,
 - the calendar's events that match the title pattern but can't be read.
 
 The events are cached in your cache directory (`~/.cache/deckz/calendar/`, readable
-by you only) for `cache_hours`. When reading the calendar fails (offline), the cache
-serves, with a note saying when it was read.
+by you only, one file per calendar) for `cache_hours`. When reading a calendar fails
+(offline), its cache serves, with a note saying when it was read.

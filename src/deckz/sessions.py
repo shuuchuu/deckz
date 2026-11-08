@@ -15,8 +15,9 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path, PurePosixPath
+from re import Pattern
 from re import compile as compile_regex
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic import ValidationError
 from yaml import YAMLError, safe_load
@@ -25,9 +26,6 @@ from .configuring.settings import GlobalSettings, SessionsSettings
 from .exceptions import CalendarError, CalendarUnavailableError
 from .models import CalendarClaim, DeckDefinition
 from .utils import all_deck_settings
-
-if TYPE_CHECKING:
-    from .extras.calendar import UserCalendarSettings
 
 # A claim or an entry matching no engagement names the engagements of its
 # training this close to its date, likely the session it meant.
@@ -57,6 +55,9 @@ class CalendarEngagement:
     """Unconfirmed: one of its sessions is (the title pattern's `tentative`)."""
     intra: bool
     """Its extra part matches the user's `intra_pattern`."""
+    calendar: str | None = None
+    """The label of its calendar in `calendars` (None when one calendar is \
+    read, `calendar_id`)."""
 
     @property
     def key(self) -> tuple[str, str, date]:
@@ -72,7 +73,8 @@ class Calendar:
     errors: tuple[str, ...] = ()
     """Events matching the title pattern that couldn't be read."""
     fetched_at: datetime | None = None
-    """When Google Calendar was read (None: from an events file)."""
+    """When Google Calendar was read, the oldest calendar's time when several \
+    are (None: from an events file)."""
     note: str | None = None
     """Why older events than `cache_hours` allows were used, if they were."""
 
@@ -163,30 +165,26 @@ def _calendar_module() -> Any:
 
 
 def _raw_events(
-    user: "UserCalendarSettings",
+    calendar_id: str,
+    cache_hours: float,
     cache_dir: Path,
     *,
     refresh: bool,
     login: bool,
     now: datetime,
 ) -> tuple[list[dict[str, Any]], datetime, str | None]:
+    # One calendar's events, from its cache when recent.
     calendar = _calendar_module()
-    if user.calendar_id is None:
-        msg = (
-            "calendar_id isn't set in calendar.yml: copy invoicez's "
-            "(`invoicez gcal calendars` lists your calendars)"
-        )
-        raise CalendarUnavailableError(msg)
-    path = _cache_path(cache_dir, user.calendar_id)
+    path = _cache_path(cache_dir, calendar_id)
     cached = _read_cache(path)
     if (
         cached is not None
         and not refresh
-        and now - cached[0] < timedelta(hours=user.cache_hours)
+        and now - cached[0] < timedelta(hours=cache_hours)
     ):
         return cached[1], cached[0], None
     try:
-        events = calendar.fetch_events(user.calendar_id, login=login)
+        events = calendar.fetch_events(calendar_id, login=login)
     except CalendarError as e:
         if cached is None:
             raise
@@ -209,7 +207,8 @@ def read_calendar(
 
     Google Calendar is read again once the cache is older than `cache_hours`
     (the user's `calendar.yml`); when that fails, the cache serves, with a
-    note saying so.
+    note saying so. With several `calendars`, each is read (and cached) on its
+    own, and its engagements carry its label.
 
     Args:
         settings: The settings: their user config directory holds
@@ -221,51 +220,75 @@ def read_calendar(
         cache_dir: Where the events are cached (default: `default_cache_dir`).
         now: The current time (default: now).
 
-    It raises `CalendarUnavailableError` when the calendar extra,
-    `calendar.yml`, its `calendar_id` or a login is missing (and no cache
-    serves), `CalendarError` when `calendar.yml` is invalid.
+    It also raises `CalendarUnavailableError` when the calendar extra,
+    `calendar.yml` or a login is missing (and no cache serves),
+    `CalendarError` when `calendar.yml` is invalid.
 
     Returns:
         The engagements, by start date.
+
+    Raises:
+        CalendarUnavailableError: If `calendar.yml` sets neither `calendar_id`
+            nor `calendars`.
     """
     calendar = _calendar_module()
     user = calendar.load_settings(settings.paths.user_config_dir)
-    fetched_at: datetime | None = None
-    note = None
+    times: list[datetime] = []
+    notes: list[str] = []
+    raw: dict[str | None, list[dict[str, Any]]] = {}
     if events_file is not None:
-        raw = calendar.read_file(events_file)
+        raw[None] = calendar.read_file(events_file)
     else:
-        raw, fetched_at, note = _raw_events(
-            user,
-            default_cache_dir() if cache_dir is None else cache_dir,
-            refresh=refresh,
-            login=login,
-            now=datetime.now(UTC) if now is None else now,
-        )
-    found, errors = calendar.engagements(raw, user)
-    intra = compile_regex(user.intra_pattern)
-    return Calendar(
-        engagements=tuple(
-            CalendarEngagement(
-                event_id=e.id,
-                link=e.root.html_link,
-                company=e.company,
-                training=e.training,
-                place=e.place,
-                extra=e.extra,
-                start=e.start,
-                end=e.end,
-                days=sum(
-                    s.quantity * (1 if s.kind == "day" else 0.5) for s in e.sessions
-                ),
-                tentative=e.tentative,
-                intra=e.extra is not None and intra.search(e.extra) is not None,
+        sources = user.sources()
+        if not sources:
+            msg = (
+                "calendar_id isn't set in calendar.yml: copy invoicez's "
+                "(`invoicez gcal calendars` lists your calendars), or list "
+                "several in calendars"
             )
-            for e in found
-        ),
+            raise CalendarUnavailableError(msg)
+        for label, calendar_id in sources.items():
+            raw[label], fetched_at, note = _raw_events(
+                calendar_id,
+                user.cache_hours,
+                default_cache_dir() if cache_dir is None else cache_dir,
+                refresh=refresh,
+                login=login,
+                now=datetime.now(UTC) if now is None else now,
+            )
+            times.append(fetched_at)
+            if note is not None:
+                notes.append(note if label is None else f"{label}: {note}")
+    intra = compile_regex(user.intra_pattern)
+    engagements: list[CalendarEngagement] = []
+    errors: list[str] = []
+    for label, events in raw.items():
+        found, read_errors = calendar.engagements(events, user)
+        engagements.extend(_engagement(e, label, intra) for e in found)
+        errors.extend(e if label is None else f"{label}: {e}" for e in read_errors)
+    return Calendar(
+        engagements=tuple(sorted(engagements, key=lambda e: e.start)),
         errors=tuple(errors),
-        fetched_at=fetched_at,
-        note=note,
+        fetched_at=min(times, default=None),
+        note="; ".join(notes) or None,
+    )
+
+
+def _engagement(e: Any, label: str | None, intra: Pattern[str]) -> CalendarEngagement:
+    # A schedz engagement (typed Any: only extras.calendar imports schedz).
+    return CalendarEngagement(
+        event_id=e.id,
+        link=e.root.html_link,
+        company=e.company,
+        training=e.training,
+        place=e.place,
+        extra=e.extra,
+        start=e.start,
+        end=e.end,
+        days=sum(s.quantity * (1 if s.kind == "day" else 0.5) for s in e.sessions),
+        tentative=e.tentative,
+        intra=e.extra is not None and intra.search(e.extra) is not None,
+        calendar=label,
     )
 
 

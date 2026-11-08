@@ -328,6 +328,7 @@ def test_cli_json_names_no_client(
         "days": 1,
         "tentative": True,
         "intra": False,
+        "calendar": None,
     }
     text = json.dumps(found)
     assert "Paris" not in text

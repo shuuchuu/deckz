@@ -30,6 +30,12 @@ class UserCalendarSettings(CalendarSettings, extra="forbid", frozen=True):
     `tentative`) and `durations`, as invoicez reads them.
     """
 
+    calendars: dict[str, str] = Field(default_factory=dict)
+    """Several calendars read together, by a short label (e.g. a colleague's
+    name) shown with each of their sessions: the calendar ids, instead of
+    `calendar_id`. Each is read on its own, so a continuation only continues a
+    session of its own calendar."""
+
     intra_pattern: str = r"(?i)^intra\b"
     """A regex searched in a title's extra part: a match makes the session an
     INTRA, which belongs to the deck claiming it, not to its catalog deck."""
@@ -46,6 +52,31 @@ class UserCalendarSettings(CalendarSettings, extra="forbid", frozen=True):
             raise ValueError(msg) from e
         return self
 
+    @model_validator(mode="after")
+    def _check_calendars(self) -> Self:
+        if self.calendar_id is not None and self.calendars:
+            msg = (
+                "calendar_id and calendars are both set: list every calendar in "
+                "calendars, yours included, and remove calendar_id"
+            )
+            raise ValueError(msg)
+        if len(set(self.calendars.values())) < len(self.calendars):
+            msg = "calendars names one calendar id twice"
+            raise ValueError(msg)
+        return self
+
+    def sources(self) -> dict[str | None, str]:
+        """The calendars to read, by label (None: `calendar_id`, unlabelled).
+
+        Returns:
+            Label to calendar id; empty when neither key is set.
+        """
+        if self.calendar_id is not None:
+            return {None: self.calendar_id}
+        sources: dict[str | None, str] = {}
+        sources.update(self.calendars)
+        return sources
+
 
 def load_settings(user_config_dir: Path) -> UserCalendarSettings:
     """Read the user's `calendar.yml`.
@@ -61,8 +92,9 @@ def load_settings(user_config_dir: Path) -> UserCalendarSettings:
     if not path.is_file():
         msg = (
             f"no calendar settings: write {path} with your calendar's "
-            "`calendar_id` and `title_pattern` (invoicez's `gcal` settings have "
-            "both), as deckz's guide (Sessions) shows"
+            "`calendar_id` (or several, `calendars`) and `title_pattern` "
+            "(invoicez's `gcal` settings have both), as deckz's guide (Sessions) "
+            "shows"
         )
         raise CalendarUnavailableError(msg)
     try:

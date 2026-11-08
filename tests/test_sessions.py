@@ -302,6 +302,132 @@ def test_a_failed_fetch_falls_back_on_the_cache(
         read_calendar(settings, cache_dir=tmp_path / "empty", now=now)
 
 
+def _two_calendars(tmp_path: Path, monkeypatch: Any) -> None:
+    user_dir = tmp_path / "two"
+    _write(
+        user_dir / "calendar.yml",
+        json.dumps(
+            {
+                "calendars": {"Me": "me@example.com", "Colleague": "co@example.com"},
+                "title_pattern": _TITLE_PATTERN,
+            }
+        ),
+    )
+    monkeypatch.setattr("appdirs.user_config_dir", lambda *_, **__: str(user_dir))
+
+
+_BY_CALENDAR = {
+    "me@example.com": [
+        _event("Acme - ABC - CV", "2026-02-02", 3),
+        _event("-> Acme - ABC - CV", "2026-02-16"),
+    ],
+    "co@example.com": [
+        _event("Acme - ABC - Lyon", "2026-01-12", 2),
+        # Continues no session of its own calendar: mine doesn't count.
+        _event("-> Acme - ABC - CV", "2026-02-23"),
+    ],
+}
+
+
+def test_several_calendars_are_read_each_on_its_own(
+    repo: Path, tmp_path: Path, monkeypatch: Any
+) -> None:
+    _two_calendars(tmp_path, monkeypatch)
+    calls: list[str] = []
+
+    def fetch(calendar_id: str, *, login: bool) -> list[Any]:
+        calls.append(calendar_id)
+        return _BY_CALENDAR[calendar_id]
+
+    monkeypatch.setattr("deckz.extras.calendar.fetch_events", fetch)
+    cache = tmp_path / "cache"
+    now = datetime(2026, 11, 8, 9, tzinfo=UTC)
+
+    found = read_calendar(GlobalSettings.from_yaml(repo), cache_dir=cache, now=now)
+
+    assert calls == ["me@example.com", "co@example.com"]
+    assert len(list(cache.iterdir())) == 2
+    assert [(str(e.start), e.calendar, e.days) for e in found.engagements] == [
+        ("2026-01-12", "Colleague", 2),
+        ("2026-02-02", "Me", 4),
+    ]
+    (error,) = found.errors
+    assert error.startswith("Colleague: ")
+    assert "continuation without a root event" in error
+    assert found.fetched_at == now
+
+
+def test_one_calendar_failing_falls_back_on_its_own_cache(
+    repo: Path, tmp_path: Path, monkeypatch: Any
+) -> None:
+    _two_calendars(tmp_path, monkeypatch)
+    settings = GlobalSettings.from_yaml(repo)
+    cache = tmp_path / "cache"
+    now = datetime(2026, 11, 8, 9, tzinfo=UTC)
+    monkeypatch.setattr(
+        "deckz.extras.calendar.fetch_events",
+        lambda calendar_id, *, login: _BY_CALENDAR[calendar_id],
+    )
+    read_calendar(settings, cache_dir=cache, now=now)
+
+    def fetch(calendar_id: str, *, login: bool) -> list[Any]:
+        if calendar_id == "co@example.com":
+            msg = "offline"
+            raise CalendarError(msg)
+        return _BY_CALENDAR[calendar_id]
+
+    monkeypatch.setattr("deckz.extras.calendar.fetch_events", fetch)
+    later = now + timedelta(hours=30)
+
+    found = read_calendar(settings, cache_dir=cache, now=later)
+
+    assert {e.calendar for e in found.engagements} == {"Me", "Colleague"}
+    assert found.fetched_at == now
+    assert found.note is not None
+    assert found.note.startswith("Colleague: events read on")
+
+
+def test_calendar_id_and_calendars_together_are_invalid(
+    repo: Path, tmp_path: Path, monkeypatch: Any
+) -> None:
+    user_dir = tmp_path / "both"
+    _write(
+        user_dir / "calendar.yml",
+        json.dumps(
+            {
+                "calendar_id": "me@example.com",
+                "calendars": {"Colleague": "co@example.com"},
+                "title_pattern": _TITLE_PATTERN,
+            }
+        ),
+    )
+    monkeypatch.setattr("appdirs.user_config_dir", lambda *_, **__: str(user_dir))
+
+    with raises(CalendarError, match="calendar_id and calendars are both set"):
+        read_calendar(GlobalSettings.from_yaml(repo))
+
+
+def test_cli_names_each_session_calendar(
+    repo: Path, tmp_path: Path, monkeypatch: Any, capsys: CaptureFixture[str]
+) -> None:
+    _two_calendars(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "deckz.extras.calendar.fetch_events",
+        lambda calendar_id, *, login: _BY_CALENDAR[calendar_id],
+    )
+    monkeypatch.setattr("deckz.sessions.default_cache_dir", lambda: tmp_path / "c")
+
+    main(("sessions", "--json"))
+
+    found = json.loads(capsys.readouterr().out)
+    decks = {d["deck"]: d["sessions"] for d in found["decks"]}
+    assert [s["calendar"] for s in decks["decks/acme/abc"]] == ["Colleague", "Me"]
+
+    main(("sessions",))
+
+    assert "  — Colleague\n" in capsys.readouterr().out
+
+
 def test_without_a_login_reading_fails_with_the_fix(repo: Path, tmp_path: Path) -> None:
     # The tests' XDG_CONFIG_HOME holds no schedz token.
     with raises(CalendarUnavailableError, match="deckz sessions --login"):
@@ -350,6 +476,7 @@ def test_cli_prints_the_sessions(
     found = json.loads(capsys.readouterr().out)
     decks = {d["deck"]: d["sessions"] for d in found["decks"]}
     assert decks["decks/acme/new-2026"][0]["tentative"] is True
+    assert decks["decks/acme/new-2026"][0]["calendar"] is None
     assert {o["session"]["start"] for o in found["orphans"]} == {
         "2026-06-01",
         "2026-04-06",
