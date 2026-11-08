@@ -250,6 +250,53 @@ review counts ignore `due` (`deck_counts`), left for the dashboard (phase 5).
   sorted by next session, then by the review score `review status` already uses;
   past INTRA decks with no upcoming session left out unless `--all`.
 
+**Settled 2026-11-08 (the maintainer), branch `dashboard`:**
+
+- The five levels. *Content*: every content file of the deck fresh (due, stale,
+  unreviewed or deleted is not). *Labs*: the files other than content the reports
+  covering the deck record (`DeckReview.others`, the notebooks) all fresh: deckz
+  knows a deck's notebooks no other way (the links are the repository's Jinja
+  filter); a notebook no report records doesn't count, its section fails *content*
+  anyway. *Pass*: `DeckPass.holds` (holds, stale, none). *Dated facts*: no covering
+  section report has its facts due today. *Findings*: no open finding in the
+  reports `review findings <deck>` shows (those recording a content file of the
+  deck, and its own); the rubrics of a new `review.findings.critical` (slides: `[E]`)
+  are counted apart. A level with nothing to judge (no notebook recorded, no
+  covering report) is neither met nor failed (`null`).
+- A section's state, first that applies: none (no file recorded), stale (a file
+  stale or deleted), partial (a file unreviewed), due, fresh.
+- Deck order: next session's start, then the deck's frames to review (all frames
+  of its unreviewed content files, the changed ones of its stale files:
+  `DeckReview.frames`), then path.
+- An INTRA deck is one whose `deck.yml` has a `calendar` key. It is past, and left
+  out unless `--all`, when the calendar shows no upcoming engagement for it, or,
+  the calendar unreadable, when its claimed start is more than 31 days ago.
+- Sessions from `sessions_report` with no login (`--refresh` passed on); on any
+  `CalendarError`, no session column and the reason in one line. A session shows
+  its start, end, days, tentative and intra only: no place nor extra, so the
+  dashboard never names a client.
+- Human output: the totals, the decks, then the 15 sections needing care with the
+  highest score (`--sections` for all of them); `--json` has everything.
+- Revised once built: a deck's covering reports also count those recording its
+  written French chapters (`review.deck_covered_paths`), in `review findings <deck>`
+  too (slides: sparks-formation/bdm's 5 open course notes findings, 1 E, were
+  invisible to its deck).
+
+**Done 2026-11-08** (branch `dashboard`): `deckz/dashboard.py` (tasks layer:
+`Dashboard`, `DeckRow`, `SectionRow`, `FilesLevel`, `FindingsLevel`, `FactsLevel`,
+`Totals`), `deckz dashboard [--json] [--all] [--sections] [--refresh] [--events]`
+(`cli/dashboard.py`, allowed to agents in the main checkout),
+`review.findings.critical`, `DeckReview.content`/`frames`, the guide's
+"Maintenance dashboard" page (with the JSON keys, which `studioz.md` now lists as
+kept stable), `tasks.md`. On slides (2026-11-08, 16 s): 154 sections (75 fresh,
+43 stale, 36 with no report), 922 files (704 fresh, 71 stale, 147 unreviewed), 377
+open findings in 44 reports (the 370 of phase 1 plus the deck and course notes
+reports since), 269 of 671 files with a chapter (40 %), 64 chapters due, no dated
+fact due, 4 decks with an upcoming session, 6 past INTRA decks left out. It finds 11
+decks with every chapter, not the hand measurement's 13: that one rounded
+sparks-formation/pav and pyp's 99 % up (each lacks
+`python/basics/control-structures/control-structures-advanced`).
+
 ### 6. The studioz page
 
 A page reading `deckz dashboard --json` (studioz imports only read-only APIs), each

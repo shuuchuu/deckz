@@ -261,6 +261,7 @@ review:
       open: open
       done: done
       refused: refused
+    critical: [E]              # optional: counted apart by `deckz dashboard`
 ```
 
 A finding is a top-level list item under that heading whose text starts with its id
@@ -309,8 +310,9 @@ deckz review findings decks/orsys/ipy  # the open findings of the reports coveri
 deckz review findings docs/qa/sections/python  # the reports under a directory
 ```
 
-For a deck, the reports are its own and those recording one of its content files; for a path
-outside `review.dir`, those recording a file under it. `--json` and `--plain` list
+For a deck, the reports are its own and those recording one of its content files or
+of its written course notes chapters; for a path outside `review.dir`, those recording
+a file under it. `--json` and `--plain` list
 every finding with its line, id, outcome and first paragraph. The command always
 exits 0.
 

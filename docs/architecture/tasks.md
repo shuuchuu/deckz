@@ -56,6 +56,21 @@ decks; studioz shows only the keys it knows. The `course-notes` section (only wi
 a course notes directory) is too: it parses each deck once more, and looks up both
 languages' chapters.
 
+## `dashboard`
+
+| | |
+|---|---|
+| **Responsibility** | What of the repository needs care: the totals, each deck at its five levels, each section, the next sessions |
+| **Owns** | `Dashboard` and its rows and levels; what a deck's levels, a section's state, a past INTRA deck are |
+| **Depends on** | `analyzing` (`review`'s `ranking` and `deck_review`, `findings`, `dated_facts`), `course_notes` (`repository_coverage`), `sessions` (`sessions_report`, `read_decks`) |
+| **Never** | Writes anything; logs in to the calendar; recomputes what those modules measure |
+| **Entry points** | [`dashboard`][deckz.dashboard.dashboard] (`deckz dashboard`) |
+| **Fails with** | `ReviewError` without `review.dir`, `DeckzError` when a deck doesn't parse; a `CalendarError` only drops the sessions |
+
+It parses every deck about three times (the ranking, each deck's review, the course
+notes coverage): 15 s on a repository of 40 decks. `deckz dashboard --json` is a
+contract with studioz (see [studioz](studioz.md)).
+
 ## `setting_up`
 
 | | |

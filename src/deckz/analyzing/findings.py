@@ -93,7 +93,8 @@ class TargetFindings:
     """As given, relative to the repository."""
     kind: Literal["deck", "paths"]
     reports: tuple[ReportFindings, ...]
-    """A deck's: the reports recording one of its content files; else the \
+    """A deck's: its own report and those recording one of its content files \
+    or written French chapters (`review.deck_covered_paths`); else the \
     reports under the path, or recording a file under it."""
 
 
@@ -378,12 +379,12 @@ def _covering(
 ) -> tuple[Literal["deck", "paths"], list[str]]:
     # The kind of `target` and the reports it stands for.
     from ..configuring.settings import DeckSettings
-    from .review import deck_files, deck_report_path, review_dir
+    from .review import deck_covered_paths, deck_report_path, review_dir
 
     git_dir = settings.paths.git_dir
     if (target / "deck.yml").is_file():
         deck = DeckSettings.from_yaml(target, git_dir=git_dir)
-        files = {path.relative_to(git_dir).as_posix() for path in deck_files(deck)}
+        files = deck_covered_paths(deck)
         own = deck_report_path(settings, target.relative_to(git_dir).as_posix())
         own_rel = own.relative_to(git_dir).as_posix()
         return "deck", [

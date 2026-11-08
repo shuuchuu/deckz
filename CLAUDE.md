@@ -71,7 +71,7 @@ into this checkout only a finished change. Before merging one that changes behav
 |---|---|
 | `index.md` | The layers, the rules and their import-linter contracts, the known exceptions |
 | `cli.md` | `deckz.cli`: command registration, the error boundary (`main`/`_launch`), stdout vs stderr, `.env` and `DECKZ_*` defaults, testing `main` |
-| `tasks.md` | `status`, `setting_up`, `scaffolding`, `ci_report`, the Claude Code hooks, `hooks_install` |
+| `tasks.md` | `status`, `setting_up`, `scaffolding`, `ci_report`, `dashboard`, the Claude Code hooks, `hooks_install` |
 | `pipelines.md` | `pipelines` (targets, plan vs build, locks, stale PDFs, `watch`), `checking`, `course_notes` |
 | `analyzing.md` | The analyses, the content checks (blocking/deferred, the gates), fr/en pairing and `Lang-sync` |
 | `components.md` | Protocols and factories, each component, the deck builder's outputs, Typst workers |

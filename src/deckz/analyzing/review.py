@@ -161,6 +161,16 @@ class DeckReview:
     chapters: tuple[FileReview, ...] = ()
     """Its course notes' French chapters that are written, in its order."""
 
+    @property
+    def content(self) -> tuple[FileReview, ...]:
+        """Its content files, every section's."""
+        return tuple(review for section in self.sections for review in section.files)
+
+    @property
+    def frames(self) -> int:
+        """Its content files' frames to review, counted as `RankedSection.frames`."""
+        return sum(_frames_to_review(review) for review in self.content)
+
 
 @dataclass(frozen=True)
 class DeckPass:
@@ -1193,6 +1203,23 @@ def _deck_chapters(settings: "DeckSettings", deck: "Deck") -> list[str]:
             if entry.status in (ChapterStatus.WRITTEN, ChapterStatus.COVERED)
         )
     )
+
+
+def deck_covered_paths(settings: "DeckSettings") -> set[str]:
+    """The files through which a report covers a deck.
+
+    Its content files, and its course notes' written French chapters: a
+    report recording one of them is about the deck (`review findings
+    <deck>`, `deckz dashboard`).
+
+    Returns:
+        Their paths, relative to the repository.
+    """
+    parsed = _parsed(settings)
+    return {
+        *(_rel(settings, path) for path in _files_of(parsed)),
+        *_deck_chapters(settings, parsed),
+    }
 
 
 def _chapters_under(settings: "GlobalSettings", target: Path) -> list[str]:

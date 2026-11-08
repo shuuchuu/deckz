@@ -50,7 +50,8 @@ studioz reads these from the workspace's deckz, so changing them is a change of 
 too:
 
 - the `--json` output of `deckz status`, `deckz show affected`, `deckz upload
-  --dry-run`, `deckz i18n stale`, `deckz labs list`, `deckz videos list`;
+  --dry-run`, `deckz i18n stale`, `deckz labs list`, `deckz videos list`, `deckz
+  dashboard` (its keys: the guide's [Maintenance dashboard](../guide/dashboard.md));
 - the `--plain` output of `deckz check --staged` and `deckz labs gpu status`;
 - the log messages of [`pipelines.watch`][deckz.pipelines], from which studioz
   follows a `deckz run --watch`;

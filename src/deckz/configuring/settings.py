@@ -402,6 +402,19 @@ class FindingsSettings(BaseModel):
     headings one level below the findings heading; a finding under one of \
     them has its letters."""
     outcomes: FindingOutcomes
+    critical: tuple[str, ...] = ()
+    """The rubrics whose open findings `deckz dashboard` counts apart, e.g. \
+    `[E]` for errors: a deck with one isn't fit to teach as it is."""
+
+    @model_validator(mode="after")
+    def _known_critical(self) -> Self:
+        if unknown := [key for key in self.critical if key not in self.rubrics]:
+            msg = (
+                "`review.findings.critical` names rubrics `review.findings.rubrics` "
+                f"lacks: {', '.join(unknown)}"
+            )
+            raise ValueError(msg)
+        return self
 
 
 class ReviewRule(BaseModel):

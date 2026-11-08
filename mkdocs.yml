@@ -19,6 +19,7 @@ nav:
       - Before committing, teaching, publishing: guide/before-you-commit.md
       - Reviews: guide/reviews.md
       - Sessions: guide/sessions.md
+      - Maintenance dashboard: guide/dashboard.md
       - Checks: guide/checks.md
   - Architecture:
       - architecture/index.md

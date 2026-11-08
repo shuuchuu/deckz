@@ -1454,6 +1454,12 @@ The main commands:
   are at their version. The `review-headers` check keeps the reports well
   formed and in place, and `deckz status` counts each deck's content not
   reviewed at its version.
+- `deckz dashboard`: what needs care, read-only: the review totals, the
+  open findings, the course notes coverage and the files due under a rule,
+  then each deck at five levels (content, labs, deck pass, dated facts,
+  open findings) with its course notes and its next session (from `deckz
+  sessions`' cache, never logging in), the next taught first, and the
+  sections needing care (see the guide's Maintenance dashboard page).
 - `deckz search-sections KEYWORDS...`: search shared sections by title or
   Markdown heading.
 - `deckz section-flavors SECTION`: list a section's flavor names.

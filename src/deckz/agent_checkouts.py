@@ -121,9 +121,18 @@ _GIT_LISTING = {
     "tag": {"--list", "-l"},
 }
 # `sessions` writes only the user's cache of calendar events, outside every
-# checkout.
+# checkout, and `dashboard` reads what `review status`, `review findings`,
+# `show course-notes` and `sessions` read.
 _DECKZ_READ_ONLY = frozenset(
-    {"check", "search-sections", "sessions", "show", "status", "worktree"}
+    {
+        "check",
+        "dashboard",
+        "search-sections",
+        "sessions",
+        "show",
+        "status",
+        "worktree",
+    }
 )
 _DECKZ_READ_ONLY_PAIRS = {
     "i18n": {"missing-en", "stale"},

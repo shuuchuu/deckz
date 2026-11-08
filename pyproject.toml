@@ -101,7 +101,7 @@ layers = [
   "cli",
   "agent_hooks",
   "agent_checkouts",
-  "status | setting_up | scaffolding | ci_report",
+  "status | setting_up | scaffolding | ci_report | dashboard",
   "pipelines",
   "analyzing",
   "checking | course_notes | course_notes_code | labs | videos | hooks_install | sessions",

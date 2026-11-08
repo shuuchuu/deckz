@@ -15,6 +15,7 @@ page is one task. `deckz --help` lists the commands by task too, and `deckz <com
 | know if my work is ready to commit, teach or publish | [Before committing, teaching, publishing](before-you-commit.md) |
 | know what was reviewed, and what changed since | [Reviews](reviews.md) |
 | know which deck I teach next, and when | [Sessions](sessions.md) |
+| see what needs care, deck by deck | [Maintenance dashboard](dashboard.md) |
 | understand what a check reports | [Checks](checks.md) |
 
 The configuration files (`deckz.yml`, `variables.yml`, `deck.yml`, section `.yml`s)
