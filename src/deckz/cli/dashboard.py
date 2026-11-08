@@ -352,7 +352,9 @@ def _print_decks(found: "Dashboard") -> None:
     with_sessions = found.sessions.available
     width = max((len(row.deck) for row in found.decks), default=4)
     head = f"{'next':<12}  " if with_sessions else ""
-    print(f"\n{head}{'deck':<{width}}  content  labs  pass   facts  open  notes  due")
+    print(
+        f"\n{head}{'deck':<{width}}  content  labs  pass   facts     open  notes  due"
+    )
     for row in found.decks:
         next_cell = f"{_session_cell(row.next_session):<12}  " if with_sessions else ""
         pass_cell = {"holds": "✓", "stale": "stale", "none": "—"}[_pass_state(row)]
@@ -360,7 +362,7 @@ def _print_decks(found: "Dashboard") -> None:
         print(
             f"{next_cell}{row.deck:<{width}}  {_files_cell(row.content):>7}  "
             f"{_files_cell(row.labs):>4}  {pass_cell:<5}  "
-            f"{_facts_cell(row.dated_facts):>5}  {_findings_cell(row.findings):>4}  "
+            f"{_facts_cell(row.dated_facts):>5}  {_findings_cell(row.findings):>7}  "
             f"{_notes_cell(row):>5}  {due or '':>3}"
         )
     print(
@@ -377,11 +379,11 @@ def _print_sections(found: "Dashboard", *, every: bool) -> None:
     if not shown:
         return
     width = max(len(row.section) for row in shown)
-    print(f"\n{'score':>6}  {'section':<{width}}  decks  state    open  facts")
+    print(f"\n{'score':>6}  {'section':<{width}}  decks  state       open  facts")
     for row in shown:
         print(
             f"{row.ranked.score:>6}  {row.section:<{width}}  {len(row.decks):>5}  "
-            f"{row.state:<7}  {_findings_cell(row.findings):>4}  "
+            f"{row.state:<7}  {_findings_cell(row.findings):>7}  "
             f"{_facts_cell(row.dated_facts):>5}"
         )
     if len(rows) > len(shown):
