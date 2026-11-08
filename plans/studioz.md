@@ -82,8 +82,13 @@ yielding the SDK's own message objects; nothing in them touches the network.
 - A workspace runs its own deckz, installed from `../deckz` (main). To try deckz
   changes from the code's worktree, point the workspace at it for the trial: its
   `.venv/lib/python3.*/site-packages/deckz.pth` holds
-  `/home/mog/repos/shuuchuu/deckz/src`; write the worktree's `src` there. A GPU
-  hook's `uv run` in the workspace resets it silently.
+  `/home/mog/repos/shuuchuu/deckz/src`; put the worktree's `src` there by replacing
+  the file, never by writing into it: uv hard-links it into every venv on the machine
+  (slides' main checkout, every workspace), and on 2026-11-08 an `echo … >` into it
+  pointed them all at the worktree, then broke them when it was removed. Write a new
+  file and move it over (`echo <worktree>/src > deckz.pth.new`, then `mv deckz.pth.new
+  deckz.pth`), check that `stat -c %h deckz.pth` says 1, and remove the workspace
+  before the worktree. A GPU hook's `uv run` in the workspace resets it silently.
 - Never click "Publier" (labs, videos, or Sync's push) nor "Envoyer" on slides: they
   publish to trainees, slides' origin or Google Drive. The tests cover them with
   fakes; on slides, stop at the confirmation.
