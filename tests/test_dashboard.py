@@ -38,6 +38,9 @@ review:
     - paths: content/sec/b.md
       since: 2026-12-01
       why: a later rule
+    - paths: course-notes/sec/b.md
+      since: 2026-12-01
+      why: a later rule for the chapters
 sessions:
   companies:
     acme: company
@@ -315,6 +318,10 @@ def test_cli_json_names_no_client(
         "dated_facts",
         "findings",
     ]
+    assert deck["opens"] is None  # no chapter due, no deck report
+    section = found["sections"][0]
+    assert section["needs_care"] is True
+    assert set(section["opens"]) == {"file", "why"}
     assert deck["next_session"] == {
         "start": "2026-11-20",
         "end": "2026-11-20",
@@ -367,3 +374,59 @@ def test_a_decks_course_notes_reports_cover_it(
 
     main(("review", "findings", TWO, "--plain"))
     assert capsys.readouterr().out.startswith(f"{notes_report}\t")
+
+
+def _opens(row: Any) -> tuple[str, str] | None:
+    return None if row.opens is None else (row.opens.file, row.opens.why)
+
+
+def _section(found: Dashboard, section: str) -> Any:
+    return next(row for row in found.sections if row.section == section)
+
+
+def test_a_section_opens_a_chapter_else_a_report_else_a_file(repo: Path) -> None:
+    found = _build(repo)
+    # Nothing reviewed, no chapter: its first file to review.
+    assert _opens(_section(found, "sec")) == (A, "file")
+    assert _opens(_section(found, "sec/sub")) == (C, "file")
+
+    _write(repo / "course-notes/sec/a.md", "# A\n")
+    _commit(repo, "Chapter")
+    assert _opens(_section(_build(repo), "sec")) == ("course-notes/sec/a.md", "chapter")
+
+    # c.md, never reviewed, has no chapter: the report of its section.
+    mark(_settings(repo), repo / "reviews/sections/sub.md", [repo / C], today=TODAY)
+    _write(repo / C, "# C1\n\nChanged.\n")
+    _commit(repo, "Change c")
+    assert _opens(_section(_build(repo), "sec/sub")) == (
+        "reviews/sections/sub.md",
+        "report",
+    )
+
+    # Fresh, after its rule: its open findings, in its report.
+    _review_sec(repo, today=date(2026, 12, 2))
+    sec = _section(_build(repo), "sec")
+    assert (sec.state, sec.needs_care) == ("fresh", True)
+    assert _opens(sec) == (REPORT, "report")
+
+
+def test_a_chapter_due_comes_first(repo: Path) -> None:
+    chapter = "course-notes/sec/b.md"
+    _review_sec(repo, today=date(2026, 11, 1))
+    _write(repo / chapter, "# B\n")
+    _commit(repo, "Chapter")
+    mark(
+        _settings(repo),
+        repo / "reviews/course-notes/sec.md",
+        [repo / chapter],
+        today=date(2026, 11, 1),
+    )
+    found = _build(repo)
+    assert _opens(_section(found, "sec")) == (chapter, "chapter_due")
+    assert _opens(_row(found, TWO)) == (chapter, "chapter_due")
+    # abc has no chapter due and no deck report: its deck page.
+    assert _row(found, ABC).opens is None
+
+    mark(_settings(repo), repo / "reviews" / f"{ABC}.md", [], today=TODAY)
+    abc = _row(_build(repo), ABC)
+    assert _opens(abc) == (abc.deck_pass.report, "report")

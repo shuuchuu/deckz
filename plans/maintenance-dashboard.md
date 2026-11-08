@@ -324,6 +324,30 @@ deckz keeps stable for it.
   next run. Nothing runs it by itself: not a file change, not the tab opening.
 - No client name: the JSON has none (sessions carry dates only); keep it so.
 
+**Settled 2026-11-08, before coding (the maintainer):**
+
+- *Where, revised:* a page of its own rather than a panel tab. The editor lives only on
+  a deck's page and a scene's, and a chapter isn't in the deck's PDF, so a panel tab
+  would load a deck page for a file unrelated to its PDF. The activity bar's
+  Maintenance view (headlines, the button, a link) opens `/espaces/<ws>/maintenance`:
+  the dashboard where a deck's page has the PDF, the editor beside it.
+- *A deck row* opens its first chapter due under a rule, in the deck's order; else its
+  deck report; else its deck page. Missing chapters are a count: no file to open.
+- *A section row* opens the first of its chapters due, else the chapter of its first
+  file needing care; with no chapter, that file's report (its section's when the file
+  was never reviewed); with no report, the slide file. A section needing care for its
+  findings or dated facts alone opens the report holding them.
+- deckz decides it (a rule studioz needs): `Opens` on `DeckRow` and `SectionRow`,
+  `opens` and the sections' `needs_care` in the JSON.
+
+**Done 2026-11-08** (branch `dashboard-page`): `dashboard.Opens`, `_deck_opens`,
+`_section_opens`; the guide's JSON keys; `studioz.maintenance` (on demand, the last
+result in `.run/studioz/maintenance.json`), the Maintenance view and page,
+`_editor_pane.html` shared with the deck and scene pages. On slides (a trial workspace,
+2026-11-08): 24 s from the button; 34 decks (6 past INTRA left out), 109 sections
+needing care; decks open 27 chapters due, 2 reports, 5 deck pages; sections 25
+chapters due, 12 chapters, 57 reports, 15 slide files.
+
 ### Later
 
 A history (the JSON of each `deckz worktree land`, in the user's state directory) for

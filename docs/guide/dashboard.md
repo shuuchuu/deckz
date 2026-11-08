@@ -75,15 +75,25 @@ of its title, so the dashboard's output never names a client.
   reports_with_open}`), `course_notes` (`{counts, share, complete_decks}`), `rules`
   (`[{rule, since, why, due}]`), `dated_facts_due` (reports).
 - `decks`, in the order shown: `{deck, intra, past, next_session, sessions, frames,
-  levels, course_notes, chapters_due}`. `next_session` is `{start, end, days,
+  levels, course_notes, chapters_due, opens}`. `next_session` is `{start, end, days,
   tentative, intra}` or null; `sessions` the number of its sessions, null without the
   calendar. `levels` has `content` and `labs` (`{ok, total, to_review, counts}`),
   `pass` (`{ok, state, report, date, stale}`), `dated_facts` (`{ok, due,
   next_due_on}`) and `findings` (`{ok, open, total, critical, reports}`, null without
   `review.findings`); each `ok` is true, false, or null when there is nothing to judge.
-  `course_notes` is `{counts, share, error}`, `chapters_due` `[{rule, why, count}]`.
+  `course_notes` is `{counts, share, error}`, `chapters_due` `[{rule, why, count}]`,
+  `opens` the file to open about it (below).
 - `left_out`: the past INTRA decks not shown.
 - `sections`, every one, by score: `{section, state, score, frames, decks, counts,
-  reports, findings, dated_facts}`, `dated_facts` being `{ok, due, reports: [{report,
-  checked, source, due_on}]}`.
+  reports, findings, dated_facts, needs_care, opens}`, `dated_facts` being `{ok, due,
+  reports: [{report, checked, source, due_on}]}`, `needs_care` whether it's among
+  those the human output lists (not fresh, an open finding, or dated facts due).
 - `problems`: the reports that couldn't be read, the findings breaking the grammar.
+- `opens`, on a deck and a section: `{file, why}`, a file of the repository that
+  exists, or null. studioz's Maintenance page opens it in its editor when a row is
+  clicked. A deck opens its first chapter due under a rule (`why`: `chapter_due`),
+  else its deck report (`report`); null: its deck page. A section opens the first of
+  its files' chapters due under a rule (`chapter_due`), else the chapter of its first
+  file not fresh (`chapter`), else that file's report, or its section's (`report`),
+  else that file itself (`file`); a section needing care only for its findings or
+  dated facts opens the report holding them.

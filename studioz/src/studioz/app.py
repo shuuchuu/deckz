@@ -12,7 +12,7 @@ from collections.abc import (
 )
 from contextlib import asynccontextmanager, suppress
 from dataclasses import asdict, dataclass, field, replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from functools import partial
 from importlib.resources import files
 from pathlib import Path
@@ -55,6 +55,7 @@ from . import (
     commits,
     gpu,
     labs,
+    maintenance,
     memory,
     notebooks,
     problems,
@@ -100,6 +101,8 @@ class Studio:
     closing: Event = field(default_factory=Event)
     """Set when studioz stops: the pages' server-sent events end."""
     sandbox: "Sandbox" = field(default_factory=lambda: Sandbox())
+    dashboards: maintenance.Maintenance = field(default_factory=maintenance.Maintenance)
+    """The workspaces' dashboards, run on demand (`deckz dashboard`)."""
 
     async def gone(self, request: Request) -> bool:
         """Whether a stream to `request`'s page should end.
@@ -225,6 +228,16 @@ def _ago(moment: datetime) -> str:
     return "à l'instant"
 
 
+def _moment(moment: datetime) -> str:
+    return moment.astimezone().strftime("%d/%m/%Y à %H:%M")
+
+
+def _day(day: str) -> str:
+    # An ISO date, as `deckz dashboard --json` gives it.
+    found = date.fromisoformat(day)
+    return found.strftime("%d/%m/%Y" if found.year != date.today().year else "%d/%m")
+
+
 def _size(size: int) -> str:
     for unit, name in ((1 << 30, "Go"), (1 << 20, "Mo"), (1 << 10, "ko")):
         if size >= unit:
@@ -270,6 +283,8 @@ def _hours(hours: float) -> str:
 
 
 templates.env.filters["ago"] = _ago
+templates.env.filters["moment"] = _moment
+templates.env.filters["day"] = _day
 templates.env.filters["dollars"] = _dollars
 templates.env.filters["hours"] = _hours
 templates.env.filters["gib"] = memory.gib
@@ -1726,6 +1741,75 @@ def video_page(
     )
 
 
+@router.get("/espaces/{name}/maintenance", response_class=HTMLResponse)
+def maintenance_page(request: Request, studio: StudioDep, name: str) -> Response:
+    """The Maintenance page: the dashboard, and the editor beside it.
+
+    Returns:
+        The page; the dashboard (`maintenance_board`) loads itself, its last \
+        result at once, computed only when the person asks.
+    """
+    found = studio.workspace(name)
+    workspaces.mark_used(found.worktree.path)
+    return _render(
+        request,
+        "maintenance.html",
+        workspace=found,
+        decks=workspaces.decks(found.worktree.path),
+        declared=workflows.declared(found.worktree.path),
+        page="maintenance",
+    )
+
+
+def _maintenance(
+    request: Request, studio: Studio, name: str, template: str
+) -> Response:
+    found = studio.workspace(name)
+    return _render(
+        request,
+        template,
+        workspace=found,
+        state=studio.dashboards.state(found.worktree.path),
+        section_states=maintenance.SECTION_STATES,
+        section_state=maintenance.SECTION_STATE,
+        file_states=maintenance.FILE_STATES,
+        why=maintenance.WHY,
+        why_titles=maintenance.WHY_TITLES,
+    )
+
+
+@router.get("/espaces/{name}/maintenance/tableau", response_class=HTMLResponse)
+def maintenance_board(request: Request, studio: StudioDep, name: str) -> Response:
+    """The Maintenance page's dashboard: the last result, and when.
+
+    Returns:
+        The dashboard, polling while a run is under way.
+    """
+    return _maintenance(request, studio, name, "_maintenance.html")
+
+
+@router.get("/espaces/{name}/maintenance/resume", response_class=HTMLResponse)
+def maintenance_summary(request: Request, studio: StudioDep, name: str) -> Response:
+    """The sidebar's Maintenance view: the last result's headlines.
+
+    Returns:
+        The view, polling while a run is under way.
+    """
+    return _maintenance(request, studio, name, "_maintenance_summary.html")
+
+
+@router.post("/espaces/{name}/maintenance/calculer")
+def maintenance_run(studio: StudioDep, name: str) -> Response:
+    """Compute the workspace's dashboard again, in the background.
+
+    Returns:
+        No content, its `maintenance-changed` event reloading the views.
+    """
+    found = studio.workspace(name)
+    studio.dashboards.start(found.worktree.path)
+    return Response(status_code=204, headers={"HX-Trigger": "maintenance-changed"})
+
+
 @router.get("/espaces/{name}/tp", response_class=HTMLResponse)
 def labs_panel(
     request: Request, studio: StudioDep, name: str, tp: str = ""
@@ -3038,6 +3122,7 @@ def create_app(
             studio.statuses.stop_all()
             studio.affected.stop_all()
             studio.backlog.stop_all()
+            studio.dashboards.stop_all()
             await asyncio.to_thread(studio.jobs.stop_all)
             await studio.agents.close_all()
             await asyncio.to_thread(studio.baselines.stop_all)

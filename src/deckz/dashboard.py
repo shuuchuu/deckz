@@ -20,6 +20,13 @@ An INTRA deck (one whose `deck.yml` claims a calendar engagement) is *past*
 when the calendar shows no upcoming engagement for it, or, the calendar
 unreadable, when its claimed start is more than `PAST_INTRA_DAYS` ago: past
 decks are left out unless asked for.
+
+Each row names the file to open about it (`Opens`), studioz's page opening it
+in its editor: a deck its first chapter due under a rule, else its deck
+report; a section the first of its chapters due, else the chapter of its
+first file needing care, else that file's report, else the file itself (a
+section needing care for its findings or dated facts alone: the report
+holding them).
 """
 
 from collections import Counter
@@ -32,7 +39,13 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from .analyzing.dated_facts import DatedFacts
     from .analyzing.findings import ReportFindings
-    from .analyzing.review import DeckPass, FileReview, RankedSection, State
+    from .analyzing.review import (
+        DeckPass,
+        DeckReview,
+        FileReview,
+        RankedSection,
+        State,
+    )
     from .configuring.settings import GlobalSettings, ReviewRule
     from .course_notes import ChapterEntry, DeckCoverage
     from .sessions import CalendarEngagement
@@ -41,6 +54,10 @@ PAST_INTRA_DAYS = 31
 """Without the calendar, an INTRA deck whose claimed start is older is past."""
 
 SectionState = Literal["fresh", "due", "partial", "stale", "none"]
+
+OpensWhy = Literal["chapter_due", "chapter", "report", "file"]
+"""Why a row opens its file: a chapter due under a rule, the chapter of a \
+file needing care, a report, a content file with neither."""
 
 
 ########################################################################################
@@ -106,6 +123,15 @@ class FactsLevel:
         return None if not self.facts else not self.due
 
 
+@dataclass(frozen=True)
+class Opens:
+    """The file to open about a row, existing."""
+
+    file: str
+    """Relative to the repository."""
+    why: OpensWhy
+
+
 ########################################################################################
 # Rows                                                                                 #
 ########################################################################################
@@ -123,6 +149,8 @@ class SectionRow:
     findings: FindingsLevel | None
     """None without a findings grammar (`review.findings`)."""
     dated_facts: FactsLevel
+    opens: Opens | None = None
+    """None when no file applies (no chapter, report nor file left)."""
 
     @property
     def section(self) -> str:
@@ -163,6 +191,8 @@ class DeckRow:
     next_session: "CalendarEngagement | None"
     """Its first engagement not over yet (one ending today isn't)."""
     past: bool
+    opens: Opens | None = None
+    """None when it has no chapter due and no deck report: its deck page."""
 
 
 ########################################################################################
@@ -303,6 +333,64 @@ def _rules_due(
     return tuple((rule, due[rule]) for rule in settings.review.rules if due[rule])
 
 
+def _deck_opens(settings: "GlobalSettings", review: "DeckReview") -> Opens | None:
+    due = next((chapter for chapter in review.chapters if chapter.due), None)
+    if due is not None:
+        return Opens(due.path, "chapter_due")
+    report = review.deck_pass.report
+    if (settings.paths.git_dir / report).is_file():
+        return Opens(report, "report")
+    return None
+
+
+def _chapter_of(settings: "GlobalSettings", review: "FileReview") -> str | None:
+    # The written French chapter of a shared content file, relative to the repo.
+    from .course_notes import chapter_path, covering
+
+    paths = settings.paths
+    content = PurePosixPath(paths.content_dir.relative_to(paths.git_dir).as_posix())
+    file = PurePosixPath(review.path)
+    if not file.is_relative_to(content):
+        return None
+    chapter = chapter_path(
+        settings,
+        covering(settings, file.relative_to(content).with_suffix("").as_posix()),
+        "fr",
+    )
+    return chapter.relative_to(paths.git_dir).as_posix() if chapter.is_file() else None
+
+
+def _section_opens(
+    settings: "GlobalSettings",
+    ranked: "RankedSection",
+    chapters: Mapping[str, "FileReview"],
+    by_report: Mapping[str, "ReportFindings"] | None,
+    facts: FactsLevel,
+) -> Opens | None:
+    written = {review.path: _chapter_of(settings, review) for review in ranked.files}
+    for chapter in written.values():
+        if chapter is not None and chapter in chapters and chapters[chapter].due:
+            return Opens(chapter, "chapter_due")
+    first = next((r for r in ranked.files if r.state != "fresh"), None)
+    if first is not None:
+        if (chapter := written[first.path]) is not None:
+            return Opens(chapter, "chapter")
+        report = first.report or next(iter(ranked.reports), None)
+        if report is not None:
+            return Opens(report, "report")
+        if (settings.paths.git_dir / first.path).is_file():
+            return Opens(first.path, "file")
+        return None
+    # Fresh: its findings or its dated facts need care, in a report.
+    with_open = [
+        r
+        for r in ranked.reports
+        if by_report and r in by_report and by_report[r].count("open")
+    ]
+    report = next(iter([*with_open, *facts.due, *ranked.reports]), None)
+    return None if report is None else Opens(report, "report")
+
+
 def _is_past(
     claim_start: date | None,
     sessions: Sequence["CalendarEngagement"] | None,
@@ -439,6 +527,7 @@ def dashboard(
                 past=_is_past(
                     None if claim is None else claim.start, deck_sessions, today
                 ),
+                opens=_deck_opens(settings, review),
             )
         )
 
@@ -452,23 +541,28 @@ def dashboard(
     shown = tuple(row for row in rows if include_past or not row.past)
     left_out = tuple(row.deck for row in rows if row.past and not include_past)
 
-    sections = tuple(
-        SectionRow(
-            ranked=r,
-            decks=tuple(section_decks.get(r.section, ())),
-            state=_section_state(r.files),
-            findings=_findings_level(settings, by_report, r.reports),
-            dated_facts=_facts_level(facts, r.reports, today),
-        )
-        for r in ranked
-    )
-
     chapters_dir = settings.paths.course_notes_dir
     chapters = (
         review_files(settings, expand(settings, [chapters_dir]), index)
         if chapters_dir.is_dir()
         else []
     )
+    chapters_by_path = {review.path: review for review in chapters}
+    sections = []
+    for r in ranked:
+        section_facts = _facts_level(facts, r.reports, today)
+        sections.append(
+            SectionRow(
+                ranked=r,
+                decks=tuple(section_decks.get(r.section, ())),
+                state=_section_state(r.files),
+                findings=_findings_level(settings, by_report, r.reports),
+                dated_facts=section_facts,
+                opens=_section_opens(
+                    settings, r, chapters_by_path, by_report, section_facts
+                ),
+            )
+        )
     every_file = {
         review.path: review
         for review in [
@@ -500,7 +594,7 @@ def dashboard(
     return Dashboard(
         today=today,
         totals=totals,
-        sections=sections,
+        sections=tuple(sections),
         decks=shown,
         left_out=left_out,
         sessions=sessions,

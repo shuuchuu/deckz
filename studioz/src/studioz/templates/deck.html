@@ -43,21 +43,7 @@
       <p class="notice" id="notice" role="status"></p>
     </div>
     <div class="sash" data-side="split" title="Glisser pour partager autrement, double-cliquer pour moitié-moitié"></div>
-    <section class="editor-pane" id="editor-pane" hidden>
-      <div class="editor-bar">
-        <span class="crumb editor-file" id="editor-file"></span>
-        {#- As in VS Code: a dot while the file has changes to save. #}
-        <button type="button" class="editor-dirty" id="editor-save" hidden
-                title="Modifications non enregistrées : cliquer pour enregistrer (Ctrl+S)" aria-label="Enregistrer">●</button>
-        <span class="editor-status" id="editor-status"></span>
-        <span class="editor-actions">
-          <button type="button" class="secondary" id="editor-ask" title="Écrire à l'agent à propos de ce passage">Demander à l'agent</button>
-          <button type="button" id="editor-close" class="secondary icon" title="Fermer le fichier" aria-label="Fermer le fichier">✕</button>
-        </span>
-      </div>
-      <p class="editor-message" id="editor-message" hidden></p>
-      <div class="editor" id="editor"></div>
-    </section>
+    {% include "_editor_pane.html" %}
   </div>
 </main>
 {% endblock %}

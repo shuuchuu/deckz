@@ -14,6 +14,7 @@ if TYPE_CHECKING:
         FactsLevel,
         FilesLevel,
         FindingsLevel,
+        Opens,
         SectionRow,
     )
     from ..sessions import CalendarEngagement
@@ -143,6 +144,10 @@ def _session_json(engagement: "CalendarEngagement | None") -> dict | None:
     }
 
 
+def _opens_json(opens: "Opens | None") -> dict[str, str] | None:
+    return None if opens is None else {"file": opens.file, "why": opens.why}
+
+
 def _deck_json(row: "DeckRow") -> dict[str, object]:
     from ..course_notes import coverage_share
 
@@ -179,6 +184,7 @@ def _deck_json(row: "DeckRow") -> dict[str, object]:
             {"rule": rule.paths, "why": rule.why, "count": count}
             for rule, count in row.chapters_due
         ],
+        "opens": _opens_json(row.opens),
     }
 
 
@@ -197,6 +203,8 @@ def _section_json(row: "SectionRow") -> dict[str, object]:
         "reports": ranked.reports,
         "findings": _findings_json(row.findings),
         "dated_facts": _facts_json(row.dated_facts),
+        "needs_care": row.needs_care,
+        "opens": _opens_json(row.opens),
     }
 
 

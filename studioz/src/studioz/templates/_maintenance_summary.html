@@ -1,0 +1,32 @@
+{#- The sidebar's Maintenance view: the last dashboard's headlines, a link to
+    the Maintenance page and the button computing it again (nothing computes
+    it by itself). Reloads when a run starts, and while one is under way. -#}
+{% set base = "/espaces/" ~ workspace.name %}
+{% set result = state.result %}
+<section class="maintenance-summary" id="maintenance-summary" hx-get="{{ base }}/maintenance/resume" hx-swap="outerHTML"
+         hx-trigger="maintenance-changed from:body{% if state.running %}, every 2s{% endif %}">
+  <h2 class="view-title"><span>Maintenance</span>
+    <button type="button" class="view-action" hx-post="{{ base }}/maintenance/calculer" hx-swap="none"
+            {% if state.running %}disabled{% endif %}
+            title="Calculer le tableau de bord (deckz dashboard, une quinzaine de secondes)" aria-label="Calculer le tableau de bord">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5v3h-3"/></svg>
+    </button>
+  </h2>
+  <p><a href="{{ base }}/maintenance" id="maintenance-open">Ouvrir le tableau de bord</a></p>
+  {% if state.running %}<p class="checking">Calcul en cours…</p>{% endif %}
+  {% if state.error %}<p class="error">Le calcul a échoué : {{ state.error }}</p>{% endif %}
+  {% if result %}
+  {% set data = result.data %}
+  {% set findings = data.totals.findings %}
+  {% set upcoming = data.decks | selectattr("next_session") | list %}
+  <ul class="maintenance-headlines">
+    <li>{{ result.sections | length }} section{{ "s" if result.sections | length > 1 }} à soigner</li>
+    {% if findings %}<li>{{ findings.open.values() | sum }} constats ouverts{% if findings.critical %}, <span class="due">{{ findings.critical }} critique{{ "s" if findings.critical > 1 }}</span>{% endif %}</li>{% endif %}
+    {% if data.totals.course_notes.share is not none %}<li>Supports : {{ (data.totals.course_notes.share * 100) | round | int }} %</li>{% endif %}
+    {% if upcoming %}<li>Prochaine session : {{ upcoming[0].deck[result.deck_root | length:] }}, {{ upcoming[0].next_session.start | day }}</li>{% endif %}
+  </ul>
+  <p class="hint">Calculé {{ result.computed | ago }}.</p>
+  {% elif not state.running %}
+  <p class="empty">Pas encore calculé.</p>
+  {% endif %}
+</section>

@@ -35,6 +35,11 @@
   <button type="button" data-click='.langs a[data-lang="{{ code }}"]'>TP : passer en {{ code }}</button>
   {% endfor %}
   {% endif %}
+  {% if page == "maintenance" %}
+  <button type="button" data-click="#maintenance-run">Maintenance : calculer le tableau de bord</button>
+  {% else %}
+  <button type="button" data-click="#maintenance-open">Maintenance : ouvrir le tableau de bord</button>
+  {% endif %}
   <button type="button" data-dialog="#action-dialog" data-url="{{ base }}/construire/formulaire">Formations : construire toutes les formations…</button>
   <button type="button" data-dialog="#action-dialog" data-url="{{ base }}/gpu/machines">GPU : machines louées, arrêter la machine…</button>
   <button type="button" data-dialog="#commit-dialog" data-url="{{ base }}/commit/formulaire" data-include="#commit-form"
@@ -55,6 +60,7 @@
   <button type="button" data-show-view="tp">Affichage : TP</button>
   <button type="button" data-show-view="modifications">Affichage : Modifications</button>
   <button type="button" data-show-view="publication">Affichage : Publication</button>
+  <button type="button" data-show-view="maintenance">Affichage : Maintenance</button>
   <button type="button" data-show-view="agent">Affichage : Avec l'agent</button>
   <button type="button" data-open-panel="problemes">Affichage : Problèmes</button>
   {% if deck %}<button type="button" data-open-panel="construction">Affichage : Construction</button>{% endif %}

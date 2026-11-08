@@ -1,0 +1,24 @@
+{#- The Maintenance page: the workspace's `deckz dashboard`, run on demand
+    (`studioz.maintenance`), each row opening its file in the editor beside it
+    (`maintenance.js`). -#}
+{% extends "workspace_base.html" %}
+{% block title %}Maintenance · {{ workspace.name }}{% endblock %}
+{% block page_head %}
+<script type="module" src="/static/maintenance.js"></script>
+{% endblock %}
+{% block main %}
+<main class="deck maintenance-page" id="maintenance-page" data-files="/espaces/{{ workspace.name }}/fichiers">
+  <div class="toolbar">
+    <span class="crumb deck-path" title="deckz dashboard : ce qui demande du soin, formation par formation"><span class="crumb-name">Maintenance</span></span>
+  </div>
+  <div class="deck-body">
+    <div class="viewer-area maintenance-area">
+      <section class="maintenance" id="maintenance" hx-get="/espaces/{{ workspace.name }}/maintenance/tableau"
+               hx-trigger="load" hx-swap="outerHTML"></section>
+      <p class="notice" id="notice" role="status"></p>
+    </div>
+    <div class="sash" data-side="split" title="Glisser pour partager autrement, double-cliquer pour moitié-moitié"></div>
+    {% include "_editor_pane.html" %}
+  </div>
+</main>
+{% endblock %}

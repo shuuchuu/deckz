@@ -194,6 +194,33 @@ tr.closed td { color: var(--muted); }
   .pair .sides { grid-template-columns: 1fr; }
 }
 
+/* The Maintenance page (`maintenance.html`): the dashboard where a deck's page
+   has the PDF, each row opening its file in the editor beside it. */
+.maintenance-area { background: var(--bg); }
+.maintenance { position: absolute; inset: 0; overflow: auto; padding: 0.8rem 1rem; }
+.maintenance-bar { display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap; }
+.maintenance h2:first-of-type { margin-top: 0.8rem; }
+.maintenance-totals { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 1rem; margin: 0; }
+.maintenance-totals dt { color: var(--muted); }
+.maintenance-totals dd { margin: 0; }
+.table-scroll { overflow-x: auto; }
+table.maintenance-table { border-collapse: collapse; width: 100%; font-size: 0.9em; }
+.maintenance-table th { font-weight: 500; color: var(--muted); text-align: left; font-size: 0.9em; white-space: nowrap; }
+.maintenance-table th, .maintenance-table td { padding: 0.25rem 0.5rem; border-bottom: 1px solid var(--line); }
+.maintenance-table td { white-space: nowrap; }
+.maintenance-table td.name { white-space: normal; overflow-wrap: anywhere; min-width: 8rem; }
+.maintenance-table tr[data-file] { cursor: pointer; }
+.maintenance-table tbody tr:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.maintenance-table tr.current { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.maintenance .ok { color: #2e7d32; }
+.maintenance .due, .maintenance-summary .due { color: var(--danger); }
+.maintenance .none { color: var(--muted); }
+.maintenance small { color: var(--muted); }
+.state-stale, .state-partial, .state-due { color: var(--danger); }
+.state-none { color: var(--muted); }
+.maintenance-summary p, .maintenance-headlines { margin: 0.4rem 0.8rem; }
+.maintenance-headlines { padding-left: 1rem; }
+
 /* A video's page (`video.html`): its player where a deck's page has the PDF. */
 .video-area { background: var(--bg); }
 .video-player { position: absolute; inset: 0; overflow: auto; padding: 0.8rem; display: flex; flex-direction: column; gap: 0.6rem; }

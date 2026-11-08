@@ -12,8 +12,8 @@ and changes not coming from studioz's own pages (DNS rebinding, cross-site
 requests): every route that changes something is a POST.
 A workspace's pages share VS Code's layout (`workspace_base.html`, `static/layout.js`):
 an activity bar choosing the sidebar's one view (Formations, a tree of the decks
-without the folders they all share; Vidéos; TP; Modifications; Publication; Avec
-l'agent), the
+without the folders they all share; Vidéos; TP; Modifications; Publication;
+Maintenance; Avec l'agent), the
 page above a panel of tabs (Problèmes; a deck's Construction, opening by itself
 when a build fails; Tâches, where a job started from a dialog goes on, the dialog
 closing on the response's `job-started` event), the agent on the right, all resizable
@@ -167,6 +167,14 @@ the person's words, and its file is the message's `about` when the last message
 written on a deck's page had another file's slide (`slide`, kept with the
 conversation), so that "merci" stays a follow-up. A session's total so far, which
 a turn's cost subtracts, is kept in `spent`, since a resumed session counts from it.
+`studioz.maintenance` backs the Maintenance view and page: the workspace's own
+`deckz dashboard --json` (no `--all`), run only from their button (never on a file
+change nor a page opening: about 15 s on slides), its last result kept with its time
+in `.run/studioz/maintenance.json`, shown until the next run. The page lays out what
+deckz decides: the totals, the decks in its order, the sections whose `needs_care`,
+and each row's `opens`, which a click opens in the editor beside the dashboard
+(`static/maintenance.js`; the editor pane is `_editor_pane.html`, shared with the deck
+and scene pages); a deck with nothing to open links to its page.
 `studioz.workflows` reads the workflows a workspace's own `deckz.yml` declares
 (`studioz.workflows`, its schema in studioz, refusing unknown keys; deckz ignores
 the section, which a deckz test keeps): each a form on the workspace page or a deck

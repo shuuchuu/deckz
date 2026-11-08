@@ -55,7 +55,8 @@ architecture):
 | `checkpoints.py` | the workspace's files before and after each agent turn, and undoing the last one |
 | `asks.py` | what the dialogs ask the agent (prompts), and the proposed commit message |
 | `workflows.py` | the workflows a workspace's `deckz.yml` declares (`studioz.workflows`), their forms' prompts and files |
-| `static/` | `deck.js` (pdf.js viewer, comparison, the slide in view, the Plan), `video.js` (a scene's page: before/after played together), `lab.js` and `notebook.js`/`notebook.css` (a notebook's page, and the sandboxed page inside its frame, MathJax's configuration), `editor.js` (CodeMirror: Markdown, YAML, Python), `dialogs.js` (dialogs opened from reloading panels), `agent.js` (the agent panel), `layout.js` (the VS Code layout: activity bar, sidebars, bottom panel, sashes, status bar), `notifications.js` (jobs' ends: toasts, the bell, desktop notifications), vendored JS (`uv run doit vendor`) |
+| `maintenance.py` | the Maintenance view and page: the workspace's `deckz dashboard --json`, on demand, its last result kept in `.run/studioz/` |
+| `static/` | `deck.js` (pdf.js viewer, comparison, the slide in view, the Plan), `video.js` (a scene's page: before/after played together), `maintenance.js` (the Maintenance page: a row opens its file in the editor), `lab.js` and `notebook.js`/`notebook.css` (a notebook's page, and the sandboxed page inside its frame, MathJax's configuration), `editor.js` (CodeMirror: Markdown, YAML, Python), `dialogs.js` (dialogs opened from reloading panels), `agent.js` (the agent panel), `layout.js` (the VS Code layout: activity bar, sidebars, bottom panel, sashes, status bar), `notifications.js` (jobs' ends: toasts, the bell, desktop notifications), vendored JS (`uv run doit vendor`) |
 
 Tests: `studioz/tests/`, against temporary repositories, a fake `deckz` (a script
 in the workspace's `.venv/bin/`), a local bare remote and a fake Agent SDK client

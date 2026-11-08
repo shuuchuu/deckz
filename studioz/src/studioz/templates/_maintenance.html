@@ -1,0 +1,136 @@
+{#- The Maintenance page's dashboard (`studioz.maintenance`): the last `deckz
+    dashboard --json` of the workspace and when it was computed, reloaded
+    while a run is under way and when one starts (`maintenance-changed`).
+    Each row opens its file (`opens`, deckz's choice) in the editor beside it
+    (`maintenance.js`); a deck with none links to its page. -#}
+{% set base = "/espaces/" ~ workspace.name %}
+{% set result = state.result %}
+{%- macro level(found) -%}
+  {%- if found is none or found.ok is none -%}<span class="none" title="Rien à juger">—</span>
+  {%- elif found.ok -%}<span class="ok">✓</span>
+  {%- else -%}<span class="due">{{ caller() }}</span>{%- endif -%}
+{%- endmacro -%}
+{%- macro opens(row, deck="") -%}
+  {%- if row.opens -%}
+  <a href="#" class="opens" data-file="{{ row.opens.file }}" title="{{ why_titles.get(row.opens.why, '') }} : {{ row.opens.file }}">{{ why.get(row.opens.why, row.opens.why) }}</a>
+  {%- elif deck -%}
+  <a href="{{ base }}/formations/{{ deck }}" title="Ni chapitre dû ni rapport : la page de la formation">formation</a>
+  {%- else -%}<span class="none">—</span>{%- endif -%}
+{%- endmacro -%}
+<section class="maintenance" id="maintenance" hx-get="{{ base }}/maintenance/tableau" hx-swap="outerHTML"
+         hx-trigger="maintenance-changed from:body{% if state.running %}, every 2s{% endif %}">
+  <header class="maintenance-bar">
+    <button type="button" id="maintenance-run" hx-post="{{ base }}/maintenance/calculer" hx-swap="none"
+            {% if state.running %}disabled{% endif %}
+            title="Lance deckz dashboard dans cet espace : il relit tout le dépôt, une quinzaine de secondes">{{ "Recalculer" if result else "Calculer" }}</button>
+    {% if state.running %}<span class="checking">Calcul en cours… (une quinzaine de secondes)</span>
+    {% elif result %}<span class="hint" title="{{ result.computed | moment }}">Calculé {{ result.computed | ago }}, le {{ result.computed | moment }} ; rien ne le recalcule sans vous.</span>
+    {% endif %}
+  </header>
+  {% if state.error %}<p class="error">Le calcul a échoué : {{ state.error }}</p>{% endif %}
+  {% if not result %}
+  <p class="empty">{% if not state.running %}Pas encore calculé : « Calculer » lance <code>deckz dashboard</code> dans cet espace, ce qui prend une quinzaine de secondes sur un grand dépôt.{% endif %}</p>
+  {% else %}
+  {% set data = result.data %}
+  {% set totals = data.totals %}
+  <h2>Totaux</h2>
+  <dl class="maintenance-totals">
+    <dt>Sections</dt>
+    <dd>{% for key, label in section_states.items() if totals.sections.get(key) %}{{ totals.sections[key] }} {{ label }}{% if not loop.last %} · {% endif %}{% endfor %}</dd>
+    <dt>Fichiers</dt>
+    <dd>{% for key, label in file_states.items() if totals.files.get(key) %}{{ totals.files[key] }} {{ label }}{% if not loop.last %} · {% endif %}{% endfor %}</dd>
+    {% if totals.findings %}
+    {% set open = totals.findings.open %}
+    <dt>Constats</dt>
+    <dd>{{ open.values() | sum }} ouverts dans {{ totals.findings.reports_with_open }} rapports
+      ({% for rubric, count in open.items() %}{{ rubric }} {{ count }}{% if not loop.last %}, {% endif %}{% endfor %}){% if totals.findings.critical %}, <span class="due">dont {{ totals.findings.critical }} critique{{ "s" if totals.findings.critical > 1 }}</span>{% endif %}</dd>
+    {% endif %}
+    {% set notes = totals.course_notes %}
+    <dt>Supports</dt>
+    <dd>{% if notes.share is not none %}{{ (notes.share * 100) | round | int }} % des fichiers ont leur chapitre{% else %}aucun fichier n'en demande{% endif %}, {{ notes.complete_decks }} formation{{ "s" if notes.complete_decks > 1 }} complète{{ "s" if notes.complete_decks > 1 }}</dd>
+    {% for rule in totals.rules %}
+    <dt>Dus</dt>
+    <dd title="{{ rule.rule }}, depuis le {{ rule.since[:10] }}">{{ rule.due }} fichier{{ "s" if rule.due > 1 }} relu{{ "s" if rule.due > 1 }} avant {{ rule.why }}</dd>
+    {% endfor %}
+    <dt>Faits datés</dt>
+    <dd>{% if totals.dated_facts_due %}<span class="due">{{ totals.dated_facts_due | length }} rapport{{ "s" if totals.dated_facts_due | length > 1 }} à revérifier</span>{% else %}aucun à revérifier{% endif %}</dd>
+    <dt>Sessions</dt>
+    <dd>{% if data.sessions.available %}du calendrier{% if data.sessions.note %} ({{ data.sessions.note }}){% endif %}{% if data.sessions.unmatched %}, {{ data.sessions.unmatched }} sans formation (<code>deckz sessions</code>){% endif %}{% else %}sans le calendrier : {{ data.sessions.why }}{% endif %}</dd>
+  </dl>
+
+  <h2>Formations <span class="count">{{ data.decks | length }}</span></h2>
+  <div class="table-scroll">
+  <table class="maintenance-table">
+    <thead><tr>
+      <th>Formation</th>
+      <th title="Ce qu'un clic sur la ligne ouvre">Ouvre</th>
+      <th title="Sa prochaine session (? : réservation provisoire)">Session</th>
+      <th title="Ses fichiers de contenu à jour de leur relecture">Contenu</th>
+      <th title="Les notebooks que les rapports la couvrant relèvent, à jour">TP</th>
+      <th title="Sa passe de relecture tient">Passe</th>
+      <th title="Les faits datés des rapports la couvrant">Faits</th>
+      <th title="Les constats ouverts des rapports la couvrant, les critiques entre crochets">Constats</th>
+      <th title="La part de ses fichiers qui ont leur chapitre de support">Supports</th>
+      <th title="Ses chapitres relus avant une règle ajoutée depuis">Dus</th>
+    </tr></thead>
+    <tbody>
+    {% for row in data.decks %}
+    {% set levels = row.levels %}
+    <tr{% if row.opens %} data-file="{{ row.opens.file }}"{% endif %}>
+      <td class="name"><a href="{{ base }}/formations/{{ row.deck }}" title="{{ row.deck }} : la page de la formation">{{ row.deck[result.deck_root | length:] }}</a></td>
+      <td>{{ opens(row, row.deck) }}</td>
+      <td>{% set next = row.next_session %}{% if next %}<span title="du {{ next.start }} au {{ next.end }}">{{ next.start | day }}{% if next.tentative %} ?{% endif %}</span> <small>{{ next.days }} j</small>{% else %}<span class="none">—</span>{% endif %}</td>
+      <td>{% call level(levels.content) %}{{ levels.content.to_review }}/{{ levels.content.total }}{% endcall %}</td>
+      <td>{% call level(levels.labs) %}{{ levels.labs.to_review }}/{{ levels.labs.total }}{% endcall %}</td>
+      <td>{% if levels.pass.ok %}<span class="ok" title="Relue le {{ levels.pass.date }}">✓</span>{% elif levels.pass.state == "stale" %}<span class="due" title="Ses fichiers ont changé depuis : {{ levels.pass.stale | join(', ') }}">périmée</span>{% else %}<span class="none" title="Aucune passe enregistrée">—</span>{% endif %}</td>
+      <td>{% call level(levels.dated_facts) %}{{ levels.dated_facts.due | length }}{% endcall %}</td>
+      <td>{% call level(levels.findings) %}{{ levels.findings.total }}{% if levels.findings.critical %} [{{ levels.findings.critical }}]{% endif %}{% endcall %}</td>
+      <td>{% set notes = row.course_notes %}{% if notes and notes.share is not none %}{{ (notes.share * 100) | round | int }} %{% if notes.counts.missing %} <small title="Chapitres pas encore écrits">{{ notes.counts.missing }} manquant{{ "s" if notes.counts.missing > 1 }}</small>{% endif %}{% else %}<span class="none">—</span>{% endif %}</td>
+      <td>{% set due = row.chapters_due | sum(attribute="count") %}{% if due %}<span class="due" title="{% for rule in row.chapters_due %}{{ rule.count }} relus avant {{ rule.why }}{% if not loop.last %} ; {% endif %}{% endfor %}">{{ due }}</span>{% else %}<span class="none">—</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if data.left_out %}<p class="hint">{{ data.left_out | length }} formation{{ "s" if data.left_out | length > 1 }} INTRA passée{{ "s" if data.left_out | length > 1 }} non affichée{{ "s" if data.left_out | length > 1 }} (<code>deckz dashboard --all</code> les montre).</p>{% endif %}
+
+  {% set sections = result.sections %}
+  <h2>Sections à soigner <span class="count">{{ sections | length }}</span></h2>
+  {% if not sections %}
+  <p class="empty">Aucune : chaque section est à jour, sans constat ouvert ni fait daté à revérifier.</p>
+  {% else %}
+  <div class="table-scroll">
+  <table class="maintenance-table">
+    <thead><tr>
+      <th>Section</th>
+      <th title="Ce qu'un clic sur la ligne ouvre">Ouvre</th>
+      <th>État</th>
+      <th title="Formations qui l'incluent × diapositives à relire">Score</th>
+      <th title="Les formations qui l'incluent">Formations</th>
+      <th title="Ses fichiers qui ne sont pas à jour de leur relecture">À revoir</th>
+      <th title="Les constats ouverts de ses rapports, les critiques entre crochets">Constats</th>
+      <th title="Les faits datés de ses rapports">Faits</th>
+    </tr></thead>
+    <tbody>
+    {% for row in sections %}
+    <tr{% if row.opens %} data-file="{{ row.opens.file }}"{% endif %}>
+      <td class="name">{{ row.section }}</td>
+      <td>{{ opens(row) }}</td>
+      <td><span class="state-{{ row.state }}">{{ section_state.get(row.state, row.state) }}</span></td>
+      <td>{{ row.score }}</td>
+      <td title="{{ row.decks | join(', ') }}">{{ row.decks | length }}</td>
+      <td>{% set fresh = row.counts.get("fresh", 0) %}{% set total = row.counts.values() | sum %}{% if total - fresh %}{{ total - fresh }}/{{ total }}{% else %}<span class="ok">✓</span>{% endif %}</td>
+      <td>{% call level(row.findings) %}{{ row.findings.total }}{% if row.findings.critical %} [{{ row.findings.critical }}]{% endif %}{% endcall %}</td>
+      <td>{% call level(row.dated_facts) %}{{ row.dated_facts.due | length }}{% endcall %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+  {% if data.problems %}
+  <h2>Problèmes de lecture</h2>
+  <ul class="maintenance-problems">{% for problem in data.problems %}<li>{{ problem }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% endif %}
+</section>
