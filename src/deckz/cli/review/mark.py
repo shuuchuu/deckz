@@ -11,6 +11,7 @@ def mark(
     *,
     accept: list[Path] | None = None,
     forget: list[Path] | None = None,
+    at: str | None = None,
     json: bool = False,
     workdir: Path = Path(),
 ) -> None:
@@ -23,6 +24,18 @@ def mark(
     --forget), refreshes every file REPORT records: after reviewing what
     `deckz review diff` shows. Only the front matter's `reviewed` key is
     rewritten.
+
+    Where REPORT is gives its kind: under `<review.dir>/sections/`, a
+    shared section's report; `<review.dir>/<deck directory>.md`, a deck's
+    (its deck pass). A deck's report records the deck's own files (its
+    `deck.yml`, `variables.yml`, program, `content/`, not their `en/`
+    translations): with no PATHS, it records them all, new ones included,
+    and the deck's directory stands for them. It refuses shared content,
+    which section reports review.
+
+    --at COMMIT registers a review made at a past commit, in a report
+    recording nothing yet: the versions of that commit are recorded, with
+    its date, and the files changed since show stale.
 
     A recorded file whose change since its review came from elsewhere
     (commits that reached this branch through the main checkout's branch,
@@ -39,6 +52,8 @@ def mark(
             once read (repeat it for several files)
         forget: Remove this file from the report, e.g. deleted or renamed
             (`--forget OLD NEW` records NEW in the same call)
+        at: Record the versions of this commit (of this branch's history)
+            instead of the working tree's, in a report recording nothing yet
         json: Print one JSON object instead, `{report, created, added,
             refreshed, unchanged, forgotten, not_recorded, refused: [{path,
             reason}]}`
@@ -56,6 +71,7 @@ def mark(
         [locate(settings, p) for p in paths or ()],
         accept=[locate(settings, p) for p in accept or ()],
         forget=[locate(settings, p) for p in forget or ()],
+        at=at,
     )
     if json:
         from .._presentation import print_json

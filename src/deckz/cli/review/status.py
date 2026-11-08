@@ -6,7 +6,12 @@ from . import app
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from ...analyzing.review import FileReview, RankedSection, TargetReview
+    from ...analyzing.review import (
+        DeckPass,
+        FileReview,
+        RankedSection,
+        TargetReview,
+    )
 
 
 @app.command()
@@ -28,7 +33,9 @@ def status(
 
     A TARGET that is a deck's directory lists its content files (in French,
     as `deckz show paths` resolves them) by section, then the other files
-    (e.g. lab notebooks) the reports covering them record. Any other
+    (e.g. lab notebooks) the reports covering them record, then its deck
+    pass: its own report (`<review.dir>/<deck directory>.md`), which holds
+    while the deck's own files are at the version it recorded. Any other
     TARGET is a path: a content directory stands for the content files some
     deck includes under it (not their `en/` translations), another
     directory for its git-tracked files.
@@ -44,15 +51,18 @@ def status(
             the repository's root
         plain: Compact, stable lines for a script or an agent, their fields
             separated by tabs: per file, its state, path, `+<added>`,
-            `-<removed>` (empty unless stale) and report (empty if none);
+            `-<removed>` (empty unless stale) and report (empty if none),
+            a deck's own files last, against its own report, unless already
+            listed;
             per section, with no TARGET, its score, path, decks, fresh,
             stale and unreviewed files, and frames to review (all of an
             unreviewed file's, those a stale file's changes touch)
         json: Print one JSON object instead: with no TARGET, `{"sections":
             [{section, decks, score, frames, fresh, stale, unreviewed,
             reports, files}]}`; else `{"targets": [{target, kind ("deck" or
-            "paths"), sections: [{section, files}] and others (a deck), or
-            files (paths)}]}`. A file is `{path, state, added, removed,
+            "paths"), sections: [{section, files}], others and deck_pass:
+            {report, date, base, holds, files} (a deck), or files
+            (paths)}]}`. A file is `{path, state, added, removed,
             frames, changed_frames, report, reports: [{report, date, base,
             blob}]}` (`changed_frames`: the frames a stale content file's
             changes touch), its
@@ -146,6 +156,13 @@ def _target_json(target: "TargetReview") -> dict[str, object]:
             for s in target.deck.sections
         ],
         "others": [_file_json(r) for r in target.deck.others],
+        "deck_pass": {
+            "report": target.deck.deck_pass.report,
+            "date": None if (day := target.deck.deck_pass.date) is None else str(day),
+            "base": target.deck.deck_pass.base,
+            "holds": target.deck.deck_pass.holds,
+            "files": [_file_json(r) for r in target.deck.deck_pass.files],
+        },
     }
 
 
@@ -185,11 +202,14 @@ def _print_target(target: "TargetReview", *, plain: bool) -> None:
     if target.deck is None:
         every = list(target.files)
         others: list[FileReview] = []
+        own: list[FileReview] = []
     else:
         every = [r for s in target.deck.sections for r in s.files]
         others = list(target.deck.others)
+        own = list(target.deck.deck_pass.files)
     if plain:
-        for review in [*every, *others]:
+        listed = {review.path for review in [*every, *others]}
+        for review in [*every, *others, *(r for r in own if r.path not in listed)]:
             print(_plain_line(review))
         return
     if target.deck is None:
@@ -205,11 +225,27 @@ def _print_target(target: "TargetReview", *, plain: bool) -> None:
                 f"\n  Other files the reports covering them record: {_summary(others)}"
             )
             _print_files(others, "    ")
-    reviews = [*every, *others]
+        _print_deck_pass(target.deck.deck_pass)
+    reviews = [*every, *others, *own]
     if any(r.state == "stale" for r in reviews):
         print("\nWhat changed since a review: `deckz review diff <report> [<path>...]`")
     if any(r.state == "deleted" for r in reviews):
         print("A deleted or renamed file: `deckz review mark <report> --forget <path>`")
+
+
+def _print_deck_pass(deck_pass: "DeckPass") -> None:
+    if deck_pass.date is None:
+        print(
+            f"\n  Deck pass: none recorded; after one, `deckz review mark "
+            f"{deck_pass.report}`"
+        )
+        return
+    verdict = "holds" if deck_pass.holds else "out of date"
+    print(
+        f"\n  Deck pass ({deck_pass.report}, {deck_pass.date}): {verdict}, "
+        f"{_summary(deck_pass.files)}"
+    )
+    _print_files([r for r in deck_pass.files if r.state != "fresh"], "    ")
 
 
 def _print_ranking(

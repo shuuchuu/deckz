@@ -378,13 +378,17 @@ def _covering(
 ) -> tuple[Literal["deck", "paths"], list[str]]:
     # The kind of `target` and the reports it stands for.
     from ..configuring.settings import DeckSettings
-    from .review import deck_files, review_dir
+    from .review import deck_files, deck_report_path, review_dir
 
     git_dir = settings.paths.git_dir
     if (target / "deck.yml").is_file():
         deck = DeckSettings.from_yaml(target, git_dir=git_dir)
         files = {path.relative_to(git_dir).as_posix() for path in deck_files(deck)}
-        return "deck", [r for r, paths in recorded.items() if paths & files]
+        own = deck_report_path(settings, target.relative_to(git_dir).as_posix())
+        own_rel = own.relative_to(git_dir).as_posix()
+        return "deck", [
+            r for r, paths in recorded.items() if paths & files or r == own_rel
+        ]
     rel = target.relative_to(git_dir).as_posix()
     if target.is_relative_to(review_dir(settings)):
         return "paths", [

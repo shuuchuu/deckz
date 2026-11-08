@@ -19,7 +19,7 @@ from deckz.configuring.settings import DeckSettings, GlobalSettings
 from deckz.exceptions import DeckParsingError, ReviewError
 from deckz.status import deck_status
 
-REPORT = "reviews/sec.md"
+REPORT = "reviews/sections/sec.md"
 A = "content/sec/a.md"
 B = "content/sec/b.md"
 C = "content/sec/sub/c.md"
@@ -218,7 +218,7 @@ def test_status_of_a_deck_groups_its_files_and_the_reports_other_files(
 
 
 def test_the_most_recent_mark_wins(repo: Path) -> None:
-    other = repo / "reviews" / "deep" / "other.md"
+    other = repo / "reviews" / "sections" / "deep" / "other.md"
     mark(_settings(repo), other, [repo / A], today=date(2026, 1, 1))
     _write(repo / A, "# A changed\n")
     _mark(repo, A, today=date(2026, 2, 1))
@@ -227,7 +227,10 @@ def test_the_most_recent_mark_wins(repo: Path) -> None:
 
     review = found.targets[0].files[0]
     assert review.state == "fresh"
-    assert [m.report for m in review.marks] == [REPORT, "reviews/deep/other.md"]
+    assert [m.report for m in review.marks] == [
+        REPORT,
+        "reviews/sections/deep/other.md",
+    ]
 
 
 def test_status_ranks_sections_by_decks_times_frames_to_review(repo: Path) -> None:
@@ -405,25 +408,31 @@ def test_on_the_main_branch_without_upstream_only_uncommitted_changes_pass(
 
 def test_the_check_reports_malformed_headers(repo: Path) -> None:
     _write(
-        repo / "reviews" / "bad.md",
+        repo / "reviews" / "sections" / "bad.md",
         "---\nreviewed:\n  date: soon\n  base: abc\n  files:\n    x.md: 12\n---\n",
     )
-    _write(repo / "reviews" / "unclosed.md", "---\nreviewed: {}\n")
-    _write(repo / "reviews" / "fine.md", "# No front matter: nothing recorded\n")
+    _write(repo / "reviews" / "sections" / "unclosed.md", "---\nreviewed: {}\n")
+    _write(
+        repo / "reviews" / "sections" / "fine.md",
+        "# No front matter: nothing recorded\n",
+    )
 
     problems = header_problems(_settings(repo), None)
 
     assert len(problems) == 2
-    bad = next(p for p in problems if p.startswith("reviews/bad.md"))
+    bad = next(p for p in problems if p.startswith("reviews/sections/bad.md"))
     assert "`reviewed.date` is not a date" in bad
     assert "`reviewed.base` is not a commit sha" in bad
     assert "x.md is not a blob sha" in bad
     assert any("no closing `---`" in p for p in problems)
-    assert header_problems(_settings(repo), [repo / "reviews" / "fine.md"]) == []
+    assert (
+        header_problems(_settings(repo), [repo / "reviews" / "sections" / "fine.md"])
+        == []
+    )
 
 
 def test_the_check_runs_from_deckz_check(repo: Path, capsys: Any) -> None:
-    _write(repo / "reviews" / "bad.md", "---\nreviewed: [1]\n---\n")
+    _write(repo / "reviews" / "sections" / "bad.md", "---\nreviewed: [1]\n---\n")
 
     with raises(SystemExit) as exc_info:
         main(("check", "review-headers"))
@@ -517,7 +526,7 @@ FINDINGS = (
     "    rubrics: {E: Errors, P: Pedagogy}\n"
     "    outcomes: {open: open, done: done, refused: refused}\n"
 )
-OTHER = "reviews/other.md"
+OTHER = "reviews/sections/other.md"
 
 
 def test_cli_findings_of_every_report_and_of_a_deck(repo: Path, capsys: Any) -> None:
@@ -572,3 +581,189 @@ def test_cli_findings_refuses_without_a_grammar(repo: Path, caplog: Any) -> None
 
     assert exc_info.value.code == 1
     assert "set `review.findings` in deckz.yml" in caplog.text
+
+
+DECK = "company/two"
+DECK_REPORT = "reviews/company/two.md"
+DECK_FILES = (
+    "company/two/content/local.md",
+    "company/two/deck.yml",
+    "company/two/program.md",
+)
+
+
+def _deck_repo(repo: Path) -> Path:
+    # company/two gets its own files: a program, a deck-local content file
+    # and English translations of both, which a deck report leaves out.
+    _write(repo / DECK / "program.md", "# Program\n")
+    _write(repo / DECK / "en" / "program.md", "# Program\n")
+    _write(repo / DECK / "content" / "local.md", "# Local\n")
+    _write(repo / DECK / "content" / "en" / "local.md", "# Local\n")
+    _commit(repo, "Deck files", DECK)
+    return repo
+
+
+def test_a_reports_kind_comes_from_its_path(repo: Path) -> None:
+    from deckz.analyzing.review import report_kind
+
+    settings = _settings(repo)
+
+    assert report_kind(settings, repo / REPORT) == ("section", None)
+    assert report_kind(settings, repo / DECK_REPORT) == ("deck", DECK)
+    assert report_kind(settings, repo / "reviews" / "company" / "gone.md") is None
+    assert report_kind(settings, repo / "reviews" / "loose.md") is None
+
+
+def test_the_check_and_mark_refuse_a_misplaced_report(repo: Path) -> None:
+    _write(repo / "reviews" / "loose.md", "# Nothing recorded\n")
+
+    problems = header_problems(_settings(repo), None)
+
+    assert len(problems) == 1
+    assert problems[0].startswith("reviews/loose.md is neither")
+    assert "reviews/sections/" in problems[0]
+    with raises(ReviewError, match="is neither a shared section's report"):
+        mark(_settings(repo), repo / "reviews" / "company" / "gone.md", [repo / A])
+
+
+def test_a_deck_report_records_the_decks_own_files(repo: Path) -> None:
+    _deck_repo(repo)
+    report = repo / DECK_REPORT
+
+    result = mark(_settings(repo), report, [], today=date(2026, 11, 8))
+
+    assert result.created
+    assert result.added == DECK_FILES
+    # Its directory stands for the same files, not for the deck's content.
+    _write(repo / DECK / "variables.yml", "x: 1\n")
+    result = mark(_settings(repo), report, [repo / DECK])
+    assert result.added == ("company/two/variables.yml",)
+    assert result.refused == ()
+
+
+def test_a_deck_report_refuses_shared_content(repo: Path) -> None:
+    _deck_repo(repo)
+
+    result = mark(_settings(repo), repo / DECK_REPORT, [repo / A, repo / DECK])
+
+    assert [path for path, _ in result.refused] == [A]
+    assert "review it in its section's report" in result.refused[0][1]
+    assert set(read_report(_settings(repo), repo / DECK_REPORT).files) == set(
+        DECK_FILES
+    )
+
+
+def test_a_decks_status_shows_its_pass(repo: Path) -> None:
+    _deck_repo(repo)
+
+    def deck_pass() -> Any:
+        found = review_status(_settings(repo), [repo / DECK])
+        deck = found.targets[0].deck
+        assert deck is not None
+        return deck
+
+    assert deck_pass().deck_pass.date is None
+    assert not deck_pass().deck_pass.holds
+    assert deck_pass().deck_pass.report == DECK_REPORT
+    mark(_settings(repo), repo / DECK_REPORT, [], today=date(2026, 11, 8))
+    deck = deck_pass()
+    assert deck.deck_pass.holds
+    assert deck.others == ()  # its own files show in its pass only
+    _write(repo / DECK / "program.md", "# Program, changed\n")
+    _write(repo / DECK / "content" / "new.md", "# New\n")
+    states = {r.path: r.state for r in deck_pass().deck_pass.files}
+    assert not deck_pass().deck_pass.holds
+    assert states["company/two/program.md"] == "stale"
+    assert states["company/two/content/new.md"] == "unreviewed"
+    assert states["company/two/deck.yml"] == "fresh"
+
+
+def test_mark_at_records_a_past_commits_versions(repo: Path) -> None:
+    _deck_repo(repo)
+    past = _git(repo, "rev-parse", "HEAD")
+    _write(repo / DECK / "program.md", "# Program, changed\n")
+    _write(repo / DECK / "content" / "new.md", "# New\n")
+    _commit(repo, "Later", DECK)
+
+    result = mark(_settings(repo), repo / DECK_REPORT, [], at=past[:10])
+
+    assert result.added == DECK_FILES
+    report = read_report(_settings(repo), repo / DECK_REPORT)
+    assert report.base == past
+    assert report.date == date.fromisoformat(
+        _git(repo, "show", "-s", "--format=%cs", past)
+    )
+    assert report.files["company/two/program.md"] == _git(
+        repo, "rev-parse", f"{past}:company/two/program.md"
+    )
+    deck = review_status(_settings(repo), [repo / DECK]).targets[0].deck
+    assert deck is not None
+    states = {r.path: r.state for r in deck.deck_pass.files}
+    assert states["company/two/program.md"] == "stale"
+    assert states["company/two/content/new.md"] == "unreviewed"
+
+
+def test_mark_at_refuses_what_it_cant_register(repo: Path) -> None:
+    _deck_repo(repo)
+    first = _git(repo, "rev-list", "--max-parents=0", "HEAD")
+    settings = _settings(repo)
+
+    with raises(ReviewError, match="is not a commit"):
+        mark(settings, repo / REPORT, [repo / A], at="nowhere")
+    with raises(ReviewError, match=r"not in .*company/two/program\.md"):
+        mark(settings, repo / DECK_REPORT, [repo / DECK / "program.md"], at=first)
+    _git(repo, "checkout", "--quiet", "-b", "side")
+    _git(repo, "commit", "--quiet", "--allow-empty", "-m", "Side")
+    side = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "--quiet", "main")
+    with raises(ReviewError, match="not in this branch's history"):
+        mark(settings, repo / REPORT, [repo / A], at=side)
+    mark(settings, repo / REPORT, [repo / A])
+    with raises(ReviewError, match="already records files"):
+        mark(settings, repo / REPORT, [repo / B], at=first)
+
+
+def test_a_decks_findings_include_its_report(repo: Path, capsys: Any) -> None:
+    deckz_yml = repo / "deckz.yml"
+    deckz_yml.write_text(
+        deckz_yml.read_text(encoding="utf8").replace(
+            "review:\n  dir: reviews\n", FINDINGS
+        ),
+        encoding="utf8",
+    )
+    main(("review", "mark", DECK_REPORT))
+    path = repo / DECK_REPORT
+    path.write_text(
+        path.read_text(encoding="utf8")
+        + "\n## Findings\n\n### Errors\n\n- **E1** — budget. *open*\n",
+        encoding="utf8",
+    )
+    capsys.readouterr()
+
+    main(("review", "findings", DECK, "--plain"))
+
+    fields = [line.split("\t") for line in capsys.readouterr().out.splitlines()]
+    assert [(f[0], f[2], f[3]) for f in fields] == [(DECK_REPORT, "E1", "open")]
+
+
+def test_cli_status_of_a_deck_shows_its_pass(repo: Path, capsys: Any) -> None:
+    main(("review", "status", DECK))
+    assert "Deck pass: none recorded" in capsys.readouterr().out
+
+    main(("review", "mark", DECK_REPORT))
+    capsys.readouterr()
+    main(("review", "status", DECK, "--json"))
+    deck_pass = loads(capsys.readouterr().out)["targets"][0]["deck_pass"]
+    assert deck_pass["report"] == DECK_REPORT
+    assert deck_pass["holds"] is True
+    assert [f["path"] for f in deck_pass["files"]] == ["company/two/deck.yml"]
+
+    main(("review", "status", DECK, "--plain"))
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[-1].split("\t") == [
+        "fresh",
+        "company/two/deck.yml",
+        "",
+        "",
+        DECK_REPORT,
+    ]

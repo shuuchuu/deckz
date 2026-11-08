@@ -380,10 +380,13 @@ class ReviewSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
     dir: str | None = None
     """Directory of the review reports, relative to the git root, e.g. \
-    `docs/qa/sections`: every Markdown file under it, at any depth, is a \
-    report, whose front matter's `reviewed` key deckz writes (`deckz review \
-    mark`) and nothing else. Unset, `deckz review` refuses, and the \
-    `review-headers` check and `deckz status` leave reviews alone."""
+    `docs/qa`: every Markdown file under it, at any depth, is a report, \
+    whose front matter's `reviewed` key deckz writes (`deckz review mark`) \
+    and nothing else. Its path gives its kind: under `sections/`, a shared \
+    section's report; `<deck directory>.md` (e.g. `decks/orsys/pyt.md`), \
+    that deck's report, its deck pass; the `review-headers` check fails on \
+    any other. Unset, `deckz review` refuses, and the `review-headers` \
+    check and `deckz status` leave reviews alone."""
     findings: FindingsSettings | None = None
     """The findings grammar of the reports (`deckz review findings`). \
     Unset, `deckz review findings` refuses and the `review-findings` check \

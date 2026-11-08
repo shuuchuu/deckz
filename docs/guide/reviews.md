@@ -9,16 +9,26 @@ It needs a directory for the review reports, in `deckz.yml`:
 
 ```yaml
 review:
-  dir: docs/qa/sections
+  dir: docs/qa
 ```
 
 ## Reports
 
-A report is any Markdown file under `review.dir`, at any depth (one per section, e.g.
-`docs/qa/sections/python/basics.md`, keeps two people reviewing different sections
-from touching the same file). What it says is up to the repository: findings,
-summaries, decisions. Its front matter's `reviewed` key is deckz's, written by `deckz
-review mark`, never by hand:
+A report is any Markdown file under `review.dir`, at any depth. Where it is says what
+it reviews, so that a script finds a report from its path alone:
+
+- under `sections/`, a shared section's report, one per section (e.g.
+  `docs/qa/sections/python/basics.md`: two people reviewing different sections never
+  touch the same file);
+- at `<deck directory>.md`, a deck's report: its deck pass (e.g.
+  `docs/qa/decks/orsys/pyt.md` for the deck `decks/orsys/pyt`, see
+  [Deck reports](#deck-reports)).
+
+The `review-headers` check fails on a report anywhere else, e.g. a deck's report left
+behind when its deck was renamed: `git mv` it to its deck's new path.
+
+What a report says is up to the repository: findings, summaries, decisions. Its front
+matter's `reviewed` key is deckz's, written by `deckz review mark`, never by hand:
 
 ```yaml
 ---
@@ -108,6 +118,19 @@ Changes made on your own branch since an earlier mark pass. A version you marked
 without ever committing or staging it can't be told apart from someone else's:
 check the diff and `--accept`.
 
+### A review made before
+
+A review whose report was never marked (written before the repository had `review.dir`,
+say) is registered at the commit it read:
+
+```sh
+deckz review mark docs/qa/decks/orsys/pyt.md --at c6985bae
+```
+
+`--at` records the versions of that commit, with its date and as its `base`, so the
+files changed since show stale at once. It applies only to a report recording nothing
+yet, and the commit must be in the branch's history.
+
 ### Renamed or deleted files
 
 The `review-headers` check (run by `deckz check`, hence the pre-commit hook) fails on
@@ -121,6 +144,27 @@ deckz review mark docs/qa/sections/python/basics.md --forget content/old.md cont
 The new path is recorded at its current version: if the file also changed, review it
 first. `--forget` alone removes a deleted file.
 
+## Deck reports
+
+A section report reviews shared content once for every deck including it; a deck's
+pass reviews what is the deck's own: whether its program is covered, its sections fit
+together, its budget holds. Its report, at `<review.dir>/<deck directory>.md`, records
+the deck's own files: its `deck.yml`, `variables.yml`, program and `content/`, every
+file under its directory that git tracks or doesn't ignore, but not the `en/`
+translations. With no path, `mark` records them all, the new ones included:
+
+```sh
+deckz review mark docs/qa/decks/orsys/pyt.md
+```
+
+The deck's directory stands for the same files there, and `mark` refuses shared
+content in a deck's report: its sections' reports review it. So the pass holds while
+the deck's own files are at the version it read; a change to one of its shared
+sections shows in that section's report, at the content level, not in the deck's.
+`deckz review status <deck>` ends with its pass: none recorded, holds, or out of date
+with the files changed or added since. `deckz review findings <deck>` includes the
+deck's report.
+
 ## Findings
 
 What a report says is the repository's, but deckz can count what's left to do if the
@@ -128,7 +172,7 @@ findings follow one grammar, set in `deckz.yml`:
 
 ```yaml
 review:
-  dir: docs/qa/sections
+  dir: docs/qa
   findings:
     heading: Findings          # the heading the findings are under, at any level
     rubrics:                   # the headings one level below it, by letters
@@ -147,6 +191,27 @@ emphasized, wherever it is: after a sub-list or a blank line, followed by the co
 or the reason. Other list items (a verdict, what was checked) aren't findings:
 
 ```markdown
+## Deck reports
+
+A section report reviews shared content once for every deck including it; a deck's
+pass reviews what is the deck's own: whether its program is covered, its sections fit
+together, its budget holds. Its report, at `<review.dir>/<deck directory>.md`, records
+the deck's own files: its `deck.yml`, `variables.yml`, program and `content/`, every
+file under its directory that git tracks or doesn't ignore, but not the `en/`
+translations. With no path, `mark` records them all, the new ones included:
+
+```sh
+deckz review mark docs/qa/decks/orsys/pyt.md
+```
+
+The deck's directory stands for the same files there, and `mark` refuses shared
+content in a deck's report: its sections' reports review it. So the pass holds while
+the deck's own files are at the version it read; a change to one of its shared
+sections shows in that section's report, at the content level, not in the deck's.
+`deckz review status <deck>` ends with its pass: none recorded, holds, or out of date
+with the files changed or added since. `deckz review findings <deck>` includes the
+deck's report.
+
 ## Findings
 
 ### Errors
@@ -165,7 +230,7 @@ deckz review findings decks/orsys/ipy  # the open findings of the reports coveri
 deckz review findings docs/qa/sections/python  # the reports under a directory
 ```
 
-For a deck, the reports are those recording one of its content files; for a path
+For a deck, the reports are its own and those recording one of its content files; for a path
 outside `review.dir`, those recording a file under it. `--json` and `--plain` list
 every finding with its line, id, outcome and first paragraph. The command always
 exits 0.

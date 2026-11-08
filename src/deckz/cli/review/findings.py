@@ -30,7 +30,8 @@ def findings(
 
     With no TARGET, every report with findings, those with the most open
     ones first. A TARGET that is a deck's directory lists the open findings
-    of the reports recording one of its content files; a path under
+    of its own report (its deck pass) and of the reports recording one of
+    its content files; a path under
     `review.dir` stands for the reports under it, any other path for the
     reports recording a file under it.
 

@@ -126,6 +126,24 @@ and what to settle first.
   report), sparks-formation/bdm on `26eceac3`'s parent (2026-11-07). Confirm each from
   `git log` before marking.
 
+**Done 2026-11-08** (branch `deck-reports`). Settled with the maintainer: one
+findings grammar (slides reformats its three deck reports into the sections' form), and
+a report's kind comes from its **path**, so that a script finds a report without reading
+it: `<review.dir>/sections/**` a section's report, `<review.dir>/<deck directory>.md` a
+deck's (the same path arithmetic as the Drive links registry), anything else a
+`review-headers` failure (a deck renamed leaves its report misplaced: `git mv`). No new
+setting: `review.dir` is the parent (`docs/qa`). `review.report_kind`,
+`deck_report_path`, `deck_own_files` (tracked and unignored files under the deck's
+directory, minus `en/` and nested decks); `mark` on a deck's report records them with no
+path, takes the deck's directory for them, and refuses shared content;
+`DeckReview.deck_pass` (`DeckPass`: the own files against the deck report's marks
+alone, `holds`), shown by `review status <deck>` (human, `--plain` lines for the own
+files not listed already, `--json` `deck_pass`); `review findings <deck>` includes the
+deck's report. `mark --at <commit>` only on a report recording nothing yet (so
+`changed_elsewhere` has nothing to refuse, said in the docstring), the commit in HEAD's
+history, every file present at it; `base` = the commit, `date` = its `%cs`. Phase 3's
+`supports/` reports get a third kind by path the same way.
+
 ### 3. Rule dates and dated facts
 
 - `review.rules`: `[{paths: <glob>, since: <date>, why: <text>}]`. A file marked before

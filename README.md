@@ -417,13 +417,15 @@ typst_ignore_system_fonts: true
 
   ```yaml
   review:
-    dir: docs/qa/sections
+    dir: docs/qa
   ```
 
   `dir` (unset by default: `deckz review` then refuses, and the
   `review-headers` check and `deckz status` leave reviews alone): the
   directory, from the git root, whose Markdown files (at any depth) are
-  review reports. deckz writes only their front matter's `reviewed` key.
+  review reports: a shared section's under `sections/`, a deck's at
+  `<deck directory>.md`. deckz writes only their front matter's
+  `reviewed` key.
 
 `deckz.yml` files are merged, in order, from the git root, from the user's
 config directory (XDG-compliant, e.g.
@@ -1412,9 +1414,12 @@ The main commands:
   changed since a review, so the next one reads only that, and `mark`
   records the files again, refusing (until `--accept`) one whose change
   since its review came from the main branch, which nobody reviewed;
-  `--forget` drops a deleted or renamed file. The `review-headers` check
-  keeps the reports well formed, and `deckz status` counts each deck's
-  content not reviewed at its version.
+  `--forget` drops a deleted or renamed file, and `--at COMMIT` registers
+  a review made at a past commit. A deck's report (`<review.dir>/<deck
+  directory>.md`) records the deck's own files: its pass holds while they
+  are at their version. The `review-headers` check keeps the reports well
+  formed and in place, and `deckz status` counts each deck's content not
+  reviewed at its version.
 - `deckz search-sections KEYWORDS...`: search shared sections by title or
   Markdown heading.
 - `deckz section-flavors SECTION`: list a section's flavor names.

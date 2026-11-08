@@ -130,8 +130,10 @@ no variables of its own: every file of a deck renders with the same
   diff REPORT` shows what changed since a review, so a review reads only
   that; `deckz review mark REPORT [PATH...]` records what was read, and
   refuses a file whose change came from the main branch until it's read
-  and passed with `--accept PATH`. Never edit a report's `reviewed`
-  front matter by hand.
+  and passed with `--accept PATH`. A report's path is its kind: a
+  section's under `<review.dir>/sections/`, a deck's pass at
+  `<review.dir>/<deck directory>.md`, marked with no PATH (the deck's own
+  files). Never edit a report's `reviewed` front matter by hand.
 - `deckz labs stale [NOTEBOOKS...]` -- demos whose code cells changed
   after their outputs were written, from git history alone. Rerunning
   one costs a run (GPU time for some): when a listed change alters no
