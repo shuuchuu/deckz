@@ -103,9 +103,9 @@ findings (slides' *adaptée*) live outside the findings heading.
   `schedz` `a7f046f` (in the worktree `../invoicez-schedz`): `GcalSettings` extends
   `CalendarSettings`, the OAuth files move once to `~/.config/schedz/`,
   `anonymize.py` and the fixture script stay in invoicez, and its tests no longer
-  inherit a hook's `GIT_DIR`. Left, in order: push schedz and `doit publish` 0.1.0
-  (the maintainer's), drop invoicez's `[tool.uv.sources]` path to `../schedz`, merge
-  the branch, release invoicez.
+  inherit a hook's `GIT_DIR`. schedz 0.1.0 pushed and on PyPI (2026-11-08); invoicez
+  takes it from PyPI (`a7e0c83`, merged into its `main`, not pushed). Left: push
+  and release invoicez (the maintainer's).
 - deckz: an optional extra (`deckz[calendar]`, on schedz); `calendar` settings in the user's
   `~/.config/deckz/` (calendar id, title pattern), never in the repository; a mapping
   from (company, training) to a deck directory in `deckz.yml` (company key to catalog
