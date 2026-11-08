@@ -154,6 +154,31 @@ history, every file present at it; `base` = the commit, `date` = its `%cs`. Phas
   months), moving `qa-dated-facts` from slides' `tools/checks.py` into deckz (slides
   then drops its own and keeps the opt-in name).
 
+**Done 2026-11-08** (branch `review-rules`). Settled with the maintainer: a file's
+mark has its **own date** when it differs from its report's (`path: {blob, date,
+base}` when its day or base differs; the plain `path: <sha>` form stays for the
+others, so no existing report changes; written with no YAML alias): a report's single
+date would let a pass on one chapter clear the rule for its siblings, and `mark --at`
+couldn't register passes made at different commits in one report. So `mark` keeps the
+day of the files it doesn't mark, and `--at` now refuses only files the report already
+records, and finds a file renamed since the commit under its old path (`git diff -M`).
+`review.rules` (`ReviewRule`: `paths`
+glob with `full_match`, `since`, `why`; `since` a day, or a time compared with the
+mark's base commit time, because slides' rule came at 16:15 on a day whose morning
+wrote chapters before it): `due_rules`, a fifth state `due` (fresh but
+marked before a rule; a stale file lists its rules too, `FileReview.due`), counted
+whole in the frames to review, shown by `review status` (a column, `due` in `--json`,
+the rule's `why` under the file, the fix: mark it again by name). Course notes
+reports are a third kind by path, `<review.dir>/<course notes directory>/**`
+(`course_notes_reports_dir`); a course notes directory given to `status`/`mark`
+stands for its French chapters; `DeckReview.chapters` (a deck's written French
+chapters) in `review status <deck>`. `review.dated_facts` (`line`, `months`,
+`sections` by path, longest wins): `analyzing/dated_facts.py`, the
+`review-dated-facts` check, opt-in in deckz itself (`OPT_IN`: its verdict changes as
+days pass); the date is the latest such line, else the author date the report was
+added under `sections/`, following renames there. Not done here: `deckz status`'s
+review counts ignore `due` (`deck_counts`), left for the dashboard (phase 5).
+
 ### 4. Sessions from the calendar
 
 - Extract from invoicez's `gcal/` the calendar layer: `google.py` (OAuth, read-only

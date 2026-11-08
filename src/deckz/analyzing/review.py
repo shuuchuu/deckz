@@ -21,10 +21,24 @@ diff from it to the working tree is exactly what changed since the review.
 deckz reads and rewrites only that key: the rest of the front matter and
 the report's body are the repository's, kept byte for byte.
 
+A file marked on another day or commit than the report's (a mark naming only
+some of the report's files leaves the others' day as it was; `mark --at`
+registers files at a past commit) has its own day and commit:
+
+```yaml
+    content/older.md:
+      blob: <blob sha>
+      date: 2026-10-01
+      base: <HEAD when it was marked>
+```
+
 A file is *fresh* when its working-tree version is the one recorded, *stale*
 when it differs, *unreviewed* when no report records it (and *deleted* when
 a report records a file that is gone). A file several reports record takes
-the most recent mark: by `date`, then by its `base`'s commit time.
+the most recent mark: by its date, then by its base's commit time. A fresh
+file is *due* when a rule of `review.rules` covering it took effect after
+its mark: reviewed at its version, but not against that rule (a stale file
+lists the rules it is due for too).
 
 `mark` refuses, at the point of harm, to record a file whose change since
 its review came from elsewhere: another session's or person's commits that
@@ -41,7 +55,9 @@ a shared section's report, and any other path is misplaced (the
 `review-headers` check). A deck report records the deck's own files
 (`deck_own_files`): its pass holds while they are fresh, and changes to the
 shared sections it includes show at the content level, in the section
-reports, not in it.
+reports, not in it. A report under `<review.dir>/<course notes directory>/`
+(the course notes directory's path relative to the repository, e.g.
+`docs/qa/course-notes/python/basics.md`) reviews course notes chapters.
 """
 
 import re
@@ -49,7 +65,7 @@ import subprocess
 from bisect import bisect_right
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from difflib import SequenceMatcher, unified_diff
 from functools import cache
 from pathlib import Path, PurePosixPath
@@ -58,11 +74,11 @@ from typing import TYPE_CHECKING, Any, Literal
 from ..exceptions import ReviewError
 
 if TYPE_CHECKING:
-    from ..configuring.settings import DeckSettings, GlobalSettings
+    from ..configuring.settings import DeckSettings, GlobalSettings, ReviewRule
     from ..models import Deck
 
-State = Literal["fresh", "stale", "unreviewed", "deleted"]
-Kind = Literal["section", "deck"]
+State = Literal["fresh", "due", "stale", "unreviewed", "deleted"]
+Kind = Literal["section", "deck", "course-notes"]
 
 SECTIONS_DIR = "sections"
 """The subdirectory of `review.dir` that holds the shared sections' reports."""
@@ -92,6 +108,9 @@ class Report:
     base: str | None
     files: Mapping[str, str]
     """Path relative to the repository to the blob sha reviewed, sorted."""
+    own: Mapping[str, tuple[date, str]] = field(default_factory=dict)
+    """The files marked on another day or commit than the report's, with \
+    that day and commit."""
 
 
 @dataclass(frozen=True)
@@ -111,6 +130,9 @@ class FileReview:
     """Stale content file: the frames its changes since the review touch, in \
     the reviewed or the current version, whichever has more; None if the \
     reviewed version isn't in the repository's objects."""
+    due: tuple["ReviewRule", ...] = ()
+    """The rules (`review.rules`) covering it that took effect after its \
+    mark: its state is `due` if it's at the version reviewed."""
 
     @property
     def report(self) -> str | None:
@@ -136,6 +158,8 @@ class DeckReview:
     """The files other than content files the reports covering the deck's \
     content files record (e.g. lab notebooks), its pass's files left out."""
     deck_pass: "DeckPass"
+    chapters: tuple[FileReview, ...] = ()
+    """Its course notes' French chapters that are written, in its order."""
 
 
 @dataclass(frozen=True)
@@ -253,7 +277,9 @@ def report_kind(
 
     `<review.dir>/<deck directory>.md`, the deck's directory relative to the
     repository, is that deck's report; a Markdown file under
-    `<review.dir>/sections/` a shared section's report.
+    `<review.dir>/sections/` a shared section's report; one under
+    `<review.dir>/<course notes directory>/` (its path relative to the
+    repository) a report on course notes chapters.
 
     Args:
         settings: The repository's settings.
@@ -261,7 +287,7 @@ def report_kind(
 
     Returns:
         Its kind and, for a deck's report, the deck's directory relative to \
-        the repository; None if it is neither.
+        the repository; None if it is none of them.
     """
     relative = PurePosixPath(path.relative_to(review_dir(settings)).as_posix())
     if relative.suffix != ".md":
@@ -271,7 +297,24 @@ def report_kind(
         return "deck", deck.as_posix()
     if len(relative.parts) > 1 and relative.parts[0] == SECTIONS_DIR:
         return "section", None
+    notes = course_notes_reports_dir(settings)
+    if notes is not None and relative.is_relative_to(notes) and relative != notes:
+        return "course-notes", None
     return None
+
+
+def course_notes_reports_dir(settings: "GlobalSettings") -> PurePosixPath | None:
+    """Where the course notes' reports are, relative to `review.dir`.
+
+    Returns:
+        The course notes directory's path relative to the repository (e.g. \
+        `course-notes`), None if it isn't inside it.
+    """
+    git_dir = settings.paths.git_dir
+    notes = Path(_normalized(settings.paths.course_notes_dir))
+    if not notes.is_relative_to(git_dir) or notes == git_dir:
+        return None
+    return PurePosixPath(notes.relative_to(git_dir).as_posix())
 
 
 def deck_report_path(settings: "GlobalSettings", deck: str) -> Path:
@@ -289,12 +332,16 @@ def deck_report_path(settings: "GlobalSettings", deck: str) -> Path:
 
 def _misplaced(settings: "GlobalSettings", path: Path) -> str:
     directory = _rel(settings, review_dir(settings))
+    notes = course_notes_reports_dir(settings)
+    chapters = (
+        "" if notes is None else f", a course notes report (under {directory}/{notes}/)"
+    )
     return (
         f"{_rel(settings, path)} is neither a shared section's report (under "
-        f"{directory}/{SECTIONS_DIR}/) nor a deck's report ({directory}/<deck "
-        f"directory>.md, e.g. {directory}/<company>/<deck>.md): move it there "
-        "(`git mv`); a deck's report whose deck was renamed follows it, one whose "
-        "deck was removed goes"
+        f"{directory}/{SECTIONS_DIR}/){chapters} nor a deck's report "
+        f"({directory}/<deck directory>.md, e.g. {directory}/<company>/<deck>.md): "
+        "move it there (`git mv`); a deck's report whose deck was renamed follows "
+        "it, one whose deck was removed goes"
     )
 
 
@@ -598,27 +645,39 @@ def _front_matter(text: str) -> _FrontMatter:
     raise ReviewError(msg)
 
 
-def _validated(data: Any) -> tuple[date | None, str | None, dict[str, str], list[str]]:
-    # The `reviewed` value's date, base and files, and what's wrong with it.
+@dataclass(frozen=True)
+class _Reviewed:
+    # A well-formed `reviewed` value, and what's wrong with it.
+    date: date | None
+    base: str | None
+    files: dict[str, str]
+    own: dict[str, tuple[date, str]]
+    problems: list[str]
+
+
+def _date(value: Any) -> date | None:
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
+def _validated(data: Any) -> _Reviewed:
     problems: list[str] = []
     if not isinstance(data, dict):
-        return None, None, {}, ["`reviewed` is not a mapping"]
+        return _Reviewed(None, None, {}, {}, ["`reviewed` is not a mapping"])
     if unknown := sorted(set(data) - {"date", "base", "files"}):
         problems.append(f"`reviewed` has unknown keys: {', '.join(map(str, unknown))}")
-    raw_date = data.get("date")
-    when = None
-    if isinstance(raw_date, date):
-        when = raw_date
-    else:
-        try:
-            when = date.fromisoformat(str(raw_date))
-        except ValueError:
-            problems.append(f"`reviewed.date` is not a date: {raw_date!r}")
+    when = _date(data.get("date"))
+    if when is None:
+        problems.append(f"`reviewed.date` is not a date: {data.get('date')!r}")
     base = _sha(data.get("base"))
     if base is None:
         problems.append(f"`reviewed.base` is not a commit sha: {data.get('base')!r}")
-    found = _validated_files(data.get("files"), problems)
-    return when, base, found, problems
+    found, own = _validated_files(data.get("files"), problems)
+    return _Reviewed(when, base, found, own, problems)
 
 
 def _sha(value: Any) -> str | None:
@@ -627,26 +686,58 @@ def _sha(value: Any) -> str | None:
     return value if isinstance(value, str) and _SHA.fullmatch(value) else None
 
 
-def _validated_files(files: Any, problems: list[str]) -> dict[str, str]:
-    # The `reviewed.files` value's well-formed entries; the others' problems
-    # go to `problems`.
+def _validated_files(
+    files: Any, problems: list[str]
+) -> tuple[dict[str, str], dict[str, tuple[date, str]]]:
+    # The `reviewed.files` value's well-formed entries (blobs, and the own
+    # date and base of those that have one); the others' problems go to
+    # `problems`.
     found: dict[str, str] = {}
+    own: dict[str, tuple[date, str]] = {}
     if files is None:
-        return found
+        return found, own
     if not isinstance(files, dict):
         problems.append("`reviewed.files` is not a mapping")
-        return found
-    for path, sha in files.items():
+        return found, own
+    for path, value in files.items():
         pure = PurePosixPath(str(path))
         if pure.is_absolute() or ".." in pure.parts or not str(path):
             problems.append(
                 f"`reviewed.files` has a path not in the repository: {path}"
             )
-        elif (blob := _sha(sha)) is None:
-            problems.append(f"`reviewed.files`' {path} is not a blob sha: {sha!r}")
+        elif isinstance(value, dict):
+            entry = _validated_entry(str(path), value, problems)
+            if entry is not None:
+                found[str(path)], own[str(path)] = entry
+        elif (blob := _sha(value)) is None:
+            problems.append(f"`reviewed.files`' {path} is not a blob sha: {value!r}")
         else:
             found[str(path)] = blob
-    return found
+    return found, own
+
+
+def _validated_entry(
+    path: str, value: dict[Any, Any], problems: list[str]
+) -> tuple[str, tuple[date, str]] | None:
+    # A file's entry with its own date: `{blob, date, base}`.
+    wrong = []
+    if unknown := sorted(set(value) - {"blob", "date", "base"}):
+        wrong.append(f"unknown keys {', '.join(map(str, unknown))}")
+    blob, when, base = (
+        _sha(value.get("blob")),
+        _date(value.get("date")),
+        _sha(value.get("base")),
+    )
+    if blob is None:
+        wrong.append(f"`blob` is not a blob sha: {value.get('blob')!r}")
+    if when is None:
+        wrong.append(f"`date` is not a date: {value.get('date')!r}")
+    if base is None:
+        wrong.append(f"`base` is not a commit sha: {value.get('base')!r}")
+    if wrong or blob is None or when is None or base is None:
+        problems.append(f"`reviewed.files`' {path}: {'; '.join(wrong)}")
+        return None
+    return blob, (when, base)
 
 
 def _reviewed_value(text: str) -> Any:
@@ -683,12 +774,19 @@ def read_report(settings: "GlobalSettings", path: Path) -> Report:
         value = _reviewed_value(path.read_text(encoding="utf8"))
         if value is None:
             return Report(rel, None, None, {})
-        when, base, files, problems = _validated(value)
+        found = _validated(value)
+        problems = found.problems
     except ReviewError as error:
         problems = [str(error)]
     else:
         if not problems:
-            return Report(rel, when, base, dict(sorted(files.items())))
+            return Report(
+                rel,
+                found.date,
+                found.base,
+                dict(sorted(found.files.items())),
+                found.own,
+            )
     msg = (
         f"{rel}: {'; '.join(problems)}: fix the front matter by hand "
         "(`deckz check review-headers`)"
@@ -784,23 +882,51 @@ def header_problems(
     return problems
 
 
+@cache
+def _no_alias_dumper() -> type:
+    import yaml
+
+    class NoAliasDumper(yaml.SafeDumper):
+        # Several files sharing a date object would get `&id001`/`*id001`.
+        def ignore_aliases(self, data: Any) -> bool:
+            return True
+
+    return NoAliasDumper
+
+
 def _write_report(
-    path: Path, report_date: date, base: str, files: Mapping[str, str]
+    path: Path,
+    report_date: date,
+    base: str,
+    files: Mapping[str, str],
+    own: Mapping[str, tuple[date, str]] | None = None,
 ) -> None:
     # Rewrite only the `reviewed` key of `path`'s front matter (creating the
-    # file or the front matter), everything else byte for byte.
+    # file or the front matter), everything else byte for byte. A file of
+    # `own` marked on another day or commit than the report's gets its own
+    # entry (a rule's time compares the base's).
     import yaml
 
     from ..utils import write_atomic
 
-    block = yaml.safe_dump(
+    own = own or {}
+    entries: dict[str, Any] = {}
+    for file, blob in sorted(files.items()):
+        when, commit = own.get(file, (report_date, base))
+        entries[file] = (
+            blob
+            if (when, commit) == (report_date, base)
+            else {"blob": blob, "date": when, "base": commit}
+        )
+    block = yaml.dump(
         {
             _KEY: {
                 "date": report_date,
                 "base": base,
-                "files": dict(sorted(files.items())),
+                "files": entries,
             }
         },
+        Dumper=_no_alias_dumper(),
         sort_keys=False,
         allow_unicode=True,
         default_flow_style=False,
@@ -867,9 +993,8 @@ def marks_index(
         if report.date is None or report.base is None:
             continue
         for path, blob in report.files.items():
-            index.setdefault(path, []).append(
-                Mark(report.path, report.date, report.base, blob)
-            )
+            when, base = report.own.get(path, (report.date, report.base))
+            index.setdefault(path, []).append(Mark(report.path, when, base, blob))
     return {
         path: tuple(
             sorted(
@@ -927,7 +1052,8 @@ def _changed_frames(old: bytes, new: bytes) -> int:
 
 
 def _frames_to_review(review: FileReview) -> int:
-    if review.state == "unreviewed":
+    # A file due under a rule is read whole again, against the rule.
+    if review.state == "unreviewed" or review.due:
         return review.frames or 0
     if review.state == "stale":
         if review.changed_frames is not None:
@@ -970,22 +1096,58 @@ def review_files(
             else None
         )
         marks = index.get(path, ())
+        due = due_rules(settings, path, marks[0]) if marks else ()
         if not marks:
             found.append(FileReview(path, "unreviewed", frames=frames))
         elif path not in current:
             found.append(FileReview(path, "deleted", marks))
         elif path not in stale:
-            found.append(FileReview(path, "fresh", marks, frames=frames))
+            state: State = "due" if due else "fresh"
+            found.append(FileReview(path, state, marks, frames=frames, due=due))
         elif (reviewed := old.get(stale[path])) is None:
-            found.append(FileReview(path, "stale", marks, frames=frames))
+            found.append(FileReview(path, "stale", marks, frames=frames, due=due))
         else:
             text = absolute.read_bytes()
             added, removed = _line_counts(reviewed, text)
             changed = None if frames is None else _changed_frames(reviewed, text)
             found.append(
-                FileReview(path, "stale", marks, added, removed, frames, changed)
+                FileReview(path, "stale", marks, added, removed, frames, changed, due)
             )
     return found
+
+
+def due_rules(
+    settings: "GlobalSettings", path: str, mark: Mark
+) -> tuple["ReviewRule", ...]:
+    """The rules (`review.rules`) covering a file that took effect after its mark.
+
+    A rule whose `since` is a day took effect after a mark of an earlier day;
+    one whose `since` is a time, after a mark whose base commit is older (by
+    its commit time; by its mark's day if this clone lacks it).
+
+    Args:
+        settings: The repository's settings.
+        path: Relative to the repository.
+        mark: The file's mark (the one used).
+
+    Returns:
+        Those rules, in `review.rules`' order.
+    """
+    pure = PurePosixPath(path)
+    return tuple(
+        rule
+        for rule in settings.review.rules
+        if pure.full_match(rule.paths)
+        and _before(settings.paths.git_dir, mark, rule.since)
+    )
+
+
+def _before(git_dir: Path, mark: Mark, since: date) -> bool:
+    if not isinstance(since, datetime):
+        return mark.date < since
+    if committed := _commit_time(git_dir, mark.base):
+        return committed < since.timestamp()
+    return mark.date < since.date()
 
 
 def _files_of(deck: "Deck") -> list[Path]:
@@ -1007,13 +1169,42 @@ def deck_files(settings: "DeckSettings") -> list[Path]:
     Returns:
         Their absolute paths, in the deck's order, each once.
     """
+    return _files_of(_parsed(settings))
+
+
+def _parsed(settings: "DeckSettings") -> "Deck":
     from ..components.factory import DeckSettingsFactory
 
-    return _files_of(
+    return (
         DeckSettingsFactory(settings, lang="fr")
         .parser()
         .from_deck_definition(settings.paths.deck_definition)
     )
+
+
+def _deck_chapters(settings: "DeckSettings", deck: "Deck") -> list[str]:
+    # Its course notes' written French chapters, in its order, each once.
+    from ..course_notes import ChapterStatus, entries
+
+    return list(
+        dict.fromkeys(
+            _rel(settings, Path(_normalized(entry.chapter)))
+            for entry in entries(settings, deck, "fr")
+            if entry.status in (ChapterStatus.WRITTEN, ChapterStatus.COVERED)
+        )
+    )
+
+
+def _chapters_under(settings: "GlobalSettings", target: Path) -> list[str]:
+    # The French chapters of the course notes under `target`.
+    from ..course_notes import chapter_path, chapters
+
+    found = (
+        Path(_normalized(chapter_path(settings, path, "fr")))
+        for path, lang in chapters(settings)
+        if lang == "fr"
+    )
+    return sorted(_rel(settings, p) for p in found if p.is_relative_to(target))
 
 
 def _used_files(settings: "GlobalSettings") -> dict[str, set[str]]:
@@ -1037,9 +1228,10 @@ def expand(
 
     A file stands for itself; a content directory for the content files some
     deck includes under it (its `en/` translations left out); a deck's
-    directory for the content files it resolves to; any other directory for
-    its git-tracked files. A path that doesn't exist stands for itself (a
-    file deleted or renamed, for `--forget`).
+    directory for the content files it resolves to; a course notes
+    directory for its French chapters; any other directory for its
+    git-tracked files. A path that doesn't exist stands for itself (a file
+    deleted or renamed, for `--forget`).
 
     Args:
         settings: The repository's settings.
@@ -1063,19 +1255,29 @@ def expand(
         elif _in_content_dir(settings, target):
             if used is None:
                 used = _used_files(settings)
-            root = _content_root(settings, target) or target
-            for path in sorted(used):
-                absolute = git_dir / path
-                if (
-                    absolute.is_relative_to(target)
-                    and "en" not in (absolute.relative_to(root).parts[:-1])
-                ):
-                    found[path] = None
+            found.update(dict.fromkeys(_used_under(settings, target, used)))
+        elif target.is_relative_to(Path(_normalized(settings.paths.course_notes_dir))):
+            found.update(dict.fromkeys(_chapters_under(settings, target)))
         else:
             listed = _git(git_dir, "ls-files", "-z", "--", _rel(settings, target)) or ""
             for path in sorted(p for p in listed.split("\0") if p):
                 found[path] = None
     return list(found)
+
+
+def _used_under(
+    settings: "GlobalSettings", target: Path, used: Mapping[str, set[str]]
+) -> list[str]:
+    # The content files of `used` under the content directory `target`,
+    # their `en/` translations left out.
+    git_dir = settings.paths.git_dir
+    root = _content_root(settings, target) or target
+    return [
+        path
+        for path in sorted(used)
+        if (git_dir / path).is_relative_to(target)
+        and "en" not in (git_dir / path).relative_to(root).parts[:-1]
+    ]
 
 
 def _owning_section(settings: "GlobalSettings", path: Path, sections: set[str]) -> str:
@@ -1101,7 +1303,9 @@ def deck_review(
     reports: Sequence[Report],
     index: Mapping[str, tuple[Mark, ...]] | None = None,
 ) -> DeckReview:
-    """A deck's content files' states, by section, and the reports' other files.
+    """A deck's content files' states, by section, the reports' other files.
+
+    And its pass (`DeckPass`), and its written French course notes chapters.
 
     Returns:
         Its review.
@@ -1112,11 +1316,13 @@ def deck_review(
     if index is None:
         index = marks_index(git_dir, reports)
     sections = set(shared_section_ids(settings.paths.content_dir))
+    parsed = _parsed(settings)
     grouped: dict[str, list[str]] = {}
-    for path in deck_files(settings):
+    for path in _files_of(parsed):
         grouped.setdefault(_owning_section(settings, path, sections), []).append(
             _rel(settings, path)
         )
+    chapters = _deck_chapters(settings, parsed)
     deck = _rel(settings, settings.paths.current_dir)
     deck_pass = _deck_pass(settings, deck, reports)
     passed = {review.path for review in deck_pass.files}
@@ -1130,11 +1336,14 @@ def deck_review(
             for path in report.files
             if path not in content
             and path not in passed
+            and path not in chapters
             and not _is_content_file(settings, git_dir / path)
         }
     )
     every = review_files(
-        settings, [*(p for files in grouped.values() for p in files), *others], index
+        settings,
+        [*(p for files in grouped.values() for p in files), *others, *chapters],
+        index,
     )
     by_path = {review.path: review for review in every}
     return DeckReview(
@@ -1145,6 +1354,7 @@ def deck_review(
         ),
         tuple(by_path[path] for path in others),
         deck_pass,
+        tuple(by_path[path] for path in chapters),
     )
 
 
@@ -1398,12 +1608,17 @@ def mark(
     which section reports review. A recorded file whose change since its
     review came from elsewhere (`changed_elsewhere`) is refused, unless in
     `accept`; the others are marked all the same. The report's `date` and
-    `base` (HEAD) are set whenever a file is marked or forgotten.
+    `base` (HEAD) are set whenever a file is marked or forgotten; the files
+    recorded but not marked this time keep their own (the report's former
+    ones, if they had none).
 
     With `at`, records the versions of a past commit instead, to register a
-    review made then: the report must record nothing yet, so every file is
-    added (`changed_elsewhere` has nothing to refuse), with that commit as
-    `base` and its commit date as `date`. Files changed since show stale.
+    review made then, of files the report doesn't record yet (so
+    `changed_elsewhere` has nothing to refuse), with that commit's date and
+    the commit as their base: the report's own if it records nothing yet.
+    A file renamed since is found under its path at that commit (git's
+    rename detection, from the commit to HEAD). Files changed since show
+    stale.
 
     Args:
         settings: The repository's settings.
@@ -1421,8 +1636,8 @@ def mark(
     Raises:
         ReviewError: If `report` isn't a report (under `review.dir`, where \
             its kind puts it) or can't be read, there's nothing to mark, or \
-            `at` doesn't apply (not a commit of this branch, a report already \
-            recording files, a file missing at that commit).
+            `at` doesn't apply (not a commit of this branch, a file the \
+            report already records, a file missing at that commit).
     """
     report = _report_path(settings, report)
     kind = report_kind(settings, report)
@@ -1430,17 +1645,21 @@ def mark(
         raise ReviewError(_misplaced(settings, report))
     deck = kind[1]
     created = not report.is_file()
-    recorded = dict(read_report(settings, report).files) if not created else {}
+    existing = (
+        read_report(settings, report)
+        if not created
+        else Report(_rel(settings, report), None, None, {})
+    )
     if at is not None:
         if accept or forget:
             msg = "--at registers a past review: it takes no --accept or --forget"
             raise ReviewError(msg)
-        return _mark_at(settings, report, at, paths, recorded, deck, created=created)
+        return _mark_at(settings, report, at, paths, existing, deck, created=created)
     return _mark_now(
         settings,
         report,
         paths,
-        recorded,
+        existing,
         deck,
         accept=accept,
         forget=forget,
@@ -1453,7 +1672,7 @@ def _mark_now(
     settings: "GlobalSettings",
     report: Path,
     paths: Sequence[Path],
-    recorded: dict[str, str],
+    existing: Report,
     deck: str | None,
     *,
     accept: Sequence[Path],
@@ -1461,9 +1680,11 @@ def _mark_now(
     created: bool,
     today: date | None,
 ) -> MarkResult:
-    # `mark` without `at`: the working tree's versions.
+    # `mark` without `at`: the working tree's versions. The files it doesn't
+    # mark keep the day they were marked.
     git_dir = settings.paths.git_dir
     rel_report = _rel(settings, report)
+    recorded = dict(existing.files)
     named = [_rel(settings, path) for path in forget]
     forgotten = [path for path in named if recorded.pop(path, None) is not None]
     not_recorded = [path for path in named if path not in forgotten]
@@ -1512,7 +1733,8 @@ def _mark_now(
             recorded[path] = blob
             refreshed.append(path)
     if added or refreshed or unchanged or forgotten:
-        _write_report(report, today or date.today(), _head(git_dir), recorded)
+        own = _kept_marks(existing, recorded, {*added, *refreshed, *unchanged})
+        _write_report(report, today or date.today(), _head(git_dir), recorded, own)
     return MarkResult(
         rel_report,
         created and report.is_file(),
@@ -1523,6 +1745,55 @@ def _mark_now(
         tuple(refused),
         tuple(not_recorded),
     )
+
+
+def _kept_marks(
+    existing: Report, recorded: Mapping[str, str], marked: set[str]
+) -> dict[str, tuple[date, str]]:
+    # The date and base of each file still recorded and not marked again:
+    # its own, else the report's former ones.
+    if existing.date is None or existing.base is None:
+        return {}
+    former = (existing.date, existing.base)
+    return {
+        path: existing.own.get(path, former)
+        for path in recorded
+        if path in existing.files and path not in marked
+    }
+
+
+def _blobs_at(
+    git_dir: Path, commit: str, paths: Sequence[str], at: str
+) -> dict[str, str]:
+    # Each path's blob at `commit`, under its old path if renamed since.
+    found = {path: _blob_at(git_dir, commit, path) for path in paths}
+    if any(blob is None for blob in found.values()):
+        renamed = _renamed_since(git_dir, commit)
+        for path, blob in found.items():
+            if blob is None and path in renamed:
+                found[path] = _blob_at(git_dir, commit, renamed[path])
+    if missing := [path for path, blob in found.items() if blob is None]:
+        msg = (
+            f"not in {at}: {', '.join(missing)}: leave out the files that commit "
+            "doesn't have"
+        )
+        raise ReviewError(msg)
+    return {path: blob for path, blob in found.items() if blob is not None}
+
+
+def _renamed_since(git_dir: Path, commit: str) -> dict[str, str]:
+    # The files renamed between `commit` and HEAD: each new path's old one.
+    out = _git(git_dir, "diff", "-M", "--name-status", "-z", commit, "HEAD") or ""
+    fields = out.split("\0")
+    renamed, position = {}, 0
+    while position < len(fields) and fields[position]:
+        status = fields[position]
+        if status[:1] in ("R", "C") and position + 2 < len(fields):
+            renamed[fields[position + 2]] = fields[position + 1]
+            position += 3
+        else:
+            position += 2
+    return renamed
 
 
 def _mark_targets(
@@ -1590,13 +1861,13 @@ def _mark_at(
     report: Path,
     at: str,
     paths: Sequence[Path],
-    recorded: Mapping[str, str],
+    existing: Report,
     deck: str | None,
     *,
     created: bool,
 ) -> MarkResult:
-    # `mark --at`: record a past commit's versions in a report recording
-    # nothing yet.
+    # `mark --at`: record a past commit's versions of files the report
+    # doesn't record yet.
     git_dir = settings.paths.git_dir
     rel_report = _rel(settings, report)
     commit = _git(git_dir, "rev-parse", "--verify", "--quiet", f"{at}^{{commit}}")
@@ -1608,13 +1879,6 @@ def _mark_at(
         msg = (
             f"{at} is not in this branch's history: give a commit HEAD descends "
             "from, the one the review read"
-        )
-        raise ReviewError(msg)
-    if recorded:
-        msg = (
-            f"{rel_report} already records files: --at only registers a past "
-            f"review in a report recording nothing yet; `deckz review mark "
-            f"{rel_report}` without it records today's versions"
         )
         raise ReviewError(msg)
     if paths:
@@ -1629,14 +1893,26 @@ def _mark_at(
         raise ReviewError(msg)
     if refused := _shared_content(settings, targets, deck, rel_report):
         raise ReviewError("; ".join(reason for _, reason in refused))
-    found = {path: _blob_at(git_dir, commit, path) for path in targets}
-    if missing := [path for path, blob in found.items() if blob is None]:
+    if already := [path for path in targets if path in existing.files]:
         msg = (
-            f"not in {at}: {', '.join(missing)}: leave out the files that commit "
-            "doesn't have"
+            f"{rel_report} already records {', '.join(already)}: --at registers "
+            "a past review of files a report doesn't record yet; leave them out, "
+            f"or, reviewed since, `deckz review mark {rel_report} <path>` records "
+            "today's version"
         )
         raise ReviewError(msg)
-    day = (_git(git_dir, "show", "-s", "--format=%cs", commit) or "").strip()
-    files = {path: blob for path, blob in found.items() if blob is not None}
-    _write_report(report, date.fromisoformat(day), commit, files)
+    files = _blobs_at(git_dir, commit, targets, at)
+    day = date.fromisoformat(
+        (_git(git_dir, "show", "-s", "--format=%cs", commit) or "").strip()
+    )
+    if existing.date is None or existing.base is None:
+        _write_report(report, day, commit, files)
+    else:
+        _write_report(
+            report,
+            existing.date,
+            existing.base,
+            {**existing.files, **files},
+            {**existing.own, **dict.fromkeys(files, (day, commit))},
+        )
     return MarkResult(rel_report, created, tuple(files))

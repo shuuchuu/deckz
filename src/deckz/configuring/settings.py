@@ -1,4 +1,5 @@
 import re
+from datetime import date, datetime
 from functools import reduce
 from pathlib import Path
 from typing import Annotated, Any, Literal, Self, cast
@@ -374,6 +375,49 @@ class FindingsSettings(BaseModel):
     outcomes: FindingOutcomes
 
 
+class ReviewRule(BaseModel):
+    """A rule added after files were reviewed: those reviewed before it are due.
+
+    A file it covers whose review predates `since` is *due*: reviewed at \
+    its version, but not against this rule (`deckz review status`).
+    """
+
+    model_config = ConfigDict(frozen=True)
+    paths: str
+    """The files it covers: a glob relative to the git root, `**` for any \
+    depth (`PurePosixPath.full_match`), e.g. `course-notes/**`."""
+    since: datetime | date
+    """When it took effect: a day (a mark from that day on read it), or a \
+    time with its offset, e.g. the commit adding the rule's, \
+    `2026-10-23T16:15:18+02:00` (a mark whose base commit is older didn't; \
+    a base this clone lacks counts by its mark's day)."""
+    why: str
+    """What it asks, shown next to each file it makes due, e.g. `the \
+    hierarchy rules (main thread first, details in an aside)`."""
+
+
+class DatedFactsSettings(BaseModel):
+    """When the dated facts of a section's report are due for a check again.
+
+    A shared section's report says when its dated facts (versions, prices, \
+    the state of the art) were last checked, on a line starting with \
+    `line` and followed by the date (`YYYY-MM-DD`); without one, the day \
+    the report was added counts. The `review-dated-facts` check (opt-in) \
+    fails on the reports whose date is older than their delay.
+    """
+
+    model_config = ConfigDict(frozen=True)
+    line: str
+    """The start of the line giving the date, e.g. `State of the art \
+    checked on` (the date follows it, after a space)."""
+    months: int = Field(default=12, gt=0)
+    """The delay, in months, of the sections `sections` doesn't name."""
+    sections: dict[str, Annotated[int, Field(gt=0)]] = {}
+    """A delay for some sections and their subsections, by section path \
+    (relative to the shared content directory), e.g. `{genai: 6}` for the \
+    fast-moving ones; the longest path matching a report's section wins."""
+
+
 class ReviewSettings(BaseModel):
     """The review registry of `deckz review` (`deckz.analyzing.review`)."""
 
@@ -384,13 +428,21 @@ class ReviewSettings(BaseModel):
     whose front matter's `reviewed` key deckz writes (`deckz review mark`) \
     and nothing else. Its path gives its kind: under `sections/`, a shared \
     section's report; `<deck directory>.md` (e.g. `decks/orsys/pyt.md`), \
-    that deck's report, its deck pass; the `review-headers` check fails on \
-    any other. Unset, `deckz review` refuses, and the `review-headers` \
-    check and `deckz status` leave reviews alone."""
+    that deck's report, its deck pass; under the course notes directory's \
+    path (e.g. `course-notes/`), a report on course notes chapters; the \
+    `review-headers` check fails on any other. Unset, `deckz review` \
+    refuses, and the `review-headers` check and `deckz status` leave \
+    reviews alone."""
     findings: FindingsSettings | None = None
     """The findings grammar of the reports (`deckz review findings`). \
     Unset, `deckz review findings` refuses and the `review-findings` check \
     passes."""
+    rules: tuple[ReviewRule, ...] = ()
+    """Rules added after files were reviewed, e.g. a course notes \
+    convention: a file a rule covers, reviewed before it, is due."""
+    dated_facts: DatedFactsSettings | None = None
+    """When section reports' dated facts are due for a check again \
+    (`review-dated-facts`). Unset, that check passes."""
 
 
 class ChecksSettings(BaseModel):

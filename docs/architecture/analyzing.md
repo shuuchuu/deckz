@@ -27,7 +27,8 @@ flavors, marking a translation synced).
 | [`parity`][deckz.analyzing.parity] | `deckz check parity` | Compare a deck's PDF and HTML versions, slide by slide (`deckz[parity]`) |
 | [`sections_search`][deckz.analyzing.sections_search] | `deckz search-sections`, `section-files`, `section-flavors` | Find shared sections by keyword, list their flavors and files |
 | [`sections_analyzer`][deckz.analyzing.sections_analyzer] | `deckz deps` | Which sections, flavors and files the decks use; each flavor's files and frames (`frame_count`, the one frame count), the decks' total frames |
-| [`review`][deckz.analyzing.review] | `deckz review`, the `review-headers` check, `status` | The review registry: the reports under `review.dir`, whose front matter's `reviewed` key records each file reviewed by its blob sha, and whose path gives their kind (a section's under `sections/`, a deck's at `<deck directory>.md`, which records the deck's own files: its pass holds while they're fresh, its shared sections' changes show in their own reports); files' states (fresh, stale, unreviewed), the sections ranked by what's left to review, a deck's pass, diffs since a review, and `mark`, which rewrites that key only, refuses a file changed from the main line since its review, and with `--at` registers a past commit's review |
+| [`review`][deckz.analyzing.review] | `deckz review`, the `review-headers` check, `status` | The review registry: the reports under `review.dir`, whose front matter's `reviewed` key records each file reviewed by its blob sha, and whose path gives their kind (a section's under `sections/`, a deck's at `<deck directory>.md`, which records the deck's own files: its pass holds while they're fresh, its shared sections' changes show in their own reports; a course notes report's under the course notes directory's path), each file's own day when it differs from the report's; files' states (fresh, due under a later `review.rules` rule, stale, unreviewed), the sections ranked by what's left to review, a deck's pass and chapters, diffs since a review, and `mark`, which rewrites that key only, refuses a file changed from the main line since its review, and with `--at` registers a past commit's review of files a report doesn't record yet |
+| [`dated_facts`][deckz.analyzing.dated_facts] | the `review-dated-facts` check (opt-in) | When each section report's dated facts were last checked (its `review.dated_facts.line`, else the day it was added) and whether they're due, by the section's delay |
 | [`findings`][deckz.analyzing.findings] | `deckz review findings`, the `review-findings` check | The reports' findings, by `review.findings`' grammar (heading, rubrics, outcome words): each finding's id, rubric, line and outcome, what breaks the grammar, and the reports covering a deck or a path. It reads the report bodies, `review` only their front matter |
 | [`flavor_renamer`][deckz.analyzing.flavor_renamer], [`flavors_merger`][deckz.analyzing.flavors_merger], [`flavor_files`][deckz.analyzing.flavor_files] | `deckz flavor rename`, `deduplicate` | Edit section definitions and every deck referring to them |
 
@@ -77,7 +78,8 @@ flowchart TB
 - A check in `checks.opt_in` (a slow, networked, or not yet passing check) runs only
   when named on the command line: `deckz check`, the pre-commit hook and the post-edit
   agent hook skip it (`ChecksSettings.runs_unnamed`). The built-in opt-in checks
-  (`content_checks.OPT_IN`: `course-notes-code`, which runs code) stay opt-in whatever
+  (`content_checks.OPT_IN`: `course-notes-code`, which runs code, and
+  `review-dated-facts`, whose verdict changes as days pass) stay opt-in whatever
   the repository lists, unlike `DEFERRED`, which `checks.deferred` replaces: a
   repository listing its own would otherwise start running every chapter's code on
   each commit. `deckz check --file` passes its files as `paths`.

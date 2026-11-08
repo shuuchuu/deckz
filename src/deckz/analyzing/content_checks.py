@@ -639,6 +639,15 @@ def review_findings(settings: "GlobalSettings", paths: Paths = None) -> list[str
     return findings_problems(settings, paths)
 
 
+def review_dated_facts(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
+    # No shared section report's dated facts are older than their delay
+    # (see `deckz.analyzing.dated_facts`). Nothing to do without
+    # `review.dated_facts`.
+    from .dated_facts import dated_facts_problems
+
+    return dated_facts_problems(settings, paths)
+
+
 CHECKS: dict[str, Callable[["GlobalSettings", Paths], list[str]]] = {
     "lab-ids": lab_ids,
     "lab-pairs": lab_pairs,
@@ -655,6 +664,7 @@ CHECKS: dict[str, Callable[["GlobalSettings", Paths], list[str]]] = {
     "course-notes-code": course_notes_code,
     "review-headers": review_headers,
     "review-findings": review_findings,
+    "review-dated-facts": review_dated_facts,
 }
 
 DEFERRED = (
@@ -683,12 +693,15 @@ miscounts what's left to do, and only its writer knows the outcome).
 `deckz.yml`'s `checks.deferred` replaces this list.
 """
 
-OPT_IN = ("course-notes-code",)
+OPT_IN = ("course-notes-code", "review-dated-facts")
 """The built-in checks `deckz check` runs only when named.
 
 `course-notes-code` runs every chapter's code, with the libraries
 `course_notes.code.python` installs, for minutes: `deckz check
 course-notes-code --file <chapter>` checks one chapter as it's written.
+`review-dated-facts` changes its verdict as days pass, with no commit:
+blocking, it would refuse an unrelated commit the day a report's facts fall
+due.
 They stay opt-in whatever the repository sets: `deckz.yml`'s
 `checks.opt_in` adds to them, so a repository listing its own opt-in checks
 doesn't start running every chapter's code on each commit.

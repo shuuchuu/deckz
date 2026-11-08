@@ -22,7 +22,10 @@ it reviews, so that a script finds a report from its path alone:
   touch the same file);
 - at `<deck directory>.md`, a deck's report: its deck pass (e.g.
   `docs/qa/decks/orsys/pyt.md` for the deck `decks/orsys/pyt`, see
-  [Deck reports](#deck-reports)).
+  [Deck reports](#deck-reports));
+- under the course notes directory's path (`paths.course_notes_dir` relative to the
+  repository, e.g. `docs/qa/course-notes/python/basics.md`), a report on course notes
+  chapters, one per section as for the slides.
 
 The `review-headers` check fails on a report anywhere else, e.g. a deck's report left
 behind when its deck was renamed: `git mv` it to its deck's new path.
@@ -47,6 +50,17 @@ diff` shows exactly what changed since. `base` is the commit the last mark was m
 on. deckz rewrites only this key: the rest of the front matter and the report's text
 stay as they are.
 
+A file marked on another day or commit than the report's keeps its own day and commit:
+a mark naming some of a report's files leaves the others' as they were, and `--at`
+registers files at a past commit ([A review made before](#a-review-made-before)):
+
+```yaml
+    content/python/basics/loops.md:
+      blob: <blob sha>
+      date: 2026-10-01
+      base: <HEAD when it was marked>
+```
+
 ## Where reviews stand
 
 ```sh
@@ -59,7 +73,8 @@ A file is **fresh** when it's at the version reviewed, **stale** when it changed
 (with the lines added and removed, and for a content file the frames those changes
 touch), **unreviewed** when no report records it, and
 **deleted** when a report records a file that's gone. When several reports record a
-file, the most recent mark counts.
+file, the most recent mark counts. A fresh file is **due** when a rule added since
+its review covers it (see [Rules added later](#rules-added-later)).
 
 With no argument, the sections some deck uses are ranked by the number of decks
 including one of their files, times their frames to review: all the frames of their
@@ -128,8 +143,12 @@ deckz review mark docs/qa/decks/orsys/pyt.md --at c6985bae
 ```
 
 `--at` records the versions of that commit, with its date and as its `base`, so the
-files changed since show stale at once. It applies only to a report recording nothing
-yet, and the commit must be in the branch's history.
+files changed since show stale at once. It applies only to files the report doesn't
+record yet (name them when the report records others: each keeps that commit's day),
+and the commit must be in the branch's history. Passes made at different commits go
+in one report this way, one `--at` per commit. A file renamed since that commit is
+found under its old path there (git's rename detection), and recorded under its new
+one.
 
 ### Renamed or deleted files
 
@@ -164,6 +183,66 @@ sections shows in that section's report, at the content level, not in the deck's
 `deckz review status <deck>` ends with its pass: none recorded, holds, or out of date
 with the files changed or added since. `deckz review findings <deck>` includes the
 deck's report.
+
+## Course notes reports
+
+Course notes chapters are reviewed like slides, in reports of their own under the
+course notes directory's path, one per section (`docs/qa/course-notes/python/basics.md`
+for the chapters of `course-notes/python/basics/`). A course notes directory given to
+`status` or `mark` stands for its French chapters (not their `en/` translations, nor
+other files there). `deckz review status <deck>` lists the deck's written French
+chapters after its content files and the reports' other files.
+
+## Rules added later
+
+A rule added after files were reviewed (a new course notes convention, say) makes
+their review out of date without any of them changing. `review.rules` says which
+files a rule covers and since when:
+
+```yaml
+review:
+  dir: docs/qa
+  rules:
+    - paths: course-notes/**          # a glob from the repository's root
+      since: 2026-10-23               # the day it took effect
+      why: the hierarchy rules (main thread first, details in an aside)
+```
+
+`since` is a day, or a time with its offset when the rule came in the middle of a
+day's reviews (the commit adding it, `git log -1 --format=%cI <commit>`): a mark then
+counts by its base commit's time, or by its day if your clone lacks that commit.
+
+A file it covers, at the version reviewed but marked before `since`, is **due**:
+`deckz review status` shows `why` under it, and counts its frames whole in a
+section's frames to review. A stale file names the rules it is due for too. Once the
+file is reviewed against the rule, mark it again by name, which records it today,
+changed or not:
+
+```sh
+deckz review mark docs/qa/course-notes/python/basics.md course-notes/python/basics/loops.md
+```
+
+## Dated facts
+
+Some facts age without anyone changing a file: versions, prices, the state of the
+art. A section's report can say when its facts were last checked, on a line of its
+own, and `review.dated_facts` sets how long that lasts:
+
+```yaml
+review:
+  dir: docs/qa
+  dated_facts:
+    line: State of the art checked on   # followed by the date, YYYY-MM-DD
+    months: 12                          # the default delay
+    sections: {genai: 6, mlops: 6}      # faster ones, with their subsections
+```
+
+The latest date on such a line counts; with none, the day the report was added (under
+`sections/`, following renames there). The opt-in `review-dated-facts` check (`deckz
+check review-dated-facts`) fails on each section report whose date is older than its
+delay, the longest section path of `sections` matching it, else `months`: check the
+facts, then write the day on that line. It is opt-in in every repository: its verdict
+changes as days pass, with no commit.
 
 ## Findings
 

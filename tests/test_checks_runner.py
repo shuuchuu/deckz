@@ -35,6 +35,7 @@ def test_without_a_plugin_module_only_builtin_checks_run(tmp_path: Path) -> None
         "course-notes-code",
         "review-headers",
         "review-findings",
+        "review-dated-facts",
     }
     assert checks["raw-latex"]() == []
 

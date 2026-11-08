@@ -3,8 +3,9 @@
 `deckz check` runs every check (the pre-commit hook runs it on the staged files);
 `deckz check <name>` runs one. Each problem it reports ends with how to fix it.
 Checks a repository lists under `deckz.yml`'s `checks.opt_in` only run when named (or
-nightly in CI): they're slow, or need the network. So does deckz's own
-`course-notes-code`, which runs the course notes' code. `--file <path>...` limits the
+nightly in CI): they're slow, or need the network. So do deckz's own
+`course-notes-code`, which runs the course notes' code, and `review-dated-facts`,
+whose verdict changes as days pass. `--file <path>...` limits the
 checks that read files to those: `deckz check course-notes-code --file
 course-notes/topic/intro.md` runs one chapter's code.
 No check compiles a deck: when `ci.builds` is set, CI builds every Sunday (or every
@@ -35,8 +36,9 @@ a repository's own checks block unless it lists them.
 | `lab-secrets` | yes | no token or password in a notebook (they're public) | remove it, revoke it; `labs.not_secrets` for a false positive |
 | `jinja-syntax` | yes | every content file's Jinja parses with the repository's environment, its filters and tests known (otherwise only the build fails) | fix the tag or the filter's name; `{% raw %}…{% endraw %}` around braces meant as text |
 | `deck-definitions` | yes | every deck parses in French: its `deck.yml`, the sections it includes and their `.yml`, the files they name, its `variables.yml` | fix the YAML, or restore (or stop including) the section or file it names |
-| `review-headers` | yes | every review report's `reviewed` front matter is well formed, the files it records exist, and the report is where its kind goes: under `sections/`, or at its deck's path (only with `review.dir`, see [Reviews](reviews.md)) | a renamed file: `deckz review mark <report> --forget <old> <new>`; a deleted one: `--forget <old>`; a misplaced report: `git mv` it |
+| `review-headers` | yes | every review report's `reviewed` front matter is well formed, the files it records exist, and the report is where its kind goes: under `sections/`, under the course notes directory's path, or at its deck's path (only with `review.dir`, see [Reviews](reviews.md)) | a renamed file: `deckz review mark <report> --forget <old> <new>`; a deleted one: `--forget <old>`; a misplaced report: `git mv` it |
 | `review-findings` | yes | every finding of the review reports has an outcome, an id no other finding of its report has, and its rubric's letters, under its rubric's heading (only with `review.findings`, see [Reviews](reviews.md#findings)) | write its outcome; give a second id the next free number; move the finding under its rubric |
+| `review-dated-facts` | opt-in | no section report's dated facts are older than their delay (only with `review.dated_facts`, see [Reviews](reviews.md#dated-facts)) | check the facts, then write the day on the report's dated line |
 | `lab-ids` | no | every notebook has a valid, unique published ID | `deckz labs ids` |
 | `lab-pairs` | no | every lab exists in French and English, with the same cells and code | translate the missing one; `deckz labs compare <lab dir>` |
 | `lab-outputs` | no | hands-on notebooks store no outputs; demos store a full run's, none of them blank | clear them, or run the demo and `deckz labs outputs` |

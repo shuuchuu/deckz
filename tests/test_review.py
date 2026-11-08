@@ -1,5 +1,5 @@
 import subprocess
-from datetime import date
+from datetime import UTC, date
 from json import loads
 from pathlib import Path
 from shutil import copytree
@@ -719,8 +719,8 @@ def test_mark_at_refuses_what_it_cant_register(repo: Path) -> None:
     with raises(ReviewError, match="not in this branch's history"):
         mark(settings, repo / REPORT, [repo / A], at=side)
     mark(settings, repo / REPORT, [repo / A])
-    with raises(ReviewError, match="already records files"):
-        mark(settings, repo / REPORT, [repo / B], at=first)
+    with raises(ReviewError, match=r"already records content/sec/a\.md"):
+        mark(settings, repo / REPORT, [repo / A], at=first)
 
 
 def test_a_decks_findings_include_its_report(repo: Path, capsys: Any) -> None:
@@ -767,3 +767,168 @@ def test_cli_status_of_a_deck_shows_its_pass(repo: Path, capsys: Any) -> None:
         "",
         DECK_REPORT,
     ]
+
+
+def _with_settings(repo: Path, text: str) -> None:
+    deckz_yml = repo / "deckz.yml"
+    deckz_yml.write_text(deckz_yml.read_text(encoding="utf8") + text, encoding="utf8")
+
+
+def test_a_partial_mark_keeps_the_other_files_day(repo: Path) -> None:
+    _mark(repo, A, B, today=date(2026, 10, 1))
+    first = read_report(_settings(repo), repo / REPORT)
+
+    _mark(repo, A, today=date(2026, 11, 8))
+
+    report = read_report(_settings(repo), repo / REPORT)
+    assert report.date == date(2026, 11, 8)
+    assert report.own == {B: (date(2026, 10, 1), first.base)}
+    assert A not in report.own
+    text = (repo / REPORT).read_text(encoding="utf8")
+    assert f"    {B}:\n      blob: {_blob(repo, B)}\n      date: 2026-10-01\n" in text
+    marks = review_status(_settings(repo), [repo / B]).targets[0].files[0].marks
+    assert marks[0].date == date(2026, 10, 1)
+    # Marking it again gives it the report's day back, and the plain form.
+    _mark(repo, B, today=date(2026, 11, 8))
+    assert read_report(_settings(repo), repo / REPORT).own == {}
+    assert f"  {B}: {_blob(repo, B)}\n" in (repo / REPORT).read_text(encoding="utf8")
+
+
+def test_a_malformed_own_entry_is_a_header_problem(repo: Path) -> None:
+    _mark(repo, A, today=date(2026, 11, 8))
+    path = repo / REPORT
+    path.write_text(
+        path.read_text(encoding="utf8").replace(
+            f"{A}: {_blob(repo, A)}",
+            f"{A}:\n      blob: {_blob(repo, A)}\n      date: x",
+        ),
+        encoding="utf8",
+    )
+
+    problems = header_problems(_settings(repo), None)
+
+    assert len(problems) == 1
+    assert "`date` is not a date" in problems[0]
+    assert "`base` is not a commit sha" in problems[0]
+
+
+def test_mark_at_adds_files_to_a_report_with_their_own_day(repo: Path) -> None:
+    past = _git(repo, "rev-parse", "HEAD")
+    _write(repo / B, "# B, changed\n")
+    _commit(repo, "Later", B)
+    _mark(repo, A, today=date(2030, 1, 1))
+
+    result = _mark(repo, B, at=past)
+
+    assert result.added == (B,)
+    report = read_report(_settings(repo), repo / REPORT)
+    day = date.fromisoformat(_git(repo, "show", "-s", "--format=%cs", past))
+    assert report.date == date(2030, 1, 1)
+    assert report.own == {B: (day, past)}
+    assert report.files[B] == _git(repo, "rev-parse", f"{past}:{B}")
+    assert _states(repo, B)[B][0] == "stale"
+
+
+def test_a_rule_makes_files_marked_before_it_due(repo: Path, capsys: Any) -> None:
+    _with_settings(
+        repo,
+        "  rules:\n    - paths: content/sec/*.md\n      since: 2026-10-23\n"
+        "      why: the new rule\n",
+    )
+    _mark(repo, A, B, C, today=date(2026, 10, 1))
+    _write(repo / B, "# B, changed\n")
+
+    found = review_status(_settings(repo), [repo / "content" / "sec"]).targets[0]
+    by_path = {review.path: review for review in found.files}
+    assert by_path[A].state == "due"
+    assert [rule.why for rule in by_path[A].due] == ["the new rule"]
+    assert by_path[B].state == "stale"
+    assert [rule.why for rule in by_path[B].due] == ["the new rule"]
+    assert by_path[C].state == "fresh"  # sub/c.md: `*` doesn't cross directories
+    ranked = {r.section: r for r in review_status(_settings(repo), []).ranked}
+    assert ranked["sec"].count("due") == 1
+    assert ranked["sec"].frames == 2 + 1  # a.md and b.md whole
+
+    main(("review", "status", "content/sec"))
+    out = capsys.readouterr().out
+    assert "due since 2026-10-23: the new rule" in out
+    assert "review it against the rule" in out
+
+    _mark(repo, A, today=date(2026, 11, 8))
+    assert _states(repo, A)[A][0] == "fresh"
+
+
+def test_course_notes_reports_and_chapters(repo: Path, capsys: Any) -> None:
+    chapter = "course-notes/sec/a.md"
+    _write(repo / chapter, "# A\n\nThe chapter.\n")
+    _write(repo / "course-notes" / "sec" / "en" / "a.md", "# A\n")
+    _write(repo / "course-notes" / "CLAUDE.md", "Notes for agents.\n")
+    notes_report = "reviews/course-notes/sec.md"
+
+    result = mark(
+        _settings(repo),
+        repo / notes_report,
+        [repo / "course-notes"],
+        today=date(2026, 11, 8),
+    )
+
+    assert result.added == (chapter,)
+    assert header_problems(_settings(repo), None) == []
+    deck = review_status(_settings(repo), [repo / "company" / "two"]).targets[0].deck
+    assert deck is not None
+    assert [(r.path, r.state) for r in deck.chapters] == [(chapter, "fresh")]
+    assert chapter not in {r.path for r in deck.others}
+    main(("review", "status", "company/two", "--json"))
+    target = loads(capsys.readouterr().out)["targets"][0]
+    assert [c["path"] for c in target["chapters"]] == [chapter]
+
+
+def test_a_rule_since_a_time_compares_the_marks_commit(repo: Path) -> None:
+    from datetime import datetime, timedelta
+
+    now = datetime.now(UTC)
+    _with_settings(
+        repo,
+        "  rules:\n"
+        f"    - paths: '{A}'\n      since: {(now - timedelta(hours=1)).isoformat()}\n"
+        "      why: older than the base\n"
+        f"    - paths: '{A}'\n      since: {(now + timedelta(hours=1)).isoformat()}\n"
+        "      why: newer than the base\n",
+    )
+    _mark(repo, A, today=now.date())
+
+    review = _states_reviews(repo, A)[A]
+
+    assert review.state == "due"
+    assert [rule.why for rule in review.due] == ["newer than the base"]
+
+
+def _states_reviews(repo: Path, *targets: str) -> dict[str, Any]:
+    found = review_status(_settings(repo), [repo / target for target in targets])
+    return {review.path: review for target in found.targets for review in target.files}
+
+
+def test_mark_at_follows_a_rename_since_the_commit(repo: Path) -> None:
+    past = _git(repo, "rev-parse", "HEAD")
+    moved = "content/sec/moved.md"
+    _git(repo, "mv", B, moved)
+    _git(repo, "commit", "--quiet", "-m", "Move")
+
+    _mark(repo, moved, at=past)
+
+    report = read_report(_settings(repo), repo / REPORT)
+    assert report.files == {moved: _git(repo, "rev-parse", f"{past}:{B}")}
+
+
+def test_files_sharing_a_mark_get_no_yaml_alias(repo: Path) -> None:
+    past = _git(repo, "rev-parse", "HEAD")
+    _write(repo / "content" / "sec" / "new.md", "# New\n")
+    _commit(repo, "New", "content/sec/new.md")
+    _mark(repo, "content/sec/new.md", today=date(2030, 1, 1))
+
+    _mark(repo, A, B, at=past)
+
+    text = (repo / REPORT).read_text(encoding="utf8")
+    assert "&id" not in text
+    assert "*id" not in text
+    assert set(read_report(_settings(repo), repo / REPORT).own) == {A, B}

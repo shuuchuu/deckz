@@ -24,7 +24,7 @@ and what keeps them from writing it at the same time.
 | `<git common dir>/deckz-bash-snapshots/` | `git status` snapshots around an agent's Bash calls in the main checkout | `agent_checkouts` | |
 | Assets (`assets/…`), with `<output>.stamp` | Generated figures, plots, videos | the assets builders, `videos` | Often committed, with their stamps |
 | The repository's hooks directory, `.claude/settings.json`, the CI workflow | Installed hooks | `hooks_install` | Only deckz's own hook files or entries |
-| `<review.dir>/**/*.md` | The `reviewed` key of a review report's front matter (date, base commit, each file's blob sha) | `analyzing.review.mark` (`deckz review mark`) | Committed. Only that key is rewritten (atomically), the rest of the file is the repository's, byte for byte; one report per section keeps sessions apart, and nothing locks it |
+| `<review.dir>/**/*.md` | The `reviewed` key of a review report's front matter (date, base commit, each file's blob sha, and its own date and base when marked another day or commit) | `analyzing.review.mark` (`deckz review mark`) | Committed. Only that key is rewritten (atomically), the rest of the file is the repository's, byte for byte; one report per section keeps sessions apart, and nothing locks it |
 | `<user config dir>/drive-links/<deck path>.yml` | Each PDF's Google Drive file | `drive_links`, `deckz upload --reserve` | Shared by every checkout |
 | `<user config dir>/` | `.env`, credentials (`gdrive-secrets.json`, `gdrive-credentials.pickle`), `github-issues.yml`, `mails.yml` | the user, `extras` | |
 | `$XDG_RUNTIME_DIR/deckz/compilation-slots/` | Machine-wide compilation slots | `MachineSlots` | |

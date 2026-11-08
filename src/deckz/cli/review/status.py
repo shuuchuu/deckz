@@ -29,20 +29,24 @@ def status(
     recorded (`deckz review mark`), stale when it changed since (with the
     lines added and removed), unreviewed when no report records it, deleted
     when a report records it and it's gone. A file several reports record
-    takes the most recent mark.
+    takes the most recent mark. A fresh file is due when a rule of
+    `review.rules` covering it took effect after its mark: review it against
+    the rule, then mark it again (a stale file names such rules too).
 
     A TARGET that is a deck's directory lists its content files (in French,
     as `deckz show paths` resolves them) by section, then the other files
-    (e.g. lab notebooks) the reports covering them record, then its deck
-    pass: its own report (`<review.dir>/<deck directory>.md`), which holds
-    while the deck's own files are at the version it recorded. Any other
-    TARGET is a path: a content directory stands for the content files some
-    deck includes under it (not their `en/` translations), another
-    directory for its git-tracked files.
+    (e.g. lab notebooks) the reports covering them record, then its course
+    notes' written French chapters, then its deck pass: its own report
+    (`<review.dir>/<deck directory>.md`), which holds while the deck's own
+    files are at the version it recorded. Any other TARGET is a path: a
+    content directory stands for the content files some deck includes under
+    it (not their `en/` translations), a course notes directory for its
+    French chapters, another directory for its git-tracked files.
 
     With no TARGET, every shared section some deck uses, the most worth
     reviewing first: by the number of decks including one of its files
-    times the frames of its stale and unreviewed files.
+    times the frames of its stale and unreviewed files (all of a due
+    file's).
 
     Always exits 0: it only informs.
 
@@ -56,18 +60,20 @@ def status(
             listed;
             per section, with no TARGET, its score, path, decks, fresh,
             stale and unreviewed files, and frames to review (all of an
-            unreviewed file's, those a stale file's changes touch)
+            unreviewed or due file's, those a stale file's changes touch),
+            then its due files
         json: Print one JSON object instead: with no TARGET, `{"sections":
             [{section, decks, score, frames, fresh, stale, unreviewed,
-            reports, files}]}`; else `{"targets": [{target, kind ("deck" or
-            "paths"), sections: [{section, files}], others and deck_pass:
-            {report, date, base, holds, files} (a deck), or files
-            (paths)}]}`. A file is `{path, state, added, removed,
-            frames, changed_frames, report, reports: [{report, date, base,
-            blob}]}` (`changed_frames`: the frames a stale content file's
-            changes touch), its
-            reports the most recent mark first. Both have `problems`: the
-            reports that couldn't be read
+            due, reports, files}]}`; else `{"targets": [{target, kind
+            ("deck" or "paths"), sections: [{section, files}], others,
+            chapters and deck_pass: {report, date, base, holds, files} (a
+            deck), or files (paths)}]}`. A file is `{path, state, added,
+            removed, frames, changed_frames, report, reports: [{report,
+            date, base, blob}], due: [{paths, since, why}]}`
+            (`changed_frames`: the frames a stale content file's changes
+            touch; `due`: the rules its mark predates), its reports the
+            most recent mark first. Both have `problems`: the reports that
+            couldn't be read
         workdir: Path to move into before running the command
 
     """
@@ -124,6 +130,10 @@ def _file_json(review: "FileReview") -> dict[str, object]:
             }
             for mark in review.marks
         ],
+        "due": [
+            {"paths": rule.paths, "since": rule.since.isoformat(), "why": rule.why}
+            for rule in review.due
+        ],
     }
 
 
@@ -136,6 +146,7 @@ def _ranked_json(ranked: "RankedSection") -> dict[str, object]:
         "fresh": ranked.count("fresh"),
         "stale": ranked.count("stale"),
         "unreviewed": ranked.count("unreviewed"),
+        "due": ranked.count("due"),
         "reports": list(ranked.reports),
         "files": [_file_json(review) for review in ranked.files],
     }
@@ -156,6 +167,7 @@ def _target_json(target: "TargetReview") -> dict[str, object]:
             for s in target.deck.sections
         ],
         "others": [_file_json(r) for r in target.deck.others],
+        "chapters": [_file_json(r) for r in target.deck.chapters],
         "deck_pass": {
             "report": target.deck.deck_pass.report,
             "date": None if (day := target.deck.deck_pass.date) is None else str(day),
@@ -177,6 +189,11 @@ def _state(review: "FileReview") -> str:
     return f"stale +{review.added} -{review.removed}, {review.changed_frames} {frames}"
 
 
+def _due(review: "FileReview") -> str:
+    # The rules a file is due for, after its line.
+    return "".join(f"\n      due since {r.since}: {r.why}" for r in review.due)
+
+
 def _plain_line(review: "FileReview") -> str:
     added = "" if review.added is None else f"+{review.added}"
     removed = "" if review.removed is None else f"-{review.removed}"
@@ -187,13 +204,13 @@ def _print_files(reviews: "Sequence[FileReview]", indent: str) -> None:
     width = max((len(_state(r)) for r in reviews), default=0)
     for review in reviews:
         where = f"  ({review.report})" if review.report else ""
-        print(f"{indent}{_state(review):<{width}}  {review.path}{where}")
+        print(f"{indent}{_state(review):<{width}}  {review.path}{where}{_due(review)}")
 
 
 def _summary(reviews: "Sequence[FileReview]") -> str:
     counts = {
         state: sum(r.state == state for r in reviews)
-        for state in ("fresh", "stale", "unreviewed", "deleted")
+        for state in ("fresh", "due", "stale", "unreviewed", "deleted")
     }
     return ", ".join(f"{n} {state}" for state, n in counts.items() if n) or "no file"
 
@@ -202,14 +219,21 @@ def _print_target(target: "TargetReview", *, plain: bool) -> None:
     if target.deck is None:
         every = list(target.files)
         others: list[FileReview] = []
+        chapters: list[FileReview] = []
         own: list[FileReview] = []
     else:
         every = [r for s in target.deck.sections for r in s.files]
         others = list(target.deck.others)
+        chapters = list(target.deck.chapters)
         own = list(target.deck.deck_pass.files)
     if plain:
-        listed = {review.path for review in [*every, *others]}
-        for review in [*every, *others, *(r for r in own if r.path not in listed)]:
+        listed = {review.path for review in [*every, *others, *chapters]}
+        for review in [
+            *every,
+            *others,
+            *chapters,
+            *(r for r in own if r.path not in listed),
+        ]:
             print(_plain_line(review))
         return
     if target.deck is None:
@@ -225,10 +249,21 @@ def _print_target(target: "TargetReview", *, plain: bool) -> None:
                 f"\n  Other files the reports covering them record: {_summary(others)}"
             )
             _print_files(others, "    ")
+        if chapters:
+            print(f"\n  Course notes chapters: {_summary(chapters)}")
+            _print_files(chapters, "    ")
         _print_deck_pass(target.deck.deck_pass)
-    reviews = [*every, *others, *own]
+    _print_hints([*every, *others, *chapters, *own])
+
+
+def _print_hints(reviews: "Sequence[FileReview]") -> None:
     if any(r.state == "stale" for r in reviews):
         print("\nWhat changed since a review: `deckz review diff <report> [<path>...]`")
+    if any(r.due for r in reviews):
+        print(
+            "A file due under a rule: review it against the rule, then `deckz "
+            "review mark <report> <path>`"
+        )
     if any(r.state == "deleted" for r in reviews):
         print("A deleted or renamed file: `deckz review mark <report> --forget <path>`")
 
@@ -261,6 +296,7 @@ def _print_ranking(
                 r.count("stale"),
                 r.count("unreviewed"),
                 r.frames,
+                r.count("due"),
             )
             print("\t".join(str(value) for value in values))
         return
@@ -269,13 +305,13 @@ def _print_ranking(
         return
     width = max(len(r.section) for r in ranked)
     print(
-        f"{'score':>6}  {'section':<{width}}  decks  fresh  stale  unreviewed  "
+        f"{'score':>6}  {'section':<{width}}  decks  fresh  due  stale  unreviewed  "
         "frames to review"
     )
     for r in ranked:
         print(
             f"{r.score:>6}  {r.section:<{width}}  {r.decks:>5}  "
-            f"{r.count('fresh'):>5}  {r.count('stale'):>5}  "
+            f"{r.count('fresh'):>5}  {r.count('due'):>3}  {r.count('stale'):>5}  "
             f"{r.count('unreviewed'):>10}  {r.frames:>16}"
         )
     print(
