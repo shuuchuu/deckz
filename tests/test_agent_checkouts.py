@@ -122,6 +122,9 @@ def test_bash_denial_allows_reading_the_main_checkout(tmp_path: Path) -> None:
         "deckz show paths --lang=en --quiet",
         "uv run --quiet deckz status",
         "deckz i18n stale",
+        "deckz review status --plain",
+        "uv run -q deckz review status decks/x --json",
+        "deckz review diff docs/qa/sections/a.md",
         "deckz worktree add y",
         "git -C ../repo--x commit -m x",
         "cd ../repo--x && python3 script.py > out.txt",
@@ -156,6 +159,7 @@ def test_bash_denial_denies_changing_the_main_checkout(tmp_path: Path) -> None:
         "sort -o a.md a.md",
         "deckz run --workdir decks/x",
         "deckz labs fmt",
+        "deckz review mark docs/qa/sections/a.md content/a.md",
         "rm a.md",
         "cd ../repo--x && cd ../repo && touch b.md",
     ):
