@@ -63,27 +63,26 @@ yielding the SDK's own message objects; nothing in them touches the network.
 
 ### Developing and trying a change
 
-- Work in the worktree `../deckz-studioz` (branch `studioz`), never in `../deckz`
-  (live for slides: deckz's `CLAUDE.md`, "This working tree is live"). Check with
-  `uv run doit check test` there; when finished, commit there (the pre-commit hook
-  runs the same) and fast-forward `../deckz` (`git merge --ff-only studioz`). Before
-  merging a change of behavior, tell the running slides sessions (`ListAgents`).
-- Try it on slides: from the worktree, `uv run --quiet studioz --workdir
-  ../slides --port 8431 --no-browser`, then <http://localhost:8431/>. The dev
-  workspace is `studioz-dev` (`../slides--studioz-dev`, branch `ws/studioz-dev`,
-  recreated clean at `3fbcc34e` on 2026-10-15, the previous one gone: create it
-  again from the home page if it's gone); the Fortinet deck
-  (`decks/orsys/INTRA/2026-10-fortinet` since slides moved its decks under `decks/`)
-  is the usual test deck. Leave it clean: a scratch
-  commit comes back off with `git reset --soft 3fbcc34e && git reset -q` (or the new
-  base after an update), and files are restored from a copy taken first. Restart
-  the server after changing Python code: the templates are read fresh, the modules
-  not, so a page may call what the running code lacks.
+- Work in a worktree made for the change, from `../deckz`'s main (`git worktree
+  add ../deckz-<topic>`, as deckz's `CLAUDE.md`, "This working tree is live", says),
+  never in `../deckz` itself. Check with `uv run doit check test` there; when
+  finished, commit there (the pre-commit hook runs the same), rebase onto main if it
+  moved, fast-forward `../deckz` (`git merge --ff-only <topic>`), then remove the
+  worktree and its branch. Before merging a change of behavior, tell the running
+  slides sessions (`ListAgents`). No worktree is kept around between changes.
+- Try it on slides in a workspace made for the trial, from slides' main checkout
+  (`deckz worktree add <topic>`, or studioz's home page), removed once done (`deckz
+  worktree remove <topic>`), rather than one kept for studioz: nothing to reset, and
+  no stale workspace in the list. From the code's worktree, `uv run --quiet studioz
+  --workdir ../slides --port 8431 --no-browser`, then <http://localhost:8431/>. The
+  Fortinet deck (`decks/orsys/INTRA/2026-10-fortinet`) is the usual test deck.
+  Restart the server after changing Python code: the templates are read fresh, the
+  modules not, so a page may call what the running code lacks.
 - A workspace runs its own deckz, installed from `../deckz` (main). To try deckz
-  changes from the worktree, point the workspace at it for the trial:
-  `.venv/lib/python3.12/site-packages/deckz.pth` holds
-  `/home/mog/repos/shuuchuu/deckz/src`; write
-  `/home/mog/repos/shuuchuu/deckz-studioz/src` there, and put it back after.
+  changes from the code's worktree, point the workspace at it for the trial: its
+  `.venv/lib/python3.*/site-packages/deckz.pth` holds
+  `/home/mog/repos/shuuchuu/deckz/src`; write the worktree's `src` there. A GPU
+  hook's `uv run` in the workspace resets it silently.
 - Never click "Publier" (labs, videos, or Sync's push) nor "Envoyer" on slides: they
   publish to trainees, slides' origin or Google Drive. The tests cover them with
   fakes; on slides, stop at the confirmation.
@@ -164,15 +163,14 @@ Found along the way, not done (each increment's "Left" has the rest):
 ### Starting phase 7
 
 Read phase 7 (below phase 6), then "Developing and trying a change" above. The user
-runs studioz one increment at a time: each one coded and tested in the worktree
-`../deckz-studioz` (branch `studioz`; `git merge --ff-only main` there first, since
-`../deckz` may have moved), `uv run doit check test`, tried for real on slides'
-`studioz-dev` (headless Chromium through the Playwright in deckz's `.venv`, run with
-`python -I`, when the Chrome extension isn't connected), its entry written in this
-plan with what was measured and what's left, the resume section above and deckz's
-`CLAUDE.md` studioz paragraph updated, committed in the worktree, `ListAgents`
-checked for slides sessions (tell them only of a change in what deckz does), and
-`../deckz` fast-forwarded (`git merge --ff-only studioz`). The user pushes. The
+runs studioz one increment at a time: each one coded and tested in a worktree made
+for it from `../deckz`'s main, `uv run doit check test`, tried for real on a slides
+workspace made for the trial (headless Chromium through the Playwright in deckz's
+`.venv`, run with `python -I`, when the Chrome extension isn't connected), its entry
+written in this plan with what was measured and what's left, the resume section above
+and `studioz/CLAUDE.md` updated, committed in the worktree, `ListAgents` checked for
+slides sessions (tell them only of a change in what deckz does), `../deckz`
+fast-forwarded, and the worktree and the workspace removed. The user pushes. The
 pre-commit hook's two Ctrl-C timing tests fail about one run in three: retry the
 commit ("Also left" has their fix).
 
