@@ -303,6 +303,27 @@ A page reading `deckz dashboard --json` (studioz imports only read-only APIs), e
 row linking to its report, deck or chapter. `docs/architecture/studioz.md` gets what
 deckz keeps stable for it.
 
+**Settled 2026-11-08 (the maintainer), nothing coded yet:**
+
+- *Where:* a new tab of its own (the panel's tabs are Problèmes, Construction,
+  Tâches: a fourth beside them, unless the code shows a better place; say so first).
+- *Links:* the maintainer prefers the **chapter**: a row opens the course notes
+  chapter it is about in the editor (`static/editor.js`; `studioz.sources` already
+  edits `.md`, so `supports/` chapters open). Settle first what that is for a deck row
+  (its chapters due under a rule? its missing ones, which don't exist yet?) and a
+  section row (several chapters), and the fallback when no chapter applies (the
+  report, the deck page).
+- *What's shown:* the totals, the decks as `deckz dashboard` orders them, and every
+  section that needs care (`SectionRow.needs_care`, by score; no cap of 15, the page
+  scrolls), never the fresh ones. Past INTRA decks are left out by the CLI's rule (no
+  upcoming session; without the calendar, a claimed start over 31 days old): the page
+  runs `deckz dashboard --json` without `--all`, and shows `left_out`'s count.
+- *When:* on demand only. A button runs the workspace's own `deckz dashboard --json`
+  (about 15 s on slides; as `studioz.background` or `studioz.jobs` runs slow commands,
+  whichever fits) and the tab shows the result with when it was computed, until the
+  next run. Nothing runs it by itself: not a file change, not the tab opening.
+- No client name: the JSON has none (sessions carry dates only); keep it so.
+
 ### Later
 
 A history (the JSON of each `deckz worktree land`, in the user's state directory) for
