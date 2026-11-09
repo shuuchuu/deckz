@@ -64,7 +64,6 @@ def test_install_claude_hooks_writes_every_event(tmp_path: Path) -> None:
         "PostToolUse",
         "PostToolUseFailure",
         "SessionStart",
-        "Stop",
         "WorktreeCreate",
         "WorktreeRemove",
     }
@@ -73,7 +72,117 @@ def test_install_claude_hooks_writes_every_event(tmp_path: Path) -> None:
     assert post_bash.startswith("[ -n ")  # Skipped unless pre-bash left a snapshot.
     pre_bash = settings["hooks"]["PreToolUse"][0]
     assert pre_bash["matcher"] == "Bash"
-    assert pre_bash["hooks"][0]["command"] == deckz_command("hooks pre-bash")
+    assert pre_bash["hooks"][0]["command"].endswith(deckz_command("hooks pre-bash"))
+
+
+def _hook(
+    tmp_path: Path,
+    event: str,
+    subcommand: str,
+    extensions: tuple[str, ...] = (".md",),
+) -> str:
+    path = install_claude_hooks(tmp_path, extensions)
+    settings = json.loads(path.read_text(encoding="utf-8"))
+    return next(
+        hook["command"]
+        for group in settings["hooks"][event]
+        for hook in group["hooks"]
+        if f"deckz hooks {subcommand}" in hook["command"]
+    )
+
+
+def _run_hook(command: str, payload: dict, cwd: Path, tmp_path: Path) -> str:
+    """Run a hook's command with a `deckz` that says it ran.
+
+    Returns:
+        What it printed: nothing when the command's own test skipped deckz.
+    """
+    import os
+    import subprocess
+
+    fake = tmp_path / "bin" / "deckz"
+    fake.parent.mkdir(exist_ok=True)
+    fake.write_text('#!/bin/sh\ncat >/dev/null; echo "ran $*"\n', encoding="utf-8")
+    fake.chmod(0o755)
+    return subprocess.run(
+        ["sh", "-c", command],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=cwd,
+        env={**os.environ, "PATH": f"{fake.parent}:{os.environ['PATH']}"},
+    ).stdout.strip()
+
+
+def _checkouts(tmp_path: Path) -> tuple[Path, Path]:
+    import subprocess
+
+    main, worktree = tmp_path / "repo", tmp_path / "repo--x"
+    identity = ["-c", "user.name=t", "-c", "user.email=t@e.com"]
+    for args in (
+        ["init", "--quiet", "-b", "main", str(main)],
+        ["-C", str(main), *identity, "commit", "--quiet", "--allow-empty", "-m", "x"],
+        ["-C", str(main), "worktree", "add", "--quiet", "-b", "ws/x", str(worktree)],
+    ):
+        subprocess.run(["git", *args], check=True, capture_output=True)
+    return main, worktree
+
+
+def test_post_edit_hook_starts_deckz_for_a_content_file_only(tmp_path: Path) -> None:
+    command = _hook(tmp_path, "PostToolUse", "post-edit")
+
+    def ran(file: str) -> str:
+        payload = {"tool_input": {"file_path": file, "new_string": 'a "b" $c'}}
+        return _run_hook(command, payload, tmp_path, tmp_path)
+
+    assert ran("/repo/content/a.md") == "ran hooks post-edit"
+    assert ran("/repo/tools/a.py") == ""
+    assert ran("/repo/labs/a.ipynb") == ""
+
+
+def test_post_edit_hook_follows_the_content_extensions(tmp_path: Path) -> None:
+    command = _hook(tmp_path, "PostToolUse", "post-edit", (".md", ".tex"))
+    payload = {"tool_input": {"file_path": "/repo/content/a.tex"}}
+
+    assert _run_hook(command, payload, tmp_path, tmp_path) == "ran hooks post-edit"
+
+
+def test_pre_edit_hook_starts_deckz_for_the_main_checkout_only(tmp_path: Path) -> None:
+    main, worktree = _checkouts(tmp_path)
+    command = _hook(tmp_path, "PreToolUse", "pre-edit")
+
+    def ran(file: Path, cwd: Path) -> str:
+        payload = {"cwd": str(cwd), "tool_input": {"file_path": str(file)}}
+        return _run_hook(command, payload, cwd, tmp_path)
+
+    assert ran(worktree / "a.md", worktree) == ""
+    assert ran(tmp_path / "notes.md", worktree) == ""
+    assert ran(main / "a.md", worktree) == "ran hooks pre-edit"
+    assert ran(worktree / "a.md", main) == "ran hooks pre-edit"
+
+
+def test_pre_bash_hook_starts_deckz_for_what_it_can_deny(tmp_path: Path) -> None:
+    main, worktree = _checkouts(tmp_path)
+    command = _hook(tmp_path, "PreToolUse", "pre-bash")
+
+    def ran(script: str, cwd: Path) -> str:
+        payload = {"cwd": str(cwd), "tool_input": {"command": script}}
+        return _run_hook(command, payload, cwd, tmp_path)
+
+    for script in ("ls docs", "grep -n '>' a.md | head -3", f"cat {worktree}/a.md"):
+        assert ran(script, worktree) == "", script
+    for script in (
+        "git add -A",
+        "uv run deckz labs publish",
+        "uv run doit publish-videos",
+        f"cp a.md {main}/a.md",
+        f"cd {main} && touch b.md",
+        "touch ../repo/b.md",
+        "touch ~/repo/b.md",
+    ):
+        assert ran(script, worktree) == "ran hooks pre-bash", script
+    assert ran("ls docs", main) == "ran hooks pre-bash"
 
 
 def test_install_claude_hooks_is_idempotent(tmp_path: Path) -> None:
@@ -82,7 +191,8 @@ def test_install_claude_hooks_is_idempotent(tmp_path: Path) -> None:
     path = install_claude_hooks(tmp_path)
 
     settings = json.loads(path.read_text(encoding="utf-8"))
-    assert len(settings["hooks"]["Stop"]) == 1
+    assert len(settings["hooks"]["SessionStart"]) == 1
+    assert len(settings["hooks"]["PreToolUse"]) == 2
 
 
 def test_install_claude_hooks_keeps_other_settings_and_hooks(tmp_path: Path) -> None:
@@ -114,11 +224,8 @@ def test_install_claude_hooks_keeps_other_settings_and_hooks(tmp_path: Path) -> 
         for group in settings["hooks"]["PreToolUse"]
         for hook in group["hooks"]
     }
-    assert commands == {
-        "my-own-hook",
-        deckz_command("hooks pre-bash"),
-        deckz_command("hooks pre-edit"),
-    }
+    assert "my-own-hook" in commands
+    assert len(commands) == 3
 
 
 def test_install_hooks_writes_into_core_hooks_path(tmp_path: Path) -> None:
@@ -181,8 +288,15 @@ def test_install_claude_hooks_updates_an_older_deckz_command(tmp_path: Path) -> 
         json.dumps(
             {
                 "hooks": {
-                    "Stop": [
-                        {"hooks": [{"type": "command", "command": "deckz hooks stop"}]}
+                    "SessionStart": [
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "deckz hooks session-start",
+                                }
+                            ]
+                        }
                     ]
                 }
             }
@@ -194,17 +308,43 @@ def test_install_claude_hooks_updates_an_older_deckz_command(tmp_path: Path) -> 
 
     settings = json.loads(path.read_text(encoding="utf-8"))
     # The current command, and the current timeout.
-    assert settings["hooks"]["Stop"] == [
+    assert settings["hooks"]["SessionStart"] == [
         {
             "hooks": [
                 {
                     "type": "command",
-                    "command": deckz_command("hooks stop"),
-                    "timeout": 60,
+                    "command": deckz_command("hooks session-start"),
+                    "timeout": 30,
                 }
             ]
         }
     ]
+
+
+def test_install_claude_hooks_removes_a_hook_deckz_no_longer_has(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / ".claude" / "settings.json"
+    path.parent.mkdir(parents=True)
+    ours = {"type": "command", "command": deckz_command("hooks stop"), "timeout": 60}
+    theirs = {"type": "command", "command": "my-own-hook"}
+    path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "Stop": [{"hooks": [ours]}],
+                    "SubagentStop": [{"hooks": [dict(ours), theirs]}],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    install_claude_hooks(tmp_path)
+
+    hooks = json.loads(path.read_text(encoding="utf-8"))["hooks"]
+    assert "Stop" not in hooks
+    assert hooks["SubagentStop"] == [{"hooks": [theirs]}]
 
 
 def test_install_claude_hooks_updates_an_older_matcher(tmp_path: Path) -> None:

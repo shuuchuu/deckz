@@ -588,6 +588,13 @@ class ChecksSettings(BaseModel):
     those whose harm comes after the commit); a list replaces them, `[]` \
     making every check block a commit. A plugin check blocks unless listed. \
     A name no check has is ignored."""
+    not_after_edit: tuple[str, ...] = ()
+    """Checks the agents' edit hook (`deckz hooks post-edit`) leaves to `deckz check`.
+
+    Those whose verdict depends on files written later: the other \
+    language's version of the file, a chapter it refers to. Reported after \
+    each edit, they'd ask for that file at once. A name no check has is \
+    ignored."""
 
     def runs_unnamed(self, name: str) -> bool:
         """Whether `deckz check`, run without naming checks, runs check `name`.

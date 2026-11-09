@@ -56,6 +56,18 @@ def test_commands_drops_file_descriptor_duplications() -> None:
     assert commands("make &> log") == [["make", ">", "log"]]
 
 
+def test_commands_can_mark_a_quoted_redirection_sign() -> None:
+    from deckz.agent_checkouts import QUOTED_GT
+
+    marked = commands("grep '>>' a.md > out; echo a \\> b", mark_quoted=True)
+
+    assert marked == [
+        ["grep", QUOTED_GT * 2, "a.md", ">", "out"],
+        ["echo", "a", QUOTED_GT, "b"],
+    ]
+    assert commands("grep '>>' a.md") == [["grep", ">>", "a.md"]]
+
+
 # -- edit_denial ---------------------------------------------------------
 
 
@@ -117,6 +129,23 @@ def test_bash_denial_allows_reading_the_main_checkout(tmp_path: Path) -> None:
         "sed -n 1,5p a.md",
         "git diff HEAD~1 -- a.md",
         "git branch --list",
+        "git branch --contains ws/x",
+        "git branch --no-merged main",
+        "git reflog -5",
+        "git clone -q . /tmp/clone",
+        "grep -n '>>>' a.md",
+        'grep -c ">" a.md | head -1',
+        "find . -name '*.md' -exec cat {} +",
+        "S=/tmp/scratch; mkdir -p $S/pages; cat a.md > $S/a.md",
+        "export S=/tmp/scratch && cp a.md ${S}/a.md",
+        "for f in *.md; do cp $OUT/$f /tmp/; done",
+        "uv sync --check",
+        "uv pip list",
+        "uv pip install --python /tmp/venv/bin/python requests",
+        "deckz labs dump labs/notebooks/a/hands-on-fr.ipynb",
+        "uv run deckz labs stale",
+        "deckz labs gpu status",
+        "deckz deps python/basics --json",
         "git merge --ff-only ws/x",
         "deckz show paths --workdir decks/x",
         "deckz show paths --lang=en --quiet",
@@ -148,7 +177,15 @@ def test_bash_denial_denies_changing_the_main_checkout(tmp_path: Path) -> None:
         "git add a.md",
         "git checkout -b other",
         "git merge ws/x",
+        "git branch other",
+        "git reflog expire --all",
+        "git clone -q /tmp/other sub",
         "uv sync",
+        "uv pip install requests",
+        "find . -name '*.md' -exec rm {} +",
+        "S=docs; touch $S/a.md",
+        "deckz labs gpu up",
+        "deckz labs fmt",
         "pip install requests",
         "npm install",
         "sed -i s/a/b/ a.md",
@@ -160,7 +197,6 @@ def test_bash_denial_denies_changing_the_main_checkout(tmp_path: Path) -> None:
         "find . -name '*.pyc' -delete",
         "sort -o a.md a.md",
         "deckz run --workdir decks/x",
-        "deckz labs fmt",
         "deckz review mark docs/qa/sections/a.md content/a.md",
         "rm a.md",
         "cd ../repo--x && cd ../repo && touch b.md",

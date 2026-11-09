@@ -8,16 +8,18 @@ are guard rails for an agent session sharing a checkout with other
 sessions, not a sandbox -- so `cli/hooks/*.py` catches broadly around
 every call here instead of letting an exception propagate.
 
-Two events need no repository-specific knowledge: PreToolUse/Bash (deny
-skipping the git hooks, and staging everything or discarding uncommitted
-changes -- several Claude Code sessions may share one checkout) and Stop
-(flag a content file or lab notebook pair changed on one language side
-only, reusing `analyzing.i18n_stale`'s pairing, and check the content
-files changed by other means than the edit tools). What changed is a
-worktree's own changes, in a worktree; elsewhere, the files the session's
-edit tools changed: never another session's work.
+PreToolUse/Bash needs no repository-specific knowledge: it denies skipping
+the git hooks, and staging everything or discarding uncommitted changes
+(several Claude Code sessions may share one checkout).
 PostToolUse/Edit converts an edited content file with the repo's own
-`pandoc_command` and runs deckz's content checks on it alone. When
+`pandoc_command` and runs deckz's content checks on it alone, and says
+only what is new: a problem it already reported for the file isn't
+repeated, and the checks of `checks.not_after_edit` (those whose verdict
+depends on files written later: the other language's version, a chapter
+referred to) wait for `deckz check`. Nothing runs when the session stops:
+the pre-commit hook runs the checks on what gets committed, and the
+commit-msg hook marks a change of one language only `Lang-sync: pending`,
+for an agent as for a person (`analyzing.i18n_stale`). When
 `deckz.yml` sets `worktree.required_for_agents`, PreToolUse/Edit,
 PreToolUse/Bash, PostToolUse/Bash and SessionStart also keep agents from
 changing the main checkout, and WorktreeCreate/WorktreeRemove make Claude
@@ -35,7 +37,6 @@ built-in denials; the first reason found (deckz's own, then the plugin's)
 wins. The module is optional.
 """
 
-import hashlib
 import json
 import os
 import re
@@ -43,7 +44,7 @@ import shlex
 from collections.abc import Generator
 from contextlib import contextmanager
 from itertools import pairwise
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -100,7 +101,34 @@ def _skips_hooks(words: list[str], sub: str, args: list[str]) -> bool:
     return "--no-verify" in args or (sub == "commit" and _commit_no_verify(args))
 
 
-def commands(script: str) -> list[list[str]]:
+def _mark_quoted(script: str) -> str:
+    """Replace each `>` inside quotes, or escaped, by `QUOTED_GT`.
+
+    Returns:
+        The script, its quotes and everything else as they were.
+    """
+    from .agent_checkouts import QUOTED_GT
+
+    out = []
+    quote = ""
+    chars = iter(script)
+    for char in chars:
+        if char == "\\" and quote != "'":
+            escaped = next(chars, "")
+            out.append(char + (QUOTED_GT if escaped == ">" else escaped))
+            continue
+        if quote and char == ">":
+            out.append(QUOTED_GT)
+            continue
+        if char == quote:
+            quote = ""
+        elif not quote and char in "'\"":
+            quote = char
+        out.append(char)
+    return "".join(out)
+
+
+def commands(script: str, *, mark_quoted: bool = False) -> list[list[str]]:
     """Split a shell script into its simple commands' words.
 
     Heredoc bodies (e.g. a commit message) are dropped first: they're data,
@@ -108,11 +136,20 @@ def commands(script: str) -> list[list[str]]:
     `&` isn't a separator; `&>file` becomes `>file`. Other redirections
     stay words (`>`, `2>>log`, `>file`…).
 
+    Args:
+        script: The shell script.
+        mark_quoted: Replace a `>` that was inside quotes, or escaped, by
+            `agent_checkouts.QUOTED_GT`, for a caller that looks for
+            redirections: once split, `grep '>' a.md` and `grep > a.md` are
+            the same words.
+
     Returns:
         Each simple command's words.
     """
     script = _HEREDOC_RE.sub("", script)
     script = _FD_DUPLICATION_RE.sub(" ", script).replace("&>", ">")
+    if mark_quoted:
+        script = _mark_quoted(script)
     lexer = shlex.shlex(
         script.replace("\n", " ; "),
         posix=True,
@@ -254,11 +291,14 @@ def bash_denial(settings: "GlobalSettings", payload: dict[str, Any]) -> str | No
     Returns:
         The first denial reason found, or None if the command may run.
     """
-    from .agent_checkouts import main_checkout_verdict, take_snapshot
+    from .agent_checkouts import main_checkout_verdict, take_snapshot, unmarked
 
     cwd = Path(payload.get("cwd") or settings.paths.git_dir)
     plugin = _deny_bash_plugin(settings)
-    script = commands(payload.get("tool_input", {}).get("command", ""))
+    marked = commands(
+        payload.get("tool_input", {}).get("command", ""), mark_quoted=True
+    )
+    script = [[unmarked(word) for word in words] for words in marked]
     state_file = _session_state_file(settings, payload)
     own = frozenset(
         json.loads(state_file.read_text(encoding="utf-8")).get("main_changes", [])
@@ -270,7 +310,7 @@ def bash_denial(settings: "GlobalSettings", payload: dict[str, Any]) -> str | No
             return reason
         if plugin is not None and (reason := plugin(words, cwd, settings)):
             return reason
-    reason, watched = main_checkout_verdict(settings, script, cwd, set(own))
+    reason, watched = main_checkout_verdict(settings, marked, cwd, set(own))
     if watched is not None:
         take_snapshot(settings, payload, watched)
     return reason
@@ -441,96 +481,44 @@ def _edited_path(settings: "GlobalSettings", payload: dict[str, Any]) -> Path | 
 
 
 def post_edit_report(settings: "GlobalSettings", payload: dict[str, Any]) -> str | None:
-    """Record an edited file, and check it if it's a content file.
+    """Check an edited content file, and report what the edit brought.
 
-    Records the file in the session's state, for `stop_report` outside a
-    worktree; converts a content file and runs deckz's content checks on it
-    (`_content_problems`), recording it as checked when it passes, so that
-    `stop_report` doesn't check it again.
+    Converts the file and runs deckz's content checks on it
+    (`_content_problems`), without those of `checks.not_after_edit`. A
+    problem already reported to the session for this file, and still
+    there, isn't reported again: the session's state keeps each file's
+    last problems.
 
     Returns:
-        A report to block the edit with, or None if nothing was found.
+        A report to block the edit with, or None if nothing new was found.
     """
     path = _edited_path(settings, payload)
-    if path is None:
+    if path is None or not _is_content(settings, path):
         return None
-    git_dir = settings.paths.git_dir
-    rel = path.relative_to(git_dir).as_posix()
-    problems = (
-        _content_problems(settings, [path]).get(rel)
-        if _is_content(settings, path)
-        else None
-    )
+    rel = path.relative_to(settings.paths.git_dir).as_posix()
+    skipped = tuple(f"[{name}] " for name in settings.checks.not_after_edit)
+    problems = [
+        problem
+        for problem in _content_problems(settings, [path]).get(rel, [])
+        if not problem.startswith(skipped)
+    ]
     with _session_state(_session_state_file(settings, payload)) as state:
-        edited: list[str] = state.setdefault("edited", [])
-        if rel not in edited:
-            edited.append(rel)
-        if _is_content(settings, path) and not problems:
-            state.setdefault("checked", {})[rel] = _file_hash(
-                git_dir, PurePosixPath(rel)
-            )
-    if not problems:
+        reported: dict[str, list[str]] = state.setdefault("problems", {})
+        known = set(reported.get(rel, []))
+        if problems:
+            reported[rel] = problems
+        else:
+            reported.pop(rel, None)
+    new = [problem for problem in problems if problem not in known]
+    if not new:
         return None
-    return _problems_message({rel: problems})
-
-
-def _pairs(settings: "GlobalSettings") -> list[tuple[PurePosixPath, PurePosixPath]]:
-    from .analyzing.i18n_stale import lang_pairs
-
-    return lang_pairs(settings)
-
-
-def _file_hash(git_dir: Path, path: PurePosixPath) -> str:
-    full = git_dir / path
-    return hashlib.sha256(full.read_bytes()).hexdigest() if full.is_file() else ""
-
-
-def _git_out(git_dir: Path, *args: str) -> str:
-    from subprocess import run
-
-    return run(
-        ["git", "-C", str(git_dir), *args],
-        capture_output=True,
-        text=True,
-        check=False,
-    ).stdout
-
-
-def _dirty_or_untracked(git_dir: Path) -> set[str]:
-    """Every path (tracked-and-changed, or untracked) `git status` reports.
-
-    Unlike `_changed_files` (used for Bash denials, where an untracked file
-    is irrelevant: nothing can discard it), a new content file or notebook
-    not yet committed is one the session changed.
-
-    Returns:
-        Each such path, relative to the git root; both sides of a rename.
-    """
-    entries = iter(
-        _git_out(git_dir, "status", "--porcelain", "-z", "-uall").split("\0")
-    )
-    found = set()
-    for entry in entries:
-        if len(entry) > 3:
-            found.add(entry[3:])
-            if entry[0] in "RC":  # The source path follows, with no status.
-                found.add(next(entries, ""))
-    return found - {""}
-
-
-def _worktree_changes(git_dir: Path, main: Path) -> set[str]:
-    """What a worktree changed: uncommitted, or committed on its own branch.
-
-    Its own branch: what the main checkout's branch doesn't have, since
-    their merge base.
-
-    Returns:
-        The paths, relative to the git root.
-    """
-    branch = _git_out(main, "symbolic-ref", "--short", "HEAD").strip()
-    base = _git_out(git_dir, "merge-base", branch or "HEAD", "HEAD").strip()
-    committed = _git_out(git_dir, "diff", "--name-only", base, "HEAD").splitlines()
-    return _dirty_or_untracked(git_dir) | set(committed)
+    message = _problems_message({rel: new})
+    if still := len(problems) - len(new):
+        message += (
+            f"\n  … and {still} problem{'s' if still > 1 else ''} already reported"
+            " for this file, still there"
+        )
+    return message
 
 
 def session_start(settings: "GlobalSettings", payload: dict[str, Any]) -> str | None:
@@ -549,114 +537,3 @@ def session_start(settings: "GlobalSettings", payload: dict[str, Any]) -> str | 
             state.unlink(missing_ok=True)
     cwd = Path(payload.get("cwd") or settings.paths.git_dir)
     return session_start_context(settings, cwd)
-
-
-def _stop_message(
-    problems: dict[str, list[str]],
-    unpaired: list[str],
-    pair_of: dict[str, str],
-    where: str,
-) -> str | None:
-    sections = []
-    if problems:
-        sections.append(
-            f"Content files changed {where} fail deckz's checks:\n"
-            + _problems_message(problems)
-        )
-    if unpaired:
-        lines = _shown(
-            [f"- {path} (not {pair_of[path]})" for path in unpaired],
-            " (`deckz i18n stale`)",
-        )
-        sections.append(
-            f"fr/en pairs changed on one side only {where}:\n"
-            + "\n".join(lines)
-            + "\nPort each change to the other language, or say why it is"
-            " one-sided (a typo, a phrasing fix) and stop."
-        )
-    return "\n\n".join(sections) or None
-
-
-def stop_report(settings: "GlobalSettings", payload: dict[str, Any]) -> str | None:
-    """Flag the changes to content files: one-sided, or failing the checks.
-
-    In a linked worktree, the changes are the worktree's: whatever `git
-    status` reports, and the commits on its branch the main checkout's
-    branch doesn't have, whichever session made them. Elsewhere, they are
-    the files the session's edit tools changed (`post_edit_report`), and
-    none when `worktree.required_for_agents` keeps agents from changing the
-    main checkout. Flags a content file or lab notebook changed on one
-    language side only (once per session), and runs the post-edit checks
-    on each changed content file they haven't passed as it is now (written
-    by a shell command, say, which no PostToolUse hook sees).
-
-    Returns:
-        A report to block the stop with, or None if nothing new was found.
-    """
-    from .agent_checkouts import checkouts
-    from .utils import is_content_file
-
-    if payload.get("stop_hook_active"):
-        return None
-    git_dir = settings.paths.git_dir
-    main = checkouts(git_dir).main
-    in_worktree = git_dir.resolve() != main
-    if not in_worktree and settings.worktree.required_for_agents:
-        return None
-    with _session_state(_session_state_file(settings, payload)) as state:
-        changed = (
-            _worktree_changes(git_dir, main)
-            if in_worktree
-            else set(state.get("edited", []))
-        )
-        current = {path: _file_hash(git_dir, PurePosixPath(path)) for path in changed}
-        fingerprint = hashlib.sha256(
-            json.dumps(sorted(current.items())).encode()
-        ).hexdigest()
-        if state.get("fingerprint") == fingerprint:
-            return None
-        state["fingerprint"] = fingerprint
-        if not any(
-            is_content_file(PurePosixPath(path), settings.file_extensions)
-            or path.endswith(".ipynb")
-            for path in changed
-        ):
-            return None
-        if not isinstance(state.get("reported"), list):  # An older deckz's state.
-            state["reported"] = []
-        reported: list[str] = state["reported"]
-        failed: dict[str, str] = state.setdefault("failed", {})
-        checked: dict[str, str] = state.setdefault("checked", {})
-        pair_of: dict[str, str] = {}
-        for a, b in _pairs(settings):
-            pair_of[str(a)] = str(b)
-            pair_of[str(b)] = str(a)
-
-        def exists(path: str) -> bool:
-            return (git_dir / path).is_file()
-
-        unpaired = sorted(
-            path
-            for path in changed & set(pair_of)
-            if pair_of[path] not in changed
-            and path not in reported
-            # A file deleted with no sibling left behind is no gap.
-            and (exists(path) or exists(pair_of[path]))
-        )
-        unchecked = sorted(
-            path
-            for path in changed
-            if current[path]
-            and current[path] not in {checked.get(path), failed.get(path)}
-            and _is_content(settings, git_dir / path)
-        )
-        problems = (
-            _content_problems(settings, [git_dir / path for path in unchecked])
-            if unchecked
-            else {}
-        )
-        for path in unchecked:
-            (failed if path in problems else checked)[path] = current[path]
-        reported.extend(unpaired)
-    where = "in this worktree" if in_worktree else "this session"
-    return _stop_message(problems, unpaired, pair_of, where)

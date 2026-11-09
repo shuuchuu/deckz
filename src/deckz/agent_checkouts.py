@@ -17,7 +17,9 @@ its commits on the main checkout's branch. The hooks enforce it:
   --ff-only` and `deckz worktree` are), a redirection into it, a program
   of `_WRITERS` writing one of its files, a change of its environment
   (`uv sync`, `pip`, `npm install`) -- and lets everything else run, after
-  a snapshot of its `git status` (`take_snapshot`);
+  a snapshot of its `git status` (`take_snapshot`). A path it can't know
+  (one starting with a variable the command doesn't set) isn't refused: in
+  the main checkout, the snapshot watches the command instead;
 - `main_changes_report` (PostToolUse on Bash): compares the main
   checkout's `git status` with the snapshot, and reports what the command
   changed, which the session may then restore (`git restore`, `rm`) and
@@ -78,6 +80,26 @@ _IN_PLACE = {"sed": ("-i", "--in-place"), "perl": ("-i",)}
 _FIND_ACTIONS = frozenset(
     {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fls"}
 )
+# Programs `find -exec` may run on what it finds without changing it.
+_READERS = frozenset(
+    {
+        "basename",
+        "cat",
+        "dirname",
+        "du",
+        "echo",
+        "file",
+        "grep",
+        "head",
+        "ls",
+        "md5sum",
+        "sha256sum",
+        "stat",
+        "tail",
+        "test",
+        "wc",
+    }
+)
 _GIT_READ_ONLY = frozenset(
     {
         "blame",
@@ -111,10 +133,24 @@ _GIT_READ_ONLY = frozenset(
         "worktree",
     }
 )
+# `git branch` options that list the branches matching a commit: their
+# argument is that commit, not a branch to create.
+_GIT_BRANCH_QUERIES = ("--contains", "--no-contains", "--merged", "--no-merged")
 # Subcommands read-only with these first arguments (or none, for those in
 # `_GIT_LISTING`).
 _GIT_LISTING = {
-    "branch": {"--list", "-l", "-a", "--all", "-r", "--remotes", "-v", "-vv"},
+    "branch": {
+        "--list",
+        "-l",
+        "-a",
+        "--all",
+        "-r",
+        "--remotes",
+        "-v",
+        "-vv",
+        "--show-current",
+        *_GIT_BRANCH_QUERIES,
+    },
     "config": {"--get", "--get-all", "--get-regexp", "--list", "-l"},
     "remote": {"-v", "show", "get-url"},
     "stash": {"list", "show"},
@@ -127,6 +163,7 @@ _DECKZ_READ_ONLY = frozenset(
     {
         "check",
         "dashboard",
+        "deps",
         "search-sections",
         "sessions",
         "show",
@@ -136,13 +173,26 @@ _DECKZ_READ_ONLY = frozenset(
 )
 _DECKZ_READ_ONLY_PAIRS = {
     "i18n": {"missing-en", "stale"},
+    # They print what the notebooks hold; `labs gpu status` what the rented
+    # machines say.
+    "labs": {"compare", "dump", "list", "missing", "stale"},
+    "videos": {"list"},
     # `mark` writes the reports; `status` and `diff` only run read-only git
     # (hash-object without -w, cat-file, rev-parse, merge-base, ls-files),
     # `findings` reads the reports.
     "review": {"diff", "findings", "status"},
     "setup": {"--check"},
 }
+_DECKZ_READ_ONLY_TRIPLES = {("labs", "gpu"): {"status", "report"}}
 _REDIRECTION = re.compile(r"^\d*>>?(.*)$")
+_VARIABLE = re.compile(r"\$(\w+)|\$\{(\w+)\}")
+_ASSIGNMENT = re.compile(r"(\w+)=(.*)", re.DOTALL)
+QUOTED_GT = "\ue000"
+"""Stands for a `>` that was inside quotes or escaped, in the words
+`agent_hooks.commands` splits with `mark_quoted`: data, not a redirection."""
+_ELSEWHERE = Path("/nonexistent/deckz-unknown-path")
+"""Where a path deckz can't know (it starts with a variable the command
+doesn't set, or with a command substitution) is taken to be: in no checkout."""
 _SNAPSHOTS = "deckz-bash-snapshots"
 """Directory, in the git common directory, of the snapshots of the Bash
 calls running in the main checkout."""
@@ -258,12 +308,55 @@ def edit_denial(settings: "GlobalSettings", payload: dict[str, Any]) -> str | No
     return None
 
 
+def unmarked(word: str) -> str:
+    """`word` with its quoted `>` back (see `QUOTED_GT`).
+
+    Returns:
+        The word as the shell would pass it.
+    """
+    return word.replace(QUOTED_GT, ">")
+
+
 def _resolve(word: str, cwd: Path) -> Path:
+    if word.startswith(("$", "`")):
+        return _ELSEWHERE
     return Path(os.path.normpath(cwd / Path(word).expanduser()))
+
+
+def _assignments(words: list[str]) -> dict[str, str] | None:
+    """The shell variables a simple command sets for those after it.
+
+    Returns:
+        Them, for `A=x B=y` and `export A=x`; None for any other command \
+        (`A=x program` sets A for that program only).
+    """
+    if words and words[0] in {"export", "declare", "local", "readonly", "typeset"}:
+        words = [word for word in words[1:] if not word.startswith("-")]
+    matches = [_ASSIGNMENT.fullmatch(word) for word in words]
+    if not matches or not all(matches):
+        return None
+    return {match[1]: match[2] for match in matches if match}
+
+
+def _expand(word: str, variables: dict[str, str]) -> str:
+    """Replace `$NAME` and `${NAME}` by the values the command or the environment set.
+
+    Returns:
+        The word, a variable neither sets left as it is.
+    """
+
+    def value(match: re.Match[str]) -> str:
+        name = match[1] or match[2]
+        return variables.get(name, os.environ.get(name, match[0]))
+
+    return _VARIABLE.sub(value, word)
 
 
 def _strip_redirections(words: list[str], cwd: Path) -> tuple[list[str], list[Path]]:
     """Split a simple command's words from the files it redirects output to.
+
+    A `>` that was inside quotes (`agent_hooks.commands`' mark) is data: the
+    pattern of `grep '>>>'` redirects nothing.
 
     Returns:
         The words left, and the redirections' targets.
@@ -273,15 +366,15 @@ def _strip_redirections(words: list[str], cwd: Path) -> tuple[list[str], list[Pa
     pending = False
     for word in words:
         if pending:
-            targets.append(_resolve(word, cwd))
+            targets.append(_resolve(unmarked(word), cwd))
             pending = False
         elif match := _REDIRECTION.match(word):
             if match[1]:
-                targets.append(_resolve(match[1], cwd))
+                targets.append(_resolve(unmarked(match[1]), cwd))
             else:
                 pending = True
         else:
-            kept.append(word)
+            kept.append(unmarked(word))
     return kept, targets
 
 
@@ -313,7 +406,16 @@ def _positionals(args: list[str]) -> list[str]:
 
 
 def _find_targets(_: str, args: list[str], cwd: Path) -> list[Path]:
-    if not set(args) & _FIND_ACTIONS:
+    actions = [
+        (arg, Path(args[i + 1]).name if i + 1 < len(args) else "")
+        for i, arg in enumerate(args)
+        if arg in _FIND_ACTIONS
+    ]
+    # `-exec cat {} +` only reads what it finds.
+    if all(
+        action in {"-exec", "-execdir"} and program in _READERS
+        for action, program in actions
+    ):
         return []
     starts = []
     for arg in args:
@@ -395,12 +497,23 @@ def _git_read_only(args: list[str]) -> bool:
     if sub == "merge":
         return "--ff-only" in rest
     if sub == "reflog":
-        return not rest or rest[0] == "show"
+        return not set(_positionals(rest)[:1]) & {"expire", "delete"}
+    if sub == "branch" and set(rest) & set(_GIT_BRANCH_QUERIES):
+        return True
     if sub in _GIT_LISTING:
         return not [a for a in rest if not a.startswith("-")] or bool(
             rest and rest[0] in _GIT_LISTING[sub]
         )
     return False
+
+
+def _clones_elsewhere(args: list[str], cwd: Path, found: Checkouts) -> bool:
+    # `git clone <source> <directory>` into a directory outside the main
+    # checkout: it only reads the source.
+    positionals = _positionals(args)
+    if positionals[:1] != ["clone"] or len(positionals) < 3:
+        return False
+    return not found.in_main(_resolve(positionals[-1], cwd))
 
 
 def _git_restores(args: list[str], cwd: Path, main: Path, own: set[str]) -> bool:
@@ -433,18 +546,38 @@ def _deckz_read_only(args: list[str]) -> bool:
         return True
     if rest[0] in _DECKZ_READ_ONLY:
         return True
+    if len(rest) > 2 and rest[2] in _DECKZ_READ_ONLY_TRIPLES.get(
+        (rest[0], rest[1]), set()
+    ):
+        return True
     return rest[0] in _DECKZ_READ_ONLY_PAIRS and bool(
         set(rest[1:2]) & _DECKZ_READ_ONLY_PAIRS[rest[0]]
     )
 
 
-def _changes_environment(program: str, args: list[str]) -> bool:
+def _changes_environment(
+    program: str, args: list[str], cwd: Path, found: Checkouts
+) -> bool:
     # Its virtual environment or node_modules: ignored by git, so the
     # snapshot wouldn't see the change, which every session in the checkout
     # would run with.
     positionals = _positionals(args)
     sub = positionals[0] if positionals else ""
+    if {"--check", "--dry-run"} & set(args):
+        return False
+    # Another environment's interpreter: a scratch one, a worktree's.
+    python = _option_value(args, "--python", "-p")
+    if python and not found.in_main(_resolve(python, cwd)):
+        return False
     if program == "uv":
+        if sub == "pip":
+            return not set(positionals[1:2]) & {
+                "check",
+                "freeze",
+                "list",
+                "show",
+                "tree",
+            }
         return bool(sub) and sub not in {"run", "help", "version", "tree"}
     if program in {"pip", "pip3"} or (program.startswith("python") and "pip" in args):
         return True
@@ -489,6 +622,8 @@ def _git_verdict(
         return None
     if _git_read_only(args) or _git_restores(args, here, found.main, own):
         return None
+    if _clones_elsewhere(args, here, found):
+        return None
     return _refusal(shown, "changes the repository", found.main)
 
 
@@ -515,7 +650,7 @@ def _simple_verdict(
             what = "builds or changes files" if "run" in args else "changes files"
             return _refusal(shown, what, main), False
         return None, False
-    if in_main and _changes_environment(program, args):
+    if in_main and _changes_environment(program, args, cwd, found):
         return _refusal(shown, "changes the Python or Node environment", main), False
     if program in _WRITERS or program in _SPECIAL_TARGETS:
         targets = [t for t in _targets(program, args, cwd) if found.in_main(t)]
@@ -534,11 +669,13 @@ def main_checkout_verdict(
     Refuses what is clearly a change of the main checkout (see the module
     docstring), and lets the rest run, with a snapshot when one of its
     simple commands runs in the main checkout or names one of its paths.
-    Follows `cd` from one simple command to the next, and git's `-C`.
+    Follows `cd` from one simple command to the next, git's `-C`, and the
+    variables the command sets (`S=/tmp/x; cat > $S/a`).
 
     Args:
         settings: The settings of the checkout the session runs in.
-        script: The command's simple commands, as `agent_hooks.commands` splits them.
+        script: The command's simple commands, as `agent_hooks.commands` splits
+            them, quoted `>` marked.
         cwd: The directory the command starts in.
         own: The main checkout's files the session changed (`main_changes_report`):
             it may restore those.
@@ -552,10 +689,16 @@ def main_checkout_verdict(
     found = checkouts(settings.paths.git_dir)
     cwd = cwd.resolve()
     watch = False
-    for raw in script:
+    variables: dict[str, str] = {}
+    for unexpanded in script:
+        raw = [_expand(word, variables) for word in unexpanded]
+        if (assigned := _assignments(raw)) is not None:
+            variables.update(assigned)
+            continue
         words, redirected = _strip_redirections(raw, cwd)
         if into := [t for t in redirected if found.in_main(t)]:
-            return _refusal(" ".join(raw), f"writes {into[0]}", found.main), None
+            shown = unmarked(" ".join(raw))
+            return _refusal(shown, f"writes {into[0]}", found.main), None
         reason, touches = _simple_verdict(words, cwd, found, own)
         if reason:
             return reason, None

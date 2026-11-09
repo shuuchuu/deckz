@@ -342,7 +342,7 @@ def claude_hooks(settings: "GlobalSettings", *, check: bool) -> SetupItem:
             Status.OK if present else Status.MISSING,
             "" if present else "run `deckz setup --claude`",
         )
-    install_claude_hooks(settings.paths.git_dir)
+    install_claude_hooks(settings.paths.git_dir, settings.file_extensions)
     return SetupItem("Claude Code hooks", Status.DONE, f"in {path}")
 
 

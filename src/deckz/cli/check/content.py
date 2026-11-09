@@ -63,7 +63,8 @@ def content(
             hide a problem that would otherwise be committed. A check
             needing the repository's git history or remotes (e.g.
             `lab-urls`) does nothing under `--staged`, since the export has
-            no `.git` of its own
+            no `.git` of its own. The deferred checks' problems, which
+            aren't about the commit, are then only counted
         plain: Compact, stable lines for a script or an agent, instead of
             one header per failing check: `blocking` or `deferred`, the
             check's name and the problem, separated by tabs
@@ -114,6 +115,6 @@ def content(
         name: problems for name, problems in results.items() if name not in blocking
     }
 
-    print_checks(blocking, deferred, plain=plain, json=json)
+    print_checks(blocking, deferred, plain=plain, json=json, count_deferred=staged)
     if blocking:
         sys_exit(1)

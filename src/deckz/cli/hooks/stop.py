@@ -1,32 +1,12 @@
-from pathlib import Path
-
-from . import app, read_payload, report_error
+from . import app
 
 
-@app.command(name="stop")
-def stop(*, workdir: Path = Path()) -> None:
-    """Flag one-sided fr/en changes, and content failing the checks.
+@app.command(name="stop", show=False)
+def stop() -> None:
+    """Do nothing: deckz has no Stop hook any more.
 
-    Wired as Claude Code's Stop hook by `deckz hooks install` (see
-    `deckz.agent_hooks.stop_report`): a worktree's changes, or outside one
-    the files the session's edit tools changed. Never fails loudly: an
-    unreadable payload or an internal error just lets the session stop,
-    same as finding nothing to report.
-
-    Args:
-        workdir: Path to move into before resolving settings
-
+    Kept so that a checkout whose `.claude/settings.json` still names
+    `deckz hooks stop` (a worktree made before `deckz hooks install` removed
+    it) stops without an error. The pre-commit and commit-msg hooks do what
+    it did, on what gets committed.
     """
-    from json import dumps
-
-    try:
-        from ...agent_hooks import stop_report
-        from ...configuring.settings import GlobalSettings
-
-        settings = GlobalSettings.from_yaml(workdir)
-        report = stop_report(settings, read_payload())
-    except Exception as error:
-        report_error("stop", error)
-        return
-    if report:
-        print(dumps({"decision": "block", "reason": report}))

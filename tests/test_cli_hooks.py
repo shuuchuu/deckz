@@ -146,7 +146,6 @@ def test_hooks_install_also_writes_claude_settings(repo: Path) -> None:
         "PostToolUse",
         "PostToolUseFailure",
         "SessionStart",
-        "Stop",
         "WorktreeCreate",
         "WorktreeRemove",
     }
@@ -200,13 +199,22 @@ def test_post_edit_is_silent_on_a_clean_file(
     assert capsys.readouterr().out == ""
 
 
-def test_session_start_then_stop_is_silent_without_a_change(
+def test_session_start_is_silent_without_the_worktree_rule(
     repo: Path, capsys: Any, monkeypatch: MonkeyPatch
 ) -> None:
     _stdin(monkeypatch, json.dumps({"session_id": "s1"}))
+
     main(("hooks", "session-start"))
 
+    assert capsys.readouterr().out == ""
+
+
+def test_stop_does_nothing_for_a_checkout_still_naming_it(
+    repo: Path, capsys: Any, monkeypatch: MonkeyPatch
+) -> None:
+    _write(repo / "content" / "topic" / "topic.md", "fr v2")
     _stdin(monkeypatch, json.dumps({"session_id": "s1"}))
+
     main(("hooks", "stop"))
 
     assert capsys.readouterr().out == ""

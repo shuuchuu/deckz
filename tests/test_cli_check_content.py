@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from pygit2 import init_repository
-from pytest import CaptureFixture, fixture, raises
+from pytest import CaptureFixture, LogCaptureFixture, fixture, raises
 
 from deckz.cli import main
 
@@ -42,6 +42,21 @@ def test_bare_check_runs_content_by_default(
     out = capsys.readouterr().out
     assert "#### raw-latex (deferred: doesn't block a commit)" in out
     assert "notes.tex" in out
+
+
+def test_check_staged_only_counts_the_deferred_problems(
+    repo: Path, capsys: CaptureFixture[str], caplog: LogCaptureFixture
+) -> None:
+    import subprocess
+
+    _write(repo / "content" / "topic" / "notes.tex", r"\section{x}")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+
+    with caplog.at_level("INFO"):
+        main(("check", "--staged"))  # Should not raise: raw-latex is deferred.
+
+    assert capsys.readouterr().out == ""
+    assert "1 problem of deferred checks (raw-latex 1)" in caplog.text
 
 
 def test_check_content_plain_reports_a_problem(

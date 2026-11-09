@@ -759,7 +759,8 @@ checks:
 A check is either blocking or deferred. A blocking check's problems fail
 `deckz check`, hence the pre-commit hook and CI; a deferred one's are
 printed (and listed by `deckz status`) without failing, unless the check is
-named: their harm comes later than the commit, when a lab is published or a
+named (the pre-commit hook, `deckz check --staged`, only counts them, by
+check: they aren't about the commit): their harm comes later than the commit, when a lab is published or a
 deck uploaded or taught, so a contributor commits freely and the debt is
 settled before then. By default every built-in check is deferred but
 `lab-secrets` (a secret stays in the history), `jinja-syntax` and
@@ -779,10 +780,13 @@ checks:
 `deckz hooks install` also adds deckz's own Claude Code hooks to
 `.claude/settings.json` (Claude Code is treated as a requirement of a
 deckz-managed repository, like git): `deckz hooks pre-bash`/`post-bash`/
-`pre-edit`/`post-edit`/`session-start`/`stop`/`worktree-create`/
+`pre-edit`/`post-edit`/`session-start`/`worktree-create`/
 `worktree-remove`, backed by `deckz.agent_hooks` and
-`deckz.agent_checkouts`. The generic rules they enforce need no
-repo-specific knowledge:
+`deckz.agent_checkouts`. Each starts with a shell test of its payload, and
+starts deckz (half a second) only when it could have something to say:
+after an edit, for a content file; before a Bash command, when it names
+git, deckz, a task runner or the main checkout. The generic rules they
+enforce need no repo-specific knowledge:
 
 - **PreToolUse/Bash**: deny staging everything (`git add -A`/`.`/`-u`),
   `git commit -a`, `git clean` without `--dry-run`, and anything that
@@ -791,20 +795,21 @@ repo-specific knowledge:
   Code sessions may share one checkout. Also deny skipping the git hooks
   (`--no-verify`, `git commit -n`, `git -c core.hooksPath=...`): they run
   the repository's checks.
-- **PostToolUse/Edit,Write,MultiEdit,NotebookEdit**: record the edited
-  file; convert a content file with this repo's own `pandoc_command` and
-  run deckz's content checks (built-ins plus `templates/checks.py`'s) on
-  it alone, reporting any problem back to the agent right away (about a
-  second: a check taking `paths` reads only that file).
-- **Stop**: flag a fr/en content or lab notebook pair changed on one
-  language side only (same pairing as `deckz i18n stale`), and run the
-  PostToolUse checks on every changed content file they haven't passed
-  as it is now: one a shell command wrote, which no PostToolUse hook
-  sees. In a linked worktree, what changed is the worktree's own work:
-  `git status`, and the commits on its branch that the main checkout's
-  branch doesn't have. Elsewhere, it is the files the session's edit
-  tools changed: never another session's work. A one-sided pair is
-  reported once per session, at most ten paths per list.
+- **PostToolUse/Edit,Write,MultiEdit,NotebookEdit**: convert an edited
+  content file with this repo's own `pandoc_command` and run deckz's
+  content checks (built-ins plus `templates/checks.py`'s) on it alone,
+  reporting back to the agent right away (about a second: a check taking
+  `paths` reads only that file) what the edit brought: a problem already
+  reported for the file, and still there, is only counted. The checks
+  listed under `checks.not_after_edit` wait for `deckz check`: those
+  whose verdict depends on files written later (the other language's
+  version, a chapter referred to).
+- Nothing runs when a session stops. The pre-commit hook runs the checks
+  on what gets committed, and the commit-msg hook marks a change of one
+  language only `Lang-sync: pending`, for an agent as for a person:
+  `deckz i18n stale` keeps the list until a session in the other language
+  comes. (`deckz hooks install` removes the Stop hook an older deckz
+  registered.)
 - **WorktreeCreate**/**WorktreeRemove**: the worktrees Claude Code makes
   (`claude --worktree <name>`, EnterWorktree with a name, a subagent's
   worktree isolation) are `deckz worktree add`'s, `../<repo>--<name>`
@@ -1006,8 +1011,7 @@ course_notes:
 ```
 
 Chapters are fr/en pairs like content files: `deckz i18n stale`, the
-`commit-msg` hook's `Lang-sync` trailer and the Claude Code hooks follow
-them. `deckz check` checks that each chapter is named after a content file
+`commit-msg` hook's `Lang-sync` trailer follow them. `deckz check` checks that each chapter is named after a content file
 (`course-notes-files`, which also checks `same_as`) and exists in both
 languages (`course-notes-pairs`). A directory with French chapters and no
 English one at all is still being written or translated: `course-notes-pairs`

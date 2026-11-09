@@ -24,10 +24,17 @@ supports several independent hook registrations side by side (a list of
 `{matcher, hooks: [...]}` groups per event), so there's nothing to refuse
 to overwrite -- `install_claude_hooks` just updates the command of an event
 deckz already registered (one calling `deckz hooks <name>`, whatever its
-form) and leaves every other key of the file untouched.
+form), removes the hooks deckz no longer has (`_RETIRED`) and leaves every
+other key of the file untouched.
+
+A hook starts Python, imports deckz and reads `deckz.yml`: half a second,
+after every tool call. Each command therefore starts with a shell test of
+the hook's payload (`_filtered`, `_PENDING_SNAPSHOT`) that ends it at once
+when deckz would have nothing to say.
 """
 
 import json
+from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -71,18 +78,56 @@ _PENDING_SNAPSHOT = (
     '[ -n "$(ls -A "$(git rev-parse --git-common-dir 2>/dev/null)'
     '/deckz-bash-snapshots" 2>/dev/null)" ] || exit 0; '
 )
+# The main checkout's root, from any of its checkouts: `$m`, empty outside a
+# repository.
+_MAIN_ROOT = (
+    "m=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null); "
+    "m=${m%/.git}; "
+)
+# `$m` as a whole path or a path's start: not the start of a sibling's name
+# (`../repo--x`, a `deckz worktree`).
+_NAMES_MAIN = '*"${m:-/}"[!A-Za-z0-9_.-]*'
+# What `deckz hooks pre-bash` can deny: a git command, a deckz one or a task
+# runner's (the repository's own denials), and a write into the main checkout
+# -- which a command names by its path, a relative one or the home directory's,
+# unless it runs there (its `cwd` is then in the payload).
+_BASH_PATTERNS = f"*git*|*deckz*|*doit*|*../*|*'~'*|*'$HOME'*|{_NAMES_MAIN}"
+
+
+def _filtered(patterns: str, command: str, *, setup: str = "") -> str:
+    """A hook command that runs `command` only on a payload matching `patterns`.
+
+    Args:
+        patterns: `case` patterns, `|`-separated, the payload (JSON) must match.
+        command: The command, which gets the payload on its standard input.
+        setup: Shell commands setting what the patterns use.
+
+    Returns:
+        The shell command.
+    """
+    return (
+        f'p=$(cat); {setup}case "$p" in {patterns}) ;; *) exit 0 ;; esac; '
+        f"printf '%s' \"$p\" | {command}"
+    )
+
+
 _CLAUDE_HOOKS: list[dict[str, Any]] = [
     {
         "event": "PreToolUse",
         "matcher": "Bash",
         "subcommand": "pre-bash",
         "timeout": 10,
+        "patterns": _BASH_PATTERNS,
+        "setup": _MAIN_ROOT,
     },
     {
         "event": "PreToolUse",
         "matcher": _EDIT_TOOLS,
         "subcommand": "pre-edit",
         "timeout": 10,
+        # It only denies an edit of the main checkout, or from it.
+        "patterns": _NAMES_MAIN,
+        "setup": _MAIN_ROOT,
     },
     {
         "event": "PostToolUse",
@@ -90,6 +135,9 @@ _CLAUDE_HOOKS: list[dict[str, Any]] = [
         "subcommand": "post-edit",
         "timeout": 60,
         "statusMessage": "Checking the content file",
+        # It only checks a content file: `patterns` comes from the
+        # repository's content extensions (`install_claude_hooks`).
+        "content_only": True,
     },
     {
         "event": "PostToolUse",
@@ -111,11 +159,6 @@ _CLAUDE_HOOKS: list[dict[str, Any]] = [
         "timeout": 30,
     },
     {
-        "event": "Stop",
-        "subcommand": "stop",
-        "timeout": 60,
-    },
-    {
         "event": "WorktreeCreate",
         "subcommand": "worktree-create",
         "timeout": 600,
@@ -126,6 +169,11 @@ _CLAUDE_HOOKS: list[dict[str, Any]] = [
         "timeout": 60,
     },
 ]
+_RETIRED = ("stop",)
+"""Subcommands of `deckz hooks` an older deckz registered, removed on install:
+the Stop hook's checks are the pre-commit hook's, and it asked for a
+translation after each change, which `deckz i18n stale` keeps for when a
+session in that language comes."""
 
 
 def hooks_dir(git_dir: Path) -> Path:
@@ -183,7 +231,35 @@ def install_hooks(git_dir: Path, *, force: bool = False) -> list[Path]:
     return written
 
 
-def install_claude_hooks(git_dir: Path) -> Path:
+def _hook_command(spec: dict[str, Any], extensions: Iterable[str]) -> str:
+    command = deckz_command(f"hooks {spec['subcommand']}")
+    if spec.get("content_only"):
+        # The edited file's path ends a JSON string of the payload.
+        patterns = "|".join(f'*{extension}\\"*' for extension in extensions)
+        return _filtered(patterns, command)
+    if "patterns" in spec:
+        return _filtered(spec["patterns"], command, setup=spec.get("setup", ""))
+    return spec.get("guard", "") + command
+
+
+def _remove_retired(hooks: dict[str, Any]) -> None:
+    for event in list(hooks):
+        groups = hooks[event]
+        for group in groups:
+            group["hooks"] = [
+                hook
+                for hook in group.get("hooks", [])
+                if not any(
+                    f"deckz hooks {name}" in hook.get("command", "")
+                    for name in _RETIRED
+                )
+            ]
+        hooks[event] = [group for group in groups if group.get("hooks")]
+        if not hooks[event]:
+            del hooks[event]
+
+
+def install_claude_hooks(git_dir: Path, extensions: Iterable[str] = (".md",)) -> Path:
     """Add deckz's generic Claude Code hooks to `git_dir`'s `.claude/settings.json`.
 
     Adds one `{matcher, hooks: [...]}` group per hook of `_CLAUDE_HOOKS`
@@ -191,11 +267,15 @@ def install_claude_hooks(git_dir: Path) -> Path:
     any form, e.g. an older deckz's bare `deckz hooks stop`) gets the
     current command, timeout and matcher instead, so calling this
     repeatedly, or after the person edited the file by hand, never
-    duplicates an entry. Every other key of an existing file -- other
-    hooks, permissions, anything else -- is kept untouched.
+    duplicates an entry. A hook deckz no longer has (`_RETIRED`) is removed,
+    with its group and its event when nothing else is left in them. Every
+    other key of an existing file -- other hooks, permissions, anything
+    else -- is kept untouched.
 
     Args:
         git_dir: Root of the deckz-managed repository.
+        extensions: Its content files' extensions (`file_extensions`): the
+            post-edit hook runs for these files only.
 
     Returns:
         The settings file's path.
@@ -205,9 +285,11 @@ def install_claude_hooks(git_dir: Path) -> Path:
         json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
     )
     hooks = settings.setdefault("hooks", {})
+    _remove_retired(hooks)
+    extensions = tuple(extensions)
     for spec in _CLAUDE_HOOKS:
         groups = hooks.setdefault(spec["event"], [])
-        command = spec.get("guard", "") + deckz_command(f"hooks {spec['subcommand']}")
+        command = _hook_command(spec, extensions)
         ours = False
         for group in groups:
             for hook in group.get("hooks", []):

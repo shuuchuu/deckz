@@ -16,12 +16,12 @@ def install(*, force: bool = False, ci: bool = False, workdir: Path = Path()) ->
 
     Also adds deckz's generic Claude Code hooks to `.claude/settings.json`
     (`deckz hooks pre-bash`/`post-bash`/`pre-edit`/`post-edit`/
-    `session-start`/`stop`/`worktree-create`/`worktree-remove`, see
+    `session-start`/`worktree-create`/`worktree-remove`, see
     `deckz.agent_hooks`): denying a Bash command that would stage
     everything or discard uncommitted work, checking an edited content
-    file, flagging a fr/en pair changed on one language side only, in a
-    worktree or by the session's edits, and making Claude Code's worktrees
-    `deckz worktree`'s. With `deckz.yml`'s `worktree.required_for_agents`,
+    file, and making Claude Code's worktrees `deckz worktree`'s; and
+    removes the Stop hook an older deckz registered. With `deckz.yml`'s
+    `worktree.required_for_agents`,
     they also keep agents from changing the main checkout (see
     `deckz.agent_checkouts`). Safe to call
     repeatedly: a hook deckz already registered gets the current command,
@@ -52,6 +52,6 @@ def install(*, force: bool = False, ci: bool = False, workdir: Path = Path()) ->
     settings = GlobalSettings.from_yaml(workdir)
     for path in install_hooks(settings.paths.git_dir, force=force):
         print(path)
-    print(install_claude_hooks(settings.paths.git_dir))
+    print(install_claude_hooks(settings.paths.git_dir, settings.file_extensions))
     if ci:
         print(install_ci_workflow(settings.paths.git_dir, settings.ci, force=force))

@@ -1,6 +1,7 @@
 # Checks
 
-`deckz check` runs every check (the pre-commit hook runs it on the staged files);
+`deckz check` runs every check (the pre-commit hook runs it on the staged files,
+and only counts the deferred checks' problems);
 `deckz check <name>` runs one. Each problem it reports ends with how to fix it.
 Checks a repository lists under `deckz.yml`'s `checks.opt_in` only run when named (or
 nightly in CI): they're slow, or need the network. So do deckz's own

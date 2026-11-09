@@ -476,6 +476,7 @@ def print_checks(
     *,
     plain: bool = False,
     json: bool = False,
+    count_deferred: bool = False,
 ) -> None:
     """Print `deckz check`'s findings, blocking checks' first.
 
@@ -483,6 +484,10 @@ def print_checks(
     mark, a `deferred` column (`plain`) or key (`json`), and a closing log
     line when nothing blocks. A problem spanning several lines (what code
     printed) keeps one line in `plain`, its newlines escaped.
+
+    `count_deferred` (the pre-commit hook, `deckz check --staged`) keeps the
+    deferred checks to that closing line, with each check's count: they
+    aren't about the commit, and `deckz status` lists them.
     """
     if json:
         print_json({"blocking": blocking, "deferred": deferred})
@@ -496,7 +501,7 @@ def print_checks(
         return
     for found, mark in (
         (blocking, ""),
-        (deferred, " (deferred: doesn't block a commit)"),
+        ({} if count_deferred else deferred, " (deferred: doesn't block a commit)"),
     ):
         for name, problems in found.items():
             print(
@@ -504,11 +509,18 @@ def print_checks(
                 *(f"  {problem}" for problem in problems),
                 sep="\n",
             )
-    if deferred and not blocking:
+    if deferred and (count_deferred or not blocking):
         count = sum(len(problems) for problems in deferred.values())
+        by_check = (
+            " ("
+            + ", ".join(f"{name} {len(found)}" for name, found in deferred.items())
+            + ")"
+            if count_deferred
+            else ""
+        )
         getLogger(__name__).info(
-            f"{count} problem{'s' if count > 1 else ''} of deferred checks: they "
-            "don't block a commit, fix them before publishing or teaching "
+            f"{count} problem{'s' if count > 1 else ''} of deferred checks{by_check}:"
+            " they don't block a commit, fix them before publishing or teaching "
             "(`deckz status` keeps showing them)"
         )
 
