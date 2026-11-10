@@ -50,6 +50,13 @@ parity = [
   "playwright >= 1, < 2",
   "pypdfium2 >= 5, < 6",
 ]
+# `deckz push` pushes the labs' own repositories through copierz, which isn't
+# on PyPI yet: an extra, so that deckz's releases stay installable from PyPI
+# (a direct URL dependency can't be uploaded there); `[tool.uv.sources]` takes
+# it from its repository, for uv installs (here, CI, a repository's `uv sync`).
+push = [
+  "copierz >= 0.1, < 1",
+]
 videos = [
   "manim >= 0.18, < 1",
 ]
@@ -60,6 +67,7 @@ dev = [
   "deckz[extras]",
   "deckz[labs]",
   "deckz[parity]",
+  "deckz[push]",
   "deckz[videos]",
   "bumpver >= 2026.1132",
   "doit >= 0.37",
@@ -101,7 +109,8 @@ layers = [
   "cli",
   "agent_hooks",
   "agent_checkouts",
-  "status | setting_up | scaffolding | ci_report | dashboard",
+  "pushing",
+  "status | setting_up | scaffolding | ci_report | dashboard | publishing",
   "pipelines",
   "analyzing",
   "checking | course_notes | course_notes_code | labs | videos | hooks_install | sessions",
@@ -191,6 +200,7 @@ forbidden_modules = ["deckz.cli"]
 members = ["studioz"]
 
 [tool.uv.sources]
+copierz = { git = "https://github.com/shuuchuu/copierz", branch = "main" }
 studioz = { workspace = true }
 
 [tool.ruff]

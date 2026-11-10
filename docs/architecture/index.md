@@ -9,7 +9,7 @@ The [guide](../guide/index.md) is for the people running a deckz-managed reposit
 |---|---|
 | This page | The context, the layers, and the rules that hold them |
 | [Command line](cli.md) | `deckz.cli`: wiring, the error boundary, output |
-| [Tasks](tasks.md) | `status`, `setting_up`, `scaffolding`, `ci_report`, `dashboard`, the agent hooks, `hooks_install` |
+| [Tasks](tasks.md) | `pushing`, `status`, `setting_up`, `scaffolding`, `ci_report`, `dashboard`, `publishing`, the agent hooks, `hooks_install` |
 | [Build pipeline](pipelines.md) | `pipelines`, `checking`, `course_notes`, `course_notes_code`, `code_runner`: planning and building decks, running the course notes' code |
 | [Analyses and checks](analyzing.md) | `analyzing`: read-only analyses, content checks |
 | [Components](components.md) | `components`: protocols, factories, and their implementations |
@@ -61,7 +61,8 @@ contract is exhaustive: a new module of `deckz` fails it until it has a layer.
 flowchart TB
     cli["<b>deckz.cli</b><br/>commands, presentation"]
     agent["<b>agent_hooks</b> → <b>agent_checkouts</b><br/>Claude Code hooks"]
-    tasks["<b>status</b> | <b>setting_up</b> | <b>scaffolding</b> | <b>ci_report</b> | <b>dashboard</b><br/>task-level operations"]
+    pushing["<b>pushing</b><br/>deckz push: pushes, then publishes"]
+    tasks["<b>status</b> | <b>setting_up</b> | <b>scaffolding</b> | <b>ci_report</b> | <b>dashboard</b> | <b>publishing</b><br/>task-level operations"]
     pipelines["<b>pipelines</b><br/>plan and build decks"]
     analyzing["<b>analyzing</b><br/>read-only analyses, content checks"]
     mid["<b>checking</b> | <b>course_notes</b> | <b>course_notes_code</b> | <b>labs</b> | <b>videos</b> | <b>hooks_install</b> | <b>sessions</b>"]
@@ -73,7 +74,7 @@ flowchart TB
     utils["<b>utils</b>"]
     exceptions["<b>exceptions</b>"]
     models["<b>models</b> | <b>code_runner</b>"]
-    cli --> agent --> tasks --> pipelines --> analyzing --> mid --> upstream --> components --> inputs --> low --> configuring --> utils --> exceptions --> models
+    cli --> agent --> pushing --> tasks --> pipelines --> analyzing --> mid --> upstream --> components --> inputs --> low --> configuring --> utils --> exceptions --> models
 ```
 
 Imports into deckz's core are mostly lazy (inside the function that needs them), so

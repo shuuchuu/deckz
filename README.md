@@ -36,7 +36,10 @@ Manim and `ffmpeg`
 (`pip install "deckz[videos]"`; `ffmpeg` itself isn't pip-installable,
 install it with your system's package manager); `deckz sessions` reads your
 Google Calendar through schedz (`pip install "deckz[calendar]"`, see the guide's
-Sessions page).
+Sessions page); `deckz push` pushes the labs' own repositories through
+copierz (`deckz[push]`: copierz isn't on PyPI yet, so install it first with
+`pip install git+https://github.com/shuuchuu/copierz`, or with uv, which takes
+it from deckz's `[tool.uv.sources]` when deckz is a path dependency).
 
 Whatever your `templates/assets_builders.py` imports (e.g. matplotlib or
 plotly) is your repository's own dependency: install it alongside deckz.
@@ -266,7 +269,10 @@ typst_ignore_system_fonts: true
     links point, and `colab: false` that the lab has no Colab version (a
     desktop GUI, say), so no notebook is expected. A repository with several
     starting points has an entry per lab, each with its own branches and
-    `start`, a base possibly another entry's branch (e.g. `gui: solution`). `deckz labs repos` reports on them, and `lab-urls` refuses a
+    `start`, a base possibly another entry's branch (e.g. `gui: solution`).
+    `clone` is the repository's local clone, which `deckz push` pushes
+    (default `{git_dir}/../{name}`, `{name}` being `repo`'s part after the
+    `/`; a repository with several entries takes its first's). `deckz labs repos` reports on them, and `lab-urls` refuses a
     hand-written link to one, suggesting `repo_link_hint` (with `{lab}`
     filled in) when it's set.
   - `gpu`: the machines `deckz labs gpu` rents: `image` (default Colab's
@@ -1246,6 +1252,25 @@ The main commands:
   holds built from other sources (neither copy is overwritten: only a
   build knows which is up to date), until the main checkout's build
   adopts them once its sources match (a pull), or for 30 days.
+- `deckz push [--dry-run] [--force] [--publish] [--json]`: push what your
+  work leaves local, in this order: the deckz checkout this deckz runs from
+  (an editable install), its current branch when ahead of its upstream;
+  the labs' own repositories (`labs.repos`), from their local clones
+  (`clone`), through copierz (`deckz[push]`), which pushes every branch
+  carrying Copier answers that is ahead, and with `--force` those a rebase
+  rewrote (stacked branches), with `--force-with-lease`, only when the
+  remote holds nothing they lacked; then the repository's main checkout's
+  branch. deckz goes first because the repository's CI installs deckz from
+  its remote, and the content links to the labs' repositories: pushed
+  before them, the repository would be checked against a deckz lacking the
+  code it depends on. A deckz push that fails, or a deckz branch diverged
+  from its remote, stops the command there. deckz's and the repository's
+  branches are never forced: behind or diverged, they're left, with the
+  fix. `--publish` then publishes the labs and the videos (as `deckz labs
+  publish` and `deckz videos publish`) when `deckz status` finds something
+  left to; without it, the command says what's left. `--dry-run` fetches,
+  and pushes and publishes nothing. Exits 1 if a push or a publish failed,
+  or a branch diverged.
 - `deckz run` (alias for `deckz run deck`, optionally restricted with
   `--parts`) / `deckz run file PATH` / `deckz run section SECTION FLAVOR` /
   `deckz run assets`: compile the deck in the current directory, a single

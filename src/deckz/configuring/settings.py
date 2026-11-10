@@ -208,6 +208,11 @@ class LabRepoSettings(BaseModel):
     url: str | None = None
     """Where `deckz labs repos` fetches it from; unset, \
     `https://github.com/<repo>.git`."""
+    clone: str = "{git_dir}/../{name}"
+    """Its local clone, which `deckz push` pushes the branches of: `{git_dir}` \
+    stands for the repository's root, `{name}` for the repository's name (the \
+    part of `repo` after the `/`). A repository with several labs takes its \
+    first entry's."""
     branches: dict[str, str | None] = Field(
         default_factory=lambda: {
             "main": None,
@@ -246,6 +251,15 @@ class LabRepoSettings(BaseModel):
     @property
     def fetch_url(self) -> str:
         return self.url or f"https://github.com/{self.repo}.git"
+
+    def clone_path(self, git_dir: Path) -> Path:
+        """Where its local clone is, `clone` filled in.
+
+        Returns:
+            Its path, whether or not it exists.
+        """
+        name = self.repo.rsplit("/", 1)[-1]
+        return Path(self.clone.format(git_dir=git_dir, name=name)).resolve()
 
 
 class LabsSettings(BaseModel):

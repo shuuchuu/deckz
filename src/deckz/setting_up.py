@@ -108,7 +108,7 @@ def _git(checkout: Path, *args: str) -> str | None:
     return None if result.returncode else result.stdout.strip()
 
 
-def _own_checkout() -> Path | None:
+def own_checkout() -> Path | None:
     """The git checkout deckz runs from, if it runs from one (an editable install).
 
     Returns:
@@ -141,7 +141,7 @@ def deckz_checkout(
     Returns:
         Its item: ok when deckz isn't a git checkout or its branch has no upstream.
     """
-    checkout = checkout or _own_checkout()
+    checkout = checkout or own_checkout()
     if checkout is None:
         return SetupItem("deckz", Status.OK, "not run from a git checkout", shared=True)
     return _up_to_date(

@@ -21,6 +21,10 @@ if TYPE_CHECKING:
     from .upstream import Source
 
 _MAX_ITEMS = 15
+LABS_PUBLISH_FIX = "`deckz labs publish`, once they're reviewed"
+"""The fix of an item `deckz labs publish` resolves (`unpublished`)."""
+VIDEOS_PUBLISH_FIX = "`deckz videos publish`, once reviewed"
+"""The fix of an item `deckz videos publish` resolves (`unpublished`)."""
 
 
 @dataclass(frozen=True)
@@ -344,7 +348,7 @@ def _published_files_items(
         StatusItem(
             f"{_count(len(differ), 'file')} of {published_rel} not as published: "
             f"{shown}",
-            "`deckz labs publish`, once they're reviewed",
+            LABS_PUBLISH_FIX,
         )
     ]
 
@@ -426,6 +430,19 @@ def labs_section(
     Returns:
         Its section.
     """
+    summary, items = _labs_items(settings, uncommitted, fetch=fetch, changed=changed)
+    return StatusSection("Labs", summary, _capped(items))
+
+
+def _labs_items(
+    settings: "GlobalSettings",
+    uncommitted: set[str],
+    *,
+    fetch: bool,
+    changed: Collection[str] = (),
+    demos: bool = True,
+) -> tuple[str, list[StatusItem]]:
+    # `labs_section`'s summary and items, uncapped; `demos`: the stale demos too.
     from .exceptions import LabPublishRefusedError
     from .labs.publishing import _published_files, _published_notebooks
     from .remotes import publish_remotes
@@ -433,16 +450,15 @@ def labs_section(
     git_dir = settings.paths.git_dir
     notebooks_dir = settings.paths.labs_notebooks_dir
     if not notebooks_dir.is_dir():
-        return StatusSection("Labs", "no lab notebooks")
+        return "no lab notebooks", []
     labs = settings.labs
     published_dir = settings.paths.labs_published_dir
     published_rel = published_dir.relative_to(git_dir).as_posix()
-    items = _uncommitted_lab_items(settings, uncommitted)
-    items += _stale_demo_items(settings, changed)
+    items = _uncommitted_lab_items(settings, uncommitted) + (
+        _stale_demo_items(settings, changed) if demos else []
+    )
     if missing := _missing_remote_items(settings, publish_remotes(settings, "labs")):
-        return StatusSection(
-            "Labs", "not compared with the published ones", _capped(items + missing)
-        )
+        return "not compared with the published ones", items + missing
     found_source, fetch_items = _lab_source(git_dir, fetch=fetch)
     items += fetch_items
     items += _unpushed_lab_items(
@@ -456,7 +472,7 @@ def labs_section(
     remote = _git(git_dir, "rev-parse", "--verify", "--quiet", ref)
     if remote is None:
         summary = f"{ref} was never fetched: `deckz status --fetch` compares with it"
-        return StatusSection("Labs", summary, _capped(items))
+        return summary, items
     try:
         committed = _published_notebooks(
             git_dir,
@@ -469,7 +485,7 @@ def labs_section(
         files = _published_files(git_dir, published_dir, found_source.commit)
     except LabPublishRefusedError as error:
         items.append(StatusItem(f"not publishable: {error}"))
-        return StatusSection("Labs", "", _capped(items))
+        return "", items
     published = {}
     published_files = {}
     for line in (_git(git_dir, "ls-tree", "-r", remote) or "").splitlines():
@@ -489,14 +505,14 @@ def labs_section(
                 f"{_count(len(differ), 'notebook')} of {found_source.name} not "
                 "as published: "
                 f"{shown}",
-                "`deckz labs publish`, once they're reviewed",
+                LABS_PUBLISH_FIX,
             )
         )
     summary = (
         f"{found_source.name} compared with {ref} as fetched on "
         f"{_commit_date(git_dir, remote)}"
     )
-    return StatusSection("Labs", summary, _capped(items))
+    return summary, items
 
 
 def videos_section(settings: "GlobalSettings", *, fetch: bool) -> StatusSection:
@@ -505,6 +521,14 @@ def videos_section(settings: "GlobalSettings", *, fetch: bool) -> StatusSection:
     Returns:
         Its section.
     """
+    summary, items = _videos_items(settings, fetch=fetch)
+    return StatusSection("Videos", summary, _capped(items))
+
+
+def _videos_items(
+    settings: "GlobalSettings", *, fetch: bool
+) -> tuple[str, list[StatusItem]]:
+    # `videos_section`'s summary and items, uncapped.
     from .exceptions import RemoteError
     from .remotes import publish_remotes
     from .videos import quality, renders, scenes
@@ -518,7 +542,7 @@ def videos_section(settings: "GlobalSettings", *, fetch: bool) -> StatusSection:
         for r in renders(settings.paths.videos_dir, scene)
     ]
     if not found:
-        return StatusSection("Videos", "no videos")
+        return "no videos", []
     items = []
     missing = [r for r in found if not r.file.is_file()]
     if missing:
@@ -542,11 +566,7 @@ def videos_section(settings: "GlobalSettings", *, fetch: bool) -> StatusSection:
     if missing_remote := _missing_remote_items(
         settings, publish_remotes(settings, "videos")
     ):
-        return StatusSection(
-            "Videos",
-            "not compared with the published ones",
-            _capped(items + missing_remote),
-        )
+        return "not compared with the published ones", items + missing_remote
     ref = f"{videos.publish_remote}/{videos.publish_branch}"
     try:
         commit = (
@@ -556,12 +576,10 @@ def videos_section(settings: "GlobalSettings", *, fetch: bool) -> StatusSection:
         )
     except RemoteError as error:
         items.append(StatusItem(str(error)))
-        return StatusSection(
-            "Videos", "not compared with the published ones", _capped(items)
-        )
+        return "not compared with the published ones", items
     if commit is None:
         summary = f"{ref} was never fetched: `deckz status --fetch` compares with it"
-        return StatusSection("Videos", summary, _capped(items))
+        return summary, items
     published = published_blobs(git_dir, commit)
     unpublished = [
         reason
@@ -577,12 +595,33 @@ def videos_section(settings: "GlobalSettings", *, fetch: bool) -> StatusSection:
             )
         )
     ]
-    items += [
-        StatusItem(reason, "`deckz videos publish`, once reviewed")
-        for reason in unpublished
-    ]
+    items += [StatusItem(reason, VIDEOS_PUBLISH_FIX) for reason in unpublished]
     summary = f"compared with {ref} as fetched on {_commit_date(git_dir, commit)}"
-    return StatusSection("Videos", summary, _capped(items))
+    return summary, items
+
+
+def unpublished(
+    settings: "GlobalSettings", *, fetch: bool
+) -> tuple[list[StatusItem], list[StatusItem]]:
+    """What `deckz labs publish`, and `deckz videos publish`, would change.
+
+    The items of `deckz status`'s labs and videos sections that a publish
+    resolves, uncapped: what `deckz push` publishes with `--publish`, and
+    says is left to publish without.
+
+    Args:
+        settings: The repository's settings.
+        fetch: Fetch the upstream branch and the publishing remotes first.
+
+    Returns:
+        `(the labs' items, the videos')`, each empty when nothing is left.
+    """
+    _, labs = _labs_items(settings, set(), fetch=fetch, demos=False)
+    _, videos = _videos_items(settings, fetch=fetch)
+    return (
+        [item for item in labs if item.fix == LABS_PUBLISH_FIX],
+        [item for item in videos if item.fix == VIDEOS_PUBLISH_FIX],
+    )
 
 
 def decks_section(

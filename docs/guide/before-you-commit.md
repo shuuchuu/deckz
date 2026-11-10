@@ -62,8 +62,36 @@ files, even one that didn't block its commit (fix it, or `--skip-checks`).
 `deckz upload --dry-run` lists the PDFs it would send, the outdated ones and the
 deck's problems, without connecting.
 
+## Pushing
+
+```sh
+deckz push --dry-run   # what would be pushed, and what's left to publish
+deckz push             # push it
+```
+
+pushes, in this order, what your work leaves local:
+
+1. the deckz checkout you run deckz from, when it's one (`../deckz`): its branch, if
+   ahead of its remote;
+2. the labs' own repositories (`labs.repos` in `deckz.yml`), from their clones next to
+   the repository (`../<name>`, or their `clone`): every branch ahead of its remote.
+   Their branches are stacked (`solution` on `main`), so a fix to `main` is rebased
+   into the branches above, which then need `deckz push --force`: it force-pushes them
+   with a lease, only when their remote holds nothing they didn't have;
+3. the repository itself: the main checkout's branch (land a worktree first, `deckz
+   worktree land`).
+
+deckz goes first because the repository's CI installs deckz from its remote, and the
+content links to the labs' repositories: pushed first, the repository would be checked
+against a deckz that lacks the code it depends on. So when deckz's push fails, or its
+branch has diverged, nothing else is pushed. deckz's and the repository's branches are
+never forced: one behind or diverged is left, with the `git pull` to run.
+
+Without `--publish`, `deckz push` ends with what's left to publish.
+
 ## Publishing labs and videos
 
 `deckz labs publish` and `deckz videos publish` update what trainees open from the
 PDFs. They're the maintainer's call: once the notebooks or renders are committed and
-reviewed.
+reviewed. `deckz push --publish` runs them after its pushes, when something is left
+to publish.

@@ -93,7 +93,7 @@ message.
 | **Owns** | `Source` (the commit published, and how to name it), what HEAD has that it lacks (`unpushed`) and lacks that it has (`missing`), every version its history holds under some paths (`known_blobs`) |
 | **Depends on** | `worktrees` (`main_checkout`), `exceptions`; `git`, with the user's own credentials |
 | **Never** | Publishes, pushes or moves a branch: it fetches and reads |
-| **Entry points** | `labs.publishing` (`known_blobs`), `deckz labs publish`/`videos publish`, `status` (the Labs section compares the upstream's notebooks) |
+| **Entry points** | `labs.publishing` (`known_blobs`), `publishing` (`deckz labs publish`/`videos publish`), `status` (the Labs section compares the upstream's notebooks) |
 | **Fails with** | [`RemoteError`][deckz.exceptions] when the fetch fails |
 
 ## `remotes`
@@ -103,5 +103,5 @@ message.
 | **Responsibility** | The git remotes `labs publish` and `videos publish` push to: their lookup, fetching a published branch, the force-push |
 | **Owns** | The fix for a missing remote (`add_remote_fix`, with its URL from `deckz.yml`'s `setup.remotes`) |
 | **Depends on** | `exceptions` only; `git`, with the user's own credentials |
-| **Entry points** | `labs.publishing`, `videos.publishing`, `deckz labs publish`/`videos publish` (`require_remotes`), `setting_up` (which runs `git remote add` itself), `status` (reports a missing one) |
+| **Entry points** | `labs.publishing`, `videos.publishing`, `publishing` (`deckz labs publish`/`videos publish`: `require_remotes`), `setting_up` (which runs `git remote add` itself), `status` (reports a missing one) |
 | **Fails with** | [`RemoteError`][deckz.exceptions], carrying git's stderr and the fix |

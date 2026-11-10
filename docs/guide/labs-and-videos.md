@@ -87,7 +87,8 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   hold (someone published commits never pushed): push them, or
   `--replace-unknown`.
   Only maintainers do it: `deckz status` says when committed files differ from the
-  published ones.
+  published ones. `deckz push --publish` pushes, then publishes what's left (see
+  [Pushing](before-you-commit.md#pushing)).
 - Publishing pushes to git remotes a fresh clone doesn't have: `deckz setup` adds
   those the repository lists in `deckz.yml`'s `setup.remotes`. Pushing needs your
   GitHub account to have write access to the published repositories: a refused push
@@ -97,7 +98,9 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   or a clone): `deckz labs repos` fetches each and reports a branch missing or behind
   the one it stacks on, a README that doesn't link its notebook, and a README last
   changed before its notebook was. Content links such a repository through the
-  repository's templating, never by hand (`lab-urls`).
+  repository's templating, never by hand (`lab-urls`). `deckz push` pushes their
+  branches from their local clones, `--force` the rebased ones (see
+  [Pushing](before-you-commit.md#pushing)).
 
 
 ## Labs in CI

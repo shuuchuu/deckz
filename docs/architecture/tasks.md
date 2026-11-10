@@ -45,7 +45,7 @@ also applied by a git hook or a check, which every contributor passes.
 | **Owns** | `StatusSection`/`StatusItem` (sections told apart by their `key`); "your changes" (`base_revision`, `changed_paths`) |
 | **Depends on** | `pipelines` (what is outdated), `analyzing` (checks, i18n, affected decks, overflow, reviews), `course_notes`, `labs`, `videos`, `remotes`, the factories |
 | **Never** | Touches the network unless `fetch` |
-| **Entry points** | [`status`][deckz.status.status], [`deck_status`][deckz.status.deck_status] (`deckz status [DECK]`) |
+| **Entry points** | [`status`][deckz.status.status], [`deck_status`][deckz.status.deck_status] (`deckz status [DECK]`), [`unpublished`][deckz.status.unpublished] (what `deckz push --publish` publishes) |
 | **Fails with** | `DeckzError` from what it reads (settings, git) |
 
 studioz's Problems panel is `deckz status --json --no-decks`, so the JSON shape of a
@@ -90,6 +90,35 @@ can't fix them, so `incomplete(items, shared=False)` leaves them out: it's what
 the git hooks. Otherwise one tool the machine lacks would block every agent's
 worktree. studioz's workspaces follow the same rule (`Created.ready`); `deckz setup`
 itself counts every item.
+
+## `publishing`
+
+| | |
+|---|---|
+| **Responsibility** | Publish the labs and the videos from the upstream branch, refusing what would replace the published ones with older or unchecked files |
+| **Owns** | Nothing on disk: the publishing remotes' branches are `labs.publishing`'s and `videos.publishing`'s |
+| **Depends on** | `checking` (the upstream's tree, checked), the factories (the checks runner), `labs`, `videos`, `upstream`, `remotes` |
+| **Never** | Publishes from anything but the upstream branch (HEAD without one) |
+| **Entry points** | [`publish_labs`][deckz.publishing.publish_labs] (`deckz labs publish`), [`videos_preview`][deckz.publishing.videos_preview] and [`publish_videos`][deckz.publishing.publish_videos] (`deckz videos publish`) |
+| **Fails with** | `LabPublishRefusedError`, `VideoPublishRefusedError`, `RemoteError` |
+
+## `pushing`
+
+| | |
+|---|---|
+| **Responsibility** | Push what a session of work leaves local, in order: deckz's checkout, the labs' repositories, the repository; then publish what's left |
+| **Owns** | `PushReport` (`RepoPush`, `BranchPush`, `PublishResult`) |
+| **Depends on** | `setting_up` (`own_checkout`), `worktrees` (the main checkout), `status` (`unpublished`), `publishing`; copierz, as a subprocess of deckz's own interpreter (the `push` extra) |
+| **Never** | Forces deckz's or the repository's branch; pushes anything after a deckz push that failed or diverged |
+| **Entry points** | [`push`][deckz.pushing.push] (`deckz push`) |
+| **Fails with** | Nothing raised: a failed push or publish, a diverged branch, are in the report (`ok`), the CLI exiting 1 |
+
+The order is a dependency: the repository's CI installs deckz from its remote, and its
+content links to the labs' repositories. The labs' branches are stacked (`solution` on
+`main`), so a fix to a base rewrites the branches above it: copierz pushes those with
+`--force-with-lease` under `--force`, only when the remote holds nothing they lacked.
+copierz runs through `sys.executable`, never the `PATH`, and its `push --json` output
+is the boundary: deckz reads its `state` and `detail`, not its code.
 
 ## `scaffolding`
 

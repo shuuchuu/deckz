@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from ..labs.gpu import GpuStatus, RunReport
     from ..models import Lang
     from ..pipelines import BuildTarget, OutputKinds
+    from ..pushing import PushReport
     from ..setting_up import SetupItem
     from ..status import StatusSection
 
@@ -453,6 +454,55 @@ def print_setup(items: "Iterable[SetupItem]") -> None:
         if item.detail and item.status is not Status.OK:
             for line in item.detail.splitlines():
                 console.print(f"         {line}", markup=False)
+
+
+def print_push(report: "PushReport") -> None:
+    """Print `deckz push`'s report: each repository's branches, then publishing."""
+    from ..pushing import FAILED, PUSHED, UP_TO_DATE, WOULD_PUSH
+
+    console = Console(highlight=False)
+    if report.dry_run:
+        console.print("[bold]Dry run[/]: nothing pushed nor published", markup=True)
+    for repo in report.repositories:
+        where = f" ({repo.path})" if repo.path and repo.path != repo.name else ""
+        console.print(f"\n[bold]{repo.name}[/]", markup=True, end="")
+        console.print(where, markup=False)
+        if repo.skipped:
+            mark = "[red]![/]" if repo.problem else "[yellow]-[/]"
+            console.print(f"  {mark} skipped: ", markup=True, end="")
+            console.print(repo.skipped, markup=False)
+        shown = [b for b in repo.branches if b.outcome != UP_TO_DATE]
+        for branch in shown:
+            colour = {PUSHED: "green", WOULD_PUSH: "cyan", FAILED: "red"}.get(
+                branch.outcome, "red" if branch.problem else "yellow"
+            )
+            console.print(f"  [{colour}]{branch.outcome}[/] ", markup=True, end="")
+            console.print(f"{branch.branch}: {branch.detail}", markup=False)
+        if up_to_date := len(repo.branches) - len(shown):
+            console.print(f"  [dim]{up_to_date} branch(es) up to date[/]", markup=True)
+    if report.stopped:
+        console.print("\n[red]Stopped[/]: ", markup=True, end="")
+        console.print(report.stopped, markup=False)
+        return
+    if not report.publish:
+        console.print("\nNothing left to publish.")
+        return
+    console.print("\n[bold]Publishing[/]", markup=True)
+    for result in report.publish:
+        colour = (
+            "red"
+            if result.problem
+            else "yellow"
+            if result.outcome == "left"
+            else "green"
+        )
+        console.print(f"  [{colour}]{result.outcome}[/] ", markup=True, end="")
+        console.print(
+            result.what + (f": {result.detail}" if result.detail else ""),
+            markup=False,
+        )
+        for item in result.left:
+            console.print(f"    - {item}", markup=False)
 
 
 def print_status(scope: str, sections: "Iterable[StatusSection]") -> None:

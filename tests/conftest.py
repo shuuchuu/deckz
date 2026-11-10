@@ -52,4 +52,4 @@ def _isolated_git(monkeypatch: Any, tmp_path_factory: Any) -> None:
 def _offline_deckz_checkout(monkeypatch: Any) -> None:
     # `deckz setup` fetches the deckz checkout it runs from: the tests give it
     # their own, or none.
-    monkeypatch.setattr("deckz.setting_up._own_checkout", lambda: None)
+    monkeypatch.setattr("deckz.setting_up.own_checkout", lambda: None)
