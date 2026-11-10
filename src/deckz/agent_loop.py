@@ -24,7 +24,8 @@ are. With `wait_on_limit`, the loop sleeps until the limit resets (the time its
 message gives, `limit_reset`), then reopens that same session (`claude
 --resume`) with `RESUME_PROMPT` rather than starting a fresh one in a working
 tree it couldn't make sense of. It waits `MAX_LIMIT_WAIT` at most: a weekly
-limit, days away, stops the loop like any failure.
+limit, days away, stops the loop like any failure. A loop that did stop there
+is started again with `resume`, the session to reopen first.
 """
 
 import json
@@ -58,11 +59,11 @@ without the user (name why).
 """
 
 RESUME_PROMPT = """\
-(deckz agent loop) A usage limit stopped this session, and it has reset since.
-Go on from where you stopped. What your last steps were waiting for (a
-subagent, a command) is gone: check what they left before redoing them. Finish
-your share, then end your final message with the DECKZ-LOOP line asked for
-above.
+(deckz agent loop) This session was stopped before its end (a usage limit,
+which has reset since, or the loop itself). Go on from where you stopped. What
+your last steps were waiting for (a subagent, a command) is gone: check what
+they left before redoing them. Finish your share, then end your final message
+with the DECKZ-LOOP line asked for above.
 """
 
 MAX_LIMIT_WAIT = timedelta(hours=6)
@@ -293,6 +294,7 @@ def agent_loop(
     max_sessions: int,
     command: Sequence[str],
     wait_on_limit: bool = False,
+    resume: str | None = None,
     on_session: Callable[[SessionOutcome], None] | None = None,
     on_wait: Callable[[SessionOutcome, datetime], None] | None = None,
     runner: Runner | None = None,
@@ -314,6 +316,8 @@ def agent_loop(
             gives none, the session is tried again every `LIMIT_POLL`, for
             `MAX_LIMIT_WAIT` at most. A session that can't be reopened gives
             way to a fresh one.
+        resume: The id of a session to reopen first, the same way: the one
+            an earlier loop left unfinished.
         on_session: Called with each session's outcome as soon as it ends.
         on_wait: Called before each wait, with the outcome waited on and the
             time the session is reopened.
@@ -333,7 +337,6 @@ def agent_loop(
     clock = clock or (lambda: datetime.now().astimezone())
     outcomes: list[SessionOutcome] = []
     started = 0
-    resume: str | None = None
     polled = timedelta()
     while resume or started < max_sessions:
         number = len(outcomes) + 1

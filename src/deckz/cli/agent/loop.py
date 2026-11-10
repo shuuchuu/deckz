@@ -11,6 +11,7 @@ def loop(
     model: str | None = None,
     permission_mode: str = "auto",
     wait_on_limit: bool = False,
+    resume: str | None = None,
     json: bool = False,
     workdir: Path = Path(),
 ) -> None:
@@ -33,6 +34,8 @@ def loop(
     uncommitted. With --wait-on-limit, the loop then sleeps until the limit
     resets (the time its message gives, 6 hours away at most: not a weekly
     limit) and reopens that session, which goes on from where it stopped.
+    A loop that stopped at a limit is started again with --resume and the id
+    of the session it cut (the loop's log gives it).
 
     Args:
         prompt: What every session is asked, e.g. "Reprends
@@ -46,6 +49,8 @@ def loop(
             hooks
         wait_on_limit: Wait for a usage limit to reset, then reopen the
             session it stopped, instead of stopping the loop
+        resume: The id of a session to reopen first (one an earlier loop
+            left unfinished), before any fresh one
         json: Print the sessions' outcomes as a JSON list once done
         workdir: Path to move into before running the command
 
@@ -88,6 +93,7 @@ def loop(
         max_sessions=max_sessions,
         command=command,
         wait_on_limit=wait_on_limit,
+        resume=resume,
         on_session=report,
         on_wait=waiting,
     )
@@ -108,7 +114,8 @@ def loop(
                 print(
                     "not waited for: its reset is too far or unknown"
                     if wait_on_limit
-                    else "--wait-on-limit waits for the reset, then reopens the session"
+                    else "--wait-on-limit waits for the reset, then reopens the"
+                    f" session; later: --resume {last.session_id}"
                 )
         print(f"logs: {last.log.parent}")
     if outcomes[-1].status not in ("done", "continue"):

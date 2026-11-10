@@ -108,7 +108,9 @@ time its message gives, "resets 9pm"), then reopens that same session (`claude
 --resume`), which goes on from where it stopped: a fresh session wouldn't know what
 the uncommitted edits are. It waits 6 hours at most, so a weekly limit still stops
 the loop. Several loops on one account share its limit: they all stop at the same
-time, and all go on at the reset.
+time, and all go on at the reset. A loop that stopped at a limit is started again
+with `--resume <session id>`: it reopens that session first, then goes on with fresh
+ones.
 
 Where agents must work in a worktree (`worktree.required_for_agents`), start the loop
 in it, `--workdir ../<repository>--<name>`: a headless session can't enter an existing

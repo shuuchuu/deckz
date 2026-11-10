@@ -433,3 +433,24 @@ def test_cli_agent_loop_reports_a_limit(
     out = capsys.readouterr().out
     assert "last session: limit" in out
     assert "not waited for" in out
+
+
+def test_agent_loop_reopens_a_given_session_first(tmp_path: Path) -> None:
+    calls: list[dict[str, Any]] = []
+    outcomes = agent_loop(
+        "Do one block",
+        git_dir=tmp_path,
+        max_sessions=1,
+        command=["claude"],
+        resume="cut",
+        runner=_scripted(
+            [_completed("DECKZ-LOOP: continue"), _completed("DECKZ-LOOP: continue")],
+            calls,
+        ),
+    )
+    # The reopened session, then the one fresh session --max-sessions allows.
+    assert [o.status for o in outcomes] == ["continue", "continue"]
+    assert calls[0]["args"] == ["claude", "--resume", "cut"]
+    assert calls[0]["input"] == RESUME_PROMPT
+    assert calls[1]["args"] == ["claude"]
+    assert calls[1]["input"] == "Do one block" + PROTOCOL
