@@ -5,9 +5,11 @@ session keeps every block in that session's context: by the tenth block it
 carries hundreds of thousands of tokens it no longer needs, which every turn
 pays for again. The plan already holds what a session needs to resume (its
 progress log), so a fresh session per block costs only the rereading. A
-coordinating session can't get that by handing each block to a subagent when
-the block itself runs subagents (a review skill does), since a subagent can't
-start its own: hence one top-level session per block, started from outside.
+coordinating session that hands each block to a fresh subagent works too (a
+subagent can start subagents of its own, as a review skill's block does), but
+it still grows with every block's brief and report, and only as long as it
+remembers to delegate: a top-level session per block, started from outside,
+carries nothing over.
 
 Each session is `claude -p` (headless, one prompt, no one to answer), run in
 the repository with the prompt and `PROTOCOL` appended: the session ends its

@@ -90,9 +90,11 @@ up: no extra, settings or login) or `CalendarError`. `sessions` imports it lazil
 | **Fails with** | Nothing: a failed session is an outcome (`error`), and the command exits 1 on it |
 
 A plan done block by block in one agent session carries every past block in its
-context; a coordinating session can't hand a block to a subagent when the block runs
-subagents of its own (a review skill does), since a subagent can't start one. A
-top-level session per block, started from outside, rereads the plan instead.
+context. A coordinating session that hands each block to a fresh subagent works too (a
+subagent can start subagents of its own, as a review skill's block does), but it still
+grows with every block's brief and report, and only as long as it remembers to
+delegate. A top-level session per block, started from outside, carries nothing over:
+it rereads the plan instead.
 
 ## `commits`
 

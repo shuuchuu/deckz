@@ -101,3 +101,9 @@ gives no such line, and after `--max-sessions` (20). Each session's result is ke
 under `.run/agent-loop/<start time>/`, and `claude --resume <session id>` (logged as
 each session ends) reopens one. It exits 1 unless the last session said `done` or
 `continue`.
+
+Where agents must work in a worktree (`worktree.required_for_agents`), start the loop
+in it, `--workdir ../<repository>--<name>`: a headless session can't enter an existing
+worktree by itself (Claude Code's EnterWorktree asks for a confirmation no one gives)
+and stays in the main checkout, where the hooks deny its edits. The results are then
+under that worktree's `.run/agent-loop/`, and `claude --resume` runs from it.
