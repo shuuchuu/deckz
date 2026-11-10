@@ -346,7 +346,7 @@ def labs_check_command(labs: "CiLabsSettings", python: str = "") -> str:
     smoke = " --smoke" if labs.smoke else ""
     return (
         f"deckz labs check --python {python} --timeout {labs.timeout}{smoke} "
-        + " ".join(labs.notebooks)
+        "--deprecations " + " ".join(labs.notebooks)
     )
 
 

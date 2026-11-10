@@ -16,12 +16,14 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   than data fetches: `--container` runs everything, for real, in the Codespace the
   published repository opens (`labs/published/.devcontainer/`, needs Docker).
   A failed shell command doesn't stop the cell, as in Colab: look at each
-  "shell command exited with code N" line (`nvidia-smi` on a CPU aside). A
-  deprecation a cell's own code meets is a problem too (`[i] DeprecationWarning: …`,
-  `FutureWarning`), once per place: the library's next release turns it into an
-  error. Those a library meets inside itself aren't reported, nor any with
-  `--container`. The command
-  exits with code 1 when a notebook has a problem, and lists those notebooks last.
+  "shell command exited with code N" line (`nvidia-smi` on a CPU aside). Each
+  deprecation a cell's own code meets gets a line too (`[i] DeprecationWarning: …`,
+  `FutureWarning`), once per place, and its notebook is listed apart at the end: a
+  warning, since the library's next release may turn it into an error, but no
+  problem unless `--deprecations` makes it one (the CI's `ci.labs` run does). Those a
+  library meets inside itself aren't reported, nor any with `--container`. The
+  command exits with code 1 when a notebook has a problem, and lists those notebooks
+  last.
 - A hands-on notebook stores no outputs (trainees would see the answers); a demo
   stores those of a full run in its own language: run it, then `deckz labs outputs
   <executed copy> <notebook>`. What the repository does to some outputs after that
@@ -104,7 +106,8 @@ A lab breaks without anyone touching it: a library's new release removes what it
 calls, after a release or two of deprecation warnings. With `ci.labs` set, the
 scheduled job (`deckz hooks install --ci`) runs `deckz labs check` every Sunday on the
 notebooks it names, in an environment it creates anew, with the libraries'
-latest versions the requirements allow; an error or a deprecation fails the job, and
+latest versions the requirements allow, with `--deprecations`; an error or a
+deprecation fails the job, and
 `ci.report_to` gets the issue, with the command to run again. Unset, the workflow has
 no such step: regenerating it changes nothing.
 

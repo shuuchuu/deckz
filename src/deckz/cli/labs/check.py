@@ -13,6 +13,7 @@ def check(
     python: str = executable,
     container: bool = False,
     timeout: int = 300,
+    deprecations: bool = False,
     workdir: Path = Path(),
 ) -> None:
     """Structural checks and an execution of every notebook's code cells.
@@ -30,10 +31,11 @@ def check(
     cmd`, before the verdict on raising cells. So does each deprecation a
     cell's own code meets (`[i] DeprecationWarning: …`, or
     `PendingDeprecationWarning`, `FutureWarning`: the warning points at the
-    cell), once per place, a problem too: a library's next release turns it
-    into an error (not reported with `--container`). With `ci.labs` set in
-    `deckz.yml`, the scheduled CI job runs it on those notebooks every
-    Sunday (`deckz hooks install --ci`).
+    cell), once per place, which a library's next release may turn into an
+    error (not reported with `--container`): a warning, listed apart at the
+    end, unless `--deprecations` counts it as a problem. With `ci.labs` set
+    in `deckz.yml`, the scheduled CI job runs it with `--deprecations` on
+    those notebooks every Sunday (`deckz hooks install --ci`).
 
     With `--container`, a notebook's run needs (`labs.run.metadata_key`:
     variables and secrets from the environment or `.env`, a hook of
@@ -54,18 +56,20 @@ def check(
             repository's dev container, under its published name, instead
             of with PYTHON
         timeout: Seconds bounding the whole notebook's execution
+        deprecations: Count the deprecations the cells meet as problems,
+            failing the check, instead of warnings
         workdir: Path to move into before running the command
 
     Raises:
         DeckzError: If PYTHON, a path, names no file.
         SystemExit: With code 1 when a notebook has a problem: a structural
             one, a cell that raises, a shell command that fails, a timeout
-            or a crash.
+            or a crash (or, with --deprecations, a deprecation).
 
     """
     from ...configuring.settings import GlobalSettings
     from ...labs.container import dev_container
-    from ...labs.execution import check_notebook, is_problem
+    from ...labs.execution import check_notebook, is_deprecation, is_problem
     from ...labs.notebook import notebook_paths
     from ...labs.publishing import notebook_id, repository_name
 
@@ -94,6 +98,7 @@ def check(
         else None
     )
     failed = []
+    warned = []
     for path in notebook_paths(notebooks):
         print(f"#### {path}")
         lab_id = notebook_id(path, settings.labs.id_metadata_key)
@@ -109,9 +114,18 @@ def check(
             hooks_cwd=settings.paths.git_dir,
         ):
             print(line)
-            if is_problem(line) and (not failed or failed[-1] != path):
-                failed.append(path)
+            if is_problem(line, deprecations=deprecations):
+                if not failed or failed[-1] != path:
+                    failed.append(path)
+            elif is_deprecation(line) and (not warned or warned[-1] != path):
+                warned.append(path)
         print()
+    if warned:
+        print(
+            f"{len(warned)} notebook(s) meeting deprecations, warnings only "
+            "(--deprecations counts them as problems):"
+        )
+        print("\n".join(f"  {path}" for path in warned))
     if failed:
         print(f"{len(failed)} notebook(s) with problems:")
         print("\n".join(f"  {path}" for path in failed))

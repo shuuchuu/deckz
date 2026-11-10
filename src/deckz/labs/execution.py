@@ -513,10 +513,32 @@ _FACT_RE = re.compile(
 )
 
 
-def is_problem(line: str) -> bool:
-    """Whether a `check_notebook` line reports a problem, which fails the check.
+_DEPRECATION_RE = re.compile(
+    r"\s*\[\d+\] (?:Deprecation|PendingDeprecation|Future)Warning: "
+)
+
+
+def is_deprecation(line: str) -> bool:
+    """Whether a `check_notebook` line reports a deprecation a cell's code met.
 
     Returns:
-        False for the lines that only state a fact (see `_FACT_RE`).
+        True if so.
     """
+    return bool(_DEPRECATION_RE.match(line))
+
+
+def is_problem(line: str, *, deprecations: bool = False) -> bool:
+    """Whether a `check_notebook` line reports a problem, which fails the check.
+
+    Args:
+        line: The line.
+        deprecations: Count a deprecation a cell met as a problem; by \
+            default it's a warning, shown without failing.
+
+    Returns:
+        False for the lines that only state a fact (see `_FACT_RE`), and for \
+        the deprecations unless `deprecations`.
+    """
+    if is_deprecation(line):
+        return deprecations
     return not _FACT_RE.match(line)

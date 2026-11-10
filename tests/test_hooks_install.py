@@ -523,7 +523,7 @@ def test_ci_workflow_runs_the_labs_on_sundays_only_when_asked() -> None:
         "unsafe-best-match --extra-index-url https://download.pytorch.org/whl/cpu "
         "-r labs/requirements.txt 'lightning>=2'",
         "uv run deckz labs check --python ../labs-venv/bin/python --timeout 900 "
-        "--smoke labs/notebooks/a labs/notebooks/b/demo-fr.ipynb",
+        "--smoke --deprecations labs/notebooks/a labs/notebooks/b/demo-fr.ipynb",
     ]
     assert "Report the problems in an issue" not in steps
 

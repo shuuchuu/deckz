@@ -135,7 +135,12 @@ def test_check_notebook_reports_the_deprecations_a_cell_meets(tmp_path: Path) ->
     assert "  [3] FutureWarning: the default will change" in lines
     assert sum("Warning:" in line for line in lines) == 2
     assert "  execution: no code cell raised" in lines
-    assert is_problem("  [1] DeprecationWarning: old() is deprecated, call new()")
+    # A warning, unless asked to count it as a problem.
+    warning = "  [1] DeprecationWarning: old() is deprecated, call new()"
+    assert not is_problem(warning)
+    assert is_problem(warning, deprecations=True)
+    # A warning raised as an error stays a problem.
+    assert is_problem("  [2] code cell raised FutureWarning: x")
 
 
 def test_smoke_caps_a_lightning_installed_after_it(tmp_path: Path) -> None:
@@ -252,3 +257,33 @@ def test_cli_check_reads_a_relative_python_from_the_current_directory(
     with raises(SystemExit):
         main(("labs", "check", "--python", "nowhere/bin/python", "demo.ipynb"))
     assert "no such interpreter" in caplog.text
+
+
+def test_cli_check_counts_deprecations_only_when_asked(
+    tmp_path: Path, capsys: Any, monkeypatch: Any
+) -> None:
+    from pygit2 import init_repository
+    from pytest import raises
+
+    from deckz.cli import main
+
+    init_repository(str(tmp_path))
+    _write_notebook(
+        tmp_path / "demo.ipynb",
+        [_code("import warnings\nwarnings.warn('soon gone', FutureWarning)")],
+    )
+    monkeypatch.chdir(tmp_path)
+
+    # A warning: the verdict and the exit code stay those of a clean run.
+    main(("labs", "check", "demo.ipynb"))
+    out = capsys.readouterr().out
+    assert "  [0] FutureWarning: soon gone\n" in out
+    assert "1 notebook(s) meeting deprecations, warnings only" in out
+    assert "with problems" not in out
+
+    with raises(SystemExit) as exc_info:
+        main(("labs", "check", "--deprecations", "demo.ipynb"))
+    assert exc_info.value.code == 1
+    out = capsys.readouterr().out
+    assert "1 notebook(s) with problems:\n  demo.ipynb" in out
+    assert "warnings only" not in out
