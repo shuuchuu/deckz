@@ -269,10 +269,30 @@ def translate(code):
     return "\n".join(out)
 
 
+def watch_deprecations():
+    # A deprecation the notebook's own code meets (the warning points at a
+    # cell: the call to change), shown once per place, reported as an event.
+    # Those raised inside a library, from a call of another library, aren't
+    # the lab's to fix.
+    import warnings
+    kinds = (DeprecationWarning, PendingDeprecationWarning, FutureWarning)
+    for kind in kinds:
+        warnings.simplefilter("default", kind)
+    shown = warnings.showwarning
+
+    def show(message, category, filename, lineno, file=None, line=None):
+        if issubclass(category, kinds) and str(filename).startswith("<cell "):
+            emit("deprecated", running[0], category.__name__, str(message)[:300])
+        return shown(message, category, filename, lineno, file, line)
+
+    warnings.showwarning = show
+
+
 def main():
     builtins.input = no_input
     import getpass
     getpass.getpass = no_input
+    watch_deprecations()
     if "--smoke" in sys.argv[2:]:
         exec(__SMOKE__, {})
     # Run in the real __main__ so multiprocessing can pickle functions cells define.
@@ -316,9 +336,12 @@ def report_lines(stderr: str, returncode: int) -> Iterator[str]:
     """Render a run's captured stderr and exit code as report lines.
 
     Yields:
-        One line per skipped shell command, per kernel death and per shell \
-        command that failed (without raising, as in IPython), then the \
-        overall execution result, and each cell that raised.
+        One line per skipped shell command, per kernel death, per shell \
+        command that failed (without raising, as in IPython) and per \
+        deprecation a cell's own code met (a `DeprecationWarning`, \
+        `PendingDeprecationWarning` or `FutureWarning` pointing at the cell, \
+        which the local runner reports), then the overall execution result, \
+        and each cell that raised.
     """
     # Not `splitlines()`: it also splits on `\x1e`, the marker's first character.
     events = [
@@ -326,7 +349,7 @@ def report_lines(stderr: str, returncode: int) -> Iterator[str]:
         for line in stderr.split("\n")
         if line.startswith(EVENT)
     ]
-    markers = {"skipped-shell", "kernel-died", "shell-failed"}
+    markers = {"skipped-shell", "kernel-died", "shell-failed", "deprecated"}
     # A failure reported again by a rerun (`labs.container`) is reported once.
     failures = list(
         dict.fromkeys(tuple(event) for event in events if event[0] not in markers)
@@ -345,6 +368,11 @@ def report_lines(stderr: str, returncode: int) -> Iterator[str]:
     )
     for _, i, code, cmd in shell_failed:
         yield f"  [{i}] shell command exited with code {code}: {cmd[:120]}"
+    deprecated = dict.fromkeys(
+        tuple(event) for event in events if event[0] == "deprecated"
+    )
+    for _, i, kind, message in deprecated:
+        yield f"  [{i}] {kind}: {message[:300]}"
     if returncode:
         # Killed (out of memory: -9) or crashed: the cells after the last event
         # never ran.

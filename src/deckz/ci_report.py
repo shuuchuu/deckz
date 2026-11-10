@@ -1,8 +1,10 @@
 """Report a scheduled CI run's problems in a GitHub issue: `deckz hooks ci-report`.
 
 The scheduled job (`deckz hooks install --ci`) writes what failed to a
-directory: the slow checks' output (`checks.txt`) and the failed builds'
-report (`builds.md`, `deckz run decks --report`). This turns them into one
+directory: the slow checks' output (`checks.txt`), the failed builds'
+report (`builds.md`, `deckz run decks --report`) and the labs' run
+(`labs.txt`, `deckz labs check` on `ci.labs`, or the end of the failed
+install of their libraries). This turns them into one
 issue whose body a person can paste to an agent: what failed, the command
 reproducing each failure, and its errors. GitHub emails it to the people it
 mentions and assigns (`ci.report_to`), body included, so the report reaches
@@ -27,6 +29,7 @@ LABEL = "deckz-ci"
 """The label of the issue each report goes to, while it's open."""
 CHECKS_REPORT = "checks.txt"
 BUILDS_REPORT = "builds.md"
+LABS_REPORT = "labs.txt"
 _BODY_MAX = 60_000
 """GitHub refuses an issue or comment body over 65,536 characters."""
 
@@ -77,15 +80,19 @@ def report_body(
     run_url: str,
     commit: str,
     report_to: Sequence[str],
+    labs_command: str = "",
 ) -> str | None:
     """The issue body for the reports in `reports_dir`.
 
     Args:
-        reports_dir: Where the job wrote `checks.txt` and `builds.md`.
+        reports_dir: Where the job wrote `checks.txt`, `builds.md` and \
+            `labs.txt`.
         checks_command: The command whose output `checks.txt` holds.
         run_url: The run's page.
         commit: The commit it ran on.
         report_to: GitHub logins to mention.
+        labs_command: The command whose output `labs.txt` holds, run in an \
+            environment with the labs' libraries.
 
     Returns:
         The body, or None when no report holds anything.
@@ -110,6 +117,25 @@ def report_body(
     builds = reports_dir / BUILDS_REPORT
     if builds.is_file() and (text := builds.read_text(encoding="utf8").strip()):
         sections.append(text)
+    labs = reports_dir / LABS_REPORT
+    if labs.is_file() and (text := labs.read_text(encoding="utf8").strip()):
+        sections.append(
+            "\n".join(
+                [
+                    "# Labs that failed",
+                    "",
+                    f"`{labs_command}`, in an environment with the labs' libraries "
+                    "(`ci.labs` in deckz.yml), reported these problems: an error, "
+                    "or a deprecation a cell's own code meets, which a library's "
+                    "next release turns into one. Fix the notebooks (both "
+                    "languages), then run it again.",
+                    "",
+                    "```text",
+                    text,
+                    "```",
+                ]
+            )
+        )
     if not sections:
         return None
     mentions = " ".join(f"@{login}" for login in report_to)

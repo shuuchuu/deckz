@@ -263,14 +263,67 @@ review:
     line: State of the art checked on   # followed by the date, YYYY-MM-DD
     months: 12                          # the default delay
     sections: {genai: 6, mlops: 6}      # faster ones, with their subsections
+    heading: Dated facts                # the reports' list of their facts
 ```
 
 The latest date on such a line counts; with none, the day the report was added (under
-`sections/`, following renames there). The opt-in `review-dated-facts` check (`deckz
-check review-dated-facts`) fails on each section report whose date is older than its
-delay, the longest section path of `sections` matching it, else `months`: check the
-facts, then write the day on that line. It is opt-in in every repository: its verdict
-changes as days pass, with no commit.
+`sections/`, following renames there). The facts must be checked again within the
+section's delay, the longest section path of `sections` matching it, else `months`:
+that's the report's *deadline*.
+
+**When they're due.** Reports written in the same weeks would all fall due the same
+month, so each report gets a *due month* of its own: the reports of one delay are
+spread over the months, at most `ceil(n / delay)` of their `n` in any month (with 36
+reports every 6 months, 6 a month), as late as that allows, the ties broken by path. A
+report is never due after its deadline: the spreading only brings a check forward,
+since a fact checked late is worse than one checked a month early. That costs once:
+the first cycle of reports written together is shorter, by up to `delay - 1` months.
+A report checked in its due month has its next deadline in that same month, which is
+then its due month, with no more advance. Nothing depends on the day the command runs:
+the months come from the reports alone.
+
+The opt-in `review-dated-facts` check (`deckz check review-dated-facts`) fails on each
+section report whose due month has begun: check the facts, then write the day on that
+line. It is opt-in in every repository: its verdict changes as days pass, with no
+commit.
+
+**The list.** With `heading` set, a section report lists its dated facts under that
+heading, after its findings, at their heading's level: a section of its own, which
+neither the fiche (`deckz review fiche` prints what comes before the findings), nor
+the findings, nor `deckz review compact` read. One table, a row per fact; the header
+row's words are yours, the columns go by position:
+
+```markdown
+## Dated facts
+
+| File | Frame | Fact | As of | Source |
+| --- | --- | --- | --- | --- |
+| `pipeline.md` | Better retrieval | Contextual retrieval prefixes each chunk with a sentence an LLM writes before indexing. | 2024-09 | https://www.anthropic.com/news/contextual-retrieval |
+| `quality.md` | RAG or long context? | The leading models' context windows reach a million tokens. | 2026-06 | the model's knowledge |
+| `press-qa/hands-on-fr.ipynb` | [2] | Ollama's OpenAI-compatible API accepts `reasoning_effort="none"`. | 2026-10-14 | a run on Colab with a GPU |
+```
+
+- the file, from the section's content directory, its notebooks directory or the
+  repository's root;
+- the frame's title, or a notebook's cell (`[2]`);
+- the fact, in full: the next check reads this row, not the file;
+- the day (`YYYY-MM-DD`) or month (`YYYY-MM`) its source states it as of;
+- the source: a URL, a document, the model's knowledge.
+
+A `|` inside a cell is written `\|`. A report without a list is valid: the next check
+of its facts writes it. The `review-facts-list` check (blocking) fails on a list
+before the findings or inside them, in a report other than a section's, a list item
+instead of a row, a row without five cells, an empty cell, a date that isn't one or is
+to come, a file that doesn't exist (renamed? write its new path), and a fact of fewer
+than four words.
+
+`deckz review dated-facts [<section>...]` prints the lists of a section and its
+subsections (`genai`, `content/genai`, a report or a directory of reports; every
+section report without one), each report with its due month, its last check and its
+deadline; `--due` only those due, `--on 2027-03` judged at the end of that month (or
+on a day), `--calendar` how many reports fall due each month, `--json` for a script.
+`deckz review brief` gives each report's due month and the number of facts its list
+holds.
 
 ## Findings
 

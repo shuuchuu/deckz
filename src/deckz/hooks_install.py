@@ -44,7 +44,7 @@ from pygit2 import Repository
 from .exceptions import HookInstallRefusedError
 
 if TYPE_CHECKING:
-    from .configuring.settings import CiSettings
+    from .configuring.settings import CiLabsSettings, CiSettings
 
 _MARKER = "# deckz-managed hook: safe to overwrite (deckz hooks install)"
 
@@ -327,6 +327,86 @@ _NIGHTLY_CRON = "0 3 * * *"
 _WEEKLY_CRON = "0 4 * * 0"
 """Sundays, an hour after the nightly checks: `github.event.schedule` tells \
 the two runs apart."""
+LABS_VENV = "../labs-venv"
+"""The labs' own environment, next to the checkout as the reports are."""
+
+
+def labs_check_command(labs: "CiLabsSettings", python: str = "") -> str:
+    """The `deckz labs check` the scheduled job runs on `ci.labs`.
+
+    Args:
+        labs: `ci.labs`.
+        python: The interpreter to give `--python`; the labs' environment's \
+            by default.
+
+    Returns:
+        The command, without `uv run`.
+    """
+    python = python or f"{LABS_VENV}/bin/python"
+    smoke = " --smoke" if labs.smoke else ""
+    return (
+        f"deckz labs check --python {python} --timeout {labs.timeout}{smoke} "
+        + " ".join(labs.notebooks)
+    )
+
+
+def labs_install_commands(labs: "CiLabsSettings") -> tuple[str, str]:
+    """The commands creating the labs' environment and installing their libraries.
+
+    Returns:
+        `uv venv …` and `uv pip install …`. With extra indexes, each package \
+        takes the best version any index has (uv's own default takes the \
+        first index having the package at all: PyTorch's also serves numpy).
+    """
+    requirements = [] if labs.requirements is None else ["-r", labs.requirements]
+    indexes = [arg for url in labs.index_urls for arg in ("--extra-index-url", url)]
+    if indexes:
+        indexes = ["--index-strategy", "unsafe-best-match", *indexes]
+    install = " ".join(
+        [
+            "uv pip install --python",
+            f"{LABS_VENV}/bin/python",
+            *indexes,
+            *requirements,
+            *(f"'{p}'" for p in labs.packages),
+        ]
+    )
+    return f"uv venv {LABS_VENV} --python {labs.python}", install
+
+
+def _labs_step(ci: "CiSettings", dispatched: str) -> str:
+    # Every Sunday, the labs `ci.labs` names, in an environment made anew.
+    labs = ci.labs
+    if labs is None:
+        return ""
+    venv, install = labs_install_commands(labs)
+    check = f"uv run {labs_check_command(labs)}"
+    if ci.report_to:
+        run = f"""|
+          # A failed install is the report, its log's end; else the labs'
+          # output, when one fails.
+          if ! {{ {venv} && {install}; }} > labs-install.txt 2>&1; then
+            mkdir -p {_REPORTS}
+            echo "Installing the labs' libraries failed:" > {_REPORTS}/labs.txt
+            tail -n 60 labs-install.txt >> {_REPORTS}/labs.txt
+            cat {_REPORTS}/labs.txt; exit 1
+          fi
+          {check} > labs.txt && cat labs.txt || {{
+            cat labs.txt; mkdir -p {_REPORTS}; mv labs.txt {_REPORTS}/; exit 1
+          }}"""
+    else:
+        run = f"""|
+          {venv}
+          {install}
+          {check}"""
+    return f"""
+      # The labs, with their libraries' latest versions the requirements
+      # allow, in an environment of their own: what a release breaks or
+      # deprecates in them shows before a session does (`ci.labs`).
+      - name: Run the labs
+        if: (github.event.schedule == '{_WEEKLY_CRON}' || {dispatched}) && !cancelled()
+        run: {run}
+"""
 
 
 def ci_workflow(ci: "CiSettings") -> str:
@@ -383,7 +463,8 @@ def ci_workflow(ci: "CiSettings") -> str:
     build_event = f"github.event.schedule == '{build_cron}' || {dispatched}"
     period, before = ("week", "7 days ago") if weekly else ("day", "24 hours ago")
     report = f" \\\n            --report {_REPORTS}/builds.md" if ci.report_to else ""
-    weekly_cron = f'\n    - cron: "{_WEEKLY_CRON}"' if ci.builds and weekly else ""
+    sundays = (ci.builds and weekly) or ci.labs is not None
+    weekly_cron = f'\n    - cron: "{_WEEKLY_CRON}"' if sundays else ""
     videos = (
         f"""
       - name: Fetch the published videos
@@ -453,7 +534,7 @@ def ci_workflow(ci: "CiSettings") -> str:
           GITHUB_TOKEN: ${{{{ github.token }}}}
         run: uv run deckz hooks ci-report {_REPORTS}
 """
-        if ci.report_to and (ci.builds or ci.nightly_checks)
+        if ci.report_to and (ci.builds or ci.nightly_checks or ci.labs)
         else ""
     )
     permissions = (
@@ -520,7 +601,7 @@ jobs:
             *) RANGE="$BEFORE..HEAD" ;;
           esac
           uv run deckz hooks check-commits "$RANGE"
-{nightly}{builds}{reporting}"""
+{nightly}{builds}{_labs_step(ci, dispatched)}{reporting}"""
 
 
 def install_ci_workflow(

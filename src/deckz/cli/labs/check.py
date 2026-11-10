@@ -27,7 +27,13 @@ def check(
     `labs/published/.devcontainer/`; needs Docker). A shell command that
     fails (`!cmd`, `%pip`) doesn't raise, as in Colab, where the cell goes
     on: each one gets its own line, `[i] shell command exited with code N:
-    cmd`, before the verdict on raising cells.
+    cmd`, before the verdict on raising cells. So does each deprecation a
+    cell's own code meets (`[i] DeprecationWarning: …`, or
+    `PendingDeprecationWarning`, `FutureWarning`: the warning points at the
+    cell), once per place, a problem too: a library's next release turns it
+    into an error (not reported with `--container`). With `ci.labs` set in
+    `deckz.yml`, the scheduled CI job runs it on those notebooks every
+    Sunday (`deckz hooks install --ci`).
 
     With `--container`, a notebook's run needs (`labs.run.metadata_key`:
     variables and secrets from the environment or `.env`, a hook of
@@ -43,7 +49,7 @@ def check(
             CPU run finishes
         python: Interpreter to run the cells with, e.g. a throwaway venv
             with the labs' libraries installed (this process's own may not
-            have them)
+            have them); a relative path is from the current directory
         container: Run each notebook for real in the published
             repository's dev container, under its published name, instead
             of with PYTHON
@@ -51,6 +57,7 @@ def check(
         workdir: Path to move into before running the command
 
     Raises:
+        DeckzError: If PYTHON, a path, names no file.
         SystemExit: With code 1 when a notebook has a problem: a structural
             one, a cell that raises, a shell command that fails, a timeout
             or a crash.
@@ -63,6 +70,18 @@ def check(
     from ...labs.publishing import notebook_id, repository_name
 
     settings = GlobalSettings.from_yaml(workdir)
+    if "/" in python:
+        # The runner starts in a throwaway directory: a relative path would
+        # be read from there.
+        python = str(Path(python).absolute())
+        if not container and not Path(python).is_file():
+            from ...exceptions import DeckzError
+
+            msg = (
+                f"--python {python}: no such interpreter; give the labs' "
+                "environment's (e.g. `uv venv <dir>`, then `<dir>/bin/python`)"
+            )
+            raise DeckzError(msg)
     dev = (
         dev_container(
             settings.paths.labs_published_dir,

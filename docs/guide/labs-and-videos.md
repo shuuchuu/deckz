@@ -16,7 +16,11 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   than data fetches: `--container` runs everything, for real, in the Codespace the
   published repository opens (`labs/published/.devcontainer/`, needs Docker).
   A failed shell command doesn't stop the cell, as in Colab: look at each
-  "shell command exited with code N" line (`nvidia-smi` on a CPU aside). The command
+  "shell command exited with code N" line (`nvidia-smi` on a CPU aside). A
+  deprecation a cell's own code meets is a problem too (`[i] DeprecationWarning: …`,
+  `FutureWarning`), once per place: the library's next release turns it into an
+  error. Those a library meets inside itself aren't reported, nor any with
+  `--container`. The command
   exits with code 1 when a notebook has a problem, and lists those notebooks last.
 - A hands-on notebook stores no outputs (trainees would see the answers); a demo
   stores those of a full run in its own language: run it, then `deckz labs outputs
@@ -92,6 +96,40 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   the one it stacks on, a README that doesn't link its notebook, and a README last
   changed before its notebook was. Content links such a repository through the
   repository's templating, never by hand (`lab-urls`).
+
+
+## Labs in CI
+
+A lab breaks without anyone touching it: a library's new release removes what it
+calls, after a release or two of deprecation warnings. With `ci.labs` set, the
+scheduled job (`deckz hooks install --ci`) runs `deckz labs check` every Sunday on the
+notebooks it names, in an environment it creates anew, with the libraries'
+latest versions the requirements allow; an error or a deprecation fails the job, and
+`ci.report_to` gets the issue, with the command to run again. Unset, the workflow has
+no such step: regenerating it changes nothing.
+
+```yaml
+ci:
+  labs:
+    notebooks:                     # files, or directories searched recursively
+      - labs/notebooks/python/basics
+      - labs/notebooks/ml/regression/linear-regression/hands-on-fr.ipynb
+    requirements: labs/requirements.txt              # and/or
+    packages: [scikit-learn, pandas]                 # pip install's arguments
+    index_urls: [https://download.pytorch.org/whl/cpu]  # PyTorch without CUDA
+    python: "3.12"                 # the default
+    timeout: 600                   # seconds per notebook, the default
+    smoke: true                    # cap Lightning's Trainers, the default
+```
+
+It runs as `deckz labs check` without `--container` does: on the runner's CPU, the run
+needs' variables and secrets unset, no shell command but the data fetches. So name
+only the labs that run that way: not those needing a GPU, credentials or a server,
+nor those that `!pip install` a library `packages` doesn't install. A pinned
+requirements file (one compiled against Colab's versions) shows what breaks on
+Colab today; an unpinned one shows the next releases before Colab takes them. A
+directory runs both languages of each lab: name the French notebooks alone to halve
+the time.
 
 ## Videos
 

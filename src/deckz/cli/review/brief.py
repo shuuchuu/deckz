@@ -29,9 +29,10 @@ def brief(
     directory or a parent's, else the section's own, to be written. Under
     each report, its lab notebooks (those under the notebooks directory at
     the section's path, and the other files it records), its open and
-    refused findings one line each, when its dated facts are due, and what
-    changed since its last mark among the section's definitions (`.yml`)
-    and its decks' own files. Then the section's flavors, with their frames
+    refused findings one line each, when its dated facts are due and how
+    many its list has (the list itself: `deckz review dated-facts`), and
+    what changed since its last mark among the section's definitions
+    (`.yml`) and its decks' own files. Then the section's flavors, with their frames
     and the decks including them, and every deck including one of its
     files, with how (`<section>@<flavor>`, or a file alone) and the
     section's frames out of its own.
@@ -45,12 +46,14 @@ def brief(
         json: Print one JSON object instead: `{section, units: [{report,
             exists, date, base, files, labs: [{lab, files}], others,
             counts: {open, done, refused}, findings, dated_facts: {checked,
-            source, months, due_on, due} or null, changed}], flavors: [{name,
-            files, frames, decks}], decks: [{deck, uses, frames, total}],
-            problems}`; a file is as in `deckz review status --json`, a
-            content file with its `flavors` and `decks` (a count) too, a
-            finding (open or refused only) as in `deckz review findings
-            --json`, and `changed` null when the report's base isn't in this
+            source, months, due_on, deadline, due, listed} or null,
+            changed}], flavors: [{name, files, frames, decks}], decks:
+            [{deck, uses, frames, total}], problems}`; a file is as in
+            `deckz review status --json`, a content file with its `flavors`
+            and `decks` (a count) too, a finding (open or refused only) as
+            in `deckz review findings --json`, `due_on` the first day of the
+            report's due month, `listed` its list's rows (null without a
+            list), and `changed` null when the report's base isn't in this
             clone
         workdir: Path to move into before running the command
 
@@ -108,7 +111,11 @@ def _json(found: "SectionBrief", today: "date") -> dict[str, object]:
                 "source": facts.source,
                 "months": facts.months,
                 "due_on": None if facts.due_on is None else facts.due_on.isoformat(),
+                "deadline": None
+                if facts.deadline is None
+                else facts.deadline.isoformat(),
                 "due": facts.due(today),
+                "listed": len(facts.facts) if facts.listed else None,
             },
             "changed": None if u.changed is None else list(u.changed),
         }
@@ -203,7 +210,12 @@ def _print_since(unit: "BriefUnit", today: "date") -> None:
     if (facts := unit.dated_facts) is not None and facts.checked is not None:
         since = "checked" if facts.source == "line" else "report added"
         due = "DUE since" if facts.due(today) else "due"
-        print(f"  dated facts: {since} {facts.checked}, {due} {facts.due_on}")
+        listing = f"{len(facts.facts)} listed" if facts.listed else "no list yet"
+        print(
+            f"  dated facts: {since} {facts.checked}, {due} {facts.due_on:%Y-%m} "
+            f"(by {facts.deadline}); {listing}: `deckz review dated-facts "
+            f"{unit.report}`"
+        )
     if unit.base is None:
         return
     if unit.changed is None:

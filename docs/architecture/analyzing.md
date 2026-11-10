@@ -17,7 +17,7 @@ flavors, marking a translation synced).
 
 | Module | Backs | What it does |
 |---|---|---|
-| [`content_checks`][deckz.analyzing.content_checks] | `deckz check` | Generic content checks, each a `(settings, paths) -> list[str]` in `CHECKS`: `lab-ids`, `lab-pairs`, `lab-outputs`, `lab-secrets`, `lab-format`, `asset-credits`, `raw-latex`, `jinja-syntax`, `deck-definitions`, `lab-urls`, `course-notes-files`, `course-notes-pairs`, `course-notes-code`, `review-headers`, `review-findings` |
+| [`content_checks`][deckz.analyzing.content_checks] | `deckz check` | Generic content checks, each a `(settings, paths) -> list[str]` in `CHECKS`: `lab-ids`, `lab-pairs`, `lab-outputs`, `lab-secrets`, `lab-format`, `asset-credits`, `raw-latex`, `jinja-syntax`, `deck-definitions`, `lab-urls`, `course-notes-files`, `course-notes-pairs`, `course-notes-code`, `review-headers`, `review-findings`, `review-dated-facts`, `review-facts-list` |
 | [`affected`][deckz.analyzing.affected] | `deckz show affected`, `status`, `upload` | Which decks a change of some files reaches (in French: an `en/` file counts as its French sibling), and their findings |
 | [`i18n_stale`][deckz.analyzing.i18n_stale] | `deckz i18n stale`, `mark-synced`, the commit-msg hook | fr/en pairs, and their staleness from the history's `Lang-sync` trailers |
 | [`i18n_coverage`][deckz.analyzing.i18n_coverage] | `deckz i18n missing-en`, `status` | French content, titles and variables with no English counterpart |
@@ -28,7 +28,7 @@ flavors, marking a translation synced).
 | [`sections_search`][deckz.analyzing.sections_search] | `deckz search-sections`, `section-files`, `section-flavors` | Find shared sections by keyword, list their flavors and files |
 | [`sections_analyzer`][deckz.analyzing.sections_analyzer] | `deckz deps` | Which sections, flavors and files the decks use; each flavor's files and frames (`frame_count`, the one frame count), the decks' total frames |
 | [`review`][deckz.analyzing.review] | `deckz review`, the `review-headers` check, `status` | The review registry: the reports under `review.dir`, whose front matter's `reviewed` key records each file reviewed by its blob sha, and whose path gives their kind (a section's under `sections/`, a deck's at `<deck directory>.md`, which records the deck's own files: its pass holds while they're fresh, its shared sections' changes show in their own reports; a course notes report's under the course notes directory's path), each file's own day when it differs from the report's; files' states (fresh, due under a later `review.rules` rule, stale, unreviewed), the sections ranked by what's left to review, a deck's pass and chapters, diffs since a review, and `mark`, which rewrites that key only, refuses a file changed from the main line since its review, and with `--at` registers a past commit's review of files a report doesn't record yet |
-| [`dated_facts`][deckz.analyzing.dated_facts] | the `review-dated-facts` check (opt-in) | When each section report's dated facts were last checked (its `review.dated_facts.line`, else the day it was added) and whether they're due, by the section's delay |
+| [`dated_facts`][deckz.analyzing.dated_facts] | `deckz review dated-facts`, the `review-dated-facts` (opt-in) and `review-facts-list` checks | When each section report's dated facts were last checked (its `review.dated_facts.line`, else the day it was added), its deadline by the section's delay, and its due month, the reports of one delay spread over the months (`schedule`, from the reports alone); each report's list of its facts, a table after its findings, and what breaks its form |
 | [`findings`][deckz.analyzing.findings] | `deckz review findings`, `fiche`, `compact`, the `review-findings` check | The reports' findings, by `review.findings`' grammar (heading, rubrics, outcome words): each finding's id, rubric, lines and outcome, what breaks the grammar, and the reports covering a deck or a path; a report's fiche (its text before the findings), and the compaction of its done findings to one line each, checked to read the same. It reads and rewrites the report bodies, `review` only their front matter |
 | [`review_brief`][deckz.analyzing.review_brief] | `deckz review brief` | What a section's reviewer reads first, the decks parsed once: its files by report with their states, frames and flavors, its lab notebooks, its reports' open and refused findings, dated facts and changes since their base, its flavors and the decks including it |
 | [`flavor_renamer`][deckz.analyzing.flavor_renamer], [`flavors_merger`][deckz.analyzing.flavors_merger], [`flavor_files`][deckz.analyzing.flavor_files] | `deckz flavor rename`, `deduplicate` | Edit section definitions and every deck referring to them |
@@ -61,7 +61,7 @@ flowchart TB
   names; `deck-definitions` parses every deck in French, in a process pool.
 - A check **blocks** or is **deferred** (`ChecksSettings.blocking`: `deckz.yml`'s
   `checks.deferred`, else `content_checks.DEFERRED`, every built-in but `lab-secrets`,
-  `jinja-syntax`, `deck-definitions`, `review-headers` and `review-findings`; a
+  `jinja-syntax`, `deck-definitions`, `review-headers`, `review-findings` and `review-facts-list`; a
   plugin check blocks
   unless listed). `deckz
   check` fails on a blocking check's findings, or on any finding of a check named on its

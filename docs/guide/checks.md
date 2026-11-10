@@ -12,6 +12,8 @@ course-notes/topic/intro.md` runs one chapter's code.
 No check compiles a deck: when `ci.builds` is set, CI builds every Sunday (or every
 night) the handouts of the decks the period's commits reach, and fails naming the deck
 that doesn't build (`deckz run decks --since <rev>` does the same before you push).
+With `ci.labs` set, CI runs those labs every Sunday too, with their libraries
+installed anew (see [Labs in CI](labs-and-videos.md#labs-in-ci)).
 With `ci.report_to`, the failures land in a `deckz-ci` GitHub issue, which GitHub
 emails: each with the command that reproduces it and its errors, ready to paste to an
 agent.
@@ -39,7 +41,8 @@ a repository's own checks block unless it lists them.
 | `deck-definitions` | yes | every deck parses in French: its `deck.yml`, the sections it includes and their `.yml`, the files they name, its `variables.yml` | fix the YAML, or restore (or stop including) the section or file it names |
 | `review-headers` | yes | every review report's `reviewed` front matter is well formed, the files it records exist, and the report is where its kind goes: under `sections/`, under the course notes directory's path, or at its deck's path (only with `review.dir`, see [Reviews](reviews.md)) | a renamed file: `deckz review mark <report> --forget <old> <new>`; a deleted one: `--forget <old>`; a misplaced report: `git mv` it |
 | `review-findings` | yes | every finding of the review reports has an outcome, an id no other finding of its report has, and its rubric's letters, under its rubric's heading (only with `review.findings`, see [Reviews](reviews.md#findings)) | write its outcome; give a second id the next free number; move the finding under its rubric |
-| `review-dated-facts` | opt-in | no section report's dated facts are older than their delay (only with `review.dated_facts`, see [Reviews](reviews.md#dated-facts)) | check the facts, then write the day on the report's dated line |
+| `review-facts-list` | yes | every section report's list of dated facts is a table after its findings, each row with its five cells filled, a date, an existing file and the fact in full (only with `review.dated_facts.heading`, see [Reviews](reviews.md#dated-facts)) | fill the cell, fix the date or the file's path, move the list after the findings |
+| `review-dated-facts` | opt-in | no section report's dated facts are due: its due month, at the latest its last check plus its delay, hasn't begun (only with `review.dated_facts`, see [Reviews](reviews.md#dated-facts)) | check the facts (`deckz review dated-facts <section>`), then write the day on the report's dated line |
 | `lab-ids` | no | every notebook has a valid, unique published ID | `deckz labs ids` |
 | `lab-pairs` | no | every lab exists in French and English, with the same cells and code | translate the missing one; `deckz labs compare <lab dir>` |
 | `lab-outputs` | no | hands-on notebooks store no outputs; demos store a full run's, none of them blank | clear them, or run the demo and `deckz labs outputs` |

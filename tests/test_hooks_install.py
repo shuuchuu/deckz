@@ -487,6 +487,68 @@ def test_ci_workflow_reports_problems_in_an_issue_only_when_asked() -> None:
     assert "--report ../deckz-reports/builds.md" in build
 
 
+def test_ci_workflow_runs_the_labs_on_sundays_only_when_asked() -> None:
+    import subprocess
+
+    import yaml
+
+    from deckz.configuring.settings import CiLabsSettings, CiSettings
+    from deckz.hooks_install import ci_workflow
+
+    # Without `labs`, nothing of it: regenerating the workflow changes nothing.
+    for settings in (
+        CiSettings(),
+        CiSettings(nightly_checks=("missing-en",), report_to=("me",)),
+    ):
+        text = ci_workflow(settings)
+        assert "labs" not in text
+        assert "0 4 * * 0" not in text
+
+    labs = CiLabsSettings(
+        notebooks=("labs/notebooks/a", "labs/notebooks/b/demo-fr.ipynb"),
+        requirements="labs/requirements.txt",
+        packages=("lightning>=2",),
+        index_urls=("https://download.pytorch.org/whl/cpu",),
+        timeout=900,
+    )
+    quiet = yaml.safe_load(ci_workflow(CiSettings(labs=labs)))
+    assert [s["cron"] for s in quiet[True]["schedule"]] == ["0 3 * * *", "0 4 * * 0"]
+    steps = {s["name"]: s for s in quiet["jobs"]["check"]["steps"]}
+    step = steps["Run the labs"]
+    assert step["if"].startswith("(github.event.schedule == '0 4 * * 0' || ")
+    assert step["if"].endswith(") && !cancelled()")
+    assert step["run"].splitlines() == [
+        "uv venv ../labs-venv --python 3.12",
+        "uv pip install --python ../labs-venv/bin/python --index-strategy "
+        "unsafe-best-match --extra-index-url https://download.pytorch.org/whl/cpu "
+        "-r labs/requirements.txt 'lightning>=2'",
+        "uv run deckz labs check --python ../labs-venv/bin/python --timeout 900 "
+        "--smoke labs/notebooks/a labs/notebooks/b/demo-fr.ipynb",
+    ]
+    assert "Report the problems in an issue" not in steps
+
+    reporting = yaml.safe_load(ci_workflow(CiSettings(labs=labs, report_to=("me",))))
+    steps = {s["name"]: s for s in reporting["jobs"]["check"]["steps"]}
+    run = steps["Run the labs"]["run"]
+    assert "> labs-install.txt 2>&1; then" in run
+    assert "tail -n 60 labs-install.txt >> ../deckz-reports/labs.txt" in run
+    assert "mv labs.txt ../deckz-reports/" in run
+    assert "Report the problems in an issue" in steps
+    # The step's script parses.
+    subprocess.run(["sh", "-n"], input=run, text=True, check=True)
+
+
+def test_ci_labs_installs_something() -> None:
+    from pydantic import ValidationError
+
+    from deckz.configuring.settings import CiLabsSettings
+
+    with raises(ValidationError, match="installs nothing"):
+        CiLabsSettings(notebooks=("labs/notebooks/a",))
+    with raises(ValidationError):
+        CiLabsSettings(notebooks=(), packages=("numpy",))
+
+
 def test_install_ci_workflow_refuses_a_foreign_workflow(tmp_path: Path) -> None:
     from deckz.configuring.settings import CiSettings
     from deckz.hooks_install import install_ci_workflow

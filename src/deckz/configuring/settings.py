@@ -444,8 +444,11 @@ class DatedFactsSettings(BaseModel):
     A shared section's report says when its dated facts (versions, prices, \
     the state of the art) were last checked, on a line starting with \
     `line` and followed by the date (`YYYY-MM-DD`); without one, the day \
-    the report was added counts. The `review-dated-facts` check (opt-in) \
-    fails on the reports whose date is older than their delay.
+    the report was added counts. Each report is due in a month of its own, \
+    no later than that date plus its delay, the reports of one delay spread \
+    over the months (`deckz.analyzing.dated_facts`). The \
+    `review-dated-facts` check (opt-in) fails on the reports due, and \
+    `deckz review dated-facts` prints their lists.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -458,6 +461,12 @@ class DatedFactsSettings(BaseModel):
     """A delay for some sections and their subsections, by section path \
     (relative to the shared content directory), e.g. `{genai: 6}` for the \
     fast-moving ones; the longest path matching a report's section wins."""
+    heading: str | None = None
+    """The heading of a section report's list of its dated facts, e.g. \
+    `Dated facts`: after the findings, at their heading's level, a table \
+    with a row per fact (file, frame, the fact, as of when, its source), \
+    which a check of the facts reads instead of the content files. Unset, \
+    no list is read, and the `review-facts-list` check passes."""
 
 
 class ReviewSettings(BaseModel):
@@ -778,6 +787,54 @@ class WorktreeSettings(BaseModel):
     which every session shares (see `deckz.agent_checkouts`)."""
 
 
+class CiLabsSettings(BaseModel):
+    """The labs the scheduled CI job runs every Sunday (`deckz labs check`).
+
+    In an environment of their own, apart from the repository's (which \
+    lacks the labs' libraries): a virtual environment the job creates with \
+    `python` and fills with `requirements` and `packages`, every week \
+    anew, so that a library's new release shows what it breaks or \
+    deprecates in a lab (an error, or a deprecation a cell's own code \
+    meets) before a session does, without an agent. A failure goes to the \
+    `ci.report_to` issue. The runner is `deckz labs check`'s own, without \
+    `--container`: on a CPU, without the run needs' variables and secrets, \
+    running no shell command but the data fetches; so only the labs that \
+    run that way belong here (no GPU-only lab, none that installs its own \
+    libraries with `!pip install` unless `packages` has them).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    notebooks: tuple[str, ...] = Field(min_length=1)
+    """Notebooks to run, or directories searched recursively for them, \
+    relative to the repository's root (a lab's directory runs both of its \
+    languages)."""
+    requirements: str | None = None
+    """A requirements file installed in the labs' environment, relative to \
+    the repository's root, e.g. the one a Codespace installs."""
+    packages: tuple[str, ...] = ()
+    """More requirements, as `pip install` takes them, e.g. `torch`."""
+    index_urls: tuple[str, ...] = ()
+    """Extra package indexes, e.g. `https://download.pytorch.org/whl/cpu` \
+    for PyTorch without CUDA (gigabytes fewer to install)."""
+    python: str = "3.12"
+    """The labs' Python version (`uv venv --python`)."""
+    timeout: int = Field(default=600, gt=0)
+    """Seconds each notebook may run (`deckz labs check --timeout`)."""
+    smoke: bool = True
+    """Cap every Lightning Trainer (`deckz labs check --smoke`), so that a \
+    training finishes on the runner's CPU."""
+
+    @model_validator(mode="after")
+    def _something_to_install(self) -> Self:
+        if self.requirements is None and not self.packages:
+            msg = (
+                "`ci.labs` installs nothing: name the labs' libraries, a "
+                "`requirements` file or `packages`"
+            )
+            raise ValueError(msg)
+        return self
+
+
 class CiSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
     deckz_repository: str | None = None
@@ -823,6 +880,10 @@ class CiSettings(BaseModel):
     e.g. the assets builders' outputs, which are only rebuilt when stale: \
     built from nothing, they can take longer than the decks. Never a \
     directory holding committed files, which a restore would overwrite."""
+    labs: CiLabsSettings | None = None
+    """The labs a scheduled job runs every Sunday, with their libraries at \
+    their latest versions the requirements allow, to catch what a release \
+    breaks or deprecates in them. Unset, no lab runs in CI."""
 
 
 class GlobalSettings(BaseModel):

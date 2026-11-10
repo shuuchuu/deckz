@@ -1391,7 +1391,9 @@ The main commands:
   `deckz.yml`'s `ci.nightly_checks` every night, and, on Sundays (or every
   night), the handouts of the decks the period's commits reach, in the
   `ci.builds` languages (`deckz run decks --since`, every deck when no
-  commit is older than that). When those fail and `ci.report_to` names
+  commit is older than that), and, on Sundays, `deckz labs check` on the
+  `ci.labs` notebooks, in an environment made anew with their libraries.
+  When those fail and `ci.report_to` names
   someone, `deckz hooks ci-report` opens an issue labeled `deckz-ci` (or
   comments on the open one) mentioning and assigning them, which GitHub
   emails them: each failure with the command reproducing it and its
@@ -1409,10 +1411,13 @@ The main commands:
   `cache_paths` (directories of generated files, such as the assets
   builders' outputs, kept from one build to the next with
   `actions/cache`, so only the stale ones are rebuilt; never one holding
-  committed files, which a restore would overwrite).
+  committed files, which a restore would overwrite), and `labs`
+  (`notebooks`, `requirements`, `packages`, `index_urls`, `python`,
+  `timeout`, `smoke`: unset, no lab runs in CI; see the guide's "Labs in
+  CI").
 - `deckz hooks ci-report REPORTS [--dry-run]`: the scheduled workflow's
-  last step, when its checks or builds fail: REPORTS holds their outputs
-  (`checks.txt`, `builds.md`), turned into the `deckz-ci` issue described
+  last step, when its checks, builds or labs fail: REPORTS holds their
+  outputs (`checks.txt`, `builds.md`, `labs.txt`), turned into the `deckz-ci` issue described
   above, with the job's `GITHUB_TOKEN`. `--dry-run` prints the body.
 - `deckz show` (alias for `deckz show tree`): show the resolved tree of
   sections and files for the current deck.

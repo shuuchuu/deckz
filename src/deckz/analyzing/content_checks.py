@@ -648,6 +648,16 @@ def review_dated_facts(settings: "GlobalSettings", paths: Paths = None) -> list[
     return dated_facts_problems(settings, paths)
 
 
+def review_facts_list(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
+    # Every section report's list of dated facts is a well-formed table,
+    # after the findings, each row's file existing (see
+    # `deckz.analyzing.dated_facts`). Nothing to do without
+    # `review.dated_facts.heading`.
+    from .dated_facts import list_problems
+
+    return list_problems(settings, paths)
+
+
 CHECKS: dict[str, Callable[["GlobalSettings", Paths], list[str]]] = {
     "lab-ids": lab_ids,
     "lab-pairs": lab_pairs,
@@ -665,6 +675,7 @@ CHECKS: dict[str, Callable[["GlobalSettings", Paths], list[str]]] = {
     "review-headers": review_headers,
     "review-findings": review_findings,
     "review-dated-facts": review_dated_facts,
+    "review-facts-list": review_facts_list,
 }
 
 DEFERRED = (
@@ -688,8 +699,11 @@ then. Those left out block a commit, the point of their harm:
 `deck-definitions` (each `git pull` breaks everyone's builds),
 `review-headers` (a malformed report stops `deckz review` for everyone
 after a pull, and a renamed file's review is best carried over by whoever
-renames it) and `review-findings` (a finding with no outcome or a shared id
-miscounts what's left to do, and only its writer knows the outcome).
+renames it), `review-findings` (a finding with no outcome or a shared id
+miscounts what's left to do, and only its writer knows the outcome) and
+`review-facts-list` (a dated fact a row doesn't state in full, or a file
+renamed under it, is lost to the next check of the facts, which reads the
+row alone).
 `deckz.yml`'s `checks.deferred` replaces this list.
 """
 

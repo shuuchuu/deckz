@@ -102,6 +102,42 @@ def test_check_notebook_reports_a_failed_shell_command_and_runs_on(
     assert "  execution: no code cell raised" in lines
 
 
+def test_check_notebook_reports_the_deprecations_a_cell_meets(tmp_path: Path) -> None:
+    # The cell's own call, once per place, whatever its kind; a library's
+    # deprecation met inside the library isn't the lab's.
+    library = tmp_path / "lib"
+    library.mkdir()
+    (library / "oldlib.py").write_text(
+        "import warnings\n\n"
+        "def old():\n"
+        "    warnings.warn('old() is deprecated, call new()',\n"
+        "                  DeprecationWarning, 2)\n\n"
+        "def inner():\n"
+        "    old()\n"
+    )
+    path = tmp_path / "demo.ipynb"
+    _write_notebook(
+        path,
+        [
+            _code(f"import sys\nsys.path.insert(0, {str(library)!r})\nimport oldlib"),
+            _code("for _ in range(3):\n    oldlib.old()"),
+            _code("oldlib.inner()"),
+            _code(
+                "import warnings\n"
+                "warnings.warn('the default will change', FutureWarning)"
+            ),
+        ],
+    )
+
+    lines = list(check_notebook(path, python=sys.executable, timeout=30))
+
+    assert "  [1] DeprecationWarning: old() is deprecated, call new()" in lines
+    assert "  [3] FutureWarning: the default will change" in lines
+    assert sum("Warning:" in line for line in lines) == 2
+    assert "  execution: no code cell raised" in lines
+    assert is_problem("  [1] DeprecationWarning: old() is deprecated, call new()")
+
+
 def test_smoke_caps_a_lightning_installed_after_it(tmp_path: Path) -> None:
     # A lab's `!pip install lightning` runs after the smoke code: it caps the
     # Trainer when the notebook first imports it.
@@ -194,3 +230,25 @@ def test_is_problem_tells_failures_from_facts(tmp_path: Path) -> None:
     # No solution section and a skipped shell line are facts, not problems.
     assert not any(is_problem(line) for line in clean_lines), clean_lines
     assert any(is_problem(line) for line in raising_lines), raising_lines
+
+
+def test_cli_check_reads_a_relative_python_from_the_current_directory(
+    tmp_path: Path, capsys: Any, caplog: Any, monkeypatch: Any
+) -> None:
+    from pygit2 import init_repository
+    from pytest import raises
+
+    from deckz.cli import main
+
+    init_repository(str(tmp_path))
+    (tmp_path / "env" / "bin").mkdir(parents=True)
+    (tmp_path / "env" / "bin" / "python").symlink_to(sys.executable)
+    _write_notebook(tmp_path / "demo.ipynb", [_code("x = 1")])
+    monkeypatch.chdir(tmp_path)
+
+    main(("labs", "check", "--python", "env/bin/python", "demo.ipynb"))
+    assert "  execution: no code cell raised" in capsys.readouterr().out
+
+    with raises(SystemExit):
+        main(("labs", "check", "--python", "nowhere/bin/python", "demo.ipynb"))
+    assert "no such interpreter" in caplog.text

@@ -10,9 +10,10 @@ def ci_report(
     """Report what a scheduled CI run found in a GitHub issue.
 
     For the workflow `deckz hooks install --ci` writes, when its scheduled
-    checks or builds fail: REPORTS holds their outputs (`checks.txt`, the
-    output of `deckz check --plain` with `ci.nightly_checks`, and
-    `builds.md`, from `deckz run decks --report`). It opens an issue labeled
+    checks, builds or labs fail: REPORTS holds their outputs (`checks.txt`,
+    the output of `deckz check --plain` with `ci.nightly_checks`,
+    `builds.md`, from `deckz run decks --report`, and `labs.txt`, from
+    `deckz labs check` on `ci.labs`). It opens an issue labeled
     `deckz-ci` mentioning and assigning `ci.report_to`, which GitHub emails
     them, body included, or comments on the one still open. The body is
     written to be pasted to an agent: each failure, the command reproducing
@@ -29,9 +30,13 @@ def ci_report(
 
     from ...ci_report import RunContext, post_report, report_body
     from ...configuring.settings import GlobalSettings
+    from ...hooks_install import labs_check_command
 
     ci = GlobalSettings.from_yaml(workdir).ci
     checks_command = "deckz check --plain " + " ".join(ci.nightly_checks)
+    labs_command = (
+        "" if ci.labs is None else labs_check_command(ci.labs, "<its python>")
+    )
     if dry_run:
         context = None
         run_url, commit = "<run>", environ.get("GITHUB_SHA", "<commit>")
@@ -44,6 +49,7 @@ def ci_report(
         run_url=run_url,
         commit=commit,
         report_to=ci.report_to,
+        labs_command=labs_command,
     )
     if body is None:
         getLogger(__name__).info("No report in %s: nothing to post", reports)

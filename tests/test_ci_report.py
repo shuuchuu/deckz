@@ -39,6 +39,27 @@ def test_report_body_holds_the_checks_and_the_builds(tmp_path: Path) -> None:
     assert body.endswith("## d, in fr")
 
 
+def test_report_body_holds_the_labs(tmp_path: Path) -> None:
+    (tmp_path / "labs.txt").write_text(
+        "#### a/demo-fr.ipynb\n  [3] DeprecationWarning: old() is deprecated\n"
+    )
+
+    body = report_body(
+        tmp_path,
+        checks_command="deckz check --plain",
+        run_url=CONTEXT.run_url,
+        commit=CONTEXT.commit,
+        report_to=(),
+        labs_command="deckz labs check --python <its python> a",
+    )
+
+    assert body is not None
+    assert "\n\n# Labs that failed\n\n`deckz labs check --python <its python> a`" in (
+        body
+    )
+    assert "  [3] DeprecationWarning: old() is deprecated" in body
+
+
 def test_report_body_is_none_without_a_report(tmp_path: Path) -> None:
     (tmp_path / "checks.txt").write_text("\n")
 

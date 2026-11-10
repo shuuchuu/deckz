@@ -40,7 +40,7 @@ script.
 | `setup.requires`, `setup.steps`, `setup.remotes` | `setting_up` | Executables to check, the repository's own setup steps, the publish remotes to add |
 | `labs.run.hooks` | `labs.needs` (for `labs.gpu`, `labs.container`) | Local commands before and after a notebook's run, on a GPU machine or in the dev container |
 | `labs.outputs.hooks` | `labs.outputs` | Commands run on a notebook's executed outputs before writing them back |
-| `ci` | `hooks_install.ci_workflow` | The CI workflow's checks and builds |
+| `ci` | `hooks_install.ci_workflow` | The CI workflow's checks, builds and labs |
 
 A manual step that must follow a deckz command becomes one of these hooks, not a step
 people have to remember.
