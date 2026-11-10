@@ -1,6 +1,6 @@
 """`deckz push`, on git repositories and bare remotes made in a temporary directory.
 
-copierz runs for real (the `push` extra is in the dev group), on a lab clone
+copierz runs for real (a dependency of deckz), on a lab clone
 of the test's own.
 """
 
@@ -260,24 +260,6 @@ def test_a_lab_with_no_local_clone_is_skipped(
     assert code == 0
     (lab,) = [r for r in report["repositories"] if r["name"] == "owner/lab"]
     assert "no local clone" in lab["skipped"]
-    assert _branches(report, "repo")["main"]["outcome"] == "pushed"
-
-
-def test_without_copierz_the_labs_are_skipped_and_the_rest_pushed(
-    repos: dict[str, Path], capsys: Any, monkeypatch: Any
-) -> None:
-    monkeypatch.setattr("deckz.pushing.copierz_command", lambda: None)
-    _commit(repos["lab"], "Fix the lab")
-    _commit(repos["repo"], "Change")
-    before = _remote_tip(repos["lab"])
-
-    code, report = _push(capsys)
-
-    assert code == 0
-    (lab,) = [r for r in report["repositories"] if r["name"] == "owner/lab"]
-    assert "deckz[push]" in lab["skipped"]
-    assert not lab["problem"]
-    assert _remote_tip(repos["lab"]) == before
     assert _branches(report, "repo")["main"]["outcome"] == "pushed"
 
 

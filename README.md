@@ -36,10 +36,7 @@ Manim and `ffmpeg`
 (`pip install "deckz[videos]"`; `ffmpeg` itself isn't pip-installable,
 install it with your system's package manager); `deckz sessions` reads your
 Google Calendar through schedz (`pip install "deckz[calendar]"`, see the guide's
-Sessions page); `deckz push` pushes the labs' own repositories through
-copierz (`deckz[push]`: copierz isn't on PyPI yet, so install it first with
-`pip install git+https://github.com/shuuchuu/copierz`, or with uv, which takes
-it from deckz's `[tool.uv.sources]` when deckz is a path dependency).
+Sessions page).
 
 Whatever your `templates/assets_builders.py` imports (e.g. matplotlib or
 plotly) is your repository's own dependency: install it alongside deckz.
@@ -1256,7 +1253,7 @@ The main commands:
   work leaves local, in this order: the deckz checkout this deckz runs from
   (an editable install), its current branch when ahead of its upstream;
   the labs' own repositories (`labs.repos`), from their local clones
-  (`clone`), through copierz (`deckz[push]`), which pushes every branch
+  (`clone`), through copierz, which pushes every branch
   carrying Copier answers that is ahead, and with `--force` those a rebase
   rewrote (stacked branches), with `--force-with-lease`, only when the
   remote holds nothing they lacked; then the repository's main checkout's
@@ -1270,7 +1267,7 @@ The main commands:
   failed on it) stops the repository's push and the publishing, while the
   other labs' repositories are still pushed, to show all that blocks at
   once; one only skipped (no local clone, no branch carrying Copier
-  answers, copierz not installed) doesn't. deckz's and the repository's
+  answers) doesn't. deckz's and the repository's
   branches are never forced: behind or diverged, they're left, with the
   fix. `--publish` then publishes the labs and the videos (as `deckz labs
   publish` and `deckz videos publish`) when `deckz status` finds something

@@ -649,12 +649,16 @@ wheels = [
 [[package]]
 name = "copierz"
 version = "0.1.0"
-source = { git = "https://github.com/shuuchuu/copierz?branch=main#d68b803cc3c6a956b420aee1c28e5072c91fa863" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "copier" },
     { name = "packaging" },
     { name = "pyyaml" },
     { name = "rich" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ca/fa/509bfe8c895764aaf4667dc05c18fd23fcefb372c5024b0d9f496546398a/copierz-0.1.0.tar.gz", hash = "sha256:d96215c1c29c6799acdda139c47c3d8b31f9d2e24983d75d8f5f9577fda04cc6", size = 32608, upload-time = "2026-11-10T12:43:07.288Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/45/ac/b019ad531bcd45ab6e9b5326d5251a629723ae1297a8d0b1e3912c4158ea/copierz-0.1.0-py3-none-any.whl", hash = "sha256:6987faddc7e98ee9014c361c0f5546d48c345c289ecc8fe15917a316f8ce19be", size = 37562, upload-time = "2026-11-10T12:43:05.83Z" },
 ]
 
 [[package]]
@@ -840,6 +844,7 @@ version = "31.3.4"
 source = { editable = "." }
 dependencies = [
     { name = "appdirs" },
+    { name = "copierz" },
     { name = "cyclopts" },
     { name = "jinja2" },
     { name = "pydantic" },
@@ -874,9 +879,6 @@ parity = [
     { name = "playwright" },
     { name = "pypdfium2" },
 ]
-push = [
-    { name = "copierz" },
-]
 videos = [
     { name = "manim" },
 ]
@@ -884,7 +886,7 @@ videos = [
 [package.dev-dependencies]
 dev = [
     { name = "bumpver" },
-    { name = "deckz", extra = ["calendar", "extras", "labs", "parity", "push", "videos"] },
+    { name = "deckz", extra = ["calendar", "extras", "labs", "parity", "videos"] },
     { name = "doit" },
     { name = "httpx2" },
     { name = "import-linter" },
@@ -908,7 +910,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "appdirs", specifier = ">=1,<2" },
-    { name = "copierz", marker = "extra == 'push'", git = "https://github.com/shuuchuu/copierz?branch=main" },
+    { name = "copierz", specifier = ">=0.1,<1" },
     { name = "cyclopts", specifier = ">=4,<5" },
     { name = "email-validator", marker = "extra == 'extras'", specifier = ">=2,<3" },
     { name = "google-api-python-client", marker = "extra == 'extras'", specifier = ">=2,<3" },
@@ -932,7 +934,7 @@ requires-dist = [
     { name = "vastai", marker = "extra == 'gpu'", specifier = ">=1,<2" },
     { name = "watchfiles", specifier = ">=1,<2" },
 ]
-provides-extras = ["calendar", "extras", "gpu", "labs", "parity", "push", "videos"]
+provides-extras = ["calendar", "extras", "gpu", "labs", "parity", "videos"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -941,7 +943,6 @@ dev = [
     { name = "deckz", extras = ["extras"] },
     { name = "deckz", extras = ["labs"] },
     { name = "deckz", extras = ["parity"] },
-    { name = "deckz", extras = ["push"] },
     { name = "deckz", extras = ["videos"] },
     { name = "doit", specifier = ">=0.37" },
     { name = "httpx2", specifier = ">=2" },

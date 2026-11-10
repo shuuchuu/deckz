@@ -5,8 +5,8 @@ In this order:
 1. deckz itself, when it runs from a git checkout (an editable install, e.g.
    `../deckz`): its current branch, if it tracks a remote branch and is ahead.
 2. The labs' own repositories (`labs.repos`), each from its local clone
-   (`labs.repos[].clone`), through copierz (`copierz push --json`, the
-   `push` extra): every branch ahead of its remote, and with `force` the
+   (`labs.repos[].clone`), through copierz (`copierz push --json`): every
+   branch ahead of its remote, and with `force` the
    branches a rebase rewrote, with `--force-with-lease`. Their branches are
    stacked (`solution` on `main`...): a change to a base is rebased into
    the branches above it, which then need a force.
@@ -25,7 +25,7 @@ a branch diverged, a rebased branch left without `force`, copierz failed on
 it), the other labs' repositories are still pushed, to show all that blocks
 at once, but neither the repository nor any publishing is. A lab repository
 merely skipped (no local clone, or not a clone of it; no branch carrying
-Copier answers; copierz not installed) doesn't stop it.
+Copier answers) doesn't stop it.
 
 Only the labs' branches are ever forced: deckz's and the repository's are
 pushed when they're ahead, and left, with the fix, when behind or diverged.
@@ -39,7 +39,6 @@ import json
 import subprocess
 import sys
 from dataclasses import dataclass, field
-from importlib.util import find_spec
 from os import environ
 from os.path import relpath
 from pathlib import Path
@@ -421,15 +420,12 @@ def repository_push(settings: "GlobalSettings", *, dry_run: bool) -> RepoPush:
     return RepoPush(main.name, "repository", shown, (pushed,), problem=pushed.problem)
 
 
-def copierz_command() -> tuple[str, ...] | None:
+def copierz_command() -> tuple[str, ...]:
     """How to run copierz: from deckz's own environment, never the `PATH`.
 
     Returns:
-        The command, or None when copierz isn't installed (deckz's `push` \
-        extra).
+        The command.
     """
-    if find_spec("copierz") is None:
-        return None
     return (sys.executable, "-c", "from copierz.cli import main; main()")
 
 
@@ -453,17 +449,6 @@ def lab_pushes(
     if not first:
         return []
     command = copierz_command()
-    if command is None:
-        return [
-            RepoPush(
-                ", ".join(first),
-                "lab",
-                skipped="copierz, which pushes the labs' repositories, isn't "
-                'installed: `pip install "deckz[push]"` (or add `push` to '
-                "deckz's extras where the repository declares it), then `deckz "
-                "push` again",
-            )
-        ]
     results = []
     for name, repo in first.items():
         clone = repo.clone_path(git_dir)

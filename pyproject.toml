@@ -8,6 +8,7 @@ classifiers = [
 ]
 dependencies = [
   "appdirs >= 1, < 2",
+  "copierz >= 0.1, < 1",
   "cyclopts >= 4, < 5",
   "jinja2 >= 3, < 4",
   "pydantic >= 2, < 3",
@@ -50,13 +51,6 @@ parity = [
   "playwright >= 1, < 2",
   "pypdfium2 >= 5, < 6",
 ]
-# `deckz push` pushes the labs' own repositories through copierz, which isn't
-# on PyPI yet: an extra, so that deckz's releases stay installable from PyPI
-# (a direct URL dependency can't be uploaded there); `[tool.uv.sources]` takes
-# it from its repository, for uv installs (here, CI, a repository's `uv sync`).
-push = [
-  "copierz >= 0.1, < 1",
-]
 videos = [
   "manim >= 0.18, < 1",
 ]
@@ -67,7 +61,6 @@ dev = [
   "deckz[extras]",
   "deckz[labs]",
   "deckz[parity]",
-  "deckz[push]",
   "deckz[videos]",
   "bumpver >= 2026.1132",
   "doit >= 0.37",
@@ -200,7 +193,6 @@ forbidden_modules = ["deckz.cli"]
 members = ["studioz"]
 
 [tool.uv.sources]
-copierz = { git = "https://github.com/shuuchuu/copierz", branch = "main" }
 studioz = { workspace = true }
 
 [tool.ruff]

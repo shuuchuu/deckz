@@ -21,8 +21,8 @@ def push(
        e.g. `../deckz`): its current branch, when ahead of the remote branch
        it tracks;
     2. the labs' own repositories (`labs.repos`), from their local clones
-       (`labs.repos[].clone`, `../<name>` by default), through copierz (the
-       `push` extra): every branch carrying Copier answers that is ahead,
+       (`labs.repos[].clone`, `../<name>` by default), through copierz:
+       every branch carrying Copier answers that is ahead,
        and with --force those a rebase rewrote (stacked branches), with
        `--force-with-lease`, only when their remote holds nothing they
        didn't have; a repository with no local clone is skipped;
@@ -39,7 +39,7 @@ def push(
     stops this repository's push and the publishing, the other labs'
     repositories being pushed all the same, to show all that blocks at once;
     a lab repository only skipped (no local clone, no branch carrying Copier
-    answers, copierz not installed) doesn't. deckz's and this repository's
+    answers) doesn't. deckz's and this repository's
     branches are never forced: one behind or diverged from its remote is
     left, with the fix.
 
