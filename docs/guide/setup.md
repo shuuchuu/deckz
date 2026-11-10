@@ -97,7 +97,11 @@ permission mode (`--permission-mode`), does one share of the work, records it wh
 the plan tracks progress, and ends its last message with `DECKZ-LOOP: continue`,
 `done` or `stop <why>`: instructions appended to the prompt ask for it. The loop
 stops at the first `done` or `stop`, at a session that fails (a usage limit, say) or
-gives no such line, and after `--max-sessions` (20). Each session's result is kept
+gives no such line, and after `--max-sessions` (20). While a session runs, the loop
+logs what it says and each tool it calls (`--no-steps` to see only how each session
+ended), and each session's end gives the share spent of the account's five-hour and
+seven-day usage windows: what tells whether one more loop would fit. Each session's
+result is kept
 under `.run/agent-loop/<start time>/`, and `claude --resume <session id>` (logged as
 each session ends) reopens one. It exits 1 unless the last session said `done` or
 `continue`.

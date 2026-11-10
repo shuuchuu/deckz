@@ -18,6 +18,12 @@ loop stops at the first session that says `done` or `stop`, fails, or gives no
 such line, and after `max_sessions` in any case. Each session's JSON result is
 kept under `<git_dir>/.run/agent-loop/<start time>/`.
 
+A session prints its events as it goes (`--output-format stream-json`), which
+`run_session` reads: what the session says and the tools it calls
+(`describe_event`, for whoever watches the loop), how much of the account's
+usage windows is spent (kept with the result), and the result itself, the
+stream's last `result` event.
+
 A session the account's usage limit stops ends as `limit`, mid-share: its edits
 are in the working tree, uncommitted, and only that session knows what they
 are. With `wait_on_limit`, the loop sleeps until the limit resets (the time its
@@ -35,6 +41,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+from threading import Thread
 from time import monotonic
 from time import sleep as _sleep
 from typing import Literal
@@ -110,7 +117,11 @@ class SessionOutcome:
         cost_usd: What Claude Code reported it cost, if anything.
         duration_s: Its wall-clock duration.
         log: The file holding its JSON result.
-        resets_at: When the limit that stopped it resets, if its message says.
+        resets_at: When the limit that stopped it resets, if its message or
+            its events say.
+        window_used: The share of the five-hour usage window spent when it
+            ended, from 0 to 1, if its events say.
+        week_used: The same for the seven-day window.
     """
 
     number: int
@@ -122,6 +133,8 @@ class SessionOutcome:
     duration_s: float
     log: Path
     resets_at: datetime | None = None
+    window_used: float | None = None
+    week_used: float | None = None
 
 
 def claude_command(
@@ -132,11 +145,148 @@ def claude_command(
     Returns:
         Its arguments; the prompt goes on stdin, not on the command line.
     """
-    command = ["claude", "-p", "--output-format", "json"]
+    command = ["claude", "-p", "--output-format", "stream-json", "--verbose"]
     command += ["--permission-mode", permission_mode]
     if model:
         command += ["--model", model]
     return command
+
+
+_TOOL_DETAILS = ("description", "file_path", "skill", "command", "pattern", "query")
+
+
+def describe_event(event: dict) -> list[str]:
+    """What an event of a session's stream shows of what the session is doing.
+
+    Args:
+        event: One line of `claude -p --output-format stream-json`.
+
+    Returns:
+        What the session says, and one line per tool it calls ("→ Bash: Run
+        the checks"); nothing for its subagents' events, tool results,
+        thinking and the rest.
+    """
+    if event.get("type") != "assistant" or event.get("parent_tool_use_id"):
+        return []
+    message = event.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    lines: list[str] = []
+    for block in content if isinstance(content, list) else []:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") == "text":
+            text = str(block.get("text") or "").strip()
+            if text:
+                lines.append(text)
+        elif block.get("type") == "tool_use":
+            tool_input = block.get("input")
+            tool_input = tool_input if isinstance(tool_input, dict) else {}
+            name = str(block.get("name") or "?")
+            if tool_input.get("model"):
+                name += f" [{tool_input['model']}]"
+            detail = next(
+                (str(tool_input[k]) for k in _TOOL_DETAILS if tool_input.get(k)), ""
+            )
+            detail = " ".join(detail.split())
+            if len(detail) > 120:
+                detail = detail[:119] + "…"
+            lines.append(f"→ {name}: {detail}" if detail else f"→ {name}")
+    return lines
+
+
+def run_session(
+    args: Sequence[str],
+    *,
+    prompt: str,
+    cwd: Path,
+    on_event: Callable[[dict], None] | None = None,
+) -> "subprocess.CompletedProcess[str]":
+    """Run one `claude` session, reading its stream of events as it goes.
+
+    Args:
+        args: The `claude` command line (`claude_command`).
+        prompt: The prompt, given on stdin.
+        cwd: The directory the session runs in.
+        on_event: Called with each event as soon as the session prints it.
+
+    Returns:
+        The finished process. Its stdout is the session's result, as one JSON
+        object: the stream's last `result` event, with the last usage figures
+        the stream gave under `rate_limit_info`; or everything the process
+        printed when it gave no such event (it failed before starting).
+    """
+    result: dict | None = None
+    limits: object = None
+    other: list[str] = []
+    errors: list[str] = []
+    with subprocess.Popen(
+        list(args),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf8",
+        errors="replace",
+        cwd=cwd,
+    ) as process:
+        assert process.stdin and process.stdout and process.stderr
+        stderr = process.stderr
+        drain = Thread(target=lambda: errors.append(stderr.read()), daemon=True)
+        drain.start()
+        try:
+            process.stdin.write(prompt)
+            process.stdin.close()
+        except OSError:  # it exited without reading its prompt
+            pass
+        for line in process.stdout:
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                event = None
+            if not isinstance(event, dict) or "type" not in event:
+                other.append(line)
+                continue
+            if event["type"] == "result":
+                result = event
+            elif event["type"] == "rate_limit_event":
+                limits = event.get("rate_limit_info")
+            if on_event:
+                on_event(event)
+        process.wait()
+        drain.join()
+    if result is None:
+        stdout = "".join(other)
+    else:
+        if limits:
+            result = {**result, "rate_limit_info": limits}
+        stdout = json.dumps(result, ensure_ascii=False)
+    return subprocess.CompletedProcess(
+        list(args), process.returncode, stdout, "".join(errors)
+    )
+
+
+def _usage(data: dict, now: datetime) -> tuple[datetime | None, dict[str, float]]:
+    """The usage figures `run_session` kept with a session's result.
+
+    Returns:
+        When the window that binds resets, and the share spent of each window
+        (`five_hour`, `seven_day`) that gives one.
+    """
+    info = data.get("rate_limit_info")
+    if not isinstance(info, dict):
+        return None, {}
+    resets = info.get("resetsAt")
+    reset = None
+    if isinstance(resets, int | float) and resets > 0:
+        reset = max(datetime.fromtimestamp(resets, now.tzinfo), now)
+    windows = info.get("unifiedWindows")
+    used = {
+        name: float(window["utilization"])
+        for name, window in (windows if isinstance(windows, dict) else {}).items()
+        if isinstance(window, dict)
+        and isinstance(window.get("utilization"), int | float)
+    }
+    return reset, used
 
 
 def limit_reset(message: str, now: datetime) -> datetime | None:
@@ -200,10 +350,12 @@ def parse_session(
         now: The current time (`limit_reset`), the system's by default.
 
     Returns:
-        Its outcome: `limit` when the account's usage limit stopped it,
+        Its outcome: `limit` when the account's usage limit stopped it (its
+        reset is the time its message gives, or else the one its events gave),
         `error` when claude failed, reported another error, or the final
         message has no `DECKZ-LOOP:` line; the last such line otherwise.
     """
+    now = now or datetime.now().astimezone()
 
     def outcome(
         status: Status,
@@ -214,6 +366,7 @@ def parse_session(
     ) -> SessionOutcome:
         data = data or {}
         cost = data.get("total_cost_usd")
+        used = _usage(data, now)[1]
         return SessionOutcome(
             number=number,
             status=status,
@@ -224,6 +377,8 @@ def parse_session(
             duration_s=duration_s,
             log=log,
             resets_at=resets_at,
+            window_used=used.get("five_hour"),
+            week_used=used.get("seven_day"),
         )
 
     try:
@@ -245,7 +400,7 @@ def parse_session(
                 result.strip()[-300:],
                 result,
                 data,
-                limit_reset(result, now or datetime.now().astimezone()),
+                limit_reset(result, now) or _usage(data, now)[0],
             )
         subtype = data.get("subtype") or f"exit code {completed.returncode}"
         return outcome("error", f"{subtype}: {result.strip()[-300:]}", result, data)
@@ -297,6 +452,7 @@ def agent_loop(
     resume: str | None = None,
     on_session: Callable[[SessionOutcome], None] | None = None,
     on_wait: Callable[[SessionOutcome, datetime], None] | None = None,
+    on_event: Callable[[dict], None] | None = None,
     runner: Runner | None = None,
     sleep: Callable[[float], None] = _sleep,
     clock: Callable[[], datetime] | None = None,
@@ -321,7 +477,9 @@ def agent_loop(
         on_session: Called with each session's outcome as soon as it ends.
         on_wait: Called before each wait, with the outcome waited on and the
             time the session is reopened.
-        runner: `subprocess.run` by default, or a stand-in in tests.
+        on_event: Called with each event of each session's stream as it
+            comes (`describe_event` reads one).
+        runner: `run_session` by default, or a stand-in in tests.
         sleep: `time.sleep` by default, or a stand-in in tests.
         clock: The current time with its time zone; the system's by default.
 
@@ -333,7 +491,7 @@ def agent_loop(
     log_dir.mkdir(parents=True, exist_ok=True)
     full_prompt = prompt + PROTOCOL
     (log_dir / "prompt.txt").write_text(full_prompt, encoding="utf8")
-    run = runner or subprocess.run
+    run = runner or run_session
     clock = clock or (lambda: datetime.now().astimezone())
     outcomes: list[SessionOutcome] = []
     started = 0
@@ -344,11 +502,9 @@ def agent_loop(
         start = monotonic()
         completed = run(
             [*command, "--resume", resume] if resume else list(command),
-            input=RESUME_PROMPT if resume else full_prompt,
-            capture_output=True,
-            text=True,
+            prompt=RESUME_PROMPT if resume else full_prompt,
             cwd=git_dir,
-            check=False,
+            on_event=on_event,
         )
         log = log_dir / f"session-{number:02}.json"
         log.write_text(completed.stdout or "", encoding="utf8")

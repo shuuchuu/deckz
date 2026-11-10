@@ -16,8 +16,10 @@ from deckz.agent_loop import (
     RESUME_PROMPT,
     agent_loop,
     claude_command,
+    describe_event,
     limit_reset,
     parse_session,
+    run_session,
 )
 from deckz.cli import main
 
@@ -96,13 +98,13 @@ def test_agent_loop_runs_until_done(tmp_path: Path) -> None:
     assert [o.status for o in outcomes] == ["continue", "done"]
     assert seen == [1, 2]
     assert calls[0]["args"] == [
-        "claude", "-p", "--output-format", "json",
+        "claude", "-p", "--output-format", "stream-json", "--verbose",
         "--permission-mode", "auto", "--model", "opus",
     ]  # fmt: skip
-    assert calls[0]["input"] == "Do one block" + PROTOCOL
+    assert calls[0]["prompt"] == "Do one block" + PROTOCOL
     assert calls[0]["cwd"] == tmp_path
     (log_dir,) = (tmp_path / ".run" / "agent-loop").iterdir()
-    assert (log_dir / "prompt.txt").read_text(encoding="utf8") == calls[0]["input"]
+    assert (log_dir / "prompt.txt").read_text(encoding="utf8") == calls[0]["prompt"]
     assert json.loads((log_dir / "session-02.json").read_text())["result"].startswith(
         "b"
     )
@@ -317,7 +319,7 @@ def test_agent_loop_waits_for_the_reset_and_reopens_the_session(
     assert clock.now == datetime(2026, 11, 10, 21, 1, tzinfo=_PARIS)
     assert calls[1]["args"] == ["claude"]
     assert calls[2]["args"] == ["claude", "--resume", "cut"]
-    assert calls[2]["input"] == RESUME_PROMPT
+    assert calls[2]["prompt"] == RESUME_PROMPT
     assert (tmp_path / ".run" / "agent-loop").is_dir()
     (log_dir,) = (tmp_path / ".run" / "agent-loop").iterdir()
     assert (log_dir / "session-03.json").exists()
@@ -405,7 +407,7 @@ def test_agent_loop_starts_afresh_when_the_session_cannot_be_reopened(
     )
     assert [o.status for o in outcomes] == ["limit", "error", "done"]
     assert calls[2]["args"] == ["claude"]
-    assert calls[2]["input"] == "Do one block" + PROTOCOL
+    assert calls[2]["prompt"] == "Do one block" + PROTOCOL
 
 
 def test_cli_agent_loop_reports_a_limit(
@@ -451,6 +453,174 @@ def test_agent_loop_reopens_a_given_session_first(tmp_path: Path) -> None:
     # The reopened session, then the one fresh session --max-sessions allows.
     assert [o.status for o in outcomes] == ["continue", "continue"]
     assert calls[0]["args"] == ["claude", "--resume", "cut"]
-    assert calls[0]["input"] == RESUME_PROMPT
+    assert calls[0]["prompt"] == RESUME_PROMPT
     assert calls[1]["args"] == ["claude"]
-    assert calls[1]["input"] == "Do one block" + PROTOCOL
+    assert calls[1]["prompt"] == "Do one block" + PROTOCOL
+
+
+_STREAM = [
+    {"type": "system", "subtype": "init", "tools": ["Bash"]},
+    {
+        "type": "assistant",
+        "parent_tool_use_id": None,
+        "message": {
+            "content": [
+                {"type": "thinking", "thinking": "hm"},
+                {"type": "text", "text": "Je lis le plan.\n"},
+                {
+                    "type": "tool_use",
+                    "name": "Bash",
+                    "input": {"command": "git  status\n--short", "description": ""},
+                },
+                {
+                    "type": "tool_use",
+                    "name": "Agent",
+                    "input": {"model": "opus", "description": "qa-fix unité 1"},
+                },
+            ]
+        },
+    },
+    {
+        "type": "assistant",
+        "parent_tool_use_id": "toolu_1",
+        "message": {"content": [{"type": "text", "text": "a subagent speaks"}]},
+    },
+    {"type": "user", "message": {"content": [{"type": "tool_result"}]}},
+    {
+        "type": "rate_limit_event",
+        "rate_limit_info": {
+            "status": "allowed",
+            "resetsAt": 1794358800,
+            "rateLimitType": "five_hour",
+            "unifiedWindows": {
+                "five_hour": {"utilization": 0.37, "resetsAt": 1794358800},
+                "seven_day": {"utilization": 0.12, "resetsAt": 1794938400},
+            },
+        },
+    },
+    {
+        "type": "result",
+        "subtype": "success",
+        "is_error": False,
+        "result": "Bloc fait.\nDECKZ-LOOP: continue",
+        "session_id": "s1",
+        "total_cost_usd": 2.0,
+    },
+]
+
+
+def test_describe_event() -> None:
+    assert [line for event in _STREAM for line in describe_event(event)] == [
+        "Je lis le plan.",
+        "→ Bash: git status --short",
+        "→ Agent [opus]: qa-fix unité 1",
+    ]
+    long = {"type": "tool_use", "name": "Read", "input": {"file_path": "x" * 300}}
+    (line,) = describe_event({"type": "assistant", "message": {"content": [long]}})
+    assert len(line) == len("→ Read: ") + 120
+    assert describe_event({"type": "assistant", "message": None}) == []
+
+
+def _streaming_claude(bin_dir: Path, lines: list[str], code: int = 0) -> Path:
+    """A `claude` that prints `lines`, then exits with `code`.
+
+    Returns:
+        The script.
+    """
+    bin_dir.mkdir()
+    (bin_dir / "lines.json").write_text(json.dumps(lines), encoding="utf8")
+    script = bin_dir / "claude"
+    script.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "sys.stdin.read()\n"
+        f"path = pathlib.Path({str(bin_dir / 'lines.json')!r})\n"
+        "lines = json.loads(path.read_text())\n"
+        "print(*lines, sep='\\n', flush=True)\n"
+        "print('a warning', file=sys.stderr)\n"
+        f"sys.exit({code})\n",
+        encoding="utf8",
+    )
+    script.chmod(script.stat().st_mode | stat.S_IEXEC)
+    return script
+
+
+def test_run_session_reads_the_stream(tmp_path: Path) -> None:
+    script = _streaming_claude(
+        tmp_path / "bin", [json.dumps(e, ensure_ascii=False) for e in _STREAM]
+    )
+    seen: list[str] = []
+    completed = run_session(
+        [str(script)],
+        prompt="Do one block",
+        cwd=tmp_path,
+        on_event=lambda event: seen.extend(describe_event(event)),
+    )
+    assert seen[0] == "Je lis le plan."
+    assert completed.returncode == 0
+    assert completed.stderr == "a warning\n"
+    data = json.loads(completed.stdout)
+    assert data["session_id"] == "s1"
+    windows = data["rate_limit_info"]["unifiedWindows"]
+    assert windows["five_hour"]["utilization"] == approx(0.37)
+
+    outcome = parse_session(1, completed, duration_s=1, log=tmp_path / "l.json")
+    assert (outcome.status, outcome.result) == ("continue", "Bloc fait.")
+    assert outcome.window_used == approx(0.37)
+    assert outcome.week_used == approx(0.12)
+
+
+def test_run_session_without_a_result_keeps_what_was_printed(tmp_path: Path) -> None:
+    script = _streaming_claude(tmp_path / "bin", ["not json", '{"no": "type"}'], 1)
+    completed = run_session([str(script)], prompt="p", cwd=tmp_path)
+    assert completed.returncode == 1
+    assert completed.stdout == 'not json\n{"no": "type"}\n'
+    outcome = parse_session(1, completed, duration_s=0, log=tmp_path / "l.json")
+    assert outcome.status == "error"
+    assert outcome.reason == "claude exited with code 1: a warning"
+
+
+def test_parse_session_takes_the_reset_from_the_events(tmp_path: Path) -> None:
+    now = datetime(2026, 11, 10, 22, 0, tzinfo=_PARIS)
+    reset = datetime(2026, 11, 11, 2, 0, tzinfo=_PARIS)
+    stdout = json.dumps(
+        {
+            "result": "You've hit your limit",
+            "is_error": True,
+            "api_error": "usage_limit_reached",
+            "session_id": "abc",
+            "rate_limit_info": {"resetsAt": reset.timestamp(), "status": "rejected"},
+        }
+    )
+    outcome = parse_session(
+        1,
+        subprocess.CompletedProcess([], 1, stdout, ""),
+        duration_s=0,
+        log=tmp_path / "l.json",
+        now=now,
+    )
+    assert (outcome.status, outcome.resets_at) == ("limit", reset)
+    assert outcome.window_used is None
+
+
+def test_cli_agent_loop_shows_the_steps(
+    tmp_path: Path, capsys: Any, caplog: Any, monkeypatch: Any
+) -> None:
+    repo = _repo(tmp_path)
+    done = {**_STREAM[-1], "result": "Fini.\nDECKZ-LOOP: done"}
+    _streaming_claude(
+        tmp_path / "bin",
+        [json.dumps(e, ensure_ascii=False) for e in [*_STREAM[:-1], done]],
+    )
+    monkeypatch.setenv("PATH", f"{tmp_path / 'bin'}{os.pathsep}{os.environ['PATH']}")
+    with caplog.at_level("INFO"):
+        main(("agent", "loop", "p", "--workdir", str(repo)))
+    assert "→ Agent [opus]: qa-fix unité 1" in caplog.text
+    assert "usage: 5-hour window 37%, week 12%" in caplog.text
+    assert "last session: done" in capsys.readouterr().out
+
+    caplog.clear()
+    with caplog.at_level("INFO"):
+        main(("agent", "loop", "p", "--workdir", str(repo), "--no-steps"))
+    assert "→ Agent" not in caplog.text
+    assert "session 1: done" in caplog.text

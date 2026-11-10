@@ -84,7 +84,7 @@ up: no extra, settings or login) or `CalendarError`. `sessions` imports it lazil
 |---|---|
 | **Responsibility** | One prompt run in fresh headless Claude Code sessions (`claude -p`), one after another, each ending with a `DECKZ-LOOP: continue\|done\|stop` line that says whether to start the next |
 | **Owns** | `PROTOCOL` (what is appended to the prompt), `RESUME_PROMPT` (what a session reopened after a usage limit is told), the sessions' logs under `<git_dir>/.run/agent-loop/<start time>/` |
-| **Depends on** | Nothing of deckz's; `claude`, as a subprocess, with the user's own login |
+| **Depends on** | Nothing of deckz's; `claude`, as a subprocess, with the user's own login, and the events it prints (`--output-format stream-json`): `assistant`, `rate_limit_event`, `result` |
 | **Never** | Answers a session, retries a failed one, or starts one after a `stop`, a failure or `max_sessions`. The one exception is asked for (`wait_on_limit`): a session the usage limit stopped (`limit`) is reopened with `claude --resume` once the limit has reset, `MAX_LIMIT_WAIT` later at most |
 | **Entry points** | `deckz agent loop` |
 | **Fails with** | Nothing: a failed session is an outcome (`error`, or `limit`), and the command exits 1 on it |
