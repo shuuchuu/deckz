@@ -60,6 +60,31 @@ def test_report_body_holds_the_labs(tmp_path: Path) -> None:
     assert "  [3] DeprecationWarning: old() is deprecated" in body
 
 
+def test_report_body_holds_the_weekly_checks_with_their_command(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "checks.txt").write_text("missing-en\tcontent/a.md: no en/a.md\n")
+    (tmp_path / "weekly-checks.txt").write_text(
+        "dead-links\tcontent/b.md: https://example.org/gone is 404\n"
+    )
+
+    body = report_body(
+        tmp_path,
+        checks_command="deckz check --plain missing-en",
+        run_url=CONTEXT.run_url,
+        commit=CONTEXT.commit,
+        report_to=(),
+        weekly_checks_command="deckz check --plain dead-links",
+    )
+
+    assert body is not None
+    nightly, weekly = body.split("\n\n# Weekly checks that failed\n\n")
+    assert "`deckz check --plain missing-en` reported" in nightly
+    assert "dead-links" not in nightly
+    assert weekly.startswith("`deckz check --plain dead-links` reported")
+    assert "https://example.org/gone is 404" in weekly
+
+
 def test_report_body_is_none_without_a_report(tmp_path: Path) -> None:
     (tmp_path / "checks.txt").write_text("\n")
 

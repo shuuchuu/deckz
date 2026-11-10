@@ -12,8 +12,9 @@ def ci_report(
     For the workflow `deckz hooks install --ci` writes, when its scheduled
     checks, builds or labs fail: REPORTS holds their outputs (`checks.txt`,
     the output of `deckz check --plain` with `ci.nightly_checks`,
-    `builds.md`, from `deckz run decks --report`, and `labs.txt`, from
-    `deckz labs check` on `ci.labs`). It opens an issue labeled
+    `weekly-checks.txt`, the same with `ci.weekly_checks`, `builds.md`,
+    from `deckz run decks --report`, and `labs.txt`, from `deckz labs
+    check` on `ci.labs`). It opens an issue labeled
     `deckz-ci` mentioning and assigning `ci.report_to`, which GitHub emails
     them, body included, or comments on the one still open. The body is
     written to be pasted to an agent: each failure, the command reproducing
@@ -34,6 +35,7 @@ def ci_report(
 
     ci = GlobalSettings.from_yaml(workdir).ci
     checks_command = "deckz check --plain " + " ".join(ci.nightly_checks)
+    weekly_checks_command = "deckz check --plain " + " ".join(ci.weekly_checks)
     labs_command = (
         "" if ci.labs is None else labs_check_command(ci.labs, "<its python>")
     )
@@ -50,6 +52,7 @@ def ci_report(
         commit=commit,
         report_to=ci.report_to,
         labs_command=labs_command,
+        weekly_checks_command=weekly_checks_command.strip(),
     )
     if body is None:
         getLogger(__name__).info("No report in %s: nothing to post", reports)

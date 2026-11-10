@@ -374,6 +374,19 @@ def labs_install_commands(labs: "CiLabsSettings") -> tuple[str, str]:
     return f"uv venv {LABS_VENV} --python {labs.python}", install
 
 
+def _checks_run(ci: "CiSettings", checks: tuple[str, ...], report: str) -> str:
+    # A scheduled `deckz check` step's script, its output the report when
+    # it fails.
+    command = f"uv run deckz check --plain {' '.join(checks)}"
+    if not ci.report_to:
+        return command
+    return f"""|
+          # Their output is the report when they fail.
+          {command} > {report} && cat {report} || {{
+            cat {report}; mkdir -p {_REPORTS}; mv {report} {_REPORTS}/; exit 1
+          }}"""
+
+
 def _labs_step(ci: "CiSettings", dispatched: str) -> str:
     # Every Sunday, the labs `ci.labs` names, in an environment made anew.
     labs = ci.labs
@@ -439,23 +452,24 @@ def ci_workflow(ci: "CiSettings") -> str:
         else ""
     )
     dispatched = "github.event_name == 'workflow_dispatch'"
-    checks_command = f"uv run deckz check --plain {' '.join(ci.nightly_checks)}"
-    checks_run = (
-        f"""|
-          # Their output is the report when they fail.
-          {checks_command} > checks.txt && cat checks.txt || {{
-            cat checks.txt; mkdir -p {_REPORTS}; mv checks.txt {_REPORTS}/; exit 1
-          }}"""
-        if ci.report_to
-        else checks_command
-    )
     nightly = (
         f"""
       - name: Nightly checks
         if: github.event.schedule == '{_NIGHTLY_CRON}' || {dispatched}
-        run: {checks_run}
+        run: {_checks_run(ci, ci.nightly_checks, "checks.txt")}
 """
         if ci.nightly_checks
+        else ""
+    )
+    weekly_checks = (
+        f"""
+      # Sundays' checks (`ci.weekly_checks`), run by hand along with the
+      # nightly ones even when those fail: they say different things.
+      - name: Weekly checks
+        if: (github.event.schedule == '{_WEEKLY_CRON}' || {dispatched}) && !cancelled()
+        run: {_checks_run(ci, ci.weekly_checks, "weekly-checks.txt")}
+"""
+        if ci.weekly_checks
         else ""
     )
     weekly = ci.builds_schedule == "weekly"
@@ -463,7 +477,7 @@ def ci_workflow(ci: "CiSettings") -> str:
     build_event = f"github.event.schedule == '{build_cron}' || {dispatched}"
     period, before = ("week", "7 days ago") if weekly else ("day", "24 hours ago")
     report = f" \\\n            --report {_REPORTS}/builds.md" if ci.report_to else ""
-    sundays = (ci.builds and weekly) or ci.labs is not None
+    sundays = (ci.builds and weekly) or ci.weekly_checks or ci.labs is not None
     weekly_cron = f'\n    - cron: "{_WEEKLY_CRON}"' if sundays else ""
     videos = (
         f"""
@@ -534,7 +548,8 @@ def ci_workflow(ci: "CiSettings") -> str:
           GITHUB_TOKEN: ${{{{ github.token }}}}
         run: uv run deckz hooks ci-report {_REPORTS}
 """
-        if ci.report_to and (ci.builds or ci.nightly_checks or ci.labs)
+        if ci.report_to
+        and (ci.builds or ci.nightly_checks or ci.weekly_checks or ci.labs)
         else ""
     )
     permissions = (
@@ -601,7 +616,7 @@ jobs:
             *) RANGE="$BEFORE..HEAD" ;;
           esac
           uv run deckz hooks check-commits "$RANGE"
-{nightly}{builds}{_labs_step(ci, dispatched)}{reporting}"""
+{nightly}{weekly_checks}{builds}{_labs_step(ci, dispatched)}{reporting}"""
 
 
 def install_ci_workflow(

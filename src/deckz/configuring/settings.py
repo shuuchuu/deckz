@@ -849,6 +849,10 @@ class CiSettings(BaseModel):
     nightly_checks: tuple[str, ...] = ()
     """Checks too slow for every push (usually some of `checks.opt_in`), run \
     every night, e.g. `missing-en`."""
+    weekly_checks: tuple[str, ...] = ()
+    """Checks run every Sunday instead, e.g. a dead links check: those too \
+    slow, or too costly in runner minutes, for every night, or whose \
+    problem would come back in the issue every night until it's fixed."""
     builds: tuple[Lang, ...] = ()
     """Languages a scheduled job builds the handouts of the decks the \
     period's commits reach in (`deckz run decks --since`), so a deck broken \

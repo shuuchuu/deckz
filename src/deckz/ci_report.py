@@ -1,12 +1,13 @@
 """Report a scheduled CI run's problems in a GitHub issue: `deckz hooks ci-report`.
 
 The scheduled job (`deckz hooks install --ci`) writes what failed to a
-directory: the slow checks' output (`checks.txt`), the failed builds'
-report (`builds.md`, `deckz run decks --report`) and the labs' run
-(`labs.txt`, `deckz labs check` on `ci.labs`, or the end of the failed
-install of their libraries). This turns them into one
-issue whose body a person can paste to an agent: what failed, the command
-reproducing each failure, and its errors. GitHub emails it to the people it
+directory: the slow checks' output (`checks.txt` every night,
+`weekly-checks.txt` on Sundays), the failed builds' report (`builds.md`,
+`deckz run decks --report`) and the labs' run (`labs.txt`, `deckz labs
+check` on `ci.labs`, or the end of the failed install of their
+libraries). This turns them into one issue whose body a person can paste
+to an agent: what failed, the command reproducing each failure, and its
+errors. GitHub emails it to the people it
 mentions and assigns (`ci.report_to`), body included, so the report reaches
 them with no mail server or secret to set up. While that issue is open, a
 new run's report is a comment on it instead of another issue.
@@ -28,6 +29,7 @@ from .exceptions import DeckzError
 LABEL = "deckz-ci"
 """The label of the issue each report goes to, while it's open."""
 CHECKS_REPORT = "checks.txt"
+WEEKLY_CHECKS_REPORT = "weekly-checks.txt"
 BUILDS_REPORT = "builds.md"
 LABS_REPORT = "labs.txt"
 _BODY_MAX = 60_000
@@ -81,39 +83,46 @@ def report_body(
     commit: str,
     report_to: Sequence[str],
     labs_command: str = "",
+    weekly_checks_command: str = "",
 ) -> str | None:
     """The issue body for the reports in `reports_dir`.
 
     Args:
-        reports_dir: Where the job wrote `checks.txt`, `builds.md` and \
-            `labs.txt`.
+        reports_dir: Where the job wrote `checks.txt`, \
+            `weekly-checks.txt`, `builds.md` and `labs.txt`.
         checks_command: The command whose output `checks.txt` holds.
         run_url: The run's page.
         commit: The commit it ran on.
         report_to: GitHub logins to mention.
         labs_command: The command whose output `labs.txt` holds, run in an \
             environment with the labs' libraries.
+        weekly_checks_command: The command whose output \
+            `weekly-checks.txt` holds.
 
     Returns:
         The body, or None when no report holds anything.
     """
     sections = []
-    checks = reports_dir / CHECKS_REPORT
-    if checks.is_file() and (text := checks.read_text(encoding="utf8").strip()):
-        sections.append(
-            "\n".join(
-                [
-                    "# Checks that failed",
-                    "",
-                    f"`{checks_command}` reported these problems, each ending with"
-                    " its fix. Run it again to see that they're gone.",
-                    "",
-                    "```text",
-                    text,
-                    "```",
-                ]
+    for name, title, command in (
+        (CHECKS_REPORT, "Checks", checks_command),
+        (WEEKLY_CHECKS_REPORT, "Weekly checks", weekly_checks_command),
+    ):
+        checks = reports_dir / name
+        if checks.is_file() and (text := checks.read_text(encoding="utf8").strip()):
+            sections.append(
+                "\n".join(
+                    [
+                        f"# {title} that failed",
+                        "",
+                        f"`{command}` reported these problems, each ending with"
+                        " its fix. Run it again to see that they're gone.",
+                        "",
+                        "```text",
+                        text,
+                        "```",
+                    ]
+                )
             )
-        )
     builds = reports_dir / BUILDS_REPORT
     if builds.is_file() and (text := builds.read_text(encoding="utf8").strip()):
         sections.append(text)

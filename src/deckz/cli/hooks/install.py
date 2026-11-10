@@ -36,7 +36,8 @@ def install(*, force: bool = False, ci: bool = False, workdir: Path = Path()) ->
             workflow running `deckz check` and reading the `Lang-sync`
             trailers on every push and pull request (`deckz hooks
             check-commits`), `deckz.yml`'s `ci.nightly_checks` every night,
-            and its `ci.builds` every Sunday (`ci.builds_schedule`), a
+            its `ci.weekly_checks` every Sunday, its `ci.builds` every
+            Sunday (`ci.builds_schedule`) and its `ci.labs`, a
             failed scheduled run reported in an issue to `ci.report_to`:
             every contributor's commits get them, hooks installed or not
         workdir: Path to move into before running the command

@@ -4,11 +4,15 @@
 and only counts the deferred checks' problems);
 `deckz check <name>` runs one. Each problem it reports ends with how to fix it.
 Checks a repository lists under `deckz.yml`'s `checks.opt_in` only run when named (or
-nightly in CI): they're slow, or need the network. So do deckz's own
+in CI): they're slow, or need the network. So do deckz's own
 `course-notes-code`, which runs the course notes' code, and `review-dated-facts`,
 whose verdict changes as days pass. `--file <path>...` limits the
 checks that read files to those: `deckz check course-notes-code --file
 course-notes/topic/intro.md` runs one chapter's code.
+CI (`deckz hooks install --ci`) runs those `ci.nightly_checks` names every night,
+and those of `ci.weekly_checks` every Sunday: a check that fetches every link, say,
+costs too many runner minutes for every night, and its problem would come back in the
+issue each night until it's fixed.
 No check compiles a deck: when `ci.builds` is set, CI builds every Sunday (or every
 night) the handouts of the decks the period's commits reach, and fails naming the deck
 that doesn't build (`deckz run decks --since <rev>` does the same before you push).

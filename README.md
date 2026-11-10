@@ -1388,8 +1388,8 @@ The main commands:
   contributor's commits the hooks' checks, installed or not: `deckz check`
   and `deckz hooks check-commits` (the pushed or proposed commits'
   `Lang-sync` lines, which must be read) on every push and pull request,
-  `deckz.yml`'s `ci.nightly_checks` every night, and, on Sundays (or every
-  night), the handouts of the decks the period's commits reach, in the
+  `deckz.yml`'s `ci.nightly_checks` every night, its `ci.weekly_checks`
+  on Sundays, and, on Sundays (or every night), the handouts of the decks the period's commits reach, in the
   `ci.builds` languages (`deckz run decks --since`, every deck when no
   commit is older than that), and, on Sundays, `deckz labs check` on the
   `ci.labs` notebooks, in an environment made anew with their libraries.
@@ -1401,7 +1401,9 @@ The main commands:
   `deckz_repository` and `deckz_ref` (a deckz checked out next to the
   repository, for one installing it from `../deckz`), `apt_packages`
   (system packages its dependencies, or its assets builders, need),
-  `nightly_checks`, `builds` (e.g. `[fr, en]`; none by default, no build),
+  `nightly_checks`, `weekly_checks` (checks too costly for every night,
+  such as one fetching every link), `builds` (e.g. `[fr, en]`; none by
+  default, no build),
   `builds_schedule` (`weekly`, the default, on Sundays at 04:00 UTC, or
   `nightly`), `videos_repository` (the `owner/name` the videos are
   published to, whose renders the builds fetch first: `deckz videos
@@ -1417,7 +1419,7 @@ The main commands:
   CI").
 - `deckz hooks ci-report REPORTS [--dry-run]`: the scheduled workflow's
   last step, when its checks, builds or labs fail: REPORTS holds their
-  outputs (`checks.txt`, `builds.md`, `labs.txt`), turned into the `deckz-ci` issue described
+  outputs (`checks.txt`, `weekly-checks.txt`, `builds.md`, `labs.txt`), turned into the `deckz-ci` issue described
   above, with the job's `GITHUB_TOKEN`. `--dry-run` prints the body.
 - `deckz show` (alias for `deckz show tree`): show the resolved tree of
   sections and files for the current deck.

@@ -487,6 +487,58 @@ def test_ci_workflow_reports_problems_in_an_issue_only_when_asked() -> None:
     assert "--report ../deckz-reports/builds.md" in build
 
 
+def test_ci_workflow_runs_the_weekly_checks_on_sundays_only_when_asked() -> None:
+    import subprocess
+
+    import yaml
+
+    from deckz.configuring.settings import CiSettings
+    from deckz.hooks_install import ci_workflow
+
+    # Without `weekly_checks`, nothing of it: regenerating changes nothing.
+    for settings in (
+        CiSettings(),
+        CiSettings(nightly_checks=("missing-en",), report_to=("me",)),
+    ):
+        text = ci_workflow(settings)
+        assert "Weekly checks" not in text
+        assert "0 4 * * 0" not in text
+
+    # The Sunday cron line, even with no build to need it.
+    quiet = yaml.safe_load(ci_workflow(CiSettings(weekly_checks=("dead-links",))))
+    assert [s["cron"] for s in quiet[True]["schedule"]] == ["0 3 * * *", "0 4 * * 0"]
+    steps = {s["name"]: s for s in quiet["jobs"]["check"]["steps"]}
+    step = steps["Weekly checks"]
+    assert step["if"].startswith("(github.event.schedule == '0 4 * * 0' || ")
+    assert step["if"].endswith(") && !cancelled()")
+    assert step["run"] == "uv run deckz check --plain dead-links"
+    assert "Nightly checks" not in steps
+    assert "Report the problems in an issue" not in steps
+
+    reporting = yaml.safe_load(
+        ci_workflow(
+            CiSettings(
+                nightly_checks=("missing-en",),
+                weekly_checks=("dead-links",),
+                report_to=("me",),
+            )
+        )
+    )
+    names = [s["name"] for s in reporting["jobs"]["check"]["steps"]]
+    assert names.index("Nightly checks") + 1 == names.index("Weekly checks")
+    steps = {s["name"]: s for s in reporting["jobs"]["check"]["steps"]}
+    run = steps["Weekly checks"]["run"]
+    assert "uv run deckz check --plain dead-links > weekly-checks.txt" in run
+    assert "mv weekly-checks.txt ../deckz-reports/" in run
+    assert "mv checks.txt ../deckz-reports/" in steps["Nightly checks"]["run"]
+    assert "Report the problems in an issue" in steps
+    # Reported with weekly checks alone, too.
+    alone = ci_workflow(CiSettings(weekly_checks=("dead-links",), report_to=("me",)))
+    assert "Report the problems in an issue" in alone
+    # The step's script parses.
+    subprocess.run(["sh", "-n"], input=run, text=True, check=True)
+
+
 def test_ci_workflow_runs_the_labs_on_sundays_only_when_asked() -> None:
     import subprocess
 
