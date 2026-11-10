@@ -102,6 +102,14 @@ under `.run/agent-loop/<start time>/`, and `claude --resume <session id>` (logge
 each session ends) reopens one. It exits 1 unless the last session said `done` or
 `continue`.
 
+A usage limit stops a session in the middle of its share, its edits uncommitted, and
+the loop with it. With `--wait-on-limit`, the loop sleeps until the limit resets (the
+time its message gives, "resets 9pm"), then reopens that same session (`claude
+--resume`), which goes on from where it stopped: a fresh session wouldn't know what
+the uncommitted edits are. It waits 6 hours at most, so a weekly limit still stops
+the loop. Several loops on one account share its limit: they all stop at the same
+time, and all go on at the reset.
+
 Where agents must work in a worktree (`worktree.required_for_agents`), start the loop
 in it, `--workdir ../<repository>--<name>`: a headless session can't enter an existing
 worktree by itself (Claude Code's EnterWorktree asks for a confirmation no one gives)

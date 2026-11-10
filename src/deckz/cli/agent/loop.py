@@ -10,6 +10,7 @@ def loop(
     max_sessions: int = 20,
     model: str | None = None,
     permission_mode: str = "auto",
+    wait_on_limit: bool = False,
     json: bool = False,
     workdir: Path = Path(),
 ) -> None:
@@ -28,6 +29,11 @@ def loop(
     `.run/agent-loop/<start time>/`; `claude --resume <session id>` reopens
     one. Exits 1 unless the last session said `done` or `continue`.
 
+    A usage limit stops a session in the middle of its share, edits
+    uncommitted. With --wait-on-limit, the loop then sleeps until the limit
+    resets (the time its message gives, 6 hours away at most: not a weekly
+    limit) and reopens that session, which goes on from where it stopped.
+
     Args:
         prompt: What every session is asked, e.g. "Reprends
             docs/plans/<plan>.md, file C, un seul bloc"
@@ -38,6 +44,8 @@ def loop(
             --permission-mode`): `auto` lets them work with no one to
             approve, within Claude Code's safeguards and the repository's
             hooks
+        wait_on_limit: Wait for a usage limit to reset, then reopen the
+            session it stopped, instead of stopping the loop
         json: Print the sessions' outcomes as a JSON list once done
         workdir: Path to move into before running the command
 
@@ -46,6 +54,7 @@ def loop(
     """
     import logging
     from dataclasses import asdict
+    from datetime import datetime
 
     from ...agent_loop import SessionOutcome, agent_loop, claude_command
     from ...utils import get_git_dir
@@ -53,6 +62,13 @@ def loop(
     logger = logging.getLogger(__name__)
     command = claude_command(permission_mode=permission_mode, model=model)
     logger.info("each session runs: %s", " ".join(command))
+
+    def waiting(outcome: SessionOutcome, until: datetime) -> None:
+        logger.info(
+            "usage limit: waiting until %s, then reopening session %s",
+            until.astimezone().strftime("%H:%M"),
+            outcome.session_id or "(a fresh one)",
+        )
 
     def report(outcome: SessionOutcome) -> None:
         cost = f", ${outcome.cost_usd:.2f}" if outcome.cost_usd is not None else ""
@@ -71,7 +87,9 @@ def loop(
         git_dir=get_git_dir(workdir.resolve()),
         max_sessions=max_sessions,
         command=command,
+        wait_on_limit=wait_on_limit,
         on_session=report,
+        on_wait=waiting,
     )
     if json:
         from .._presentation import print_json
@@ -86,6 +104,12 @@ def loop(
         else:
             reason = f": {last.reason}" if last.reason else ""
             print(f"last session: {last.status}{reason}")
+            if last.status == "limit":
+                print(
+                    "not waited for: its reset is too far or unknown"
+                    if wait_on_limit
+                    else "--wait-on-limit waits for the reset, then reopens the session"
+                )
         print(f"logs: {last.log.parent}")
     if outcomes[-1].status not in ("done", "continue"):
         raise SystemExit(1)

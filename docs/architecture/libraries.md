@@ -83,11 +83,11 @@ up: no extra, settings or login) or `CalendarError`. `sessions` imports it lazil
 | | |
 |---|---|
 | **Responsibility** | One prompt run in fresh headless Claude Code sessions (`claude -p`), one after another, each ending with a `DECKZ-LOOP: continue\|done\|stop` line that says whether to start the next |
-| **Owns** | `PROTOCOL` (what is appended to the prompt), the sessions' logs under `<git_dir>/.run/agent-loop/<start time>/` |
+| **Owns** | `PROTOCOL` (what is appended to the prompt), `RESUME_PROMPT` (what a session reopened after a usage limit is told), the sessions' logs under `<git_dir>/.run/agent-loop/<start time>/` |
 | **Depends on** | Nothing of deckz's; `claude`, as a subprocess, with the user's own login |
-| **Never** | Answers a session, retries a failed one, or starts one after a `stop`, a failure or `max_sessions` |
+| **Never** | Answers a session, retries a failed one, or starts one after a `stop`, a failure or `max_sessions`. The one exception is asked for (`wait_on_limit`): a session the usage limit stopped (`limit`) is reopened with `claude --resume` once the limit has reset, `MAX_LIMIT_WAIT` later at most |
 | **Entry points** | `deckz agent loop` |
-| **Fails with** | Nothing: a failed session is an outcome (`error`), and the command exits 1 on it |
+| **Fails with** | Nothing: a failed session is an outcome (`error`, or `limit`), and the command exits 1 on it |
 
 A plan done block by block in one agent session carries every past block in its
 context. A coordinating session that hands each block to a fresh subagent works too (a
@@ -95,6 +95,12 @@ subagent can start subagents of its own, as a review skill's block does), but it
 grows with every block's brief and report, and only as long as it remembers to
 delegate. A top-level session per block, started from outside, carries nothing over:
 it rereads the plan instead.
+
+A usage limit is the one failure a session is reopened after rather than replaced: it
+stops the session mid-share, with uncommitted edits only that session can account
+for. The reset time is read from the limit's message (`limit_reset`), the only place
+Claude Code gives it; when it can't be read, the session is tried again every
+`LIMIT_POLL` (a session started under the limit fails at once and costs nothing).
 
 ## `commits`
 
