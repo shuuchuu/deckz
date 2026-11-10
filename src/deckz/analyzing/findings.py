@@ -79,6 +79,10 @@ class Finding:
     scope: tuple[str, ...] = ()
     """The decks it concerns, as written in brackets after its id; empty: \
     every deck its report covers (`resolve_scope`)."""
+    end: int = 0
+    """Its last line in the report (from 1), the blank lines after it left out."""
+    text: str = ""
+    """Its lines as written, list marker included, from `line` to `end`."""
 
 
 @dataclass(frozen=True)
@@ -307,12 +311,16 @@ def parse(
     problems: list[str] = []
     first_line: dict[str, int] = {}
     numbers: dict[str, int] = {}
+    lines = text.splitlines()
     for item in _items(text, settings.heading):
         match = _ID.match(item.lines[0])
         assert match is not None  # `_items` keeps those only.
         letters, number = match.group(1), int(match.group(2))
         numbers[letters] = max(numbers.get(letters, 0), number)
         found = pattern.findall("\n".join(item.lines))
+        written = lines[item.line - 1 : item.line - 1 + len(item.lines)]
+        while written and not written[-1].strip():
+            written.pop()
         finding = Finding(
             id=f"{letters}{number}",
             rubric=letters,
@@ -322,6 +330,8 @@ def parse(
             heading=item.heading,
             summary=_summary(item),
             scope=_scope(item, match.end()),
+            end=item.line - 1 + len(written),
+            text="\n".join(written),
         )
         findings.append(finding)
         where = f"{report}:{item.line}: {finding.id}"
@@ -355,6 +365,193 @@ def parse(
         else:
             first_line[finding.id] = item.line
     return ReportFindings(report, tuple(findings), tuple(problems))
+
+
+def fiche(text: str, heading: str) -> str:
+    """A report's fiche: its body before its findings, the part read in their stead.
+
+    Args:
+        text: The report.
+        heading: The findings heading's text (`review.findings.heading`).
+
+    Returns:
+        The lines after the front matter and before the first heading whose \
+        text is `heading` (outside code blocks), with a final newline; the \
+        whole body if it has no such heading.
+    """
+    lines = text.splitlines()
+    start = _body_start(lines)
+    end = len(lines)
+    fence: str | None = None
+    for index in range(start, len(lines)):
+        line = lines[index]
+        if fence is not None:
+            stripped = line.strip()
+            if stripped.startswith(fence) and not stripped.strip(fence[0]):
+                fence = None
+        elif opening := _FENCE.match(line):
+            fence = opening.group(1)
+        elif (match := _HEADING.match(line)) and (
+            match.group(2) or ""
+        ).strip() == heading:
+            end = index
+            break
+    body = "\n".join(lines[start:end]).strip("\n")
+    return f"{body}\n" if body else ""
+
+
+_TITLE = 72
+"""The longest title a compacted finding keeps, in characters."""
+_MENTION = 40
+"""The longest mention of how it was done a compacted finding keeps."""
+_MARKS = 3
+"""The most commits and days a compacted finding keeps."""
+_MARK = re.compile(
+    r"(?<![0-9A-Za-z])(?:\d{4}-\d{2}-\d{2}"
+    r"|(?=[0-9a-f]*[0-9])(?=[0-9a-f]*[a-f])[0-9a-f]{7,40})(?![0-9A-Za-z])"
+)
+"""A day (`2026-11-04`) or a commit (`66fa0179`, at least a digit and a letter)."""
+_CODE_SPAN = re.compile(r"`[^`]*`")
+
+
+def _shortened(text: str, limit: int) -> str:
+    # `text` cut at a word to fit `limit` with its ellipsis, no code span or
+    # emphasis left open.
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 1]
+    if " " in cut:
+        cut = cut[: cut.rfind(" ")]
+    while cut.count("`") % 2:
+        cut = cut[: cut.rfind("`")]
+    # An emphasis left open, outside the code spans.
+    while (outside := _CODE_SPAN.sub(lambda m: " " * len(m[0]), cut)).count("*") % 2:
+        cut = cut[: outside.rfind("*")]
+    return cut.rstrip(" ,;:([«\N{EM DASH}\N{EN DASH}-") + "\N{HORIZONTAL ELLIPSIS}"
+
+
+def _parenthesized(text: str) -> str | None:
+    # What the parentheses `text` starts with hold (to its end if unclosed).
+    if not text.startswith("("):
+        return None
+    depth = 0
+    for index, char in enumerate(text):
+        depth += (char == "(") - (char == ")")
+        if depth == 0:
+            return text[1:index]
+    return text[1:]
+
+
+def _marks(text: str) -> list[str]:
+    return list(dict.fromkeys(match.group(0) for match in _MARK.finditer(text)))
+
+
+def _done_with(finding: Finding, outcomes: re.Pattern[str]) -> str:
+    # How a done finding was done, in parentheses: the commits and days that
+    # follow its outcome word, else what follows it, shortened, else the
+    # last commits and days it cites.
+    matches = list(outcomes.finditer(finding.text))
+    after = finding.text[matches[-1].end() :].lstrip() if matches else ""
+    mention = _parenthesized(after)
+    if mention is not None:
+        if marks := _marks(mention):
+            return f" ({', '.join(marks[:_MARKS])})"
+        if collapsed := " ".join(mention.split()):
+            return f" ({_shortened(collapsed, _MENTION)})"
+    marks = _marks(finding.text)[-_MARKS:]
+    return f" ({', '.join(marks)})" if marks else ""
+
+
+def _title(finding: Finding, outcomes: re.Pattern[str]) -> str:
+    # Its first paragraph up to a sub-list or an outcome word, shortened;
+    # what follows when that leaves nothing (an id alone, then a sub-list).
+    lines = finding.text.splitlines()
+    marker = _ITEM.match(lines[0])
+    head = [lines[0][marker.end() :] if marker else lines[0]]
+    rest = []
+    for index, line in enumerate(lines[1:], 1):
+        if not line.strip() or _starts_block(line.lstrip(" ")):
+            rest = lines[index:]
+            break
+        head.append(line)
+    text = " ".join(" ".join(head).split())
+    text = _ID.sub("", text, count=1)
+    if scope := _SCOPE.match(text):
+        text = text[scope.end() :]
+    text = text.strip().lstrip("\N{EM DASH}\N{EN DASH}-: ")
+    if match := outcomes.search(text):
+        text = text[: match.start()]
+    text = text.strip().rstrip(" ,;:.")
+    if not text:
+        text = " ".join(" ".join(rest).split())
+        match = outcomes.search(text)
+        text = (text[: match.start()] if match else text).strip()
+    return _shortened(text, _TITLE)
+
+
+def compact(
+    text: str, settings: "FindingsSettings", report: str = "<report>"
+) -> tuple[str, tuple[str, ...]]:
+    """Reduce each done finding of a report to one line; git keeps its text.
+
+    The line is the finding's list marker, its id, its scope, a short title
+    (its first paragraph, up to `_TITLE` characters), its outcome word and,
+    in parentheses, the commits and days its outcome cites (else what it
+    says, shortened): `- **I1** — `a.md`, « Types » : `int`… *done*
+    (66fa0179)`. Open and refused findings, and the rest of the report, stay
+    as they are. A finding stays too when its line wouldn't be shorter, so a
+    report compacted once is left unchanged.
+
+    Args:
+        text: The report.
+        settings: The grammar (`review.findings`).
+        report: Its path relative to the repository, for the problems.
+
+    Returns:
+        The compacted report, and the ids of the findings compacted, in \
+        the report's order.
+
+    Raises:
+        ReviewError: If the compacted report doesn't read as the same \
+            findings, which would be a bug: nothing is written then.
+    """
+    found = parse(text, settings, report)
+    outcomes = _outcome_pattern(settings)
+    done = settings.outcomes.done
+    lines = text.splitlines(keepends=True)
+    compacted: list[str] = []
+    for finding in reversed(found.findings):
+        if finding.outcome != "done":
+            continue
+        first = lines[finding.line - 1]
+        marker = _ITEM.match(first)
+        assert marker is not None  # A finding starts a list item.
+        scope = f" [{', '.join(finding.scope)}]" if finding.scope else ""
+        ending = lines[finding.end - 1][len(lines[finding.end - 1].rstrip("\r\n")) :]
+        line = (
+            f"{first[: marker.end()]}**{finding.id}**{scope} \N{EM DASH} "
+            f"{_title(finding, outcomes)} *{done}*{_done_with(finding, outcomes)}"
+            f"{ending}"
+        )
+        before = "".join(lines[finding.line - 1 : finding.end])
+        if len(line.encode("utf8")) < len(before.encode("utf8")):
+            lines[finding.line - 1 : finding.end] = [line]
+            compacted.append(finding.id)
+    result = "".join(lines)
+    again = parse(result, settings, report)
+
+    def read(
+        found: ReportFindings,
+    ) -> list[tuple[str, Outcome | None, tuple[str, ...]]]:
+        return [(f.id, f.outcome, f.scope) for f in found.findings]
+
+    if read(again) != read(found) or len(again.problems) != len(found.problems):
+        msg = (
+            f"{report}: compacting would change its findings, a bug of deckz: "
+            "nothing written, report it with the report attached"
+        )
+        raise ReviewError(msg)
+    return result, tuple(reversed(compacted))
 
 
 ########################################################################################
@@ -604,3 +801,145 @@ def findings_status(
             found_reports = [every[report] for report in sorted(reports)]
         shown.append(TargetFindings(rel or ".", kind, tuple(found_reports)))
     return FindingsStatus((), tuple(shown), tuple(problems))
+
+
+########################################################################################
+# Fiches and compaction                                                                #
+########################################################################################
+
+
+def section_report(settings: "GlobalSettings", given: Path) -> Path:
+    """The report a section or a report given on the command line stands for.
+
+    Args:
+        settings: The repository's settings.
+        given: As given: a report (a Markdown file under `review.dir`), or \
+            a shared section, by its directory (from the current directory \
+            or the repository's root) or its path under the shared content \
+            directory.
+
+    Returns:
+        The report, absolute: a section's is `<review.dir>/sections/<its \
+        path under the shared content directory>.md`.
+
+    Raises:
+        ReviewError: If `given` names neither, or its report doesn't exist.
+    """
+    from contextlib import suppress
+
+    from .review import SECTIONS_DIR, locate, review_dir
+
+    git_dir = settings.paths.git_dir
+    directory = review_dir(settings)
+    content_dir = settings.paths.content_dir
+    candidates = [] if given.is_absolute() else [content_dir / given]
+    with suppress(ReviewError):  # Outside the repository: not a path then.
+        candidates.insert(0, locate(settings, given))
+    report = None
+    for candidate in candidates:
+        if candidate.suffix == ".md" and candidate.is_relative_to(directory):
+            report = candidate
+        elif candidate.is_dir() and candidate.is_relative_to(content_dir):
+            section = candidate.relative_to(content_dir).as_posix()
+            report = directory / SECTIONS_DIR / f"{section}.md"
+        if report is not None:
+            break
+    else:
+        msg = (
+            f"{given} is neither a report (a Markdown file under "
+            f"{directory.relative_to(git_dir).as_posix()}) nor a shared section "
+            f"(e.g. {content_dir.relative_to(git_dir).as_posix()}/<section>, or "
+            "<section>)"
+        )
+        raise ReviewError(msg)
+    if not report.is_file():
+        msg = (
+            f"no report {report.relative_to(git_dir).as_posix()}: a review writes "
+            "it, `deckz review mark` records its files"
+        )
+        raise ReviewError(msg)
+    return report
+
+
+def report_fiche(settings: "GlobalSettings", target: Path) -> tuple[str, str]:
+    """`deckz review fiche`: a report's fiche (`fiche`).
+
+    Args:
+        settings: The repository's settings.
+        target: A report, or a shared section, as given (`section_report`).
+
+    Returns:
+        The report, relative to the repository, and its fiche. Fails if \
+        `review.findings` is unset.
+    """
+    report = section_report(settings, target)
+    text = report.read_text(encoding="utf8")
+    rel = report.relative_to(settings.paths.git_dir).as_posix()
+    return rel, fiche(text, grammar(settings).heading)
+
+
+@dataclass(frozen=True)
+class Compaction:
+    report: str
+    """Relative to the repository."""
+    ids: tuple[str, ...]
+    """The findings reduced to one line, in the report's order."""
+    before: int
+    """The report's size before, in bytes."""
+    after: int
+    """Its size after."""
+
+
+def compact_reports(
+    settings: "GlobalSettings", targets: Sequence[Path], *, dry_run: bool = False
+) -> list[Compaction]:
+    """`deckz review compact`: reduce the reports' done findings to one line each.
+
+    Args:
+        settings: The repository's settings.
+        targets: Reports, or directories under `review.dir` standing for the \
+            reports under them, absolute (`review.locate`).
+        dry_run: Only say what would be reduced, write nothing.
+
+    Returns:
+        One per report, by path, even those with nothing to reduce.
+
+    Raises:
+        ReviewError: If a target is no report, or `review.dir` or \
+            `review.findings` is unset.
+    """
+    from .review import report_paths, review_dir
+
+    directory = review_dir(settings)
+    found_grammar = grammar(settings)
+    git_dir = settings.paths.git_dir
+    paths: dict[Path, None] = {}
+    every = report_paths(settings)
+    for target in targets:
+        if target.is_dir() and target.is_relative_to(directory):
+            paths.update(dict.fromkeys(p for p in every if p.is_relative_to(target)))
+        elif target.suffix == ".md" and target.is_relative_to(directory):
+            if not target.is_file():
+                msg = f"no report {target.relative_to(git_dir).as_posix()}"
+                raise ReviewError(msg)
+            paths[target] = None
+        else:
+            msg = (
+                f"{target.relative_to(git_dir).as_posix() or '.'} is not a report: "
+                "give reports (Markdown files under "
+                f"{directory.relative_to(git_dir).as_posix()}, `review.dir`) or "
+                "directories holding them"
+            )
+            raise ReviewError(msg)
+    done = []
+    for path in sorted(paths):
+        rel = path.relative_to(git_dir).as_posix()
+        # Bytes, so that its line endings stay as they are.
+        text = path.read_bytes().decode("utf8")
+        result, ids = compact(text, found_grammar, rel)
+        if ids and not dry_run:
+            path.write_bytes(result.encode("utf8"))
+        done.append(
+            Compaction(rel, ids, len(text.encode("utf8")), len(result.encode("utf8")))
+        )
+    return done

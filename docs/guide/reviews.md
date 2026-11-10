@@ -92,6 +92,34 @@ pointing to `deckz review status <deck>`.
 `--json` and `--plain` are for scripts and agents (see `deckz review status --help`).
 The command always exits 0.
 
+### Before reviewing a section
+
+```sh
+deckz review brief python/basics   # or content/python/basics, or its report
+```
+
+prints in one call what a section's review starts from, which would otherwise take
+`review status`, `deps`, `show affected`, `review findings` and a few `git diff`s.
+For each report the section's files go to (the one recording a file, else the
+innermost section report there is for its directory or a parent's, else the
+section's own, to be written):
+
+- its files, each with its state (a stale one's lines added and removed, and the
+  frames they touch), its frames, how many decks include it, and which of the
+  section's flavors do (`all` when every one does);
+- its lab notebooks: those under the notebooks directory at the section's path
+  (`labs/notebooks/python/basics/…`), and any other file it records;
+- its findings counted, the open and refused ones one line each;
+- when its dated facts are checked and due ([Dated facts](#dated-facts));
+- what changed since its last mark among what decides the section's audiences: its
+  definitions (`.yml`), and its decks' own files (`deck.yml`, program, a local
+  override of the section's files).
+
+Then the section's flavors, with their frames, files and decks, and every deck
+including one of its files: how (`python/basics@lpy`, a subsection's flavor, or a
+file alone) and the section's frames out of the deck's. `--json` gives the same for
+a script. The command always exits 0.
+
 ## Reviewing
 
 Read the files, write the report, then record what you read:
@@ -309,6 +337,44 @@ should include); `deckz dashboard` counts a deck's findings the same way. For a 
 outside `review.dir`, the reports recording a file under it. `--json` and `--plain`
 list every finding with its line, id, outcome, first paragraph and scope. The command
 always exits 0.
+
+### Reading a report without reading it all
+
+A report grows with every review. Two commands print the parts a review or a fix
+reads, so nobody needs the whole file:
+
+```sh
+deckz review fiche python/basics                          # the text before the findings
+deckz review findings docs/qa/sections/python/basics.md --text  # its open findings, in full
+```
+
+`fiche` takes a section or reports, and prints what comes before the findings
+heading (the summary a deck pass reads in place of the content). `findings --text`
+prints the open findings of the reports `findings` would list, as they are written,
+each report's after a `==> <report> <==` line.
+
+### Compacting done findings
+
+A done finding's text has served: git keeps it. `compact` reduces each one to a line,
+its id, its scope, a short title (its first paragraph, cut at about 70 characters),
+its outcome word and the commits and days its outcome cites (else what it says
+after the outcome word, shortened):
+
+```sh
+deckz review compact docs/qa/sections --dry-run   # what would be reduced, and the bytes saved
+deckz review compact docs/qa/sections/python/basics.md
+```
+
+```markdown
+- **I1** — `exceptions.md`, « Définir une erreur personnalisée » (et « Envelopper… *done* (66fa0179)
+```
+
+Open and refused findings (the next review reads a refusal's reason, so as not to
+propose it again), the fiche and the rest of the report stay as they are, and the
+findings read the same: `compact` checks it before writing, so `review-findings`
+and `deckz review findings` give what they gave. A finding already reduced is left
+alone, so running it again changes nothing. Commit a report before compacting what
+only your working tree holds: git keeps only what was committed.
 
 The `review-findings` check (blocking) fails on a finding with no outcome, an id two
 findings of a report share (give the newer one the next free number: ids are never

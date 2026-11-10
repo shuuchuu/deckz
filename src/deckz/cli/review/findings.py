@@ -6,7 +6,12 @@ from . import app
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from ...analyzing.findings import Finding, ReportFindings, TargetFindings
+    from ...analyzing.findings import (
+        Finding,
+        FindingsStatus,
+        ReportFindings,
+        TargetFindings,
+    )
     from ...configuring.settings import FindingsSettings
 
 _SUMMARY = 100
@@ -19,6 +24,7 @@ def findings(
     *,
     plain: bool = False,
     json: bool = False,
+    text: bool = False,
     workdir: Path = Path(),
 ) -> None:
     """Count the reports' findings by rubric and outcome, and list the open ones.
@@ -54,6 +60,10 @@ def findings(
             outcome, heading, summary, scope}]}`, every finding listed. Both have
             `problems`: the unreadable reports and the findings breaking the
             grammar
+        text: Print the open findings in full instead, as the reports write
+            them, each report's after a `==> <report> <==` line: what a
+            fix or a review reads in place of the whole report (its fiche:
+            `deckz review fiche`)
         workdir: Path to move into before running the command
 
     """
@@ -64,29 +74,17 @@ def findings(
     from ...configuring.settings import GlobalSettings
 
     settings = GlobalSettings.from_yaml(workdir)
+    _refuse_mixed(text=text, plain=plain, json=json)
     found = findings_status(settings, [locate(settings, t) for t in targets or ()])
     grammar = settings.review.findings
     assert grammar is not None  # `findings_status` refuses otherwise.
     if json:
-        from .._presentation import print_json
-
-        if targets:
-            print_json(
-                {
-                    "targets": [_target_json(t, grammar) for t in found.targets],
-                    "problems": list(found.problems),
-                }
-            )
-        else:
-            print_json(
-                {
-                    "reports": [_report_json(r, grammar) for r in found.reports],
-                    "problems": list(found.problems),
-                }
-            )
+        _print_json(found, grammar, targets=bool(targets))
         return
     shown = [r for t in found.targets for r in t.reports] if targets else found.reports
-    if plain:
+    if text:
+        _print_text(shown)
+    elif plain:
         for report in shown:
             for finding in report.findings:
                 print(_plain_line(report.report, finding))
@@ -97,8 +95,53 @@ def findings(
         _print_table(found.reports, grammar)
     for problem in found.problems:
         print(f"problem: {problem}", file=stderr)
-    if found.problems and not plain:
+    if found.problems and not plain and not text:
         print("Each problem's fix: `deckz check review-findings`.", file=stderr)
+
+
+def _refuse_mixed(*, text: bool, plain: bool, json: bool) -> None:
+    if text and (plain or json):
+        from ...exceptions import ReviewError
+
+        msg = "`--text` prints the findings' text: drop `--plain` and `--json`"
+        raise ReviewError(msg)
+
+
+def _print_json(
+    found: "FindingsStatus", grammar: "FindingsSettings", *, targets: bool
+) -> None:
+    from .._presentation import print_json
+
+    if targets:
+        print_json(
+            {
+                "targets": [_target_json(t, grammar) for t in found.targets],
+                "problems": list(found.problems),
+            }
+        )
+    else:
+        print_json(
+            {
+                "reports": [_report_json(r, grammar) for r in found.reports],
+                "problems": list(found.problems),
+            }
+        )
+
+
+def _print_text(reports: "Sequence[ReportFindings]") -> None:
+    # Each report once (several targets may share one), its open findings as
+    # written.
+    seen: set[str] = set()
+    first = True
+    for report in reports:
+        opened = [f for f in report.findings if f.outcome == "open"]
+        if not opened or report.report in seen:
+            continue
+        seen.add(report.report)
+        print(f"{'' if first else chr(10)}==> {report.report} <==")
+        first = False
+        for finding in opened:
+            print(f"\n{finding.text}")
 
 
 def _counts(

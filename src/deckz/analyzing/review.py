@@ -75,7 +75,7 @@ from ..exceptions import ReviewError
 
 if TYPE_CHECKING:
     from ..configuring.settings import DeckSettings, GlobalSettings, ReviewRule
-    from ..models import Deck
+    from ..models import Deck, ParsedDeck
 
 State = Literal["fresh", "due", "stale", "unreviewed", "deleted"]
 Kind = Literal["section", "deck", "course-notes"]
@@ -448,7 +448,12 @@ def _content_root(settings: "GlobalSettings", path: Path) -> Path | None:
     return None
 
 
-def _is_content_file(settings: "GlobalSettings", path: Path) -> bool:
+def is_content_path(settings: "GlobalSettings", path: Path) -> bool:
+    """Whether `path` (absolute) is a content file, shared or a deck's own.
+
+    Returns:
+        True if its name is a content file's and it is under a content directory.
+    """
     from ..utils import is_content_file
 
     return is_content_file(path, settings.file_extensions) and _in_content_dir(
@@ -1102,7 +1107,7 @@ def review_files(
         absolute = git_dir / path
         frames = (
             frame_count(absolute)
-            if absolute.is_file() and _is_content_file(settings, absolute)
+            if absolute.is_file() and is_content_path(settings, absolute)
             else None
         )
         marks = index.get(path, ())
@@ -1234,13 +1239,27 @@ def _chapters_under(settings: "GlobalSettings", target: Path) -> list[str]:
     return sorted(_rel(settings, p) for p in found if p.is_relative_to(target))
 
 
-def _used_files(settings: "GlobalSettings") -> dict[str, set[str]]:
-    # Every content file some deck includes, in French, with those decks.
+def used_files(
+    settings: "GlobalSettings", decks: Mapping[Path, "ParsedDeck"] | None = None
+) -> dict[str, set[str]]:
+    """Every content file some deck includes, in French, with those decks.
+
+    Args:
+        settings: The repository's settings.
+        decks: Every deck parsed in French (`utils.all_decks`), when already \
+            parsed: that takes seconds.
+
+    Returns:
+        The decks' directories relative to the repository, by file relative \
+        to it.
+    """
     from ..utils import all_decks
 
     git_dir = settings.paths.git_dir
+    if decks is None:
+        decks = all_decks(git_dir, "fr")
     used: dict[str, set[str]] = {}
-    for deck_path, parsed in all_decks(git_dir, "fr").items():
+    for deck_path, parsed in decks.items():
         for path in _files_of(parsed.deck):
             used.setdefault(_rel(settings, path), set()).add(deck_path.as_posix())
     return used
@@ -1281,8 +1300,8 @@ def expand(
                 found[_rel(settings, path)] = None
         elif _in_content_dir(settings, target):
             if used is None:
-                used = _used_files(settings)
-            found.update(dict.fromkeys(_used_under(settings, target, used)))
+                used = used_files(settings)
+            found.update(dict.fromkeys(used_under(settings, target, used)))
         elif target.is_relative_to(Path(_normalized(settings.paths.course_notes_dir))):
             found.update(dict.fromkeys(_chapters_under(settings, target)))
         else:
@@ -1292,11 +1311,15 @@ def expand(
     return list(found)
 
 
-def _used_under(
+def used_under(
     settings: "GlobalSettings", target: Path, used: Mapping[str, set[str]]
 ) -> list[str]:
-    # The content files of `used` under the content directory `target`,
-    # their `en/` translations left out.
+    """The content files of `used` under the content directory `target`.
+
+    Returns:
+        Their paths relative to the repository, sorted, their `en/` \
+        translations left out.
+    """
     git_dir = settings.paths.git_dir
     root = _content_root(settings, target) or target
     return [
@@ -1364,7 +1387,7 @@ def deck_review(
             if path not in content
             and path not in passed
             and path not in chapters
-            and not _is_content_file(settings, git_dir / path)
+            and not is_content_path(settings, git_dir / path)
         }
     )
     every = review_files(
@@ -1427,7 +1450,7 @@ def ranking(
     if index is None:
         index = marks_index(git_dir, reports)
     sections = set(shared_section_ids(content_dir))
-    used = _used_files(settings)
+    used = used_files(settings)
     grouped: dict[str, list[str]] = {}
     decks: dict[str, set[str]] = {}
     for path in sorted(used):
@@ -1495,7 +1518,7 @@ def review_status(settings: "GlobalSettings", targets: Sequence[Path]) -> Review
         )
     # Parsing every deck takes seconds: once for all the content directories.
     used = (
-        _used_files(settings)
+        used_files(settings)
         if any(
             target.is_dir()
             and not (target / "deck.yml").is_file()

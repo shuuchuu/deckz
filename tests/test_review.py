@@ -1001,3 +1001,150 @@ def test_files_sharing_a_mark_get_no_yaml_alias(repo: Path) -> None:
     assert "&id" not in text
     assert "*id" not in text
     assert set(read_report(_settings(repo), repo / REPORT).own) == {A, B}
+
+
+SUB_REPORT = "reviews/sections/sec/sub.md"
+LAB = "labs/notebooks/sec/lab-fr.ipynb"
+SEC_FINDINGS = (
+    "# Sec\n\n## Fiche\n\n| Flavor | Decks |\n| --- | --- |\n| `full` | two |\n\n"
+    "## Findings\n\n### Errors\n\n- **E1** — `a.md`, « A1 »: wrong. *open*\n\n"
+    "### Pedagogy\n\n"
+    "- **P1** — `b.md`, « B »: the frame says too much for a first\n"
+    "  reading, and its example runs long.\n\n"
+    "  Proposal: cut the example in two frames.\n\n"
+    "  *done* (abc1234, 2026-11-04: cut in two)\n"
+    "- **P2** [abc] — `light` lacks `b.md`. *refused* (2026-11-08: by design)\n"
+)
+
+
+def _findings_repo(repo: Path) -> Path:
+    # `sec`'s report records a.md, b.md and its lab, with findings; its
+    # subsection `sub` has its own report, recording c.md.
+    deckz_yml = repo / "deckz.yml"
+    deckz_yml.write_text(
+        deckz_yml.read_text(encoding="utf8").replace(
+            "review:\n  dir: reviews\n", FINDINGS
+        ),
+        encoding="utf8",
+    )
+    _mark(repo, A, B, LAB)
+    path = repo / REPORT
+    path.write_text(path.read_text(encoding="utf8") + SEC_FINDINGS, encoding="utf8")
+    mark(_settings(repo), repo / SUB_REPORT, [repo / C])
+    _commit(repo, "Review")
+    return repo
+
+
+def test_cli_brief_gathers_a_sections_review(repo: Path, capsys: Any) -> None:
+    _findings_repo(repo)
+    _write(repo / B, "# B\n\nchanged\n")
+    definition = repo / "content" / "sec" / "sec.yml"
+    definition.write_text(
+        definition.read_text(encoding="utf8") + "# a comment\n", encoding="utf8"
+    )
+
+    main(("review", "brief", "sec"))
+    out = capsys.readouterr().out
+
+    assert out.startswith(
+        "content/sec: 3 files decks include, 6 frames; 2 flavors, 2 decks; 2 reports\n"
+    )
+    unit = out.split(f"\n{REPORT}: ")[1].split(f"\n{SUB_REPORT}: ")[0]
+    assert unit.startswith("marked ")
+    assert "changed since " in unit
+    assert ": content/sec/sec.yml\n" in unit
+    assert "    fresh                   2   2  a.md  all\n" in unit
+    assert "    stale +1 -3, 1 frame    1   1  b.md  full\n" in unit
+    assert "  lab labs/notebooks/sec: lab-fr fresh\n" in unit
+    assert "  findings: 1 open, 1 done, 1 refused\n" in unit
+    assert "    open    E1   l." in unit
+    assert "    refused P2   l." in unit
+    assert " P1 " not in unit
+    assert "    fresh    3   1  sub/c.md  full\n" in out
+    assert "  full      6    3  company/two\n" in out
+    assert "  light     2    1  company/abc\n" in out
+    assert "  company/abc        2/6  sec@light\n" in out
+
+    # Its directory and its report name it too.
+    main(("review", "brief", "content/sec", "--json"))
+    found = loads(capsys.readouterr().out)
+    main(("review", "brief", REPORT, "--json"))
+    assert loads(capsys.readouterr().out) == found
+    assert [u["report"] for u in found["units"]] == [REPORT, SUB_REPORT]
+    first = found["units"][0]
+    assert [(f["path"], f["state"], f["flavors"]) for f in first["files"]] == [
+        (A, "fresh", ["full", "light"]),
+        (B, "stale", ["full"]),
+    ]
+    assert first["labs"] == [
+        {"lab": "labs/notebooks/sec", "files": [first["labs"][0]["files"][0]]}
+    ]
+    assert first["counts"] == {"open": 1, "done": 1, "refused": 1}
+    assert [f["id"] for f in first["findings"]] == ["E1", "P2"]
+    assert first["changed"] == ["content/sec/sec.yml"]
+    assert found["decks"] == [
+        {"deck": "company/abc", "uses": ["sec@light"], "frames": 2, "total": 6},
+        {"deck": "company/two", "uses": ["sec@full"], "frames": 6, "total": 6},
+    ]
+
+
+def test_cli_brief_refuses_what_names_no_section(repo: Path, caplog: Any) -> None:
+    with raises(SystemExit) as exc_info:
+        main(("review", "brief", "nowhere"))
+
+    assert exc_info.value.code == 1
+    assert "nowhere names no shared section" in caplog.text
+
+
+def test_cli_fiche_and_the_open_findings_text(repo: Path, capsys: Any) -> None:
+    _findings_repo(repo)
+
+    main(("review", "fiche", "sec"))
+    assert capsys.readouterr().out == (
+        "# Sec\n\n## Fiche\n\n| Flavor | Decks |\n| --- | --- |\n| `full` | two |\n"
+    )
+    main(("review", "fiche", "content/sec", SUB_REPORT))
+    assert capsys.readouterr().out.startswith(f"==> {REPORT} <==\n# Sec\n")
+
+    main(("review", "findings", REPORT, "--text"))
+    assert capsys.readouterr().out == (
+        f"==> {REPORT} <==\n\n- **E1** — `a.md`, « A1 »: wrong. *open*\n"
+    )
+    # A deck's: those of the reports covering it, as `findings <deck>` lists them.
+    main(("review", "findings", "company/abc", "--text"))
+    assert "**E1**" in capsys.readouterr().out
+    with raises(SystemExit):
+        main(("review", "findings", "--text", "--json"))
+
+
+def test_cli_compact_reduces_the_done_findings(repo: Path, capsys: Any) -> None:
+    from deckz.analyzing.findings import findings_problems
+
+    _findings_repo(repo)
+    before = (repo / REPORT).read_text(encoding="utf8")
+
+    main(("review", "compact", "reviews", "--dry-run"))
+    out = capsys.readouterr().out
+    assert out.startswith(f"{REPORT}: would reduce 1 done findings, ")
+    assert out.endswith(", nothing written\n")
+    assert (repo / REPORT).read_text(encoding="utf8") == before
+
+    main(("review", "compact", REPORT, "--json"))
+    result = loads(capsys.readouterr().out)
+    assert [r["ids"] for r in result["reports"]] == [["P1"]]
+    after = (repo / REPORT).read_text(encoding="utf8")
+    assert after == before.replace(
+        "- **P1** — `b.md`, « B »: the frame says too much for a first\n"
+        "  reading, and its example runs long.\n\n"
+        "  Proposal: cut the example in two frames.\n\n"
+        "  *done* (abc1234, 2026-11-04: cut in two)\n",
+        "- **P1** — `b.md`, « B »: the frame says too much for a first reading, and "
+        "its… *done* (abc1234, 2026-11-04)\n",
+    )
+    assert findings_problems(_settings(repo), None) == []
+    main(("review", "compact", REPORT))
+    assert capsys.readouterr().out.startswith("0 of 1 reports, 0 findings")
+
+    with raises(SystemExit) as exc_info:
+        main(("review", "compact", A))
+    assert exc_info.value.code == 1
