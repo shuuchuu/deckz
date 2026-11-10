@@ -84,8 +84,14 @@ pushes, in this order, what your work leaves local:
 deckz goes first because the repository's CI installs deckz from its remote, and the
 content links to the labs' repositories: pushed first, the repository would be checked
 against a deckz that lacks the code it depends on. So when deckz's push fails, or its
-branch has diverged, nothing else is pushed. deckz's and the repository's branches are
-never forced: one behind or diverged is left, with the `git pull` to run.
+branch has diverged, nothing else is pushed. And since the content links to the labs'
+repositories' branches, when one of those repositories fails (a push refused, a branch
+diverged, a rebased branch that needs `--force`), the repository isn't pushed, nor
+anything published; the other labs' repositories are pushed all the same, so that you
+see everything that blocks at once. A lab repository with no local clone, or none of
+whose branches carries Copier answers, is only skipped, and doesn't stop the rest.
+deckz's and the repository's branches are never forced: one behind or diverged is
+left, with the `git pull` to run. `--dry-run` shows the same stops.
 
 Without `--publish`, `deckz push` ends with what's left to publish.
 

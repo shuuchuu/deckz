@@ -109,12 +109,14 @@ itself counts every item.
 | **Responsibility** | Push what a session of work leaves local, in order: deckz's checkout, the labs' repositories, the repository; then publish what's left |
 | **Owns** | `PushReport` (`RepoPush`, `BranchPush`, `PublishResult`) |
 | **Depends on** | `setting_up` (`own_checkout`), `worktrees` (the main checkout), `status` (`unpublished`), `publishing`; copierz, as a subprocess of deckz's own interpreter (the `push` extra) |
-| **Never** | Forces deckz's or the repository's branch; pushes anything after a deckz push that failed or diverged |
+| **Never** | Forces deckz's or the repository's branch; pushes anything after a deckz push that failed or diverged; pushes the repository, or publishes, after a lab repository failed (the others are still pushed) |
 | **Entry points** | [`push`][deckz.pushing.push] (`deckz push`) |
 | **Fails with** | Nothing raised: a failed push or publish, a diverged branch, are in the report (`ok`), the CLI exiting 1 |
 
 The order is a dependency: the repository's CI installs deckz from its remote, and its
-content links to the labs' repositories. The labs' branches are stacked (`solution` on
+content links to the labs' repositories' branches. A lab repository only skipped (no
+clone, no Copier branch, copierz not installed) is no failure: it doesn't stop the
+repository. The labs' branches are stacked (`solution` on
 `main`), so a fix to a base rewrites the branches above it: copierz pushes those with
 `--force-with-lease` under `--force`, only when the remote holds nothing they lacked.
 copierz runs through `sys.executable`, never the `PATH`, and its `push --json` output

@@ -33,8 +33,15 @@ def push(
     remote, and its content links to the labs' repositories: pushed before
     them, it would be checked against a deckz lacking the code it depends
     on. When deckz's push fails or its branch has diverged, nothing else is
-    pushed. deckz's and this repository's branches are never forced: one
-    behind or diverged from its remote is left, with the fix.
+    pushed. And since this repository's content links to the labs'
+    repositories' branches, one of them failing (a push failed, a branch
+    diverged, a rebased branch left without --force, copierz failed on it)
+    stops this repository's push and the publishing, the other labs'
+    repositories being pushed all the same, to show all that blocks at once;
+    a lab repository only skipped (no local clone, no branch carrying Copier
+    answers, copierz not installed) doesn't. deckz's and this repository's
+    branches are never forced: one behind or diverged from its remote is
+    left, with the fix.
 
     Then, with --publish, publishes the labs and the videos (what `deckz labs
     publish` and `deckz videos publish` do) when `deckz status` finds

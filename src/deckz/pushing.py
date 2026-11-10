@@ -19,7 +19,13 @@ The order matters: the repository's CI installs deckz from its remote, and
 its content links to the labs' repositories, so pushing the repository
 before them would have its CI check it against a deckz that lacks the code
 it depends on. When deckz's push fails, or its branch has diverged from its
-remote, nothing after it is pushed.
+remote, nothing after it is pushed. Likewise, the repository's content links
+to the labs' repositories' branches: when one of them fails (a push failed,
+a branch diverged, a rebased branch left without `force`, copierz failed on
+it), the other labs' repositories are still pushed, to show all that blocks
+at once, but neither the repository nor any publishing is. A lab repository
+merely skipped (no local clone, or not a clone of it; no branch carrying
+Copier answers; copierz not installed) doesn't stop it.
 
 Only the labs' branches are ever forced: deckz's and the repository's are
 pushed when they're ahead, and left, with the fix, when behind or diverged.
@@ -164,7 +170,8 @@ def push(
         repositories.append(deckz)
         if deckz.problem:
             stopped = (
-                "deckz wasn't pushed, so nothing else was: the repository's CI "
+                f"deckz {_wasnt(dry_run)} pushed, so nothing else "
+                f"{'would be' if dry_run else 'was'}: the repository's CI "
                 "installs deckz from its remote, and would check the repository "
                 "against a deckz lacking what it depends on. Fix deckz's branch "
                 "(above), then `deckz push` again"
@@ -172,7 +179,17 @@ def push(
             return PushReport(
                 dry_run, tuple(repositories), stopped, publish_asked=publish
             )
-    repositories.extend(lab_pushes(settings, dry_run=dry_run, force=force))
+    # Every lab repository is tried, to show all that blocks at once.
+    labs = lab_pushes(settings, dry_run=dry_run, force=force)
+    repositories.extend(labs)
+    if failed := [lab.name for lab in labs if lab.problem]:
+        stopped = (
+            f"{', '.join(failed)} {_wasnt(dry_run)} pushed, so the repository "
+            f"{'would not be' if dry_run else 'was not'} either, nor anything "
+            "published: its content links to those repositories' branches. Fix "
+            "them (above), then `deckz push` again"
+        )
+        return PushReport(dry_run, tuple(repositories), stopped, publish_asked=publish)
     own = repository_push(settings, dry_run=dry_run)
     repositories.append(own)
     published = publications(
@@ -181,6 +198,10 @@ def push(
     return PushReport(
         dry_run, tuple(repositories), "", tuple(published), publish_asked=publish
     )
+
+
+def _wasnt(dry_run: bool) -> str:
+    return "wouldn't be" if dry_run else "wasn't"
 
 
 def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -441,7 +462,6 @@ def lab_pushes(
                 'installed: `pip install "deckz[push]"` (or add `push` to '
                 "deckz's extras where the repository declares it), then `deckz "
                 "push` again",
-                problem=True,
             )
         ]
     results = []
@@ -460,7 +480,7 @@ def lab_pushes(
             )
             continue
         if (why := _not_a_clone(clone, repo)) is not None:
-            results.append(RepoPush(name, "lab", shown, skipped=why, problem=True))
+            results.append(RepoPush(name, "lab", shown, skipped=why))
             continue
         results.append(_copierz_push(command, name, clone, shown, dry_run, force))
     return results

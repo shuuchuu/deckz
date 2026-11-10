@@ -177,18 +177,76 @@ def test_a_rebased_lab_branch_needs_force(repos: dict[str, Path], capsys: Any) -
     _git(lab, "rebase", "--quiet", "main")
     _git(lab, "switch", "--quiet", "main")
 
+    _commit(repos["repo"], "Link the fixed statement")
+    before = _remote_tip(repos["repo"])
+
     code, report = _push(capsys)
 
     assert code == 1
     solution = _branches(report, "owner/lab")["solution"]
     assert solution["state"] == "rewritten"
     assert "`deckz push --force`" in solution["detail"]
+    # Its content links to the lab's branches: the repository waits for them.
+    assert "owner/lab wasn't pushed, so the repository was not" in report["stopped"]
+    assert [r["name"] for r in report["repositories"]] == ["deckz", "owner/lab"]
+    assert _remote_tip(repos["repo"]) == before
 
     code, report = _push(capsys, "--force")
 
     assert code == 0
     assert _branches(report, "owner/lab")["solution"]["outcome"] == "pushed"
     assert _remote_tip(lab, "solution") == _git(lab, "rev-parse", "solution")
+    assert _branches(report, "repo")["main"]["outcome"] == "pushed"
+
+
+def test_a_failing_lab_stops_the_repository_not_the_other_labs(
+    repos: dict[str, Path], tmp_path: Path, capsys: Any
+) -> None:
+    other_lab = _clone_of_new_remote(
+        tmp_path, "other-lab", {".copier-answers.yml": "_src_path: ../template\n"}
+    )
+    deckz_yml = repos["repo"] / "deckz.yml"
+    deckz_yml.write_text(
+        deckz_yml.read_text(encoding="utf8")
+        + "    - repo: owner/other-lab\n"
+        + "      lab: other/lab\n"
+        + f"      url: {tmp_path / 'remotes' / 'other-lab.git'}\n"
+        + "      branches: {main: null}\n"
+        + "      start: {fr: main}\n",
+        encoding="utf8",
+    )
+    someone = tmp_path / "someone-lab"
+    _git(
+        tmp_path,
+        "clone",
+        "--quiet",
+        str(tmp_path / "remotes" / "lab.git"),
+        str(someone),
+    )
+    _commit(someone, "Theirs")
+    _git(someone, "push", "--quiet", "origin", "main")
+    _commit(repos["lab"], "Mine")
+    _commit(other_lab, "Fix the other lab")
+    _commit(repos["repo"], "Link both")
+    before = _remote_tip(repos["repo"])
+
+    code, report = _push(capsys, "--dry-run")
+
+    assert code == 1
+    assert (
+        "owner/lab wouldn't be pushed, so the repository would not be"
+        in (report["stopped"])
+    )
+    assert _branches(report, "owner/other-lab")["main"]["outcome"] == "would push"
+
+    code, report = _push(capsys)
+
+    assert code == 1
+    assert _branches(report, "owner/lab")["main"]["state"] == "diverged"
+    assert _branches(report, "owner/other-lab")["main"]["outcome"] == "pushed"
+    assert "repo" not in [r["name"] for r in report["repositories"]]
+    assert report["publish"] == []
+    assert _remote_tip(repos["repo"]) == before
 
 
 def test_a_lab_with_no_local_clone_is_skipped(
@@ -215,9 +273,10 @@ def test_without_copierz_the_labs_are_skipped_and_the_rest_pushed(
 
     code, report = _push(capsys)
 
-    assert code == 1
+    assert code == 0
     (lab,) = [r for r in report["repositories"] if r["name"] == "owner/lab"]
     assert "deckz[push]" in lab["skipped"]
+    assert not lab["problem"]
     assert _remote_tip(repos["lab"]) == before
     assert _branches(report, "repo")["main"]["outcome"] == "pushed"
 

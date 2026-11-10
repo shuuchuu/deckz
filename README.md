@@ -1264,7 +1264,13 @@ The main commands:
   its remote, and the content links to the labs' repositories: pushed
   before them, the repository would be checked against a deckz lacking the
   code it depends on. A deckz push that fails, or a deckz branch diverged
-  from its remote, stops the command there. deckz's and the repository's
+  from its remote, stops the command there. The content links to the labs'
+  repositories' branches: one of those repositories failing (a push failed,
+  a branch diverged, a rebased branch left without `--force`, copierz
+  failed on it) stops the repository's push and the publishing, while the
+  other labs' repositories are still pushed, to show all that blocks at
+  once; one only skipped (no local clone, no branch carrying Copier
+  answers, copierz not installed) doesn't. deckz's and the repository's
   branches are never forced: behind or diverged, they're left, with the
   fix. `--publish` then publishes the labs and the videos (as `deckz labs
   publish` and `deckz videos publish`) when `deckz status` finds something
