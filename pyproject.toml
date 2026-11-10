@@ -108,7 +108,7 @@ layers = [
   "analyzing",
   "checking | course_notes | course_notes_code | labs | videos | hooks_install | sessions",
   "upstream",
-  "components | extras | worktrees | commits | remotes",
+  "components | extras | worktrees | commits | remotes | agent_loop",
   "render_inputs",
   "drive_links | stamps",
   "configuring",

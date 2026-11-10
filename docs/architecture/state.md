@@ -17,6 +17,7 @@ and what keeps them from writing it at the same time.
 | `<git_dir>/.run/assets.lock` | The assets lock | `AssetsBuilder` | |
 | `<git_dir>/.run/gpu/<machine>/` | A rented GPU machine's state, staged and executed notebooks, notes | `labs.gpu` | `deckz clean all` removes it too, even while a machine runs |
 | `<git_dir>/.run/lab-outputs.json` | Cache of notebook output digests | `labs.stale_outputs` | |
+| `<git_dir>/.run/agent-loop/<start time>/` | The prompt and each session's JSON result (and stderr) of a `deckz agent loop` | `agent_loop` | `deckz clean all` |
 | `<git_dir>/.run/studioz/` | studioz's own state for a workspace | studioz | `deckz clean all` removes it too |
 | `<git_dir>/.check/{variables,staged}/` | Scratch trees of `check variables`, and the exported index of `check --staged` | `checking.check_scratch_dir`, `export_staged` | `deckz clean all` |
 | `<git_dir>/.check/hooks-sessions/` | Per-session state of the Claude Code hooks | `agent_hooks` | |

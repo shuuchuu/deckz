@@ -81,3 +81,23 @@ repository's git directory, those the main checkout has built from other sources
 (it says which), and the main checkout's next build or render takes them once its
 sources match the worktree's: after a pull of the worktree's work. `deckz setup`
 drops them once a checkout holds them, or after 30 days.
+
+## Unattended agent sessions, one per block
+
+A plan done block by block by an agent (a night of reviews) is best done by a fresh
+Claude Code session per block: one session doing them all carries every past block in
+its context. `deckz agent loop` starts them one after another:
+
+```sh
+deckz agent loop "Reprends docs/plans/<plan>.md, file C, un seul bloc" --model fable
+```
+
+Each session runs `claude -p` at the repository's root, in Claude Code's `auto`
+permission mode (`--permission-mode`), does one share of the work, records it where
+the plan tracks progress, and ends its last message with `DECKZ-LOOP: continue`,
+`done` or `stop <why>`: instructions appended to the prompt ask for it. The loop
+stops at the first `done` or `stop`, at a session that fails (a usage limit, say) or
+gives no such line, and after `--max-sessions` (20). Each session's result is kept
+under `.run/agent-loop/<start time>/`, and `claude --resume <session id>` (logged as
+each session ends) reopens one. It exits 1 unless the last session said `done` or
+`continue`.

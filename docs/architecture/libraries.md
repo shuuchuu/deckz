@@ -78,6 +78,22 @@ up: no extra, settings or login) or `CalendarError`. `sessions` imports it lazil
 | **Entry points** | `deckz worktree …`, `agent_checkouts`, `labs.gpu_pass`, studioz's workspaces |
 | **Fails with** | [`WorktreeError`][deckz.exceptions.WorktreeError] |
 
+## `agent_loop`
+
+| | |
+|---|---|
+| **Responsibility** | One prompt run in fresh headless Claude Code sessions (`claude -p`), one after another, each ending with a `DECKZ-LOOP: continue\|done\|stop` line that says whether to start the next |
+| **Owns** | `PROTOCOL` (what is appended to the prompt), the sessions' logs under `<git_dir>/.run/agent-loop/<start time>/` |
+| **Depends on** | Nothing of deckz's; `claude`, as a subprocess, with the user's own login |
+| **Never** | Answers a session, retries a failed one, or starts one after a `stop`, a failure or `max_sessions` |
+| **Entry points** | `deckz agent loop` |
+| **Fails with** | Nothing: a failed session is an outcome (`error`), and the command exits 1 on it |
+
+A plan done block by block in one agent session carries every past block in its
+context; a coordinating session can't hand a block to a subagent when the block runs
+subagents of its own (a review skill does), since a subagent can't start one. A
+top-level session per block, started from outside, rereads the plan instead.
+
 ## `commits`
 
 [`commits`][deckz.commits] reads and writes commit trailers (`Lang-sync`,
