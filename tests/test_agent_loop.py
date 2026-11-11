@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from pytest import approx, raises
 
 from deckz.agent_loop import (
+    BACKGROUND_WAIT_VARIABLE,
     LIMIT_POLL,
     MAX_LIMIT_WAIT,
     PROTOCOL,
@@ -20,6 +21,7 @@ from deckz.agent_loop import (
     limit_reset,
     parse_session,
     run_session,
+    session_environment,
 )
 from deckz.cli import main
 
@@ -624,3 +626,190 @@ def test_cli_agent_loop_shows_the_steps(
         main(("agent", "loop", "p", "--workdir", str(repo), "--no-steps"))
     assert "→ Agent" not in caplog.text
     assert "session 1: done" in caplog.text
+
+
+_CUT_STDERR = (
+    'Background tasks still running 10m after the last turn (subagent "Rédacteur'
+    ' lab"); stopping them. Set CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 to wait'
+    " indefinitely.\n"
+)
+
+
+def _cut(session_id: str = "abc") -> "subprocess.CompletedProcess[str]":
+    """A session Claude Code ended while it waited for a subagent.
+
+    Returns:
+        The finished process, as `run_session` gives it.
+    """
+    stdout = json.dumps(
+        {
+            "result": "J'attends le rédacteur du TP.",
+            "is_error": False,
+            "subtype": "success",
+            "session_id": session_id,
+            "total_cost_usd": 5.0,
+        }
+    )
+    return subprocess.CompletedProcess([], 0, stdout, _CUT_STDERR)
+
+
+def test_session_environment_sets_the_background_wait() -> None:
+    assert session_environment({"A": "b"}) == {
+        "A": "b",
+        BACKGROUND_WAIT_VARIABLE: "7200000",
+    }
+    # The user's own value is kept.
+    assert session_environment({BACKGROUND_WAIT_VARIABLE: "0"}) == {
+        BACKGROUND_WAIT_VARIABLE: "0"
+    }
+
+
+def test_run_session_gives_the_session_time_for_its_subagents(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    script = tmp_path / "claude"
+    script.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, os, sys\n"
+        "sys.stdin.read()\n"
+        "print(json.dumps({'type': 'result', 'result':"
+        f" os.environ.get({BACKGROUND_WAIT_VARIABLE!r})}}))\n",
+        encoding="utf8",
+    )
+    script.chmod(script.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.delenv(BACKGROUND_WAIT_VARIABLE, raising=False)
+    completed = run_session([str(script)], prompt="p", cwd=tmp_path)
+    assert json.loads(completed.stdout)["result"] == "7200000"
+
+    monkeypatch.setenv(BACKGROUND_WAIT_VARIABLE, "0")
+    completed = run_session([str(script)], prompt="p", cwd=tmp_path)
+    assert json.loads(completed.stdout)["result"] == "0"
+
+
+def test_parse_session_cut_while_waiting_for_its_subagents(tmp_path: Path) -> None:
+    log = tmp_path / "l.json"
+    outcome = parse_session(2, _cut(), duration_s=0, log=log)
+    assert outcome.status == "cut"
+    assert outcome.reason == (
+        "the session gave no DECKZ-LOOP line: Background tasks still running 10m"
+        ' after the last turn (subagent "Rédacteur lab"); stopping them'
+    )
+    assert outcome.result == "J'attends le rédacteur du TP."
+    assert outcome.session_id == "abc"
+
+    # A session that gave its line is done, whatever was still running.
+    said = _completed("Bloc fait.\nDECKZ-LOOP: continue", stderr=_CUT_STDERR)
+    assert parse_session(1, said, duration_s=0, log=log).status == "continue"
+    # And a failure stays one.
+    failed = _completed("API Error: 500", is_error=True, stderr=_CUT_STDERR)
+    assert parse_session(1, failed, duration_s=0, log=log).status == "error"
+
+
+def test_agent_loop_reopens_a_cut_session_once(tmp_path: Path) -> None:
+    calls: list[dict[str, Any]] = []
+    reopened: list[int] = []
+    outcomes = agent_loop(
+        "Do one block",
+        git_dir=tmp_path,
+        max_sessions=2,
+        command=["claude"],
+        on_reopen=lambda outcome: reopened.append(outcome.number),
+        runner=_scripted(
+            [
+                _cut("first"),
+                _completed("a\nDECKZ-LOOP: continue"),
+                _cut("second"),
+                _cut("second"),
+                _completed("unused"),
+            ],
+            calls,
+        ),
+    )
+    # Reopening isn't one of the two sessions --max-sessions allows; the
+    # second session, cut again once reopened, ends the loop.
+    assert [o.status for o in outcomes] == ["cut", "continue", "cut", "cut"]
+    assert reopened == [1, 3]
+    assert [c["args"] for c in calls] == [
+        ["claude"],
+        ["claude", "--resume", "first"],
+        ["claude"],
+        ["claude", "--resume", "second"],
+    ]
+    assert calls[1]["prompt"] == RESUME_PROMPT
+    assert calls[2]["prompt"] == "Do one block" + PROTOCOL
+
+
+def test_agent_loop_reopens_a_cut_session_once_across_a_limit(
+    tmp_path: Path,
+) -> None:
+    calls: list[dict[str, Any]] = []
+    clock = _Clock(datetime(2026, 11, 10, 18, 45, tzinfo=_PARIS))
+    outcomes = agent_loop(
+        "p",
+        git_dir=tmp_path,
+        max_sessions=5,
+        command=["claude"],
+        wait_on_limit=True,
+        runner=_scripted([_cut(), _limited(), _cut(), _completed("unused")], calls),
+        sleep=clock.sleep,
+        clock=clock,
+    )
+    assert [o.status for o in outcomes] == ["cut", "limit", "cut"]
+
+
+def test_cli_agent_loop_reopens_a_cut_session(
+    tmp_path: Path, capsys: Any, caplog: Any, monkeypatch: Any
+) -> None:
+    repo = _repo(tmp_path)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    script = bin_dir / "claude"
+    script.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, sys\n"
+        "sys.stdin.read()\n"
+        "print(json.dumps({'type': 'result', 'result': 'J attends.',"
+        " 'is_error': False, 'session_id': 's'}))\n"
+        f"print({_CUT_STDERR!r}, end='', file=sys.stderr)\n",
+        encoding="utf8",
+    )
+    script.chmod(script.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.delenv(BACKGROUND_WAIT_VARIABLE, raising=False)
+    with caplog.at_level("INFO"), raises(SystemExit) as exit_info:
+        main(("agent", "loop", "p", "--workdir", str(repo)))
+    assert exit_info.value.code == 1
+    assert f"{BACKGROUND_WAIT_VARIABLE}=7200000 (deckz's default, in ms)" in caplog.text
+    assert caplog.text.count("reopening session s") == 1
+    out = capsys.readouterr().out
+    assert "last session: cut: the session gave no DECKZ-LOOP line" in out
+    assert "--resume s" in out
+    (log_dir,) = (repo / ".run" / "agent-loop").iterdir()
+    assert (log_dir / "session-02.err").read_text(encoding="utf8") == _CUT_STDERR
+
+
+def test_run_session_keeps_the_last_message_through_a_silent_turn(
+    tmp_path: Path,
+) -> None:
+    said = {**_STREAM[-1], "result": "Fini.\nDECKZ-LOOP: done", "total_cost_usd": 1.0}
+    # The notice that a subagent finished, after its report: a turn of its own.
+    silent = {**said, "result": "", "num_turns": 0, "total_cost_usd": 1.2}
+    script = _streaming_claude(
+        tmp_path / "bin", [json.dumps(e) for e in [*_STREAM[:-1], said, silent]]
+    )
+    completed = run_session([str(script)], prompt="p", cwd=tmp_path)
+    outcome = parse_session(1, completed, duration_s=0, log=tmp_path / "l.json")
+    assert (outcome.status, outcome.result) == ("done", "Fini.")
+    assert outcome.cost_usd == approx(1.2)
+
+    # A turn that says something else replaces it, and so does a failure.
+    for last in (
+        {**said, "result": "Rien de plus."},
+        {**said, "result": "", "is_error": True},
+    ):
+        (tmp_path / "bin" / "lines.json").write_text(
+            json.dumps([json.dumps(said), json.dumps(last)]), encoding="utf8"
+        )
+        completed = run_session([str(script)], prompt="p", cwd=tmp_path)
+        outcome = parse_session(1, completed, duration_s=0, log=tmp_path / "l.json")
+        assert outcome.status == "error"

@@ -116,6 +116,17 @@ time, and all go on at the reset. A loop that stopped at a limit is started agai
 with `--resume <session id>`: it reopens that session first, then goes on with fresh
 ones.
 
+A session that hands work to subagents ends its turns while they run. Headless, Claude
+Code waits 10 minutes for them after a turn, then stops them and ends the session,
+which has given no `DECKZ-LOOP:` line: a subagent that writes a chapter or runs a
+notebook takes longer. The loop gives its sessions 2 hours instead
+(`CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS`, in milliseconds: a value set in the
+environment wins, `0` waits without end, and the loop logs the one in force). A
+session that Claude Code ends that way all the same is logged as `cut` and reopened at
+once, one time: what its subagents left is in the working tree. Cut again, it stops
+the loop, since a subagent that outlasts two such waits is more likely stuck; see what
+it was doing, then start the loop again with `--resume <session id>`.
+
 Where agents must work in a worktree (`worktree.required_for_agents`), start the loop
 in it, `--workdir ../<repository>--<name>`: a headless session can't enter an existing
 worktree by itself (Claude Code's EnterWorktree asks for a confirmation no one gives)

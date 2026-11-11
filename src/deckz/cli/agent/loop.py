@@ -1,6 +1,40 @@
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from . import app
+
+if TYPE_CHECKING:
+    from ...agent_loop import SessionOutcome
+
+
+def _closing(
+    last: "SessionOutcome", *, max_sessions: int, wait_on_limit: bool
+) -> list[str]:
+    """What to print once the loop has ended on the session `last`.
+
+    Returns:
+        Its final message, how it ended, what to do about it, and where the
+        logs are.
+    """
+    lines = [last.result] if last.result else []
+    if last.status == "continue":
+        lines.append(f"stopped after --max-sessions {max_sessions}: more is left")
+    else:
+        reason = f": {last.reason}" if last.reason else ""
+        lines.append(f"last session: {last.status}{reason}")
+    if last.status == "limit":
+        lines.append(
+            "not waited for: its reset is too far or unknown"
+            if wait_on_limit
+            else "--wait-on-limit waits for the reset, then reopens the session;"
+            f" later: --resume {last.session_id}"
+        )
+    elif last.status == "cut":
+        lines.append(
+            "reopened once already: see what its subagents were doing, then"
+            f" --resume {last.session_id}"
+        )
+    return [*lines, f"logs: {last.log.parent}"]
 
 
 @app.command
@@ -41,6 +75,13 @@ def loop(
     A loop that stopped at a limit is started again with --resume and the id
     of the session it cut (the loop's log gives it).
 
+    A session waits 2 hours after a turn for the subagents and background
+    commands it started (Claude Code's own default is 10 minutes, which a
+    subagent writing a chapter outlasts): CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS
+    in the environment sets another wait, in milliseconds. A session Claude
+    Code still ends there, its subagents stopped and no `DECKZ-LOOP:` line
+    given (`cut`), is reopened at once, one time.
+
     Args:
         prompt: What every session is asked, e.g. "Reprends
             docs/plans/<plan>.md, file C, un seul bloc"
@@ -64,26 +105,43 @@ def loop(
         SystemExit: With code 1 when the last session said `stop` or failed.
     """
     import logging
+    import os
     from dataclasses import asdict
     from datetime import datetime
 
     from ...agent_loop import (
+        BACKGROUND_WAIT_VARIABLE,
         SessionOutcome,
         agent_loop,
         claude_command,
         describe_event,
+        session_environment,
     )
     from ...utils import get_git_dir
 
     logger = logging.getLogger(__name__)
     command = claude_command(permission_mode=permission_mode, model=model)
     logger.info("each session runs: %s", " ".join(command))
+    logger.info(
+        "with %s=%s (%s): how long a session waits for its subagents after a turn",
+        BACKGROUND_WAIT_VARIABLE,
+        session_environment()[BACKGROUND_WAIT_VARIABLE],
+        "from the environment"
+        if BACKGROUND_WAIT_VARIABLE in os.environ
+        else "deckz's default, in ms",
+    )
 
     def waiting(outcome: SessionOutcome, until: datetime) -> None:
         logger.info(
             "usage limit: waiting until %s, then reopening session %s",
             until.astimezone().strftime("%H:%M"),
             outcome.session_id or "(a fresh one)",
+        )
+
+    def reopening(outcome: SessionOutcome) -> None:
+        logger.info(
+            "reopening session %s, stopped while it waited for its subagents",
+            outcome.session_id,
         )
 
     def show(event: dict) -> None:
@@ -120,6 +178,7 @@ def loop(
         resume=resume,
         on_session=report,
         on_wait=waiting,
+        on_reopen=reopening,
         on_event=show if steps else None,
     )
     if json:
@@ -127,21 +186,9 @@ def loop(
 
         print_json([asdict(o) for o in outcomes])
     else:
-        last = outcomes[-1]
-        if last.result:
-            print(last.result)
-        if last.status == "continue":
-            print(f"stopped after --max-sessions {max_sessions}: more is left")
-        else:
-            reason = f": {last.reason}" if last.reason else ""
-            print(f"last session: {last.status}{reason}")
-            if last.status == "limit":
-                print(
-                    "not waited for: its reset is too far or unknown"
-                    if wait_on_limit
-                    else "--wait-on-limit waits for the reset, then reopens the"
-                    f" session; later: --resume {last.session_id}"
-                )
-        print(f"logs: {last.log.parent}")
+        closing = _closing(
+            outcomes[-1], max_sessions=max_sessions, wait_on_limit=wait_on_limit
+        )
+        print(*closing, sep="\n")
     if outcomes[-1].status not in ("done", "continue"):
         raise SystemExit(1)

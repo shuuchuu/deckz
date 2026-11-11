@@ -22,7 +22,10 @@ A session prints its events as it goes (`--output-format stream-json`), which
 `run_session` reads: what the session says and the tools it calls
 (`describe_event`, for whoever watches the loop), how much of the account's
 usage windows is spent (kept with the result), and the result itself, the
-stream's last `result` event.
+stream's last `result` event. A session prints one such event per turn, and a
+turn can say nothing: the notice that a subagent has finished comes after its
+report, and a session that had ended on that report has nothing to add. Such
+an event keeps the message of the one before, the session's last words.
 
 A session the account's usage limit stops ends as `limit`, mid-share: its edits
 are in the working tree, uncommitted, and only that session knows what they
@@ -32,12 +35,23 @@ message gives, `limit_reset`), then reopens that same session (`claude
 tree it couldn't make sense of. It waits `MAX_LIMIT_WAIT` at most: a weekly
 limit, days away, stops the loop like any failure. A loop that did stop there
 is started again with `resume`, the session to reopen first.
+
+A session that hands work to subagents ends its turns while they run, and each
+of their reports starts it again. Headless, Claude Code waits ten minutes for
+them after a turn, then stops them and ends the session on that turn's message
+("J'attends les deux rédacteurs"), which has no `DECKZ-LOOP:` line: a subagent
+that writes a chapter or runs a notebook takes longer. So a session runs with
+that wait set to `BACKGROUND_WAIT` (`session_environment`), and one Claude
+Code still ends that way is `cut`: the loop reopens it at once, the same way,
+but once only, since what outlasted `BACKGROUND_WAIT` is more likely stuck
+than slow.
 """
 
 import json
+import os
 import re
 import subprocess
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -66,11 +80,12 @@ without the user (name why).
 """
 
 RESUME_PROMPT = """\
-(deckz agent loop) This session was stopped before its end (a usage limit,
-which has reset since, or the loop itself). Go on from where you stopped. What
-your last steps were waiting for (a subagent, a command) is gone: check what
-they left before redoing them. Finish your share, then end your final message
-with the DECKZ-LOOP line asked for above.
+(deckz agent loop) This session was stopped before its end: by a usage limit,
+which has reset since, by Claude Code, which stopped the background tasks it
+had waited on for too long, or by the loop itself. Go on from where you
+stopped. What your last steps were waiting for (a subagent, a command) is
+gone: check what they left before redoing them. Finish your share, then end
+your final message with the DECKZ-LOOP line asked for above.
 """
 
 MAX_LIMIT_WAIT = timedelta(hours=6)
@@ -79,11 +94,21 @@ MAX_LIMIT_WAIT = timedelta(hours=6)
 LIMIT_POLL = timedelta(minutes=15)
 """How long to wait before trying again when the limit's message gives no time."""
 
+BACKGROUND_WAIT = timedelta(hours=2)
+"""How long a session waits, after a turn, for its subagents and background commands.
+
+Claude Code's own default for a headless session is ten minutes.
+"""
+
+BACKGROUND_WAIT_VARIABLE = "CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS"
+"""Claude Code's environment variable for that wait, in milliseconds (0: no end)."""
+
 _RESET_MARGIN = timedelta(minutes=1)
 _JUST_RESET = timedelta(minutes=10)
 
 _MARKER = re.compile(r"^\s*DECKZ-LOOP:\s*(continue|done|stop)\b[ \t]*(.*)$", re.M)
 _LIMIT = re.compile(r"\bhit your\b.{0,40}\blimit\b", re.I)
+_CUT = re.compile(r"Background tasks still running[^\n]*?stopping them", re.I)
 _RESET = re.compile(
     r"\bresets?\s+(?:at\s+)?"
     r"(?:(?P<month>[a-z]{3,9})\.?\s+(?P<day>\d{1,2}),?\s+(?:at\s+)?)?"
@@ -96,7 +121,7 @@ _MONTHS = (
     "jul", "aug", "sep", "oct", "nov", "dec",
 )  # fmt: skip
 
-Status = Literal["continue", "done", "stop", "limit", "error"]
+Status = Literal["continue", "done", "stop", "limit", "cut", "error"]
 
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 
@@ -108,10 +133,11 @@ class SessionOutcome:
     Attributes:
         number: Its rank in the loop, from 1.
         status: What its `DECKZ-LOOP:` line said, `limit` when the account's
-            usage limit stopped it, or `error` when it failed otherwise or
-            gave no such line.
-        reason: Why it stopped, or failed (the limit's message); empty
-            otherwise.
+            usage limit stopped it, `cut` when it gave no such line because
+            Claude Code stopped the background tasks it was waiting for, or
+            `error` when it failed otherwise or gave no such line.
+        reason: Why it stopped, or failed (the limit's message, what Claude
+            Code said of the tasks it stopped); empty otherwise.
         result: Its final message, without the `DECKZ-LOOP:` line.
         session_id: Claude Code's session id (`claude --resume <id>`), if any.
         cost_usd: What Claude Code reported it cost, if anything.
@@ -194,6 +220,22 @@ def describe_event(event: dict) -> list[str]:
     return lines
 
 
+def session_environment(environ: Mapping[str, str] | None = None) -> dict[str, str]:
+    """The environment of one session.
+
+    Args:
+        environ: The environment to start from, the loop's own by default.
+
+    Returns:
+        It, with `BACKGROUND_WAIT_VARIABLE` set to `BACKGROUND_WAIT` unless it
+        sets that variable already.
+    """
+    env = dict(os.environ if environ is None else environ)
+    wait_ms = int(BACKGROUND_WAIT.total_seconds() * 1000)
+    env.setdefault(BACKGROUND_WAIT_VARIABLE, str(wait_ms))
+    return env
+
+
 def run_session(
     args: Sequence[str],
     *,
@@ -203,6 +245,8 @@ def run_session(
 ) -> "subprocess.CompletedProcess[str]":
     """Run one `claude` session, reading its stream of events as it goes.
 
+    It runs in `session_environment`: with the time to wait for its subagents.
+
     Args:
         args: The `claude` command line (`claude_command`).
         prompt: The prompt, given on stdin.
@@ -211,9 +255,11 @@ def run_session(
 
     Returns:
         The finished process. Its stdout is the session's result, as one JSON
-        object: the stream's last `result` event, with the last usage figures
-        the stream gave under `rate_limit_info`; or everything the process
-        printed when it gave no such event (it failed before starting).
+        object: the stream's last `result` event (with the message of the
+        last one that had any, when its own turn said nothing), with the last
+        usage figures the stream gave under `rate_limit_info`; or everything
+        the process printed when it gave no such event (it failed before
+        starting).
     """
     result: dict | None = None
     limits: object = None
@@ -228,6 +274,7 @@ def run_session(
         encoding="utf8",
         errors="replace",
         cwd=cwd,
+        env=session_environment(),
     ) as process:
         assert process.stdin and process.stdout and process.stderr
         stderr = process.stderr
@@ -247,7 +294,7 @@ def run_session(
                 other.append(line)
                 continue
             if event["type"] == "result":
-                result = event
+                result = _with_last_message(event, result)
             elif event["type"] == "rate_limit_event":
                 limits = event.get("rate_limit_info")
             if on_event:
@@ -263,6 +310,21 @@ def run_session(
     return subprocess.CompletedProcess(
         list(args), process.returncode, stdout, "".join(errors)
     )
+
+
+def _with_last_message(event: dict, previous: dict | None) -> dict:
+    """A `result` event, with the session's last message when its turn said nothing.
+
+    Args:
+        event: The `result` event of the turn that just ended.
+        previous: What this function gave for the turn before, if any.
+
+    Returns:
+        `event`; with `previous`'s message when it has none and isn't an error.
+    """
+    if event.get("result") or event.get("is_error") or not previous:
+        return event
+    return {**event, "result": previous.get("result")}
 
 
 def _usage(data: dict, now: datetime) -> tuple[datetime | None, dict[str, float]]:
@@ -353,7 +415,9 @@ def parse_session(
         Its outcome: `limit` when the account's usage limit stopped it (its
         reset is the time its message gives, or else the one its events gave),
         `error` when claude failed, reported another error, or the final
-        message has no `DECKZ-LOOP:` line; the last such line otherwise.
+        message has no `DECKZ-LOOP:` line (`cut` when claude's stderr says it
+        stopped the session's background tasks: the session was waiting for
+        them); the last such line otherwise.
     """
     now = now or datetime.now().astimezone()
 
@@ -406,7 +470,10 @@ def parse_session(
         return outcome("error", f"{subtype}: {result.strip()[-300:]}", result, data)
     markers = list(_MARKER.finditer(result))
     if not markers:
-        return outcome("error", "the session gave no DECKZ-LOOP line", result, data)
+        reason = "the session gave no DECKZ-LOOP line"
+        if cut := _CUT.search(completed.stderr or ""):
+            return outcome("cut", f"{reason}: {cut[0]}", result, data)
+        return outcome("error", reason, result, data)
     last = markers[-1]
     status: Status = last[1]  # type: ignore[assignment]
     text = (result[: last.start()] + result[last.end() :]).strip()
@@ -442,6 +509,18 @@ def _sleep_until(
         sleep(min(left, 60))
 
 
+def _keep(completed: "subprocess.CompletedProcess[str]", log: Path) -> Path:
+    """Write a session's result to `log`, and its stderr, if any, next to it.
+
+    Returns:
+        `log`.
+    """
+    log.write_text(completed.stdout or "", encoding="utf8")
+    if completed.stderr:
+        log.with_suffix(".err").write_text(completed.stderr, encoding="utf8")
+    return log
+
+
 def agent_loop(
     prompt: str,
     *,
@@ -452,6 +531,7 @@ def agent_loop(
     resume: str | None = None,
     on_session: Callable[[SessionOutcome], None] | None = None,
     on_wait: Callable[[SessionOutcome, datetime], None] | None = None,
+    on_reopen: Callable[[SessionOutcome], None] | None = None,
     on_event: Callable[[dict], None] | None = None,
     runner: Runner | None = None,
     sleep: Callable[[float], None] = _sleep,
@@ -459,11 +539,15 @@ def agent_loop(
 ) -> list[SessionOutcome]:
     """Run `prompt` in one fresh session after another, until one doesn't say continue.
 
+    A `cut` session (Claude Code stopped the background tasks it was waiting
+    for) is reopened at once (`--resume`, `RESUME_PROMPT`), once: cut again,
+    it ends the loop.
+
     Args:
         prompt: What every session is asked, `PROTOCOL` appended.
         git_dir: The repository the sessions run in.
-        max_sessions: The most sessions to start; reopening one a usage limit
-            stopped doesn't count.
+        max_sessions: The most sessions to start; reopening one doesn't
+            count.
         command: The `claude` command line (`claude_command`).
         wait_on_limit: Whether to wait for a usage limit to reset, then
             reopen the session it stopped (`--resume`, `RESUME_PROMPT`),
@@ -477,6 +561,8 @@ def agent_loop(
         on_session: Called with each session's outcome as soon as it ends.
         on_wait: Called before each wait, with the outcome waited on and the
             time the session is reopened.
+        on_reopen: Called with a `cut` session's outcome before the session
+            is reopened.
         on_event: Called with each event of each session's stream as it
             comes (`describe_event` reads one).
         runner: `run_session` by default, or a stand-in in tests.
@@ -496,6 +582,7 @@ def agent_loop(
     outcomes: list[SessionOutcome] = []
     started = 0
     polled = timedelta()
+    cut: int | None = None  # the last session reopened after a cut, as `started`
     while resume or started < max_sessions:
         number = len(outcomes) + 1
         started += resume is None
@@ -506,12 +593,12 @@ def agent_loop(
             cwd=git_dir,
             on_event=on_event,
         )
-        log = log_dir / f"session-{number:02}.json"
-        log.write_text(completed.stdout or "", encoding="utf8")
-        if completed.stderr:
-            log.with_suffix(".err").write_text(completed.stderr, encoding="utf8")
         outcome = parse_session(
-            number, completed, duration_s=monotonic() - start, log=log, now=clock()
+            number,
+            completed,
+            duration_s=monotonic() - start,
+            log=_keep(completed, log_dir / f"session-{number:02}.json"),
+            now=clock(),
         )
         outcomes.append(outcome)
         if on_session:
@@ -522,6 +609,12 @@ def agent_loop(
             continue
         if resumed and outcome.status == "error" and outcome.session_id is None:
             continue  # claude couldn't reopen it: a fresh session takes the share
+        if outcome.status == "cut" and outcome.session_id and cut != started:
+            cut = started
+            if on_reopen:
+                on_reopen(outcome)
+            resume = outcome.session_id
+            continue
         if outcome.status != "limit" or not wait_on_limit:
             break
         wait = _limit_wait(outcome, clock(), polled)

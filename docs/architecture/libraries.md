@@ -83,11 +83,11 @@ up: no extra, settings or login) or `CalendarError`. `sessions` imports it lazil
 | | |
 |---|---|
 | **Responsibility** | One prompt run in fresh headless Claude Code sessions (`claude -p`), one after another, each ending with a `DECKZ-LOOP: continue\|done\|stop` line that says whether to start the next |
-| **Owns** | `PROTOCOL` (what is appended to the prompt), `RESUME_PROMPT` (what a session reopened after a usage limit is told), the sessions' logs under `<git_dir>/.run/agent-loop/<start time>/` |
-| **Depends on** | Nothing of deckz's; `claude`, as a subprocess, with the user's own login, and the events it prints (`--output-format stream-json`): `assistant`, `rate_limit_event`, `result` |
-| **Never** | Answers a session, retries a failed one, or starts one after a `stop`, a failure or `max_sessions`. The one exception is asked for (`wait_on_limit`): a session the usage limit stopped (`limit`) is reopened with `claude --resume` once the limit has reset, `MAX_LIMIT_WAIT` later at most |
+| **Owns** | `PROTOCOL` (what is appended to the prompt), `RESUME_PROMPT` (what a reopened session is told), `BACKGROUND_WAIT` (how long a session waits for its subagents after a turn, set in its environment), the sessions' logs under `<git_dir>/.run/agent-loop/<start time>/` |
+| **Depends on** | Nothing of deckz's; `claude`, as a subprocess, with the user's own login, the events it prints (`--output-format stream-json`): `assistant`, `rate_limit_event`, `result`, its `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` variable and what it writes to stderr when that wait ends ("Background tasks still running … stopping them") |
+| **Never** | Answers a session, retries a failed one, or starts one after a `stop`, a failure or `max_sessions`. Two exceptions, both reopening a session that didn't end by itself (`claude --resume`): one the usage limit stopped (`limit`), when asked for (`wait_on_limit`), once the limit has reset, `MAX_LIMIT_WAIT` later at most; and one Claude Code ended while it waited for its subagents (`cut`), at once and one time |
 | **Entry points** | `deckz agent loop` |
-| **Fails with** | Nothing: a failed session is an outcome (`error`, or `limit`), and the command exits 1 on it |
+| **Fails with** | Nothing: a failed session is an outcome (`error`, `limit` or `cut`), and the command exits 1 on it |
 
 A plan done block by block in one agent session carries every past block in its
 context. A coordinating session that hands each block to a fresh subagent works too (a
@@ -96,11 +96,28 @@ grows with every block's brief and report, and only as long as it remembers to
 delegate. A top-level session per block, started from outside, carries nothing over:
 it rereads the plan instead.
 
-A usage limit is the one failure a session is reopened after rather than replaced: it
+A usage limit is a failure a session is reopened after rather than replaced: it
 stops the session mid-share, with uncommitted edits only that session can account
 for. The reset time is read from the limit's message (`limit_reset`), the only place
 Claude Code gives it; when it can't be read, the session is tried again every
 `LIMIT_POLL` (a session started under the limit fails at once and costs nothing).
+
+The other is a session cut while it waited for its subagents. A headless session
+whose turn ended lives on only as long as its background tasks run, for ten minutes by
+Claude Code's default: it then stops them and exits with that turn's message as the
+result, exit code 0 and no error, so that only stderr tells it from a session that
+forgot its line. `BACKGROUND_WAIT` makes that rare; when it still happens, the session
+is reopened once, for the same reason as after a limit, and not twice: the wording
+read on stderr is Claude Code's own, and when it changes such a session is an `error`
+again, which stops the loop as it did before. Claude Code holds that wait back while
+a shell command of a subagent runs within its own timeout: it falls between two
+commands.
+
+A session prints a `result` event per turn, not one for the session, and its outcome
+is read from the last. A turn can say nothing: the notice that a subagent has finished
+follows its report, and a session that ended on that report has nothing to add. That
+event's empty message doesn't replace the one before (`run_session`), or a session
+that said `done` would be read as having given no line.
 
 ## `commits`
 
