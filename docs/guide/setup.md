@@ -127,6 +127,13 @@ once, one time: what its subagents left is in the working tree. Cut again, it st
 the loop, since a subagent that outlasts two such waits is more likely stuck; see what
 it was doing, then start the loop again with `--resume <session id>`.
 
+To end a loop before it is done, `deckz agent stop` (with the loop's `--workdir`): the
+session at work goes on to the end of its share, recorded and committed, and the loop
+starts no other. Ctrl-C would stop that session where it is, its edits uncommitted. A
+loop waiting for a usage limit ends within a minute instead, and leaves the session
+the limit cut for a later `--resume`. The same command starts the loop again later:
+the plan says where it stopped.
+
 Where agents must work in a worktree (`worktree.required_for_agents`), start the loop
 in it, `--workdir ../<repository>--<name>`: a headless session can't enter an existing
 worktree by itself (Claude Code's EnterWorktree asks for a confirmation no one gives)

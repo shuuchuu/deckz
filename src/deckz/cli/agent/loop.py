@@ -8,21 +8,34 @@ if TYPE_CHECKING:
 
 
 def _closing(
-    last: "SessionOutcome", *, max_sessions: int, wait_on_limit: bool
+    last: "SessionOutcome", *, max_sessions: int, wait_on_limit: bool, stopped: bool
 ) -> list[str]:
     """What to print once the loop has ended on the session `last`.
+
+    Args:
+        last: The last session's outcome.
+        max_sessions: The most sessions the loop could start.
+        wait_on_limit: Whether the loop waits for a usage limit to reset.
+        stopped: Whether the loop was asked to stop (`deckz agent stop`).
 
     Returns:
         Its final message, how it ended, what to do about it, and where the
         logs are.
     """
     lines = [last.result] if last.result else []
-    if last.status == "continue":
+    if last.status == "continue" and stopped:
+        lines.append("stopped on request (deckz agent stop): more is left")
+    elif last.status == "continue":
         lines.append(f"stopped after --max-sessions {max_sessions}: more is left")
     else:
         reason = f": {last.reason}" if last.reason else ""
         lines.append(f"last session: {last.status}{reason}")
-    if last.status == "limit":
+    if last.status == "limit" and stopped:
+        lines.append(
+            "stopped on request (deckz agent stop), its session not reopened;"
+            f" later: --resume {last.session_id}"
+        )
+    elif last.status == "limit":
         lines.append(
             "not waited for: its reset is too far or unknown"
             if wait_on_limit
@@ -75,6 +88,10 @@ def loop(
     A loop that stopped at a limit is started again with --resume and the id
     of the session it cut (the loop's log gives it).
 
+    `deckz agent stop` (with the same --workdir) ends the loop once the
+    session at work has finished its share: Ctrl-C stops that session too,
+    edits uncommitted.
+
     A session waits 2 hours after a turn for the subagents and background
     commands it started (Claude Code's own default is 10 minutes, which a
     subagent writing a chapter outlasts): CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS
@@ -116,6 +133,7 @@ def loop(
         claude_command,
         describe_event,
         session_environment,
+        stop_requested,
     )
     from ...utils import get_git_dir
 
@@ -169,9 +187,15 @@ def loop(
             f"; usage: {', '.join(used)}" if used else "",
         )
 
+    git_dir = get_git_dir(workdir.resolve())
+    logger.info(
+        "to end the loop once the session at work has finished its share:"
+        " deckz agent stop --workdir %s",
+        git_dir,
+    )
     outcomes = agent_loop(
         prompt,
-        git_dir=get_git_dir(workdir.resolve()),
+        git_dir=git_dir,
         max_sessions=max_sessions,
         command=command,
         wait_on_limit=wait_on_limit,
@@ -187,7 +211,10 @@ def loop(
         print_json([asdict(o) for o in outcomes])
     else:
         closing = _closing(
-            outcomes[-1], max_sessions=max_sessions, wait_on_limit=wait_on_limit
+            outcomes[-1],
+            max_sessions=max_sessions,
+            wait_on_limit=wait_on_limit,
+            stopped=stop_requested(outcomes[-1].log.parent),
         )
         print(*closing, sep="\n")
     if outcomes[-1].status not in ("done", "continue"):

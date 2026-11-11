@@ -83,11 +83,11 @@ up: no extra, settings or login) or `CalendarError`. `sessions` imports it lazil
 | | |
 |---|---|
 | **Responsibility** | One prompt run in fresh headless Claude Code sessions (`claude -p`), one after another, each ending with a `DECKZ-LOOP: continue\|done\|stop` line that says whether to start the next |
-| **Owns** | `PROTOCOL` (what is appended to the prompt), `RESUME_PROMPT` (what a reopened session is told), `BACKGROUND_WAIT` (how long a session waits for its subagents after a turn, set in its environment), the sessions' logs under `<git_dir>/.run/agent-loop/<start time>/` |
-| **Depends on** | Nothing of deckz's; `claude`, as a subprocess, with the user's own login, the events it prints (`--output-format stream-json`): `assistant`, `rate_limit_event`, `result`, its `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` variable and what it writes to stderr when that wait ends ("Background tasks still running … stopping them") |
+| **Owns** | `PROTOCOL` (what is appended to the prompt), `RESUME_PROMPT` (what a reopened session is told), `BACKGROUND_WAIT` (how long a session waits for its subagents after a turn, set in its environment), the sessions' logs under `<git_dir>/.run/agent-loop/<start time>/`, with the `lock` a running loop holds there and the `stop` file that asks it to end (`request_stop`) |
+| **Depends on** | `utils` (`file_lock`), `exceptions`; `claude`, as a subprocess, with the user's own login, the events it prints (`--output-format stream-json`): `assistant`, `rate_limit_event`, `result`, its `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` variable and what it writes to stderr when that wait ends ("Background tasks still running … stopping them") |
 | **Never** | Answers a session, retries a failed one, or starts one after a `stop`, a failure or `max_sessions`. Two exceptions, both reopening a session that didn't end by itself (`claude --resume`): one the usage limit stopped (`limit`), when asked for (`wait_on_limit`), once the limit has reset, `MAX_LIMIT_WAIT` later at most; and one Claude Code ended while it waited for its subagents (`cut`), at once and one time |
-| **Entry points** | `deckz agent loop` |
-| **Fails with** | Nothing: a failed session is an outcome (`error`, `limit` or `cut`), and the command exits 1 on it |
+| **Entry points** | `deckz agent loop`, `deckz agent stop` |
+| **Fails with** | Nothing for a loop: a failed session is an outcome (`error`, `limit` or `cut`), and the command exits 1 on it. `request_stop` raises a `DeckzError` when no loop runs in the repository |
 
 A plan done block by block in one agent session carries every past block in its
 context. A coordinating session that hands each block to a fresh subagent works too (a
@@ -112,6 +112,16 @@ read on stderr is Claude Code's own, and when it changes such a session is an `e
 again, which stops the loop as it did before. Claude Code holds that wait back while
 a shell command of a subagent runs within its own timeout: it falls between two
 commands.
+
+A loop reads nothing while it runs, and its sessions read no one: telling one to stop
+took a message to its session from another agent session. `request_stop` is the way a
+person has: it finds the repository's running loops by the lock each holds in its log
+directory (an `flock`, gone with the process however it ends, so that a loop killed
+outright isn't taken for a running one) and leaves a `stop` file there. The loop looks
+for it before starting a fresh session, never during one: a share ends recorded and
+committed, or not at all. A reopened session is the same share, so a `cut` session is
+still reopened; a wait for a usage limit is not worth its hours once the loop is to
+end, and stops within a minute.
 
 A session prints a `result` event per turn, not one for the session, and its outcome
 is read from the last. A turn can say nothing: the notice that a subagent has finished

@@ -45,6 +45,14 @@ that wait set to `BACKGROUND_WAIT` (`session_environment`), and one Claude
 Code still ends that way is `cut`: the loop reopens it at once, the same way,
 but once only, since what outlasted `BACKGROUND_WAIT` is more likely stuck
 than slow.
+
+Nobody can tell a running loop anything: its sessions read no one. So a loop
+holds a lock in its log directory while it runs (`running_loops`), and
+`request_stop` leaves a `stop` file there, which the loop looks for before it
+starts a fresh session: the session at work ends its share first (reopened,
+if it is cut), and nothing is left half done. A loop waiting for a usage
+limit ends at once instead, without reopening the session the limit cut:
+`resume` reopens it later.
 """
 
 import json
@@ -60,6 +68,9 @@ from time import monotonic
 from time import sleep as _sleep
 from typing import Literal
 from zoneinfo import ZoneInfo
+
+from .exceptions import DeckzError
+from .utils import file_lock
 
 PROTOCOL = """
 
@@ -502,11 +513,109 @@ def _limit_wait(
 
 
 def _sleep_until(
-    until: datetime, sleep: Callable[[float], None], clock: Callable[[], datetime]
-) -> None:
-    """Sleep until the clock shows `until`, however long the machine was suspended."""
+    until: datetime,
+    sleep: Callable[[float], None],
+    clock: Callable[[], datetime],
+    stopped: Callable[[], bool],
+) -> bool:
+    """Sleep until the clock shows `until`, however long the machine was suspended.
+
+    Returns:
+        Whether it slept that long: not when `stopped` said to end meanwhile,
+        which it is asked every minute.
+    """
     while (left := (until - clock()).total_seconds()) > 0:
+        if stopped():
+            return False
         sleep(min(left, 60))
+    return True
+
+
+def _wait_for_reset(
+    outcome: SessionOutcome,
+    polled: timedelta,
+    *,
+    sleep: Callable[[float], None],
+    clock: Callable[[], datetime],
+    stopped: Callable[[], bool],
+    on_wait: Callable[[SessionOutcome, datetime], None] | None,
+) -> timedelta | None:
+    """Sleep until the usage limit that stopped `outcome`'s session has reset.
+
+    Returns:
+        How long the loop has now waited without knowing when the limit
+        resets (what `polled` becomes). None when the session isn't to be
+        reopened: the reset is too far (`_limit_wait`), or a stop was
+        requested during the wait.
+    """
+    wait = _limit_wait(outcome, clock(), polled)
+    if wait is None:
+        return None
+    until = clock() + wait
+    if on_wait:
+        on_wait(outcome, until)
+    if not _sleep_until(until, sleep, clock, stopped):
+        return None
+    return polled + wait if outcome.resets_at is None else timedelta()
+
+
+def running_loops(git_dir: Path) -> list[Path]:
+    """The loops running in a repository.
+
+    Args:
+        git_dir: The repository (a worktree is one of its own: a loop started
+            in it runs there).
+
+    Returns:
+        The log directory of each: those whose lock a process holds.
+    """
+    import fcntl
+
+    running = []
+    for lock in sorted((git_dir / ".run" / "agent-loop").glob("*/lock")):
+        with lock.open("a") as handle:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                running.append(lock.parent)
+    return running
+
+
+def stop_requested(log_dir: Path) -> bool:
+    """Whether the loop that logs in `log_dir` was asked to stop (`request_stop`).
+
+    Returns:
+        Whether its `stop` file is there.
+    """
+    return (log_dir / "stop").exists()
+
+
+def request_stop(git_dir: Path) -> list[Path]:
+    """Ask the loops running in a repository to end after their current session.
+
+    Each starts no fresh session once the one at work has ended its share,
+    and one waiting for a usage limit ends within a minute.
+
+    Args:
+        git_dir: The repository.
+
+    Returns:
+        The log directory of each loop asked.
+
+    Raises:
+        DeckzError: When no loop runs there.
+    """
+    loops = running_loops(git_dir)
+    if not loops:
+        msg = (
+            f"no deckz agent loop is running in {git_dir}: a loop started with"
+            " --workdir is stopped with the same --workdir (a worktree's,"
+            " ../<repository>--<name>)"
+        )
+        raise DeckzError(msg)
+    for log_dir in loops:
+        (log_dir / "stop").touch()
+    return loops
 
 
 def _keep(completed: "subprocess.CompletedProcess[str]", log: Path) -> Path:
@@ -543,6 +652,10 @@ def agent_loop(
     for) is reopened at once (`--resume`, `RESUME_PROMPT`), once: cut again,
     it ends the loop.
 
+    Once asked to stop (`request_stop`), the loop starts no fresh session
+    and ends a wait for a usage limit; `stop_requested`, on the last
+    outcome's log directory, tells such an end from the others.
+
     Args:
         prompt: What every session is asked, `PROTOCOL` appended.
         git_dir: The repository the sessions run in.
@@ -577,19 +690,67 @@ def agent_loop(
     log_dir.mkdir(parents=True, exist_ok=True)
     full_prompt = prompt + PROTOCOL
     (log_dir / "prompt.txt").write_text(full_prompt, encoding="utf8")
-    run = runner or run_session
-    clock = clock or (lambda: datetime.now().astimezone())
     outcomes: list[SessionOutcome] = []
+    with file_lock(log_dir / "lock", f"another loop logs in {log_dir}: waiting"):
+        _run_sessions(
+            outcomes,
+            log_dir=log_dir,
+            git_dir=git_dir,
+            max_sessions=max_sessions,
+            command=command,
+            prompt=full_prompt,
+            wait_on_limit=wait_on_limit,
+            resume=resume,
+            on_session=on_session,
+            on_wait=on_wait,
+            on_reopen=on_reopen,
+            on_event=on_event,
+            run=runner or run_session,
+            sleep=sleep,
+            clock=clock or (lambda: datetime.now().astimezone()),
+        )
+    return outcomes
+
+
+def _run_sessions(
+    outcomes: list[SessionOutcome],
+    *,
+    log_dir: Path,
+    git_dir: Path,
+    max_sessions: int,
+    command: Sequence[str],
+    prompt: str,
+    wait_on_limit: bool,
+    resume: str | None,
+    on_session: Callable[[SessionOutcome], None] | None,
+    on_wait: Callable[[SessionOutcome, datetime], None] | None,
+    on_reopen: Callable[[SessionOutcome], None] | None,
+    on_event: Callable[[dict], None] | None,
+    run: Runner,
+    sleep: Callable[[float], None],
+    clock: Callable[[], datetime],
+) -> None:
+    """Run the sessions of `agent_loop`, which holds the loop's lock meanwhile.
+
+    Each run's outcome is added to `outcomes`, and its result kept in
+    `log_dir`. `prompt` is what a fresh session is asked, `PROTOCOL`
+    included, and `run` what runs one session; the other arguments are
+    `agent_loop`'s.
+    """
+
+    def stopped() -> bool:
+        return stop_requested(log_dir)
+
     started = 0
     polled = timedelta()
     cut: int | None = None  # the last session reopened after a cut, as `started`
-    while resume or started < max_sessions:
+    while resume or (started < max_sessions and not stopped()):
         number = len(outcomes) + 1
         started += resume is None
         start = monotonic()
         completed = run(
             [*command, "--resume", resume] if resume else list(command),
-            prompt=RESUME_PROMPT if resume else full_prompt,
+            prompt=RESUME_PROMPT if resume else prompt,
             cwd=git_dir,
             on_event=on_event,
         )
@@ -617,13 +778,10 @@ def agent_loop(
             continue
         if outcome.status != "limit" or not wait_on_limit:
             break
-        wait = _limit_wait(outcome, clock(), polled)
-        if wait is None:
+        waited = _wait_for_reset(
+            outcome, polled, sleep=sleep, clock=clock, stopped=stopped, on_wait=on_wait
+        )
+        if waited is None:
             break
-        polled = polled + wait if outcome.resets_at is None else timedelta()
-        until = clock() + wait
-        if on_wait:
-            on_wait(outcome, until)
-        _sleep_until(until, sleep, clock)
+        polled = waited
         resume = outcome.session_id
-    return outcomes

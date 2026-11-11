@@ -2,6 +2,7 @@ import json
 import os
 import stat
 import subprocess
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -20,10 +21,14 @@ from deckz.agent_loop import (
     describe_event,
     limit_reset,
     parse_session,
+    request_stop,
     run_session,
+    running_loops,
     session_environment,
+    stop_requested,
 )
 from deckz.cli import main
+from deckz.exceptions import DeckzError
 
 
 def _completed(
@@ -813,3 +818,129 @@ def test_run_session_keeps_the_last_message_through_a_silent_turn(
         completed = run_session([str(script)], prompt="p", cwd=tmp_path)
         outcome = parse_session(1, completed, duration_s=0, log=tmp_path / "l.json")
         assert outcome.status == "error"
+
+
+def _stopping(
+    git_dir: Path, answers: list["subprocess.CompletedProcess[str]"], calls: list[Any]
+) -> Any:
+    """A runner whose first session sees the loop asked to stop while it works.
+
+    Returns:
+        The runner, which answers each call with the next of `answers`.
+    """
+    queue = iter(answers)
+
+    def runner(args: list[str], **kwargs: Any) -> "subprocess.CompletedProcess[str]":
+        if not calls:
+            (log_dir,) = running_loops(git_dir)
+            assert request_stop(git_dir) == [log_dir]
+        calls.append(args)
+        return next(queue)
+
+    return runner
+
+
+def test_agent_loop_ends_after_the_session_at_work_when_asked_to_stop(
+    tmp_path: Path,
+) -> None:
+    calls: list[Any] = []
+    outcomes = agent_loop(
+        "p",
+        git_dir=tmp_path,
+        max_sessions=5,
+        command=["claude"],
+        runner=_stopping(
+            tmp_path, [_completed("a\nDECKZ-LOOP: continue"), _completed("no")], calls
+        ),
+    )
+    assert [o.status for o in outcomes] == ["continue"]
+    assert stop_requested(outcomes[-1].log.parent)
+
+    # The loop has ended: nothing runs there any more, and a new loop isn't
+    # stopped by the request the last one got.
+    assert running_loops(tmp_path) == []
+    with raises(DeckzError, match="no deckz agent loop is running"):
+        request_stop(tmp_path)
+    again = agent_loop(
+        "p",
+        git_dir=tmp_path / "other",
+        max_sessions=1,
+        command=["claude"],
+        runner=lambda *a, **k: _completed("DECKZ-LOOP: done"),
+    )
+    assert not stop_requested(again[-1].log.parent)
+
+
+def test_agent_loop_asked_to_stop_lets_a_cut_session_finish(tmp_path: Path) -> None:
+    calls: list[Any] = []
+    outcomes = agent_loop(
+        "p",
+        git_dir=tmp_path,
+        max_sessions=5,
+        command=["claude"],
+        runner=_stopping(
+            tmp_path,
+            [_cut("s"), _completed("a\nDECKZ-LOOP: continue"), _completed("no")],
+            calls,
+        ),
+    )
+    assert [o.status for o in outcomes] == ["cut", "continue"]
+    assert calls == [["claude"], ["claude", "--resume", "s"]]
+
+
+def test_agent_loop_asked_to_stop_ends_a_wait_for_the_limit(tmp_path: Path) -> None:
+    calls: list[dict[str, Any]] = []
+    clock = _Clock(datetime(2026, 11, 10, 18, 45, tzinfo=_PARIS))
+
+    def sleep(seconds: float) -> None:
+        clock.sleep(seconds)
+        if clock.slept == 120:
+            request_stop(tmp_path)
+
+    outcomes = agent_loop(
+        "p",
+        git_dir=tmp_path,
+        max_sessions=5,
+        command=["claude"],
+        wait_on_limit=True,
+        runner=_scripted([_limited(), _completed("unused")], calls),
+        sleep=sleep,
+        clock=clock,
+    )
+    # Two minutes into a wait of more than two hours: the session the limit
+    # cut isn't reopened.
+    assert [o.status for o in outcomes] == ["limit"]
+    assert clock.slept == 120
+    assert len(calls) == 1
+
+
+def test_cli_agent_stop(tmp_path: Path, capsys: Any, monkeypatch: Any) -> None:
+    repo = _repo(tmp_path)
+    with raises(SystemExit) as exit_info:
+        main(("agent", "stop", "--workdir", str(repo)))
+    assert exit_info.value.code == 1
+
+    # A session during which someone runs `deckz agent stop`, from another process.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    script = bin_dir / "claude"
+    stop = "from deckz.cli import main; main(('agent', 'stop'))"
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import json, subprocess, sys\n"
+        "sys.stdin.read()\n"
+        f"asked = subprocess.run([sys.executable, '-c', {stop!r}],"
+        " capture_output=True, text=True, check=True).stdout\n"
+        "print(json.dumps({'type': 'result', 'result': asked +"
+        " 'DECKZ-LOOP: continue', 'is_error': False, 'session_id': 's'}))\n",
+        encoding="utf8",
+    )
+    script.chmod(script.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    capsys.readouterr()
+    main(("agent", "loop", "p", "--workdir", str(repo)))
+    out = capsys.readouterr().out
+    (log_dir,) = (repo / ".run" / "agent-loop").iterdir()
+    assert f"asked to stop after its current session: {log_dir / 'stop'}" in out
+    assert "stopped on request (deckz agent stop): more is left" in out
+    assert not (log_dir / "session-02.json").exists()
