@@ -5,6 +5,7 @@ import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from time import monotonic
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -807,17 +808,27 @@ def test_run_session_keeps_the_last_message_through_a_silent_turn(
     assert (outcome.status, outcome.result) == ("done", "Fini.")
     assert outcome.cost_usd == approx(1.2)
 
-    # A turn that says something else replaces it, and so does a failure.
-    for last in (
-        {**said, "result": "Rien de plus."},
-        {**said, "result": "", "is_error": True},
+    # Nor does a turn that answers a wakeup fired after the end, without the
+    # line; one that gives a line replaces it, and so does a failure.
+    for last, status in (
+        ({**said, "result": "Rien de plus."}, "done"),
+        ({**said, "result": "En fait non.\nDECKZ-LOOP: stop un doute"}, "stop"),
+        ({**said, "result": "", "is_error": True}, "error"),
     ):
         (tmp_path / "bin" / "lines.json").write_text(
             json.dumps([json.dumps(said), json.dumps(last)]), encoding="utf8"
         )
         completed = run_session([str(script)], prompt="p", cwd=tmp_path)
         outcome = parse_session(1, completed, duration_s=0, log=tmp_path / "l.json")
-        assert outcome.status == "error"
+        assert outcome.status == status
+    # Before any line, the last words are the last turn's.
+    waiting = {**said, "result": "J'attends."}
+    (tmp_path / "bin" / "lines.json").write_text(
+        json.dumps([json.dumps(waiting), json.dumps({**said, "result": "Encore."})]),
+        encoding="utf8",
+    )
+    completed = run_session([str(script)], prompt="p", cwd=tmp_path)
+    assert json.loads(completed.stdout)["result"] == "Encore."
 
 
 def _stopping(
@@ -944,3 +955,79 @@ def test_cli_agent_stop(tmp_path: Path, capsys: Any, monkeypatch: Any) -> None:
     assert f"asked to stop after its current session: {log_dir / 'stop'}" in out
     assert "stopped on request (deckz agent stop): more is left" in out
     assert not (log_dir / "session-02.json").exists()
+
+
+def _lingering_claude(
+    path: Path, steps: list[tuple[float, dict]], linger: float
+) -> Path:
+    """A `claude` that prints events at given times, then stays open a while.
+
+    Args:
+        path: Where to write it.
+        steps: Each event, and how long to wait before printing it.
+        linger: How long it stays open after the last, as a session with a
+            scheduled wakeup does.
+
+    Returns:
+        The script.
+    """
+    path.write_text(
+        f"#!{sys.executable}\n"
+        "import json, sys, time\n"
+        "sys.stdin.read()\n"
+        f"for wait, event in {steps!r}:\n"
+        "    time.sleep(wait)\n"
+        "    print(json.dumps(event), flush=True)\n"
+        f"time.sleep({linger})\n"
+        "print(json.dumps({'type': 'result', 'result': 'Réveil : rien à faire.'}))\n",
+        encoding="utf8",
+    )
+    path.chmod(path.stat().st_mode | stat.S_IEXEC)
+    return path
+
+
+def test_run_session_ends_a_session_left_open_after_its_line(tmp_path: Path) -> None:
+    said = {"type": "result", "result": "Fini.\nDECKZ-LOOP: done", "session_id": "s"}
+    script = _lingering_claude(tmp_path / "claude", [(0, said)], linger=60)
+    seen: list[str] = []
+    start = monotonic()
+    completed = run_session(
+        [str(script)],
+        prompt="p",
+        cwd=tmp_path,
+        on_event=lambda event: seen.extend(describe_event(event)),
+        end_grace=timedelta(seconds=0.3),
+    )
+    assert monotonic() - start < 30
+    assert completed.returncode == 0
+    assert json.loads(completed.stdout)["ended_by_loop"] is True
+    assert seen == [
+        "the session gave its DECKZ-LOOP line and stayed open with nothing running"
+        " (a scheduled wakeup?): ended by the loop"
+    ]
+    outcome = parse_session(1, completed, duration_s=0, log=tmp_path / "l.json")
+    assert (outcome.status, outcome.result) == ("done", "Fini.")
+
+
+def test_run_session_leaves_a_session_that_works_or_waits_alone(
+    tmp_path: Path,
+) -> None:
+    grace = timedelta(seconds=0.5)
+    # A line given too early, then work: the timer stops at the first sign of it.
+    early = {"type": "result", "result": "DECKZ-LOOP: stop j'attends"}
+    work = {"type": "assistant", "message": {"content": []}}
+    script = _lingering_claude(
+        tmp_path / "claude", [(0, early), (0.2, work)], linger=0.8
+    )
+    completed = run_session([str(script)], prompt="p", cwd=tmp_path, end_grace=grace)
+    data = json.loads(completed.stdout)
+    assert "ended_by_loop" not in data
+    assert data["result"] == "DECKZ-LOOP: stop j'attends"
+
+    # No line yet: a session waiting for its subagents is never ended here.
+    waiting = {"type": "result", "result": "J'attends les rédacteurs."}
+    script = _lingering_claude(tmp_path / "claude", [(0, waiting)], linger=1)
+    completed = run_session([str(script)], prompt="p", cwd=tmp_path, end_grace=grace)
+    data = json.loads(completed.stdout)
+    assert "ended_by_loop" not in data
+    assert data["result"] == "Réveil : rien à faire."

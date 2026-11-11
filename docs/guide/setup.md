@@ -127,6 +127,11 @@ once, one time: what its subagents left is in the working tree. Cut again, it st
 the loop, since a subagent that outlasts two such waits is more likely stuck; see what
 it was doing, then start the loop again with `--resume <session id>`.
 
+A session that schedules itself a wakeup while it waits (Claude Code's ScheduleWakeup)
+would stay open until it fires, long after its `DECKZ-LOOP:` line: the appended
+instructions ask it to leave none, and the loop ends a session that has given its line
+and stays open a minute with nothing running (it logs it).
+
 To end a loop before it is done, `deckz agent stop` (with the loop's `--workdir`): the
 session at work goes on to the end of its share, recorded and committed, and the loop
 starts no other. Ctrl-C would stop that session where it is, its edits uncommitted. A

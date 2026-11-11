@@ -88,6 +88,9 @@ def loop(
     A loop that stopped at a limit is started again with --resume and the id
     of the session it cut (the loop's log gives it).
 
+    A session that has given its `DECKZ-LOOP:` line and stays open a minute
+    with nothing running (a wakeup it scheduled keeps it) is ended there.
+
     `deckz agent stop` (with the same --workdir) ends the loop once the
     session at work has finished its share: Ctrl-C stops that session too,
     edits uncommitted.

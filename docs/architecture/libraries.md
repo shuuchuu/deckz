@@ -85,7 +85,7 @@ up: no extra, settings or login) or `CalendarError`. `sessions` imports it lazil
 | **Responsibility** | One prompt run in fresh headless Claude Code sessions (`claude -p`), one after another, each ending with a `DECKZ-LOOP: continue\|done\|stop` line that says whether to start the next |
 | **Owns** | `PROTOCOL` (what is appended to the prompt), `RESUME_PROMPT` (what a reopened session is told), `BACKGROUND_WAIT` (how long a session waits for its subagents after a turn, set in its environment), the sessions' logs under `<git_dir>/.run/agent-loop/<start time>/`, with the `lock` a running loop holds there and the `stop` file that asks it to end (`request_stop`) |
 | **Depends on** | `utils` (`file_lock`), `exceptions`; `claude`, as a subprocess, with the user's own login, the events it prints (`--output-format stream-json`): `assistant`, `rate_limit_event`, `result`, its `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` variable and what it writes to stderr when that wait ends ("Background tasks still running … stopping them") |
-| **Never** | Answers a session, retries a failed one, or starts one after a `stop`, a failure or `max_sessions`. Two exceptions, both reopening a session that didn't end by itself (`claude --resume`): one the usage limit stopped (`limit`), when asked for (`wait_on_limit`), once the limit has reset, `MAX_LIMIT_WAIT` later at most; and one Claude Code ended while it waited for its subagents (`cut`), at once and one time |
+| **Never** | Answers a session, ends one that hasn't given its `DECKZ-LOOP:` line, retries a failed one, or starts one after a `stop`, a failure or `max_sessions`. Two exceptions, both reopening a session that didn't end by itself (`claude --resume`): one the usage limit stopped (`limit`), when asked for (`wait_on_limit`), once the limit has reset, `MAX_LIMIT_WAIT` later at most; and one Claude Code ended while it waited for its subagents (`cut`), at once and one time |
 | **Entry points** | `deckz agent loop`, `deckz agent stop` |
 | **Fails with** | Nothing for a loop: a failed session is an outcome (`error`, `limit` or `cut`), and the command exits 1 on it. `request_stop` raises a `DeckzError` when no loop runs in the repository |
 
@@ -127,7 +127,18 @@ A session prints a `result` event per turn, not one for the session, and its out
 is read from the last. A turn can say nothing: the notice that a subagent has finished
 follows its report, and a session that ended on that report has nothing to add. That
 event's empty message doesn't replace the one before (`run_session`), or a session
-that said `done` would be read as having given no line.
+that said `done` would be read as having given no line. Nor does the message of a turn
+that follows the session's `DECKZ-LOOP:` line and gives none: once a session has said
+how it ends, only another such line changes that.
+
+Such a turn comes from a wakeup the session scheduled for itself (ScheduleWakeup, as a
+fallback while its subagents ran), and a pending wakeup has a worse effect: a headless
+session stays open until it fires, up to an hour after its final message, then pays a
+turn on a context the cache has dropped. `PROTOCOL` asks a session to leave none, and
+`run_session` doesn't count on it: a session that has given its line and prints
+nothing for `SESSION_END_GRACE` is ended (SIGTERM), its outcome the line it gave. A
+subagent or a command still at work prints events, which hold that off; a session that
+waits without having given a line is never ended this way.
 
 ## `commits`
 

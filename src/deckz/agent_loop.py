@@ -25,7 +25,15 @@ usage windows is spent (kept with the result), and the result itself, the
 stream's last `result` event. A session prints one such event per turn, and a
 turn can say nothing: the notice that a subagent has finished comes after its
 report, and a session that had ended on that report has nothing to add. Such
-an event keeps the message of the one before, the session's last words.
+an event keeps the message of the one before, the session's last words. So
+does a turn that comes after the session's `DECKZ-LOOP:` line and gives none:
+a wakeup the session had scheduled as a fallback while its subagents ran
+(ScheduleWakeup) fires after its final message, and its answer ("nothing
+left") must not erase the line. Such a pending wakeup also keeps a headless
+session open until it fires, up to an hour later, at the price of a turn on a
+context no longer cached: a session that has given its line and stays open
+with nothing happening is ended after `SESSION_END_GRACE`, and `PROTOCOL`
+asks sessions to leave none.
 
 A session the account's usage limit stops ends as `limit`, mid-share: its edits
 are in the working tree, uncommitted, and only that session knows what they
@@ -63,7 +71,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from threading import Thread
+from threading import Thread, Timer
 from time import monotonic
 from time import sleep as _sleep
 from typing import Literal
@@ -88,6 +96,11 @@ DECKZ-LOOP: stop <why>
 `continue`: your share is done and recorded, and more is left. `done`: nothing
 is left. `stop`: you can't go on, or the next session couldn't either,
 without the user (name why).
+
+Leave nothing pending behind that final message: no subagent or background
+command still running, and no scheduled wakeup (ScheduleWakeup). The reports
+of your subagents reach you without one, and a pending wakeup keeps this
+session open after its end, until it fires.
 """
 
 RESUME_PROMPT = """\
@@ -110,6 +123,10 @@ BACKGROUND_WAIT = timedelta(hours=2)
 
 Claude Code's own default for a headless session is ten minutes.
 """
+
+SESSION_END_GRACE = timedelta(minutes=1)
+"""How long a session that gave its `DECKZ-LOOP:` line may stay open, nothing
+happening, before the loop ends it."""
 
 BACKGROUND_WAIT_VARIABLE = "CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS"
 """Claude Code's environment variable for that wait, in milliseconds (0: no end)."""
@@ -189,6 +206,8 @@ def claude_command(
     return command
 
 
+_LOOP_EVENT = "deckz_loop"  # an event of the loop's own, among the session's
+
 _TOOL_DETAILS = ("description", "file_path", "skill", "command", "pattern", "query")
 
 
@@ -200,9 +219,12 @@ def describe_event(event: dict) -> list[str]:
 
     Returns:
         What the session says, and one line per tool it calls ("→ Bash: Run
-        the checks"); nothing for its subagents' events, tool results,
-        thinking and the rest.
+        the checks"); what the loop itself did to the session (`run_session`
+        ending it); nothing for its subagents' events, tool results, thinking
+        and the rest.
     """
+    if event.get("type") == _LOOP_EVENT:
+        return [str(event.get("text") or "")]
     if event.get("type") != "assistant" or event.get("parent_tool_use_id"):
         return []
     message = event.get("message")
@@ -253,24 +275,30 @@ def run_session(
     prompt: str,
     cwd: Path,
     on_event: Callable[[dict], None] | None = None,
+    end_grace: timedelta = SESSION_END_GRACE,
 ) -> "subprocess.CompletedProcess[str]":
     """Run one `claude` session, reading its stream of events as it goes.
 
     It runs in `session_environment`: with the time to wait for its subagents.
+    A session that has given its `DECKZ-LOOP:` line and stays open, nothing
+    happening, is ended: only something pending keeps it (a scheduled
+    wakeup), which it no longer needs.
 
     Args:
         args: The `claude` command line (`claude_command`).
         prompt: The prompt, given on stdin.
         cwd: The directory the session runs in.
-        on_event: Called with each event as soon as the session prints it.
+        on_event: Called with each event as soon as the session prints it,
+            and with one of the loop's own when it ends the session.
+        end_grace: How long the session may stay open that way.
 
     Returns:
-        The finished process. Its stdout is the session's result, as one JSON
-        object: the stream's last `result` event (with the message of the
-        last one that had any, when its own turn said nothing), with the last
-        usage figures the stream gave under `rate_limit_info`; or everything
-        the process printed when it gave no such event (it failed before
-        starting).
+        The finished process, its exit code 0 when the loop ended it. Its
+        stdout is the session's result, as one JSON object: the stream's last
+        `result` event (`_with_last_message` says with which message), with
+        the last usage figures the stream gave under `rate_limit_info`, and
+        `ended_by_loop` when the loop ended it; or everything the process
+        printed when it gave no such event (it failed before starting).
     """
     result: dict | None = None
     limits: object = None
@@ -296,6 +324,7 @@ def run_session(
             process.stdin.close()
         except OSError:  # it exited without reading its prompt
             pass
+        idle = _IdleEnd(process, end_grace)
         for line in process.stdout:
             try:
                 event = json.loads(line)
@@ -308,34 +337,98 @@ def run_session(
                 result = _with_last_message(event, result)
             elif event["type"] == "rate_limit_event":
                 limits = event.get("rate_limit_info")
+            idle.saw(event, result)
             if on_event:
                 on_event(event)
+        idle.close()
         process.wait()
         drain.join()
-    if result is None:
-        stdout = "".join(other)
-    else:
-        if limits:
-            result = {**result, "rate_limit_info": limits}
-        stdout = json.dumps(result, ensure_ascii=False)
+    if idle.ended and on_event:
+        on_event({"type": _LOOP_EVENT, "text": _IdleEnd.NOTICE})
+    extra = {"rate_limit_info": limits} if limits else {}
+    extra |= {"ended_by_loop": True} if idle.ended else {}
     return subprocess.CompletedProcess(
-        list(args), process.returncode, stdout, "".join(errors)
+        list(args),
+        0 if idle.ended else process.returncode,
+        json.dumps({**result, **extra}, ensure_ascii=False)
+        if result
+        else "".join(other),
+        "".join(errors),
     )
 
 
+class _IdleEnd:
+    """Ends a session that stays open, idle, after its `DECKZ-LOOP:` line.
+
+    A headless session lives as long as something of its own is pending. Its
+    subagents and commands print events as they work; a scheduled wakeup
+    prints nothing until it fires. So after each turn that leaves the session
+    with its line given (`saw`), a timer starts, which any later sign of work
+    stops and the next such turn starts again.
+    """
+
+    NOTICE = (
+        "the session gave its DECKZ-LOOP line and stayed open with nothing"
+        " running (a scheduled wakeup?): ended by the loop"
+    )
+
+    def __init__(self, process: "subprocess.Popen[str]", grace: timedelta) -> None:
+        self.ended = False
+        self._process = process
+        self._grace = grace.total_seconds()
+        self._timer: Timer | None = None
+
+    def saw(self, event: dict, result: dict | None) -> None:
+        """Take one event of the session's stream into account.
+
+        Args:
+            event: The event.
+            result: The session's result so far (`_with_last_message`).
+        """
+        if event["type"] not in ("result", "assistant", "user"):
+            return
+        self.close()
+        if event["type"] != "result" or not result or result.get("is_error"):
+            return
+        if _MARKER.search(str(result.get("result") or "")):
+            self._timer = Timer(self._grace, self._end)
+            self._timer.daemon = True
+            self._timer.start()
+
+    def close(self) -> None:
+        """Stop the timer, if one runs."""
+        if self._timer:
+            self._timer.cancel()
+            self._timer = None
+
+    def _end(self) -> None:
+        self.ended = True
+        self._process.terminate()
+        try:
+            self._process.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            self._process.kill()
+
+
 def _with_last_message(event: dict, previous: dict | None) -> dict:
-    """A `result` event, with the session's last message when its turn said nothing.
+    """A `result` event, with the message that stands as the session's last.
 
     Args:
         event: The `result` event of the turn that just ended.
         previous: What this function gave for the turn before, if any.
 
     Returns:
-        `event`; with `previous`'s message when it has none and isn't an error.
+        `event`, with `previous`'s message instead of its own when it isn't
+        an error and its turn said nothing, or followed the session's
+        `DECKZ-LOOP:` line without giving one: the answer to a notice or to a
+        wakeup that came after the end.
     """
-    if event.get("result") or event.get("is_error") or not previous:
+    if event.get("is_error") or not previous:
         return event
-    return {**event, "result": previous.get("result")}
+    said, before = (str(e.get("result") or "") for e in (event, previous))
+    if said and (_MARKER.search(said) or not _MARKER.search(before)):
+        return event
+    return {**event, "result": before}
 
 
 def _usage(data: dict, now: datetime) -> tuple[datetime | None, dict[str, float]]:
