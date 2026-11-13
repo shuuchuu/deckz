@@ -106,10 +106,10 @@ itself counts every item.
 
 | | |
 |---|---|
-| **Responsibility** | Push what a session of work leaves local, in order: deckz's checkout, the labs' repositories, the repository; then publish what's left |
+| **Responsibility** | Push what a session of work leaves local, in order: deckz's checkout, the labs' repositories, the other repositories the content links to (`push.repos`, plain git), the repository; then publish what's left |
 | **Owns** | `PushReport` (`RepoPush`, `BranchPush`, `PublishResult`) |
 | **Depends on** | `setting_up` (`own_checkout`), `worktrees` (the main checkout), `status` (`unpublished`), `publishing`; copierz, as a subprocess of deckz's own interpreter |
-| **Never** | Forces deckz's or the repository's branch; pushes anything after a deckz push that failed or diverged; pushes the repository, or publishes, after a lab repository failed (the others are still pushed) |
+| **Never** | Forces deckz's or the repository's branch; pushes anything after a deckz push that failed or diverged; pushes the repository, or publishes, after a lab repository or one of `push.repos` failed (the others are still pushed) |
 | **Entry points** | [`push`][deckz.pushing.push] (`deckz push`) |
 | **Fails with** | Nothing raised: a failed push or publish, a diverged branch, are in the report (`ok`), the CLI exiting 1 |
 

@@ -332,3 +332,85 @@ def test_dry_run_on_a_diverged_repository_exits_1(
         main(("push", "--dry-run"))
 
     assert exc_info.value.code == 1
+
+
+def _declare_data(repos: dict[str, Path], tmp_path: Path) -> Path:
+    # A data sets repository in `push.repos`, cloned next to the repository.
+    data = _clone_of_new_remote(tmp_path, "data", {"README.md": "data\n"})
+    deckz_yml = repos["repo"] / "deckz.yml"
+    deckz_yml.write_text(
+        deckz_yml.read_text(encoding="utf8")
+        + "push:\n"
+        + "  repos:\n"
+        + "    - repo: owner/data\n"
+        + f"      url: {tmp_path / 'remotes' / 'data.git'}\n",
+        encoding="utf8",
+    )
+    return data
+
+
+def test_pushes_the_other_repositories_after_the_labs(
+    repos: dict[str, Path], tmp_path: Path, capsys: Any
+) -> None:
+    data = _declare_data(repos, tmp_path)
+    _commit(data, "Add a data set")
+    _git(data, "switch", "--quiet", "-c", "local-only")
+    _commit(data, "Not tracked")
+    _git(data, "switch", "--quiet", "main")
+    _commit(repos["repo"], "Link the data set")
+
+    code, report = _push(capsys)
+
+    assert code == 0
+    assert [r["name"] for r in report["repositories"]] == [
+        "deckz",
+        "owner/lab",
+        "owner/data",
+        "repo",
+    ]
+    assert set(_branches(report, "owner/data")) == {"main"}
+    assert _branches(report, "owner/data")["main"]["outcome"] == "pushed"
+    assert _remote_tip(data) == _git(data, "rev-parse", "main")
+
+
+def test_a_diverged_other_repository_stops_the_repository(
+    repos: dict[str, Path], tmp_path: Path, capsys: Any
+) -> None:
+    data = _declare_data(repos, tmp_path)
+    someone = tmp_path / "someone-data"
+    _git(
+        tmp_path,
+        "clone",
+        "--quiet",
+        str(tmp_path / "remotes" / "data.git"),
+        str(someone),
+    )
+    _commit(someone, "Theirs")
+    _git(someone, "push", "--quiet", "origin", "main")
+    _commit(data, "Mine")
+    _commit(repos["repo"], "Link the data set")
+    before = _remote_tip(repos["repo"])
+
+    code, report = _push(capsys)
+
+    assert code == 1
+    assert _branches(report, "owner/data")["main"]["state"] == "diverged"
+    assert "owner/data wasn't pushed, so the repository was not" in report["stopped"]
+    assert "repo" not in [r["name"] for r in report["repositories"]]
+    assert _remote_tip(repos["repo"]) == before
+
+
+def test_an_other_repository_with_no_local_clone_is_skipped(
+    repos: dict[str, Path], tmp_path: Path, capsys: Any
+) -> None:
+    data = _declare_data(repos, tmp_path)
+    data.rename(data.with_name("elsewhere"))
+    _commit(repos["repo"], "Change")
+
+    code, report = _push(capsys)
+
+    assert code == 0
+    (other,) = [r for r in report["repositories"] if r["name"] == "owner/data"]
+    assert "no local clone" in other["skipped"]
+    assert "push.repos" in other["skipped"]
+    assert _branches(report, "repo")["main"]["outcome"] == "pushed"

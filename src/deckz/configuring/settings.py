@@ -189,30 +189,48 @@ class LabsOutputsSettings(BaseModel):
     back, e.g. to shrink what a library's outputs embed."""
 
 
-class LabRepoSettings(BaseModel):
+class RepoCloneSettings(BaseModel):
+    """A GitHub repository next to this one, and its local clone."""
+
+    model_config = ConfigDict(frozen=True)
+    repo: str
+    """The repository on GitHub, as `owner/name`."""
+    url: str | None = None
+    """Where it's fetched from; unset, `https://github.com/<repo>.git`."""
+    clone: str = "{git_dir}/../{name}"
+    """Its local clone, which `deckz push` pushes the branches of: `{git_dir}` \
+    stands for the repository's root, `{name}` for the repository's name (the \
+    part of `repo` after the `/`)."""
+
+    @property
+    def fetch_url(self) -> str:
+        return self.url or f"https://github.com/{self.repo}.git"
+
+    def clone_path(self, git_dir: Path) -> Path:
+        """Where its local clone is, `clone` filled in.
+
+        Returns:
+            Its path, whether or not it exists.
+        """
+        name = self.repo.rsplit("/", 1)[-1]
+        return Path(self.clone.format(git_dir=git_dir, name=name)).resolve()
+
+
+class LabRepoSettings(RepoCloneSettings):
     """A lab whose project lives in a repository of its own.
 
     The lab's hands-on notebooks are its Colab version; the repository's \
     README, on the branch a trainee opens in their language, gives the same \
     statement for a GitHub Codespace or a local clone. `deckz labs repos` \
-    reports where the branches and the READMEs drift from the notebooks.
+    fetches it from `url` and reports where the branches and the READMEs \
+    drift from the notebooks. A repository with several labs takes its first \
+    entry's `clone`.
     """
 
-    model_config = ConfigDict(frozen=True)
-    repo: str
-    """The repository on GitHub, as `owner/name`."""
     lab: str
     """The lab, as a path under `paths.labs_notebooks_dir`: its notebooks \
     are `<lab>/hands-on-<lang>.ipynb` (and `demo-<lang>`), the hands-on ones \
     the README's Colab version."""
-    url: str | None = None
-    """Where `deckz labs repos` fetches it from; unset, \
-    `https://github.com/<repo>.git`."""
-    clone: str = "{git_dir}/../{name}"
-    """Its local clone, which `deckz push` pushes the branches of: `{git_dir}` \
-    stands for the repository's root, `{name}` for the repository's name (the \
-    part of `repo` after the `/`). A repository with several labs takes its \
-    first entry's."""
     branches: dict[str, str | None] = Field(
         default_factory=lambda: {
             "main": None,
@@ -260,18 +278,17 @@ class LabRepoSettings(BaseModel):
         """
         return bool(self.start)
 
-    @property
-    def fetch_url(self) -> str:
-        return self.url or f"https://github.com/{self.repo}.git"
 
-    def clone_path(self, git_dir: Path) -> Path:
-        """Where its local clone is, `clone` filled in.
+class PushSettings(BaseModel):
+    """What `deckz push` pushes beyond deckz, the labs' repositories and this one."""
 
-        Returns:
-            Its path, whether or not it exists.
-        """
-        name = self.repo.rsplit("/", 1)[-1]
-        return Path(self.clone.format(git_dir=git_dir, name=name)).resolve()
+    model_config = ConfigDict(frozen=True)
+    repos: tuple[RepoCloneSettings, ...] = ()
+    """Other repositories the content links to, which no lab holds (e.g. the \
+    data sets labs download): `deckz push` pushes each branch of their clone \
+    that tracks a remote branch and is ahead, with plain git (no Copier \
+    answers needed, never forced), after the labs' repositories and before \
+    this one."""
 
 
 class LabsSettings(BaseModel):
@@ -1003,6 +1020,7 @@ class GlobalSettings(BaseModel):
     """
     file_extensions: tuple[str, ...] = (".md",)
     labs: LabsSettings = Field(default_factory=LabsSettings)
+    push: PushSettings = Field(default_factory=PushSettings)
     checks: ChecksSettings = Field(default_factory=ChecksSettings)
     i18n: I18nSettings = Field(default_factory=I18nSettings)
     review: ReviewSettings = Field(default_factory=ReviewSettings)

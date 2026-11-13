@@ -10,9 +10,12 @@ In this order:
    branches a rebase rewrote, with `--force-with-lease`. Their branches are
    stacked (`solution` on `main`...): a change to a base is rebased into
    the branches above it, which then need a force.
-3. The repository itself: its main checkout's branch, if ahead of its
+3. The other repositories the content links to (`push.repos`, e.g. a data
+   sets repository), each from its local clone, with plain git: every branch
+   tracking a remote branch that is ahead.
+4. The repository itself: its main checkout's branch, if ahead of its
    upstream (`deckz.upstream`).
-4. With `publish`, the labs and the videos, when `deckz status` finds
+5. With `publish`, the labs and the videos, when `deckz status` finds
    something left to publish (`deckz.status.unpublished`).
 
 The order matters: the repository's CI installs deckz from its remote, and
@@ -23,11 +26,12 @@ remote, nothing after it is pushed. Likewise, the repository's content links
 to the labs' repositories' branches: when one of them fails (a push failed,
 a branch diverged, a rebased branch left without `force`, copierz failed on
 it), the other labs' repositories are still pushed, to show all that blocks
-at once, but neither the repository nor any publishing is. A lab repository
-merely skipped (no local clone, or not a clone of it; no branch carrying
+at once, but neither the repository nor any publishing is; so does one of
+`push.repos` failing (a push failed, a branch diverged). A repository merely
+skipped (no local clone, or not a clone of it; for a lab, no branch carrying
 Copier answers) doesn't stop it.
 
-Only the labs' branches are ever forced: deckz's and the repository's are
+Only the labs' branches are ever forced: the others are
 pushed when they're ahead, and left, with the fix, when behind or diverged.
 Every branch is compared with its remote once fetched (as last fetched,
 offline). `dry_run` fetches, and pushes and publishes nothing.
@@ -47,7 +51,7 @@ from typing import TYPE_CHECKING
 from .exceptions import DeckzError
 
 if TYPE_CHECKING:
-    from .configuring.settings import GlobalSettings, LabRepoSettings
+    from .configuring.settings import GlobalSettings, RepoCloneSettings
 
 
 def _env() -> dict[str, str]:
@@ -92,10 +96,10 @@ class RepoPush:
     """What became of one repository's branches."""
 
     name: str
-    """`deckz`, a lab's repository (`owner/name`), or the repository's \
-    directory name."""
+    """`deckz`, a lab's or another repository's `owner/name`, or the \
+    repository's directory name."""
     kind: str
-    """`deckz`, `lab` or `repository`."""
+    """`deckz`, `lab`, `other` (`push.repos`) or `repository`."""
     path: str = ""
     """Its checkout, as shown to a person; "" when it has none."""
     branches: tuple[BranchPush, ...] = ()
@@ -151,7 +155,7 @@ def push(
     force: bool = False,
     publish: bool = False,
 ) -> PushReport:
-    """Push deckz, the labs' repositories and the repository, then publish.
+    """Push deckz, the labs' and other repositories and the repository, then publish.
 
     Args:
         settings: The repository's settings.
@@ -187,6 +191,16 @@ def push(
             f"{'would not be' if dry_run else 'was not'} either, nor anything "
             "published: its content links to those repositories' branches. Fix "
             "them (above), then `deckz push` again"
+        )
+        return PushReport(dry_run, tuple(repositories), stopped, publish_asked=publish)
+    others = other_pushes(settings, dry_run=dry_run)
+    repositories.extend(others)
+    if failed := [other.name for other in others if other.problem]:
+        stopped = (
+            f"{', '.join(failed)} {_wasnt(dry_run)} pushed, so the repository "
+            f"{'would not be' if dry_run else 'was not'} either, nor anything "
+            "published: its content links to those repositories. Fix them "
+            "(above), then `deckz push` again"
         )
         return PushReport(dry_run, tuple(repositories), stopped, publish_asked=publish)
     own = repository_push(settings, dry_run=dry_run)
@@ -443,7 +457,7 @@ def lab_pushes(
         One per repository, in `labs.repos`' order.
     """
     git_dir = settings.paths.git_dir
-    first: dict[str, LabRepoSettings] = {}
+    first: dict[str, RepoCloneSettings] = {}
     for repo in settings.labs.repos:
         first.setdefault(repo.repo, repo)
     if not first:
@@ -464,27 +478,76 @@ def lab_pushes(
                 )
             )
             continue
-        if (why := _not_a_clone(clone, repo)) is not None:
+        if (why := _not_a_clone(clone, repo, "labs.repos")) is not None:
             results.append(RepoPush(name, "lab", shown, skipped=why))
             continue
         results.append(_copierz_push(command, name, clone, shown, dry_run, force))
     return results
 
 
-def _not_a_clone(clone: Path, repo: "LabRepoSettings") -> str | None:
+def other_pushes(settings: "GlobalSettings", *, dry_run: bool) -> list[RepoPush]:
+    """Push the other repositories' branches (`push.repos`) from their clones.
+
+    Each branch tracking a remote branch is pushed when ahead, never forced \
+    (`branch_push`); a branch tracking none is left alone.
+
+    Returns:
+        One per repository, in `push.repos`' order.
+    """
+    git_dir = settings.paths.git_dir
+    results = []
+    for repo in settings.push.repos:
+        clone = repo.clone_path(git_dir)
+        shown = _shown(clone, git_dir)
+        if not clone.is_dir():
+            results.append(
+                RepoPush(
+                    repo.repo,
+                    "other",
+                    skipped=f"no local clone at {shown}, nothing to push: `git "
+                    f"clone {repo.fetch_url} {shown}` to work on it, or set its "
+                    "`clone` in deckz.yml's `push.repos`",
+                )
+            )
+            continue
+        if (why := _not_a_clone(clone, repo, "push.repos")) is not None:
+            results.append(RepoPush(repo.repo, "other", shown, skipped=why))
+            continue
+        tracking = _out(
+            clone,
+            "for-each-ref",
+            "--format=%(if)%(upstream)%(then)%(refname:short)%(end)",
+            "refs/heads",
+        ).split()
+        branches = tuple(
+            branch_push(clone, branch, shown, dry_run=dry_run) for branch in tracking
+        )
+        results.append(
+            RepoPush(
+                repo.repo,
+                "other",
+                shown,
+                branches,
+                problem=any(branch.problem for branch in branches),
+            )
+        )
+    return results
+
+
+def _not_a_clone(clone: Path, repo: "RepoCloneSettings", key: str) -> str | None:
     # Why `clone` isn't a clone of `repo`, if it isn't one.
     top = _out(clone, "rev-parse", "--show-toplevel")
     if not top or Path(top).resolve() != clone:
         return (
             f"{clone} isn't the root of a git checkout: set the `clone` of "
-            f"{repo.repo} in deckz.yml's `labs.repos`"
+            f"{repo.repo} in deckz.yml's `{key}`"
         )
     urls = _out(clone, "remote", "-v").split()
     wanted = (repo.repo, f"{repo.repo}.git", repo.fetch_url)
     if not any(url.endswith(w) for url in urls for w in wanted):
         return (
             f"{clone} has no remote at {repo.fetch_url}: it isn't a clone of "
-            f"{repo.repo}; set its `clone` in deckz.yml's `labs.repos`"
+            f"{repo.repo}; set its `clone` in deckz.yml's `{key}`"
         )
     return None
 

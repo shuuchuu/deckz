@@ -13,7 +13,7 @@ def push(
     json: bool = False,
     workdir: Path = Path(),
 ) -> None:
-    """Push what your work leaves local: deckz, the labs' repositories, then this one.
+    """Push what your work leaves local: deckz, the labs', other repos, then this one.
 
     In this order, each compared with its remote once fetched:
 
@@ -26,7 +26,10 @@ def push(
        and with --force those a rebase rewrote (stacked branches), with
        `--force-with-lease`, only when their remote holds nothing they
        didn't have; a repository with no local clone is skipped;
-    3. this repository: its main checkout's branch (not a worktree's: `deckz
+    3. the other repositories the content links to (`push.repos`, e.g. a
+       data sets repository), from their local clones, with plain git: each
+       branch tracking a remote branch, when ahead, never forced;
+    4. this repository: its main checkout's branch (not a worktree's: `deckz
        worktree land` first), when ahead of its upstream.
 
     deckz comes first because this repository's CI installs deckz from its
@@ -38,9 +41,9 @@ def push(
     diverged, a rebased branch left without --force, copierz failed on it)
     stops this repository's push and the publishing, the other labs'
     repositories being pushed all the same, to show all that blocks at once;
-    a lab repository only skipped (no local clone, no branch carrying Copier
-    answers) doesn't. deckz's and this repository's
-    branches are never forced: one behind or diverged from its remote is
+    so does one of `push.repos` failing. A repository only skipped (no local
+    clone; for a lab, no branch carrying Copier answers) doesn't. Only the
+    labs' branches are ever forced: one behind or diverged from its remote is
     left, with the fix.
 
     Then, with --publish, publishes the labs and the videos (what `deckz labs

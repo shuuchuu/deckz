@@ -116,7 +116,11 @@ pushes, in this order, what your work leaves local:
    Their branches are stacked (`solution` on `main`), so a fix to `main` is rebased
    into the branches above, which then need `deckz push --force`: it force-pushes them
    with a lease, only when their remote holds nothing they didn't have;
-3. the repository itself: the main checkout's branch (land a worktree first, `deckz
+3. the other repositories the content links to, which no lab holds (`push.repos` in
+   `deckz.yml`, e.g. the data sets the labs download), from their clones (`../<name>`,
+   or their `clone`): every branch tracking a remote branch, when ahead, with plain git
+   and never forced;
+4. the repository itself: the main checkout's branch (land a worktree first, `deckz
    worktree land`).
 
 deckz goes first because the repository's CI installs deckz from its remote, and the
@@ -126,8 +130,9 @@ branch has diverged, nothing else is pushed. And since the content links to the 
 repositories' branches, when one of those repositories fails (a push refused, a branch
 diverged, a rebased branch that needs `--force`), the repository isn't pushed, nor
 anything published; the other labs' repositories are pushed all the same, so that you
-see everything that blocks at once. A lab repository with no local clone, or none of
-whose branches carries Copier answers, is only skipped, and doesn't stop the rest.
+see everything that blocks at once. One of `push.repos` failing stops it the same way.
+A repository with no local clone, or a lab repository none of whose branches carries
+Copier answers, is only skipped, and doesn't stop the rest.
 deckz's and the repository's branches are never forced: one behind or diverged is
 left, with the `git pull` to run. `--dry-run` shows the same stops.
 
