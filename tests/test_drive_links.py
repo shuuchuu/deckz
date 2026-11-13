@@ -10,7 +10,7 @@ from pytest import CaptureFixture, fixture, raises
 from deckz import drive_links
 from deckz.cli import main
 from deckz.configuring.settings import DeckSettings
-from deckz.exceptions import InvalidConfigurationError
+from deckz.exceptions import DeckzError, InvalidConfigurationError
 
 _NOTES_TEMPLATE = "= Course notes\n"
 
@@ -120,3 +120,103 @@ def test_upload_finds_pdfs_built_before_their_links(
     assert found["unbuilt"] == ["company/abc/pdf/abc-print-handout.pdf"]
     with raises(SystemExit):
         main(("upload", "--skip-checks"))
+
+
+def test_parse_file_id() -> None:
+    file_id = "1CHFEpdqK0YadnuFeISCmgtIDdyyp2yH4"
+    for given in (
+        f"https://drive.google.com/file/d/{file_id}/view?usp=sharing",
+        f"https://drive.google.com/open?id={file_id}",
+        file_id,
+    ):
+        assert drive_links.parse_file_id(given) == file_id
+    assert drive_links.parse_file_id("handout") is None
+
+
+def _adoptions(repo: Path, *requests: str) -> dict[Path, str]:
+    settings = DeckSettings.from_yaml(_deck_dir(repo))
+    pdf_dir = settings.paths.pdf_dir
+    pdfs = [pdf_dir / "abc-handout.pdf", pdf_dir / "abc-print-handout.pdf"]
+    return drive_links.adoptions(settings, pdfs, requests)
+
+
+def test_adoptions_take_paths_in_the_deck_or_the_repository(repo: Path) -> None:
+    pdf_dir = DeckSettings.from_yaml(_deck_dir(repo)).paths.pdf_dir
+    link = "https://drive.google.com/file/d/handout-file-id/view"
+
+    assert _adoptions(
+        repo,
+        f"pdf/abc-handout.pdf={link}",
+        "company/abc/pdf/abc-print-handout.pdf=print-file-id",
+    ) == {
+        pdf_dir / "abc-handout.pdf": "handout-file-id",
+        pdf_dir / "abc-print-handout.pdf": "print-file-id",
+    }
+
+
+def test_adoptions_refuse_what_they_cant_reserve(repo: Path) -> None:
+    settings = DeckSettings.from_yaml(_deck_dir(repo))
+    handout = settings.paths.pdf_dir / "abc-handout.pdf"
+    printed = settings.paths.pdf_dir / "abc-print-handout.pdf"
+    for requests, problem in (
+        (("pdf/abc-handout.pdf",), "give `<pdf>=<Drive link>`"),
+        (("pdf/abc-handout.pdf=nope",), "give `<pdf>=<Drive link>`"),
+        (("pdf/en/abc-handout.pdf=file-id-0001",), "the deck builds no"),
+        (
+            ("pdf/abc-handout.pdf=file-id-0001", "pdf/abc-handout.pdf=file-id-0002"),
+            "is given two links",
+        ),
+        (
+            (
+                "pdf/abc-handout.pdf=file-id-0001",
+                "pdf/abc-print-handout.pdf=file-id-0001",
+            ),
+            "would share one Drive file",
+        ),
+    ):
+        with raises(DeckzError, match=problem):
+            _adoptions(repo, *requests)
+
+    drive_links.save(settings, {handout: "file-id-0001"})
+    # Its own link again: nothing to do.
+    assert _adoptions(repo, "pdf/abc-handout.pdf=file-id-0001") == {}
+    with raises(DeckzError, match="has a link already"):
+        _adoptions(repo, "pdf/abc-handout.pdf=file-id-0002")
+    with raises(DeckzError, match="would share one Drive file"):
+        _adoptions(repo, "pdf/abc-print-handout.pdf=file-id-0001")
+    assert printed not in drive_links.load(settings)
+
+
+def test_reserve_dry_run_shows_the_links_given(
+    repo: Path, capsys: CaptureFixture[str]
+) -> None:
+    found = _json(
+        capsys,
+        "upload",
+        "--reserve",
+        "--dry-run",
+        "--json",
+        "--link",
+        "pdf/abc-handout.pdf=https://drive.google.com/file/d/handout-file-id/view",
+    )
+    assert "company/abc/pdf/abc-handout.pdf" in found["reserve"]
+    assert found["link"] == {"company/abc/pdf/abc-handout.pdf": "handout-file-id"}
+
+    capsys.readouterr()
+    main(
+        (
+            "upload",
+            "--reserve",
+            "--dry-run",
+            "--link",
+            "pdf/abc-handout.pdf=a-file-id-0001",
+        )
+    )
+    out = capsys.readouterr().out
+    assert "company/abc/pdf/abc-handout.pdf (link: a-file-id-0001)" in out
+
+
+def test_link_needs_reserve(repo: Path, caplog: Any) -> None:
+    with raises(SystemExit):
+        main(("upload", "--dry-run", "--link", "pdf/abc-handout.pdf=a-file-id-0001"))
+    assert "pass it with --reserve" in caplog.text

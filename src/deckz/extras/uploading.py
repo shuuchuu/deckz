@@ -1,15 +1,19 @@
+import webbrowser
 from collections.abc import Iterable, Mapping, Set
 from dataclasses import dataclass
 from hashlib import md5
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from logging import getLogger
 from pathlib import Path
 from pickle import dump as pickle_dump
 from pickle import load as pickle_load
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 from rich.progress import (
     BarColumn,
@@ -26,6 +30,11 @@ from ..configuring.settings import DeckSettings
 from ..exceptions import DeckzError
 from ..models import LANGS, lang_dir
 
+# deckz reaches only the files it created, and those the user picked for it in
+# Google's Picker (`Uploader.adopt`): never their whole Drive.
+_SCOPES = ["https://www.googleapis.com/auth/drive.file"]
+_FILE_FIELDS = "id,name,webViewLink,md5Checksum"
+
 
 @dataclass
 class _RemoteFile:
@@ -40,8 +49,9 @@ class Uploader:
 
     English PDFs go to its `en/` subfolder, the course notes next to the \
     slides of their language. A PDF with a reserved file (`deckz.drive_links`) \
-    is written to it, so its link never changes; the others go to the file \
-    of the same name.
+    is written to it, so its link never changes, wherever it is (an adopted \
+    file stays where its owner put it); the others go to the file of the \
+    same name.
     """
 
     def __init__(self, settings: DeckSettings):
@@ -89,6 +99,134 @@ class Uploader:
                 )
                 reserved[pdf] = created.get("id")
         return reserved
+
+    def adopt(self, ids: Mapping[Path, str]) -> dict[Path, str]:
+        """Get access to existing Drive files, to reserve them for their PDFs.
+
+        deckz reaches only the files it created (`drive.file`), so one put \
+        on Drive by hand has to be granted to it: Google's Picker opens in \
+        the browser with the files selected, the user confirms, and deckz \
+        reaches them from then on, for good, and only them. Each file is \
+        then shared read-only with anyone with its link, as the deck's \
+        folder is: its link is printed in the PDFs.
+
+        Args:
+            ids: Each PDF's absolute path, mapped to the ID of its file.
+
+        Returns:
+            `ids`, once each file is checked to be a PDF the user can edit.
+
+        Raises:
+            DeckzError: If the Picker fails or isn't confirmed, or a file \
+                isn't a PDF the user can edit.
+        """
+        unreachable = [
+            file_id for file_id in ids.values() if not self._reaches(file_id)
+        ]
+        if unreachable:
+            self._pick(unreachable)
+        for pdf, file_id in ids.items():
+            try:
+                meta = (
+                    self._service.files()
+                    .get(
+                        fileId=file_id,
+                        fields="id,name,mimeType,trashed,capabilities(canEdit)",
+                    )
+                    .execute()
+                )
+            except HttpError as error:
+                msg = (
+                    f"Drive file {file_id}, given for {pdf.name}, is still out of "
+                    f"reach ({error.status_code} {error.reason}): check its link, "
+                    "and that it's in your Drive or shared with you as an editor"
+                )
+                raise DeckzError(msg) from error
+            if (
+                meta.get("mimeType") != "application/pdf"
+                or meta.get("trashed")
+                or not meta.get("capabilities", {}).get("canEdit")
+            ):
+                msg = (
+                    f"“{meta.get('name')}” ({file_id}), given for {pdf.name}, isn't "
+                    "a PDF you can edit (or it's in the trash): give the link of a "
+                    "PDF of yours, or one shared with you as an editor"
+                )
+                raise DeckzError(msg)
+            self._logger.info(
+                f"Reserving “{meta.get('name')}” for {pdf.name}, shared read-only "
+                "with anyone with its link"
+            )
+            self._service.permissions().create(
+                fileId=file_id, body={"type": "anyone", "role": "reader"}
+            ).execute()
+        return dict(ids)
+
+    def _reaches(self, file_id: str) -> bool:
+        try:
+            self._service.files().get(fileId=file_id, fields="id").execute()
+        except HttpError as error:
+            if error.status_code in (403, 404):
+                return False
+            raise
+        return True
+
+    def _pick(self, file_ids: list[str]) -> None:
+        # Google's Picker for installed apps: an authorization URL with
+        # `trigger_onepick`, whose redirect gives `picked_file_ids` along with
+        # the code. What the user picks is granted to deckz's OAuth client, so
+        # its usual token reaches it afterwards: this one is thrown away.
+        received: dict[str, list[str]] = {}
+
+        class _Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                query = parse_qs(urlparse(self.path).query)
+                if {"code", "error"} & query.keys():
+                    received.update(query)
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"deckz: done, back to the terminal.")
+
+            def log_request(self, code: int | str = "-", size: int | str = "-") -> None:
+                pass  # Its default logs each request to stderr.
+
+        flow = InstalledAppFlow.from_client_secrets_file(
+            self._settings.paths.gdrive_secrets, _SCOPES
+        )
+        with HTTPServer(("localhost", 0), _Handler) as server:
+            flow.redirect_uri = f"http://localhost:{server.server_port}/"
+            url, state = flow.authorization_url(
+                prompt="consent",
+                trigger_onepick="true",
+                file_ids=",".join(file_ids),
+                mimetypes="application/pdf",
+                **({"allow_multiple": "true"} if len(file_ids) > 1 else {}),
+            )
+            self._logger.info(
+                "deckz can't reach these files yet: confirm them in Google's Picker, "
+                f"opened in your browser (or open it yourself: {url})"
+            )
+            webbrowser.open(url)
+            while not received:
+                server.handle_request()
+        if "error" in received or received.get("state") != [state]:
+            reason = received.get("error", ["wrong state"])[0]
+            msg = (
+                f"Google's Picker failed ({reason}). "
+                "If it showed an error, enable the Google Picker API in the Google "
+                f"Cloud project of {self._settings.paths.gdrive_secrets} (APIs & "
+                "Services, Library), then run the command again"
+            )
+            raise DeckzError(msg)
+        picked = set(",".join(received.get("picked_file_ids", [])).split(","))
+        if missing := sorted(set(file_ids) - picked):
+            msg = (
+                f"These files weren't picked: {', '.join(missing)}. Run the command "
+                "again and confirm them in the Picker"
+            )
+            raise DeckzError(msg)
+        flow.fetch_token(code=received["code"][0])
 
     def upload(self, pdfs: Iterable[Path], ids: Mapping[Path, str]) -> dict[Path, str]:
         """Upload `pdfs`, each to its reserved file if `ids` has one.
@@ -158,8 +296,7 @@ class Uploader:
                 creds.refresh(Request())
             else:
                 flow = InstalledAppFlow.from_client_secrets_file(
-                    self._settings.paths.gdrive_secrets,
-                    ["https://www.googleapis.com/auth/drive.file"],
+                    self._settings.paths.gdrive_secrets, _SCOPES
                 )
                 creds = flow.run_local_server(port=0)
             self._settings.paths.gdrive_credentials.parent.mkdir(
@@ -261,16 +398,37 @@ class Uploader:
     def _reserved_file(
         self, pdf: Path, file_id: str, existing_by_id: Mapping[str, _RemoteFile]
     ) -> _RemoteFile:
-        if (existing := existing_by_id.get(file_id)) is None:
+        if (existing := existing_by_id.get(file_id)) is not None:
+            return existing
+        # Outside the deck's folder: adopted (`adopt`), or moved by its owner.
+        item: dict[str, Any]
+        item: dict[str, Any]
+        try:
+            item = (
+                self._service.files()
+                .get(fileId=file_id, fields=f"{_FILE_FIELDS},trashed")
+                .execute()
+            )
+        except HttpError as error:
+            if error.status_code not in (403, 404):
+                raise
+            item = {"trashed": True}
+        if item.get("trashed"):
             msg = (
                 f"“{pdf.name}”'s Drive file ({file_id}, in "
-                f"{self._settings.paths.drive_links}) is not in the deck's "
-                "folder anymore: restore it from Drive's trash, or remove its "
-                "line and run `deckz upload --reserve` for a new link, then "
-                "rebuild the PDFs showing it"
+                f"{self._settings.paths.drive_links}) is gone from Drive, or out of "
+                "deckz's reach: restore it from Drive's trash (or its owner's), "
+                "or remove its line and run "
+                "`deckz upload --reserve` for a new link, then rebuild the PDFs "
+                "showing it"
             )
             raise DeckzError(msg)
-        return existing
+        return _RemoteFile(
+            id=item["id"],
+            name=item["name"],
+            web_view_link=item["webViewLink"],
+            md5_checksum=item.get("md5Checksum"),
+        )
 
     def _send(
         self,
@@ -366,7 +524,7 @@ class Uploader:
                 .list(
                     q=query,
                     spaces="drive",
-                    fields="nextPageToken, files(id,name,webViewLink,md5Checksum)",
+                    fields=f"nextPageToken, files({_FILE_FIELDS})",
                     pageToken=page_token,
                 )
                 .execute()

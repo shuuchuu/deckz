@@ -45,7 +45,7 @@ repository's scenes and templates (see [plugins](plugins.md)).
 | | |
 |---|---|
 | **Responsibility** | Side services: Google Drive uploads ([`Uploader`][deckz.extras.uploading.Uploader], `deckz upload`), GitHub issues (`github_querying`, `deckz extras issue`), mailing (`mailing`, `deckz extras random`) |
-| **Owns** | The Drive files `deckz upload --reserve` creates (with `drive_links`), the user's credentials files in the config directory |
+| **Owns** | The Drive files `deckz upload --reserve` creates (with `drive_links`), and the content of those it adopts (`--link`), the user's credentials files in the config directory |
 | **Depends on** | `configuring`, `models`, `utils`, `exceptions`; the `deckz[extras]` dependencies |
 | **Never** | Is imported at module level outside `cli/extras/`, `cli/upload.py` and the optional parts of `labs`/`analyzing`. Those import it inside [`extras_imports`][deckz.extras.extras_imports], which turns a missing optional dependency into a `MissingExtraError` naming the extra to install |
 

@@ -1,13 +1,21 @@
+import json
 from hashlib import md5
 from logging import getLogger
 from pathlib import Path
+from threading import Thread
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock
+from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.request import urlopen
 
-from pytest import raises
+import httplib2
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.errors import HttpError
+from pytest import MonkeyPatch, raises
 
 from deckz.exceptions import DeckzError
+from deckz.extras import uploading
 from deckz.extras.uploading import Uploader, _RemoteFile
 
 if TYPE_CHECKING:
@@ -26,6 +34,7 @@ def build_uploader(pdf_dir: Path, service: MagicMock) -> Uploader:
                 pdf_dir=pdf_dir,
                 course_notes_pdf_dir=pdf_dir / "course-notes",
                 drive_links=pdf_dir.parent / "drive-links.yml",
+                gdrive_secrets=pdf_dir.parent / "gdrive-secrets.json",
             )
         ),
     )
@@ -213,13 +222,57 @@ def test_upload_writes_to_the_reserved_file_and_keeps_reserved_orphans(
     service.files.return_value.delete.assert_called_once_with(fileId="other-id")
 
 
+def http_error(status: int) -> HttpError:
+    return HttpError(httplib2.Response({"status": status}), b"{}")
+
+
 def test_upload_refuses_a_reserved_file_gone(tmp_path: Path) -> None:
     pdf_dir = tmp_path / "pdf"
     a = write_pdf(pdf_dir, "a.pdf")
-    uploader = build_uploader(pdf_dir, build_service(existing_files=[]))
+    service = build_service(existing_files=[])
+    service.files.return_value.get.return_value.execute.side_effect = http_error(404)
+    uploader = build_uploader(pdf_dir, service)
 
-    with raises(DeckzError, match="not in the deck's folder anymore"):
+    with raises(DeckzError, match="gone from Drive"):
         upload_dir(uploader, pdf_dir, {a: "reserved-a"})
+
+
+def test_upload_refuses_a_reserved_file_in_the_trash(tmp_path: Path) -> None:
+    pdf_dir = tmp_path / "pdf"
+    a = write_pdf(pdf_dir, "a.pdf")
+    service = build_service(existing_files=[])
+    service.files.return_value.get.return_value.execute.return_value = {
+        "id": "reserved-a",
+        "name": "a.pdf",
+        "webViewLink": "...",
+        "trashed": True,
+    }
+    uploader = build_uploader(pdf_dir, service)
+
+    with raises(DeckzError, match="Drive's trash"):
+        upload_dir(uploader, pdf_dir, {a: "reserved-a"})
+
+
+def test_upload_writes_to_a_reserved_file_outside_the_folder(tmp_path: Path) -> None:
+    pdf_dir = tmp_path / "pdf"
+    a = write_pdf(pdf_dir, "a.pdf")
+    # An adopted file, where its owner put it, under another name.
+    service = build_service(existing_files=[])
+    service.files.return_value.get.return_value.execute.return_value = {
+        "id": "adopted-id",
+        "name": "old-handout.pdf",
+        "webViewLink": "...",
+        "trashed": False,
+    }
+    uploader = build_uploader(pdf_dir, service)
+
+    upload_dir(uploader, pdf_dir, {a: "adopted-id"})
+
+    _, kwargs = service.files.return_value.update.call_args
+    assert kwargs["fileId"] == "adopted-id"
+    assert "body" not in kwargs  # Its name stays.
+    service.files.return_value.create.assert_not_called()
+    service.files.return_value.delete.assert_not_called()
 
 
 def test_existing_files_by_name_paginates(tmp_path: Path) -> None:
@@ -318,3 +371,155 @@ def test_reserve_keeps_online_files_and_creates_the_others(tmp_path: Path) -> No
         "parents": [FOLDER_ID],
         "mimeType": "application/pdf",
     }
+
+
+def adoptable_service(meta: dict[str, Any], *, reachable: bool = True) -> MagicMock:
+    service = build_service(existing_files=[])
+    service.files.return_value.get.return_value.execute.side_effect = [
+        {"id": meta["id"]} if reachable else http_error(404),
+        meta,
+    ]
+    return service
+
+
+PDF_META = {
+    "id": "adopted-id",
+    "name": "handout.pdf",
+    "mimeType": "application/pdf",
+    "trashed": False,
+    "capabilities": {"canEdit": True},
+}
+
+
+def test_adopt_shares_a_reachable_pdf_without_the_picker(tmp_path: Path) -> None:
+    pdf_dir = tmp_path / "pdf"
+    service = adoptable_service(PDF_META)
+    uploader = build_uploader(pdf_dir, service)
+    uploader._pick = MagicMock()
+
+    ids = uploader.adopt({pdf_dir / "a.pdf": "adopted-id"})
+
+    assert ids == {pdf_dir / "a.pdf": "adopted-id"}
+    uploader._pick.assert_not_called()
+    service.permissions.return_value.create.assert_called_once_with(
+        fileId="adopted-id", body={"type": "anyone", "role": "reader"}
+    )
+
+
+def test_adopt_opens_the_picker_for_a_file_out_of_reach(tmp_path: Path) -> None:
+    pdf_dir = tmp_path / "pdf"
+    uploader = build_uploader(pdf_dir, adoptable_service(PDF_META, reachable=False))
+    uploader._pick = MagicMock()
+
+    uploader.adopt({pdf_dir / "a.pdf": "adopted-id"})
+
+    uploader._pick.assert_called_once_with(["adopted-id"])
+
+
+def test_adopt_refuses_what_isnt_an_editable_pdf(tmp_path: Path) -> None:
+    pdf_dir = tmp_path / "pdf"
+    for meta in (
+        PDF_META | {"mimeType": "application/vnd.google-apps.document"},
+        PDF_META | {"capabilities": {"canEdit": False}},
+        PDF_META | {"trashed": True},
+    ):
+        service = adoptable_service(meta)
+        uploader = build_uploader(pdf_dir, service)
+
+        with raises(DeckzError, match="isn't a PDF you can edit"):
+            uploader.adopt({pdf_dir / "a.pdf": "adopted-id"})
+        service.permissions.return_value.create.assert_not_called()
+
+
+def test_adopt_refuses_a_file_still_out_of_reach(tmp_path: Path) -> None:
+    pdf_dir = tmp_path / "pdf"
+    service = build_service(existing_files=[])
+    service.files.return_value.get.return_value.execute.side_effect = http_error(404)
+    uploader = build_uploader(pdf_dir, service)
+    uploader._pick = MagicMock()
+
+    with raises(DeckzError, match="still out of reach"):
+        uploader.adopt({pdf_dir / "a.pdf": "adopted-id"})
+
+
+def pick(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+    file_ids: list[str],
+    answer: Any,
+) -> list[str]:
+    """Run `_pick`, the browser replaced by `answer(query)`'s redirect query.
+
+    Returns:
+        The codes it exchanged for a token.
+    """
+    (tmp_path / "gdrive-secrets.json").write_text(
+        json.dumps(
+            {
+                "installed": {
+                    "client_id": "client-id",
+                    "client_secret": "secret",
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": ["http://localhost"],
+                }
+            }
+        ),
+        encoding="utf8",
+    )
+    fetched: list[str] = []
+    monkeypatch.setattr(
+        InstalledAppFlow, "fetch_token", lambda _, code: fetched.append(code)
+    )
+
+    def browse(url: str) -> None:
+        query = {
+            key: values[0] for key, values in parse_qs(urlparse(url).query).items()
+        }
+        redirect = f"{query['redirect_uri']}?{urlencode(answer(query))}"
+        Thread(target=lambda: urlopen(redirect).read(), daemon=True).start()
+
+    monkeypatch.setattr(uploading.webbrowser, "open", browse)
+    build_uploader(tmp_path / "pdf", MagicMock())._pick(file_ids)
+    return fetched
+
+
+def test_pick_asks_for_the_files_and_checks_they_were_picked(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    asked: dict[str, str] = {}
+
+    def answer(query: dict[str, str]) -> dict[str, str]:
+        asked.update(query)
+        return {
+            "state": query["state"],
+            "code": "the-code",
+            "picked_file_ids": query["file_ids"],
+        }
+
+    assert pick(tmp_path, monkeypatch, ["id-1", "id-2"], answer) == ["the-code"]
+    assert asked["trigger_onepick"] == "true"
+    assert asked["file_ids"] == "id-1,id-2"
+    assert asked["allow_multiple"] == "true"
+    assert asked["scope"] == "https://www.googleapis.com/auth/drive.file"
+
+
+def test_pick_refuses_a_file_not_picked(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    def answer(query: dict[str, str]) -> dict[str, str]:
+        return {"state": query["state"], "code": "c", "picked_file_ids": "id-1"}
+
+    with raises(DeckzError, match="weren't picked: id-2"):
+        pick(tmp_path, monkeypatch, ["id-1", "id-2"], answer)
+
+
+def test_pick_refuses_an_error_or_a_wrong_state(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    for redirect in (
+        {"error": "access_denied"},
+        {"state": "forged", "code": "c", "picked_file_ids": "id-1"},
+    ):
+        with raises(DeckzError, match="Google Picker API"):
+            pick(tmp_path, monkeypatch, ["id-1"], lambda _, r=redirect: r)

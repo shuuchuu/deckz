@@ -118,4 +118,17 @@ online) and records it, before any build shows the link. `DeckBuilder._links` gi
 main template `links` (`self`, `handout`, `course_notes`: those the registry has) and
 records them next to the build (`.links`). `plan()` reports `links_changed`, which
 `pipelines.outdated_pdfs` counts, so a new link rebuilds the PDF. `Uploader.upload`
-writes a PDF to its reserved file by ID, and never deletes a reserved file.
+writes a PDF to its reserved file by ID, wherever it is, and never deletes a reserved
+file.
+
+`deckz upload --reserve --link <pdf>=<link>` reserves an existing Drive file instead,
+to keep a link already handed out: `drive_links.adoptions` checks the requests against
+the deck's PDFs and its registry (a PDF never changes link), `Uploader.adopt` reaches
+the files. deckz's OAuth scope is `drive.file`, the files it created and those the
+user picked for it, never the whole Drive: a file put on Drive by hand is out of its
+reach until the user confirms it in Google's Picker (the installed-app flow, an
+authorization URL with `trigger_onepick`, whose redirect gives `picked_file_ids`).
+The grant is the OAuth client's, for good, so the usual token reaches the file
+afterwards and the Picker's is thrown away. An adopted file stays where its owner put
+it, with its name, and is shared read-only with anyone with its link, as the deck's
+folder is.

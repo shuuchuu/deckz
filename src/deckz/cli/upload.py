@@ -1,5 +1,7 @@
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
+
+from cyclopts import Parameter
 
 from . import app
 from ._groups import EVERYDAY
@@ -14,6 +16,9 @@ if TYPE_CHECKING:
 def upload(
     *,
     reserve: bool = False,
+    links: Annotated[
+        tuple[str, ...], Parameter(name="--link", negative="", show_default=False)
+    ] = (),
     langs: Langs = ("fr",),
     include_stale: bool = False,
     skip_checks: bool = False,
@@ -46,6 +51,13 @@ def upload(
             yours (`drive-links/<deck path>.yml` in deckz's user config
             directory, every checkout's): the PDFs built afterwards show
             their links. A PDF already online keeps its link
+        links: With --reserve, `<pdf>=<Drive link>` (repeatable): reserve
+            that existing Drive file for the PDF (its path in the deck's
+            directory, e.g. `pdf/<deck>-handout.pdf`) instead of a new one,
+            to keep a link already handed out. The file stays where it is,
+            with its name, shared read-only with anyone with its link; a file
+            deckz didn't create is granted to it once, in Google's Picker,
+            which opens in the browser
         langs: With --reserve, the languages to reserve links for
         include_stale: Upload the outdated PDFs too, those without a link,
             and without the reserved ones not built
@@ -57,14 +69,17 @@ def upload(
             --reserve, the PDFs it would reserve a link for
         json: With --dry-run, print one JSON object (`pdfs`, `outdated`,
             `unlinked`, `unbuilt`: paths relative to the repository,
-            `problems`: `<check>: <problem>`; with --reserve, `reserve`)
+            `problems`: `<check>: <problem>`; with --reserve, `reserve`, and
+            `link`: each --link PDF's file ID)
             instead
         workdir: Path to move into before running the command
 
     Raises:
         DeckzError: When a PDF is outdated, has no link, or a reserved one \
             isn't built, without --include-stale, or the checks report a \
-            problem in the deck, without --skip-checks.
+            problem in the deck, without --skip-checks; when a --link is \
+            malformed, names a PDF the deck doesn't build or one with \
+            another link already, or its file isn't a PDF you can edit.
     """
     from .. import drive_links
     from ..analyzing.affected import deck_findings
@@ -77,8 +92,11 @@ def upload(
 
     settings = DeckSettings.from_yaml(workdir)
     if reserve:
-        _reserve(settings, unique(langs), dry_run=dry_run, json=json)
+        _reserve(settings, unique(langs), links, dry_run=dry_run, json=json)
         return
+    if links:
+        msg = "--link reserves a Drive file: pass it with --reserve"
+        raise DeckzError(msg)
     paths = settings.paths
     git_dir = paths.git_dir
     slides = {
@@ -198,7 +216,12 @@ def _listed(pdfs: list[Path], git_dir: Path) -> str:
 
 
 def _reserve(
-    settings: "DeckSettings", langs: tuple["Lang", ...], *, dry_run: bool, json: bool
+    settings: "DeckSettings",
+    langs: tuple["Lang", ...],
+    links: tuple[str, ...],
+    *,
+    dry_run: bool,
+    json: bool,
 ) -> None:
     from .. import drive_links
     from ..extras import extras_imports
@@ -206,20 +229,21 @@ def _reserve(
 
     git_dir = settings.paths.git_dir
     ids = drive_links.load(settings)
-    missing = [
-        pdf
-        for pdf in published_pdfs(published_targets(settings, langs))
-        if pdf not in ids
-    ]
+    pdfs = published_pdfs(published_targets(settings, langs))
+    adopted = drive_links.adoptions(settings, pdfs, links)
+    missing = [pdf for pdf in pdfs if pdf not in ids]
     if dry_run:
         found = [str(pdf.relative_to(git_dir)) for pdf in missing]
+        given = {
+            str(pdf.relative_to(git_dir)): file_id for pdf, file_id in adopted.items()
+        }
         if json:
             from ._presentation import print_json
 
-            print_json({"reserve": found})
+            print_json({"reserve": found, "link": given})
             return
         for pdf in found:
-            print(pdf)
+            print(f"{pdf} (link: {given[pdf]})" if pdf in given else pdf)
         return
     if not missing:
         print("Every PDF has its Drive link already")
@@ -227,8 +251,11 @@ def _reserve(
     with extras_imports():
         from ..extras.uploading import Uploader
 
-    drive_links.save(settings, Uploader(settings).reserve(missing, ids))
+    uploader = Uploader(settings)
+    reserved = ids | (uploader.adopt(adopted) if adopted else {})
+    drive_links.save(settings, uploader.reserve(missing, reserved))
     print(
-        f"Reserved {len(missing)} Drive links in {settings.paths.drive_links}: "
-        "rebuild the deck's PDFs to show them"
+        f"Reserved {len(missing)} Drive links in {settings.paths.drive_links}"
+        + (f", {len(adopted)} of them existing files" if adopted else "")
+        + ": rebuild the deck's PDFs to show them"
     )

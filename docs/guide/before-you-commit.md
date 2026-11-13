@@ -62,6 +62,18 @@ files, even one that didn't block its commit (fix it, or `--skip-checks`).
 `deckz upload --dry-run` lists the PDFs it would send, the outdated ones and the
 deck's problems, without connecting.
 
+For the PDFs to show their own Drive links (the handout's, the course notes'), reserve
+them before building: `deckz upload --reserve --lang fr en` creates each PDF's Drive
+file, empty, and records it in your registry (`drive-links/<deck path>.yml` in deckz's
+config directory); the PDFs built afterwards show the links, which `deckz upload` then
+keeps. To keep a link you already handed out, a PDF you put on Drive by hand, give it
+for that PDF: `deckz upload --reserve --link
+pdf/<deck>-handout.pdf=https://drive.google.com/file/d/<id>/view` (`--dry-run` lists
+the PDFs). deckz only reaches the files it created, so Google's Picker opens in your
+browser with that file selected: confirm it, once. The file stays where it is, with its
+name, shared read-only with anyone with its link. If the Picker shows an error, enable
+the Google Picker API in the Google Cloud project of your `gdrive-secrets.json`.
+
 ## Pushing
 
 ```sh
