@@ -87,6 +87,19 @@ and run `deckz upload --reserve --links <file>` from anywhere in the repository
 pass in the Picker for all the files. If it stops halfway, run it again: it picks up
 where it stopped.
 
+A PDF you handed out under several links over the years (an older name, a copy in
+another folder) keeps them all up to date with aliases: `--alias
+pdf/<deck>-handout.pdf=<link>` (repeatable), or an `aliases:` section in the file,
+
+```yaml
+aliases:
+  decks/x/pdf/x-handout.pdf:
+    - https://drive.google.com/file/d/<old id>/view
+```
+
+Each upload of the PDF then updates those files too, where they are and with their
+names; the PDF shows its own link. They're granted in the same Picker pass.
+
 ## Pushing
 
 ```sh

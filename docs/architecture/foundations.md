@@ -135,3 +135,14 @@ folder is. `--links <file>` does it for several decks (`drive_links.links_file`
 groups the file's PDFs by deck): every deck's requests are checked before Drive is
 reached, one `adopt` covers every file, then each deck's registry is saved as its
 reservations are made, so a run stopped halfway resumes where it stopped.
+
+A PDF can also have aliases, the registry's `aliases:` section: other Drive files, links
+handed out before (an older name, a copy elsewhere), which `Uploader.upload` fills with
+the PDF's content after the PDF itself, where they are and with their names, so that
+every link handed out shows the current version. The PDF shows its own link only. An
+alias gone from Drive is skipped with a warning, and an alias is never deleted.
+`--reserve --alias <pdf>=<link>` (and the `aliases:` section of a `--links` file,
+`drive_links.aliases_file`) records them: `drive_links.alias_requests` checks that a
+file follows one PDF, never a PDF's own file, and `adopt` grants them in the same Picker
+as the `--link` files. `drive_links.save` keeps the registry's aliases unless given
+others.

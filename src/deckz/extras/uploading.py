@@ -1,5 +1,5 @@
 import webbrowser
-from collections.abc import Iterable, Mapping, Set
+from collections.abc import Iterable, Mapping, Sequence, Set
 from dataclasses import dataclass
 from hashlib import md5
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -52,7 +52,8 @@ class Uploader:
     slides of their language. A PDF with a reserved file (`deckz.drive_links`) \
     is written to it, so its link never changes, wherever it is (an adopted \
     file stays where its owner put it); the others go to the file of the \
-    same name.
+    same name. A PDF's aliases (`deckz.drive_links.load_aliases`), other \
+    files handed out before, get its content too, where they are.
     """
 
     def __init__(self, settings: DeckSettings):
@@ -101,20 +102,74 @@ class Uploader:
                 reserved[pdf] = created.get("id")
         return reserved
 
-    def upload(self, pdfs: Iterable[Path], ids: Mapping[Path, str]) -> dict[Path, str]:
+    def upload(
+        self,
+        pdfs: Iterable[Path],
+        ids: Mapping[Path, str],
+        aliases: Mapping[Path, Sequence[str]] | None = None,
+    ) -> dict[Path, str]:
         """Upload `pdfs`, each to its reserved file if `ids` has one.
 
         Args:
             pdfs: The PDFs, absolute paths.
             ids: The deck's registry, each PDF's Drive file ID.
+            aliases: Each PDF's aliases, the other Drive files it updates.
 
         Returns:
             Each PDF's link.
         """
+        aliases = aliases or {}
+        pdfs = list(pdfs)
+        kept = set(ids.values()) | {id_ for found in aliases.values() for id_ in found}
         links: dict[Path, str] = {}
         for subfolder, folder_pdfs in self._by_folder(pdfs).items():
-            links |= self._upload(self._subfolder(subfolder), folder_pdfs, ids)
+            links |= self._upload(self._subfolder(subfolder), folder_pdfs, ids, kept)
+        self._update_aliases({pdf: aliases[pdf] for pdf in pdfs if aliases.get(pdf)})
         return links
+
+    def _update_aliases(self, aliases: Mapping[Path, Sequence[str]]) -> None:
+        # Each alias gets its PDF's content, where it is and with its name.
+        # One gone (deleted, out of reach) is skipped with a warning: the
+        # PDF itself is online.
+        if not aliases:
+            return
+        progress = self._build_progress()
+        with progress:
+            for pdf, found in aliases.items():
+                local = self._local_md5(pdf)
+                for file_id in found:
+                    item: dict[str, Any]
+                    try:
+                        item = (
+                            self._service.files()
+                            .get(fileId=file_id, fields=f"{_FILE_FIELDS},trashed")
+                            .execute()
+                        )
+                    except HttpError as error:
+                        if error.status_code not in (403, 404):
+                            raise
+                        item = {"trashed": True}
+                    if item.get("trashed"):
+                        self._logger.warning(
+                            f"“{pdf.name}”'s alias {file_id} (in "
+                            f"{self._settings.paths.drive_links}) is gone from "
+                            "Drive, or out of deckz's reach: skipping it. Restore "
+                            "it, or remove it from the registry's `aliases:`"
+                        )
+                        continue
+                    remote = _RemoteFile(
+                        id=item["id"],
+                        name=item["name"],
+                        web_view_link=item["webViewLink"],
+                        md5_checksum=item.get("md5Checksum"),
+                    )
+                    if remote.md5_checksum == local:
+                        self._logger.info(
+                            f"Alias “{remote.name}” of “{pdf.name}” is unchanged"
+                        )
+                        continue
+                    self._logger.info(f"Updating alias “{remote.name}” of “{pdf.name}”")
+                    self._send(pdf, remote, "", progress)
 
     def _by_folder(self, pdfs: Iterable[Path]) -> dict[str | None, list[Path]]:
         # Each PDF's remote subfolder, by the language directory it's in:
@@ -210,7 +265,11 @@ class Uploader:
         return hasher.hexdigest()
 
     def _upload(
-        self, folder_id: str, pdfs: Iterable[Path], ids: Mapping[Path, str]
+        self,
+        folder_id: str,
+        pdfs: Iterable[Path],
+        ids: Mapping[Path, str],
+        kept: Set[str] | None = None,
     ) -> dict[Path, str]:
         pdfs = sorted(pdfs, key=lambda p: p.name)
         self._logger.info(f"Uploading {len(pdfs)} pdfs")
@@ -241,7 +300,7 @@ class Uploader:
         else:
             self._delete_orphans(
                 [remote for remote in remote_files if remote.id in remaining],
-                set(ids.values()),
+                set(ids.values()) if kept is None else kept,
             )
         return links
 
@@ -386,7 +445,11 @@ class Uploader:
         return results
 
 
-def adopt(settings: GlobalSettings, ids: Mapping[Path, str]) -> dict[Path, str]:
+def adopt(
+    settings: GlobalSettings,
+    ids: Mapping[Path, str],
+    aliases: Mapping[Path, Sequence[str]] | None = None,
+) -> dict[Path, str]:
     """Get access to existing Drive files, to reserve them for their PDFs.
 
     deckz reaches only the files it created (`drive.file`), so one put \
@@ -400,6 +463,8 @@ def adopt(settings: GlobalSettings, ids: Mapping[Path, str]) -> dict[Path, str]:
         settings: Settings giving the user's credentials, any deck's.
         ids: Each PDF's absolute path, mapped to the ID of its file, of one \
             deck or several: one Picker covers them all.
+        aliases: Each PDF's aliases to adopt too (`--alias`), in the same \
+            Picker: files handed out before, which its uploads update.
 
     Returns:
         `ids`, once each file is checked to be a PDF the user can edit.
@@ -408,13 +473,19 @@ def adopt(settings: GlobalSettings, ids: Mapping[Path, str]) -> dict[Path, str]:
         DeckzError: If the Picker fails or isn't confirmed, or a file \
             isn't a PDF the user can edit.
     """
-    service = _build_service(settings)
-    unreachable = [
-        file_id for file_id in ids.values() if not _reaches(service, file_id)
+    files = [
+        *ids.items(),
+        *(
+            (pdf, file_id)
+            for pdf, found in (aliases or {}).items()
+            for file_id in found
+        ),
     ]
+    service = _build_service(settings)
+    unreachable = [file_id for _, file_id in files if not _reaches(service, file_id)]
     if unreachable:
         _pick(settings, unreachable)
-    for pdf, file_id in ids.items():
+    for pdf, file_id in files:
         try:
             meta = (
                 service.files()

@@ -537,3 +537,51 @@ def test_pick_refuses_an_error_or_a_wrong_state(
     ):
         with raises(DeckzError, match="Google Picker API"):
             pick(tmp_path, monkeypatch, ["id-1"], lambda _, r=redirect: r)
+
+
+def test_upload_updates_the_aliases_and_never_deletes_them(tmp_path: Path) -> None:
+    pdf_dir = tmp_path / "pdf"
+    a = write_pdf(pdf_dir, "a.pdf")
+    local = md5(a.read_bytes()).hexdigest()
+    service = build_service(
+        existing_files=[
+            {"id": "reserved-a", "name": "a.pdf", "webViewLink": "..."},
+            # An alias in the deck's folder, with no PDF of its name.
+            {"id": "alias-here", "name": "a-all.pdf", "webViewLink": "..."},
+        ]
+    )
+    metas = {
+        "alias-here": {"name": "a-all.pdf", "md5Checksum": "old"},
+        "alias-same": {"name": "a-same.pdf", "md5Checksum": local},
+        "alias-trashed": {"name": "a-gone.pdf", "trashed": True},
+    }
+
+    def get(fileId: str, fields: str) -> MagicMock:  # ruff: ignore[invalid-argument-name]
+        request = MagicMock()
+        if fileId == "alias-gone":
+            request.execute.side_effect = http_error(404)
+        else:
+            request.execute.return_value = {
+                "id": fileId,
+                "webViewLink": "...",
+                "trashed": False,
+            } | metas[fileId]
+        return request
+
+    service.files.return_value.get.side_effect = get
+    uploader = build_uploader(pdf_dir, service)
+    uploader._by_folder = lambda pdfs: {None: list(pdfs)}  # type: ignore[method-assign]
+    uploader._subfolder = lambda _: FOLDER_ID  # type: ignore[method-assign]
+
+    uploader.upload(
+        [a],
+        {a: "reserved-a"},
+        {a: ["alias-here", "alias-same", "alias-trashed", "alias-gone"]},
+    )
+
+    updated = [
+        kwargs["fileId"]
+        for _, kwargs in service.files.return_value.update.call_args_list
+    ]
+    assert updated == ["reserved-a", "alias-here"]
+    service.files.return_value.delete.assert_not_called()

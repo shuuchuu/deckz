@@ -20,6 +20,9 @@ def upload(
         tuple[str, ...], Parameter(name="--link", negative="", show_default=False)
     ] = (),
     links_from: Annotated[Path | None, Parameter(name="--links")] = None,
+    aliases: Annotated[
+        tuple[str, ...], Parameter(name="--alias", negative="", show_default=False)
+    ] = (),
     langs: Langs = ("fr",),
     include_stale: bool = False,
     skip_checks: bool = False,
@@ -63,8 +66,15 @@ def upload(
             (their paths in the repository) to their Drive links, as --link
             does for one deck: each deck it names gets its links reserved,
             those existing files with a single pass in the Picker for all of
-            them. Run it from anywhere in the repository; run again after a
-            failure, it picks up where it stopped
+            them. Its `aliases:` section maps PDFs to links handed out before,
+            one or a list, as --alias does. Run it from anywhere in the
+            repository; run again after a failure, it picks up where it
+            stopped
+        aliases: With --reserve, `<pdf>=<Drive link>` (repeatable): an
+            alias of the PDF, a file handed out before (an older name, a
+            copy elsewhere) that each upload of the PDF updates too, so that
+            its link shows the current version; the PDF shows its own link.
+            Granted in Google's Picker as --link's files are
         langs: With --reserve, the languages to reserve links for
         include_stale: Upload the outdated PDFs too, those without a link,
             and without the reserved ones not built
@@ -76,8 +86,9 @@ def upload(
             --reserve, the PDFs it would reserve a link for
         json: With --dry-run, print one JSON object (`pdfs`, `outdated`,
             `unlinked`, `unbuilt`: paths relative to the repository,
-            `problems`: `<check>: <problem>`; with --reserve, `reserve`, and
-            `link`: each --link PDF's file ID)
+            `problems`: `<check>: <problem>`; with --reserve, `reserve`,
+            `link`: each --link PDF's file ID, and `alias`: each --alias
+            PDF's new aliases)
             instead
         workdir: Path to move into before running the command
 
@@ -86,7 +97,9 @@ def upload(
             isn't built, without --include-stale, or the checks report a \
             problem in the deck, without --skip-checks; when a --link is \
             malformed, names a PDF the deck doesn't build or one with \
-            another link already, or its file isn't a PDF you can edit.
+            another link already, or its file isn't a PDF you can edit; \
+            when an --alias is malformed, names a PDF the deck doesn't build \
+            or a file another PDF has.
     """
     from .. import drive_links
     from ..analyzing.affected import deck_findings
@@ -99,11 +112,19 @@ def upload(
 
     if reserve:
         _reserve_requested(
-            workdir, links, links_from, unique(langs), dry_run=dry_run, json=json
+            workdir,
+            links,
+            aliases,
+            links_from,
+            unique(langs),
+            dry_run=dry_run,
+            json=json,
         )
         return
-    if links or links_from is not None:
-        msg = "--link and --links reserve Drive files: pass them with --reserve"
+    if links or aliases or links_from is not None:
+        msg = (
+            "--link, --alias and --links reserve Drive files: pass them with --reserve"
+        )
         raise DeckzError(msg)
     settings = DeckSettings.from_yaml(workdir)
     paths = settings.paths
@@ -195,7 +216,7 @@ def upload(
         from ..extras.uploading import Uploader
 
     uploader = Uploader(settings)
-    uploader.upload(pdfs, ids)
+    uploader.upload(pdfs, ids, drive_links.load_aliases(settings))
     print(f"Online folder: {uploader.folder_link}")
 
 
@@ -227,6 +248,7 @@ def _listed(pdfs: list[Path], git_dir: Path) -> str:
 def _reserve_requested(
     workdir: Path,
     links: tuple[str, ...],
+    aliases: tuple[str, ...],
     links_from: Path | None,
     langs: tuple["Lang", ...],
     *,
@@ -238,23 +260,33 @@ def _reserve_requested(
     from ..exceptions import DeckzError
 
     if links_from is None:
-        decks = [(DeckSettings.from_yaml(workdir), list(links))]
-    elif links:
-        msg = "--link or --links, not both: put every link in the --links file"
+        decks = [(DeckSettings.from_yaml(workdir), list(links), list(aliases))]
+    elif links or aliases:
+        msg = (
+            "--link or --alias, and --links, not both: put every link in the "
+            "--links file"
+        )
         raise DeckzError(msg)
     else:
         git_dir = GlobalSettings.from_yaml(workdir).paths.git_dir
+        by_deck = drive_links.links_file(links_from, git_dir)
+        aliases_by_deck = drive_links.aliases_file(links_from, git_dir)
         decks = [
-            (DeckSettings.from_yaml(deck_dir, git_dir=git_dir), requests)
-            for deck_dir, requests in drive_links.links_file(
-                links_from, git_dir
-            ).items()
+            (
+                DeckSettings.from_yaml(deck_dir, git_dir=git_dir),
+                by_deck.get(deck_dir, []),
+                aliases_by_deck.get(deck_dir, []),
+            )
+            for deck_dir in [
+                *by_deck,
+                *(d for d in aliases_by_deck if d not in by_deck),
+            ]
         ]
     _reserve(decks, langs, dry_run=dry_run, json=json)
 
 
 def _reserve(
-    decks: list[tuple["DeckSettings", list[str]]],
+    decks: list[tuple["DeckSettings", list[str], list[str]]],
     langs: tuple["Lang", ...],
     *,
     dry_run: bool,
@@ -266,31 +298,48 @@ def _reserve(
 
     # Every request is checked, in every deck, before Drive is reached.
     plans = []
-    for settings, requests in decks:
+    for settings, requests, alias_requests in decks:
         ids = drive_links.load(settings)
         pdfs = published_pdfs(published_targets(settings, langs))
         adopted = drive_links.adoptions(settings, pdfs, requests)
-        plans.append((settings, ids, adopted, [pdf for pdf in pdfs if pdf not in ids]))
+        new_aliases = drive_links.alias_requests(
+            settings, pdfs, alias_requests, ids | adopted
+        )
+        plans.append(
+            (
+                settings,
+                ids,
+                adopted,
+                [pdf for pdf in pdfs if pdf not in ids],
+                new_aliases,
+            )
+        )
     if dry_run:
         _print_reservations(plans, json=json)
         return
-    if not any(missing for *_, missing in plans):
-        print("Every PDF has its Drive link already")
+    if not any(missing or new for *_, missing, new in plans):
+        print("Every PDF has its Drive link already, and every alias given")
         return
     with extras_imports():
         from ..extras.uploading import Uploader, adopt
 
     every_adopted = {
-        pdf: id_ for _, _, adopted, _ in plans for pdf, id_ in adopted.items()
+        pdf: id_ for _, _, adopted, _, _ in plans for pdf, id_ in adopted.items()
     }
-    if every_adopted:
-        adopt(plans[0][0], every_adopted)
+    every_alias = {pdf: found for *_, new in plans for pdf, found in new.items()}
+    if every_adopted or every_alias:
+        adopt(plans[0][0], every_adopted, every_alias)
     reserved = 0
-    for settings, ids, adopted, missing in plans:
+    for settings, ids, adopted, missing, new in plans:
+        merged = drive_links.load_aliases(settings)
+        for pdf, found in new.items():
+            merged[pdf] = [*merged.get(pdf, []), *found]
         if missing:
             uploader = Uploader(settings)
-            drive_links.save(settings, uploader.reserve(missing, ids | adopted))
+            drive_links.save(settings, uploader.reserve(missing, ids | adopted), merged)
             reserved += len(missing)
+        elif new:
+            drive_links.save(settings, ids | adopted, merged)
     registries = (
         str(plans[0][0].paths.drive_links)
         if len(plans) == 1
@@ -300,24 +349,42 @@ def _reserve(
         f"Reserved {reserved} Drive links in {registries}"
         + (f", {len(every_adopted)} of them existing files" if every_adopted else "")
         + ": rebuild the decks' PDFs to show them"
+        + (
+            f". Added {sum(len(found) for found in every_alias.values())} aliases, "
+            "which uploads update"
+            if every_alias
+            else ""
+        )
     )
 
 
 def _print_reservations(
-    plans: list[tuple["DeckSettings", dict[Path, str], dict[Path, str], list[Path]]],
+    plans: list[
+        tuple[
+            "DeckSettings",
+            dict[Path, str],
+            dict[Path, str],
+            list[Path],
+            dict[Path, list[str]],
+        ]
+    ],
     *,
     json: bool,
 ) -> None:
     found: list[str] = []
     given: dict[str, str] = {}
-    for settings, _, adopted, missing in plans:
+    aliased: dict[str, list[str]] = {}
+    for settings, _, adopted, missing, new in plans:
         git_dir = settings.paths.git_dir
         found.extend(str(pdf.relative_to(git_dir)) for pdf in missing)
         given |= {str(pdf.relative_to(git_dir)): id_ for pdf, id_ in adopted.items()}
+        aliased |= {str(pdf.relative_to(git_dir)): ids for pdf, ids in new.items()}
     if json:
         from ._presentation import print_json
 
-        print_json({"reserve": found, "link": given})
+        print_json({"reserve": found, "link": given, "alias": aliased})
         return
     for pdf in found:
         print(f"{pdf} (link: {given[pdf]})" if pdf in given else pdf)
+    for pdf, ids in aliased.items():
+        print(f"{pdf} (alias: {', '.join(ids)})")
