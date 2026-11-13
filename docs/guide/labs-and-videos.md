@@ -100,7 +100,9 @@ to the published copy, and the IDs are printed in handed-out PDFs: never change 
   changed before its notebook was. Content links such a repository through the
   repository's templating, never by hand (`lab-urls`). `deckz push` pushes their
   branches from their local clones, `--force` the rebased ones (see
-  [Pushing](before-you-commit.md#pushing)).
+  [Pushing](before-you-commit.md#pushing)). A repository no trainee opens (a lab's
+  end state published as a package) is declared with an empty `start`: `deckz push`
+  pushes it and `deckz labs repos` checks its branches, and nothing links it.
 
 
 ## Labs in CI

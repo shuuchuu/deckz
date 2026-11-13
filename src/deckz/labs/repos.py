@@ -7,6 +7,9 @@ repository sees the other one, so `deckz labs repos` fetches each into a bare
 mirror, under the content repository's git directory (shared by its
 worktrees), and reports:
 
+A repository no trainee opens (`start` empty, e.g. a lab's end state
+published as a package) has only its branches checked.
+
 - a declared branch missing, or one the declaration lacks;
 - a branch behind the one it stacks on (it lacks some of its commits);
 - a README that doesn't give the statement yet (`statement: false`);
@@ -225,7 +228,7 @@ def report(
     )
     declared = settings.labs.repo_branches(repo.repo) or repo.branches
     problems = _branch_problems(path, repo, declared)
-    if not repo.statement:
+    if repo.opened and not repo.statement:
         problems.append(
             "its READMEs don't give the lab's statement yet (statement: false)"
         )

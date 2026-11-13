@@ -464,11 +464,12 @@ def lab_urls(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
     # templating, not a literal, rot-prone URL. Nor to a lab's own repository
     # (`labs.repos`): the branch a trainee opens depends on the content's
     # language, and the repository's templating knows it. Course notes too:
-    # they render through the same templating.
+    # they render through the same templating. A repository no trainee opens
+    # (`start` empty) has no such link: content names it by hand.
     labs = settings.labs
     slug = _published_notebooks_slug(settings)
     published = re.compile(re.escape(slug) + r"\b") if slug else None
-    repos = [(repo, _lab_repo_link(repo.repo)) for repo in labs.repos]
+    repos = [(repo, _lab_repo_link(repo.repo)) for repo in labs.repos if repo.opened]
     if published is None and not repos:
         return []
     git_dir = settings.paths.git_dir

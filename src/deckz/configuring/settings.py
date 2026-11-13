@@ -231,7 +231,11 @@ class LabRepoSettings(BaseModel):
         default_factory=lambda: {"fr": "main", "en": "main-en"}
     )
     """The branch a trainee opens, by language: its README is the lab's \
-    statement in that language."""
+    statement in that language. Empty for a repository no trainee opens, \
+    such as a lab's end state published as a package: `deckz push` pushes \
+    its branches and `deckz labs repos` checks them, but nothing links it \
+    (`statement` and `colab` don't apply, and `lab-urls` lets content link \
+    it by hand)."""
     statement: bool = True
     """Whether those READMEs give the lab's statement yet. Until then, \
     `deckz labs repos` reports it, and a repository's templating can keep \
@@ -247,6 +251,14 @@ class LabRepoSettings(BaseModel):
             msg = f"labs.repos {self.lab}: {', '.join(unknown)} not in its branches"
             raise ValueError(msg)
         return self
+
+    @property
+    def opened(self) -> bool:
+        """Whether trainees open it (`start` names a branch).
+
+        Only then do its READMEs give the lab's statement and content link it.
+        """
+        return bool(self.start)
 
     @property
     def fetch_url(self) -> str:

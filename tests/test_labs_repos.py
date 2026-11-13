@@ -174,6 +174,43 @@ def test_report_flags_a_missing_notebook_and_statement(tmp_path: Path) -> None:
     ]
 
 
+def test_report_checks_only_the_branches_of_a_repository_nobody_opens(
+    tmp_path: Path,
+) -> None:
+    # A lab's end state published as a package: no README is a statement, and
+    # no notebook is its Colab version, whatever `statement` says.
+    branches = {
+        "main": None,
+        "main-en": "main",
+        "solution": "main",
+        "solution-en": "solution",
+    }
+
+    assert _report(
+        tmp_path, lab="topic/other", branches=branches, start={}, statement=False
+    ) == ([], [])
+
+
+def test_report_flags_the_branches_of_a_repository_nobody_opens(
+    tmp_path: Path,
+) -> None:
+    problems, _ = _report(tmp_path, branches={"main": None}, start={})
+
+    assert problems
+    assert all(
+        "statement" not in problem and "Colab" not in problem for problem in problems
+    )
+
+
+def test_settings_accept_a_repository_nobody_opens() -> None:
+    repo = LabRepoSettings(
+        repo="acme/package", lab=LAB, branches={"main": None}, start={}
+    )
+
+    assert not repo.opened
+    assert LabRepoSettings(repo="acme/lab", lab=LAB).opened
+
+
 def test_report_notes_a_readme_older_than_its_notebook(tmp_path: Path) -> None:
     upstream = _lab_repo(tmp_path)
     git_dir = _content_repo(tmp_path)

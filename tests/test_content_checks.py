@@ -490,6 +490,25 @@ def test_lab_urls_accepts_a_lab_repository_in_code_or_another_one(
     assert lab_urls(_repo_settings(tmp_path)) == []
 
 
+def test_lab_urls_accepts_a_link_to_a_repository_nobody_opens(
+    tmp_path: Path,
+) -> None:
+    init_repository(str(tmp_path))
+    _write(
+        tmp_path / "content" / "topic" / "tp.md",
+        "[The end state](https://github.com/acme/package)\n",
+    )
+    repo = LabRepoSettings(
+        repo="acme/package", lab="topic/package", branches={"main": None}, start={}
+    )
+    settings = GlobalSettings(
+        paths=GlobalPaths(current_dir=tmp_path, git_dir=tmp_path),
+        labs=LabsSettings(repos=(repo,)),
+    )
+
+    assert lab_urls(settings) == []
+
+
 def test_lab_urls_given_paths_reports_only_about_them(tmp_path: Path) -> None:
     init_repository(str(tmp_path))
     link = "[Linting](https://github.com/acme/linting)\n"
