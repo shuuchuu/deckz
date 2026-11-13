@@ -67,6 +67,28 @@ def test_code_difference_allows_imported_names_sorted_differently() -> None:
     assert code_difference(fr, en) is None
 
 
+def test_code_difference_allows_imports_sorted_differently() -> None:
+    fr = (
+        "from .conversion_chaines import decode, encode_chaine\n"
+        "from .images import charge\n"
+        "import pathlib\n"
+        "encode_chaine(charge(pathlib.Path()))"
+    )
+    en = (
+        "import pathlib\n"
+        "from .image_io import load\n"
+        "from .string_conversion import decode, encode_string\n"
+        "encode_string(load(pathlib.Path()))"
+    )
+    assert code_difference(fr, en) is None
+
+
+def test_code_difference_still_compares_import_shapes() -> None:
+    fr = "from .a import x, y\nfrom .b import z"
+    en = "from .c import u\nimport d"
+    assert code_difference(fr, en) is not None
+
+
 def test_code_difference_still_pairs_imported_names_in_the_code() -> None:
     fr = "from m import a, b\na(1)\nb(1)\na(2)"
     en = "from m import x, y\nx(1)\ny(1)\ny(2)"

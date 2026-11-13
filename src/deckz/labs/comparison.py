@@ -85,7 +85,9 @@ def code_tokens(code: str) -> list[str] | None:
     translation may reshape, e.g. a mapping of English values that only the
     fr side needs. The names a `from … import` lists all become `N`: a
     formatter sorts them, so a translation may reorder them, and the code
-    that uses them still pairs each fr name with its en name. A comma before a
+    that uses them still pairs each fr name with its en name; for the same
+    reason, a run of import statements compares in a set order
+    (`sorted_imports`). A comma before a
     closing bracket goes too: the formatter adds one when a longer name wraps
     the call, at the price of not telling `(x,)` from `(x)`.
 
@@ -103,11 +105,25 @@ def code_tokens(code: str) -> list[str] | None:
         tokens = list(tokenize.generate_tokens(io.StringIO("\n".join(lines)).readline))
     except (tokenize.TokenError, IndentationError, SyntaxError):
         return None
-    kept: list[str] = []
+    statements = statement_tokens(tokens)
+    kept = [token for statement in sorted_imports(statements) for token in statement]
+    return collapse_literal_runs(without_trailing_commas(kept))
+
+
+def statement_tokens(tokens: list[tokenize.TokenInfo]) -> list[list[str]]:
+    """Group a cell's kept tokens by logical line (see `code_tokens`).
+
+    Returns:
+        Each statement's tokens, string literals as `S`, imported names as `N`.
+    """
+    statements: list[list[str]] = [[]]
     depth = 0
     imported = imported_names(tokens)
     for i, token in enumerate(tokens):
-        if i in imported:
+        kept = statements[-1]
+        if token.type == tokenize.NEWLINE:
+            statements.append([])
+        elif i in imported:
             kept.append("N")
         elif token.type == FSTRING_START:
             depth += 1
@@ -122,12 +138,37 @@ def code_tokens(code: str) -> list[str] | None:
         elif token.type not in {
             tokenize.COMMENT,
             tokenize.NL,
-            tokenize.NEWLINE,
             tokenize.INDENT,
+            tokenize.DEDENT,
             tokenize.ENDMARKER,
         }:
             kept.append(token.string)
-    return collapse_literal_runs(without_trailing_commas(kept))
+    return statements
+
+
+def sorted_imports(statements: list[list[str]]) -> list[list[str]]:
+    """Put each run of consecutive import statements in a set order.
+
+    A formatter sorts imports by module name, and a translation renames
+    modules (`conversion_chaines`, `string_conversion`): in a run, each
+    import's names become `N` and the run is sorted, so the fr and en runs
+    match when they import the same shapes, whatever their order. The code
+    that uses those names still pairs each fr name with its en name.
+
+    Returns:
+        The statements, each import run sorted.
+    """
+    result: list[list[str]] = []
+    run: list[list[str]] = []
+    for statement in statements:
+        if statement[:1] in (["import"], ["from"]):
+            run.append(["N" if is_name(token) else token for token in statement])
+            continue
+        result.extend(sorted(run))
+        run = []
+        result.append(statement)
+    result.extend(sorted(run))
+    return result
 
 
 def without_trailing_commas(tokens: list[str]) -> list[str]:
