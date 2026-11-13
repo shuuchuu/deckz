@@ -21,14 +21,14 @@ def push(
        e.g. `../deckz`): its current branch, when ahead of the remote branch
        it tracks;
     2. the labs' own repositories (`labs.repos`), from their local clones
-       (`labs.repos[].clone`, `../<name>` by default), through copierz:
-       every branch carrying Copier answers that is ahead,
-       and with --force those a rebase rewrote (stacked branches), with
-       `--force-with-lease`, only when their remote holds nothing they
-       didn't have; a repository with no local clone is skipped;
+       (`labs.repos[].clone`, `../<name>` by default): every branch tracking
+       a remote branch that is ahead, and with --force those a rebase
+       rewrote (stacked branches), with `--force-with-lease`, only when
+       their remote holds nothing they didn't have (its tip is in their
+       reflog); a repository with no local clone is skipped;
     3. the other repositories the content links to (`push.repos`, e.g. a
-       data sets repository), from their local clones, with plain git: each
-       branch tracking a remote branch, when ahead, never forced;
+       data sets repository), from their local clones: every branch tracking
+       a remote branch that is ahead, never forced;
     4. this repository: its main checkout's branch (not a worktree's: `deckz
        worktree land` first), when ahead of its upstream.
 
@@ -38,13 +38,12 @@ def push(
     on. When deckz's push fails or its branch has diverged, nothing else is
     pushed. And since this repository's content links to the labs'
     repositories' branches, one of them failing (a push failed, a branch
-    diverged, a rebased branch left without --force, copierz failed on it)
-    stops this repository's push and the publishing, the other labs'
-    repositories being pushed all the same, to show all that blocks at once;
-    so does one of `push.repos` failing. A repository only skipped (no local
-    clone; for a lab, no branch carrying Copier answers) doesn't. Only the
-    labs' branches are ever forced: one behind or diverged from its remote is
-    left, with the fix.
+    diverged, a rebased branch left without --force) stops this repository's
+    push and the publishing, the other labs' repositories being pushed all
+    the same, to show all that blocks at once; so does one of `push.repos`
+    failing. A repository only skipped (no local clone) doesn't. Only a lab's
+    rebased branches are ever forced: any other branch behind or diverged
+    from its remote is left, with the fix.
 
     Then, with --publish, publishes the labs and the videos (what `deckz labs
     publish` and `deckz videos publish` do) when `deckz status` finds

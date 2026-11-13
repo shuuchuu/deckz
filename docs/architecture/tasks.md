@@ -108,19 +108,20 @@ itself counts every item.
 |---|---|
 | **Responsibility** | Push what a session of work leaves local, in order: deckz's checkout, the labs' repositories, the other repositories the content links to (`push.repos`, plain git), the repository; then publish what's left |
 | **Owns** | `PushReport` (`RepoPush`, `BranchPush`, `PublishResult`) |
-| **Depends on** | `setting_up` (`own_checkout`), `worktrees` (the main checkout), `status` (`unpublished`), `publishing`; copierz, as a subprocess of deckz's own interpreter |
+| **Depends on** | `setting_up` (`own_checkout`), `worktrees` (the main checkout), `status` (`unpublished`), `publishing` |
 | **Never** | Forces deckz's or the repository's branch; pushes anything after a deckz push that failed or diverged; pushes the repository, or publishes, after a lab repository or one of `push.repos` failed (the others are still pushed) |
 | **Entry points** | [`push`][deckz.pushing.push] (`deckz push`) |
 | **Fails with** | Nothing raised: a failed push or publish, a diverged branch, are in the report (`ok`), the CLI exiting 1 |
 
 The order is a dependency: the repository's CI installs deckz from its remote, and its
-content links to the labs' repositories' branches. A lab repository only skipped (no
-clone, no Copier branch) is no failure: it doesn't stop the
-repository. The labs' branches are stacked (`solution` on
-`main`), so a fix to a base rewrites the branches above it: copierz pushes those with
-`--force-with-lease` under `--force`, only when the remote holds nothing they lacked.
-copierz runs through `sys.executable`, never the `PATH`, and its `push --json` output
-is the boundary: deckz reads its `state` and `detail`, not its code.
+content links to the labs' repositories' branches. A repository only skipped (no
+clone) is no failure: it doesn't stop the repository. Every repository goes through
+`branch_push`, one branch at a time: the labs' and `push.repos`' every branch tracking a
+remote branch, whatever it holds (a lab's starting branch may hold only its README).
+The labs' branches are stacked (`solution` on `main`), so a fix to a base rewrites the
+branches above it: `branch_push` tells such a branch from a diverged one by its
+remote's tip being in its reflog, and force-pushes it under `--force` with
+`--force-with-lease` on that tip, so a push made since fails instead of being lost.
 
 ## `scaffolding`
 

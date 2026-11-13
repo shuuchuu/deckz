@@ -1,8 +1,4 @@
-"""`deckz push`, on git repositories and bare remotes made in a temporary directory.
-
-copierz runs for real (a dependency of deckz), on a lab clone
-of the test's own.
-"""
+"""`deckz push`, on git repositories and bare remotes made in a temporary directory."""
 
 import json
 import subprocess
@@ -197,6 +193,49 @@ def test_a_rebased_lab_branch_needs_force(repos: dict[str, Path], capsys: Any) -
     assert _branches(report, "owner/lab")["solution"]["outcome"] == "pushed"
     assert _remote_tip(lab, "solution") == _git(lab, "rev-parse", "solution")
     assert _branches(report, "repo")["main"]["outcome"] == "pushed"
+
+
+def test_a_lab_branch_without_copier_answers_is_pushed(
+    repos: dict[str, Path], tmp_path: Path, capsys: Any
+) -> None:
+    # A starting branch holding only a README (shuuchuu/compression's `main`).
+    lab = repos["lab"]
+    _git(lab, "switch", "--quiet", "--orphan", "start")
+    (lab / "README.md").write_text("Statement\n", encoding="utf8")
+    _git(lab, "add", "README.md")
+    _git(lab, "commit", "--quiet", "-m", "Statement")
+    _git(lab, "push", "--quiet", "-u", "origin", "start")
+    _commit(lab, "Reword the statement")
+    _git(lab, "switch", "--quiet", "main")
+
+    code, report = _push(capsys)
+
+    assert code == 0
+    assert _branches(report, "owner/lab")["start"]["outcome"] == "pushed"
+    assert _remote_tip(lab, "start") == _git(lab, "rev-parse", "start")
+
+
+def test_force_never_forces_a_diverged_lab_branch(
+    repos: dict[str, Path], tmp_path: Path, capsys: Any
+) -> None:
+    someone = tmp_path / "someone-lab"
+    _git(
+        tmp_path,
+        "clone",
+        "--quiet",
+        str(tmp_path / "remotes" / "lab.git"),
+        str(someone),
+    )
+    _commit(someone, "Theirs")
+    _git(someone, "push", "--quiet", "origin", "main")
+    theirs = _remote_tip(someone)
+    _commit(repos["lab"], "Mine")
+
+    code, report = _push(capsys, "--force")
+
+    assert code == 1
+    assert _branches(report, "owner/lab")["main"]["state"] == "diverged"
+    assert _remote_tip(repos["lab"]) == theirs
 
 
 def test_a_failing_lab_stops_the_repository_not_the_other_labs(

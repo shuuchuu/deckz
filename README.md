@@ -1253,23 +1253,23 @@ The main commands:
   work leaves local, in this order: the deckz checkout this deckz runs from
   (an editable install), its current branch when ahead of its upstream;
   the labs' own repositories (`labs.repos`), from their local clones
-  (`clone`), through copierz, which pushes every branch
-  carrying Copier answers that is ahead, and with `--force` those a rebase
-  rewrote (stacked branches), with `--force-with-lease`, only when the
-  remote holds nothing they lacked; then the repository's main checkout's
-  branch. deckz goes first because the repository's CI installs deckz from
+  (`clone`): every branch tracking a remote branch that is ahead, and with
+  `--force` those a rebase rewrote (stacked branches), with
+  `--force-with-lease`, only when the remote holds nothing they lacked (its
+  tip is in their reflog); the other repositories the content links to
+  (`push.repos`, e.g. a data sets repository), every branch ahead, never
+  forced; then the repository's main checkout's branch. deckz goes first because the repository's CI installs deckz from
   its remote, and the content links to the labs' repositories: pushed
   before them, the repository would be checked against a deckz lacking the
   code it depends on. A deckz push that fails, or a deckz branch diverged
   from its remote, stops the command there. The content links to the labs'
   repositories' branches: one of those repositories failing (a push failed,
-  a branch diverged, a rebased branch left without `--force`, copierz
-  failed on it) stops the repository's push and the publishing, while the
-  other labs' repositories are still pushed, to show all that blocks at
-  once; one only skipped (no local clone, no branch carrying Copier
-  answers) doesn't. deckz's and the repository's
-  branches are never forced: behind or diverged, they're left, with the
-  fix. `--publish` then publishes the labs and the videos (as `deckz labs
+  a branch diverged, a rebased branch left without `--force`), or one of
+  `push.repos` failing, stops the repository's push and the publishing,
+  while the other repositories are still pushed, to show all that blocks
+  at once; one only skipped (no local clone) doesn't. Only a lab's rebased
+  branches are ever forced: any other branch behind or diverged is left,
+  with the fix. `--publish` then publishes the labs and the videos (as `deckz labs
   publish` and `deckz videos publish`) when `deckz status` finds something
   left to; without it, the command says what's left. `--dry-run` fetches,
   and pushes and publishes nothing. Exits 1 if a push or a publish failed,

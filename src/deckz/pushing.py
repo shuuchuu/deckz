@@ -5,14 +5,15 @@ In this order:
 1. deckz itself, when it runs from a git checkout (an editable install, e.g.
    `../deckz`): its current branch, if it tracks a remote branch and is ahead.
 2. The labs' own repositories (`labs.repos`), each from its local clone
-   (`labs.repos[].clone`), through copierz (`copierz push --json`): every
-   branch ahead of its remote, and with `force` the
-   branches a rebase rewrote, with `--force-with-lease`. Their branches are
-   stacked (`solution` on `main`...): a change to a base is rebased into
-   the branches above it, which then need a force.
+   (`labs.repos[].clone`): every branch tracking a remote branch that is
+   ahead, and with `force` the branches a rebase rewrote, with
+   `--force-with-lease`. Their branches are stacked (`solution` on
+   `main`...): a change to a base is rebased into the branches above it,
+   which then need a force. A branch is rewritten when its remote's tip is
+   in its reflog: the remote holds nothing it didn't have.
 3. The other repositories the content links to (`push.repos`, e.g. a data
-   sets repository), each from its local clone, with plain git: every branch
-   tracking a remote branch that is ahead.
+   sets repository), each from its local clone: every branch tracking a
+   remote branch that is ahead, never forced.
 4. The repository itself: its main checkout's branch, if ahead of its
    upstream (`deckz.upstream`).
 5. With `publish`, the labs and the videos, when `deckz status` finds
@@ -24,12 +25,11 @@ before them would have its CI check it against a deckz that lacks the code
 it depends on. When deckz's push fails, or its branch has diverged from its
 remote, nothing after it is pushed. Likewise, the repository's content links
 to the labs' repositories' branches: when one of them fails (a push failed,
-a branch diverged, a rebased branch left without `force`, copierz failed on
-it), the other labs' repositories are still pushed, to show all that blocks
+a branch diverged, a rebased branch left without `force`), the other labs'
+repositories are still pushed, to show all that blocks
 at once, but neither the repository nor any publishing is; so does one of
 `push.repos` failing (a push failed, a branch diverged). A repository merely
-skipped (no local clone, or not a clone of it; for a lab, no branch carrying
-Copier answers) doesn't stop it.
+skipped (no local clone, or not a clone of it) doesn't stop it.
 
 Only the labs' branches are ever forced: the others are
 pushed when they're ahead, and left, with the fix, when behind or diverged.
@@ -39,9 +39,7 @@ offline). `dry_run` fetches, and pushes and publishes nothing.
 Git runs as a subprocess, with the user's own credentials and ssh agent.
 """
 
-import json
 import subprocess
-import sys
 from dataclasses import dataclass, field
 from os import environ
 from os.path import relpath
@@ -106,8 +104,7 @@ class RepoPush:
     skipped: str = ""
     """Why it wasn't looked at, and the fix, when it wasn't."""
     problem: bool = False
-    """Whether it fails the command (one of its branches does, or copierz \
-    failed on it)."""
+    """Whether it fails the command (one of its branches does)."""
 
 
 @dataclass(frozen=True)
@@ -277,18 +274,28 @@ def _tracked(checkout: Path, branch: str) -> tuple[str, str, str] | None:
 
 
 def branch_push(
-    checkout: Path, branch: str, shown: str, *, dry_run: bool
+    checkout: Path,
+    branch: str,
+    shown: str,
+    *,
+    dry_run: bool,
+    force: bool | None = None,
 ) -> BranchPush:
     """Push `branch` of `checkout` to the remote branch it tracks, if ahead.
 
-    Never forced: a branch behind its remote is left (a pull brings it up), \
-    one diverged from it too, as a problem.
+    A branch behind its remote is left (a pull brings it up), one diverged \
+    from it too, as a problem. With `force` set (a lab's branch), one a \
+    rebase rewrote (its remote's tip in its reflog: the remote holds \
+    nothing it didn't have) is force-pushed with a lease on that tip when \
+    `force` is true, and left as a problem otherwise; unset, it's diverged.
 
     Args:
         checkout: Any checkout of the repository.
         branch: A local branch.
         shown: How to name the checkout in a fix (`git -C <shown> pull`).
         dry_run: Fetch only.
+        force: Whether to force-push a rewritten branch; None to never \
+            tell one apart from a diverged branch.
 
     Returns:
         What became of it.
@@ -311,6 +318,7 @@ def branch_push(
     tip = _out(checkout, "rev-parse", "--verify", "--quiet", tracking)
     if tip == local:
         return BranchPush(branch, name, "up_to_date", UP_TO_DATE, detail=as_of.strip())
+    lease = ""
     if tip and not _is_ancestor(checkout, tip, local):
         behind = _count(checkout, f"{local}..{tip}")
         if _is_ancestor(checkout, local, tip):
@@ -323,37 +331,38 @@ def branch_push(
                 f"push: `git -C {shown} pull`",
             )
         ahead = _count(checkout, f"{tip}..{local}")
-        return BranchPush(
-            branch,
-            name,
-            "diverged",
-            NOT_PUSHED,
-            commits=ahead,
-            detail=f"diverged from {name}{as_of}: {behind} commit(s) there, "
-            f"{ahead} here; never forced: `git -C {shown} pull --rebase`, "
-            "then `deckz push` again",
-            problem=True,
-        )
+        if force is not None and tip in _reflog(checkout, branch):
+            if not force:
+                return BranchPush(
+                    branch,
+                    name,
+                    "rewritten",
+                    NOT_PUSHED,
+                    detail=f"rebased: {ahead} commit(s) to force-push to "
+                    f"{name}{as_of}: `deckz push --force` force-pushes it with a "
+                    "lease, only if its remote holds nothing it didn't have",
+                    problem=True,
+                )
+            lease = tip
+        else:
+            return _diverged(branch, name, shown, as_of, behind, ahead)
+    state = "rewritten" if lease else "ahead"
+    how = " (forced, with a lease)" if lease else ""
     commits = _count(checkout, f"{tip}..{local}" if tip else local)
     if dry_run:
         return BranchPush(
             branch,
             name,
-            "ahead",
+            state,
             WOULD_PUSH,
             commits,
-            f"{commits} commit(s) to push to {name}{as_of}",
+            f"{commits} commit(s) to push to {name}{how}{as_of}",
         )
+    args = ["git", "-C", str(checkout), "push", "--quiet"]
+    if lease:
+        args.append(f"--force-with-lease=refs/heads/{remote_branch}:{lease}")
     pushed = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(checkout),
-            "push",
-            "--quiet",
-            remote,
-            f"refs/heads/{branch}:refs/heads/{remote_branch}",
-        ],
+        [*args, remote, f"refs/heads/{branch}:refs/heads/{remote_branch}"],
         capture_output=True,
         text=True,
         check=False,
@@ -365,7 +374,7 @@ def branch_push(
         return BranchPush(
             branch,
             name,
-            "ahead",
+            state,
             FAILED,
             commits,
             f"push failed: {stderr}\nCheck that `git -C {shown} ls-remote "
@@ -373,7 +382,31 @@ def branch_push(
             problem=True,
         )
     return BranchPush(
-        branch, name, "ahead", PUSHED, commits, f"{commits} commit(s) to {name}"
+        branch, name, state, PUSHED, commits, f"{commits} commit(s) to {name}{how}"
+    )
+
+
+def _reflog(checkout: Path, branch: str) -> set[str]:
+    # Every commit `branch` has pointed to, as far as its reflog goes.
+    found = _out(
+        checkout, "reflog", "show", "--format=%H", f"refs/heads/{branch}", "--"
+    )
+    return set(found.split())
+
+
+def _diverged(
+    branch: str, name: str, shown: str, as_of: str, behind: int, ahead: int
+) -> BranchPush:
+    return BranchPush(
+        branch,
+        name,
+        "diverged",
+        NOT_PUSHED,
+        commits=ahead,
+        detail=f"diverged from {name}{as_of}: {behind} commit(s) there, "
+        f"{ahead} here; never forced: `git -C {shown} pull --rebase`, "
+        "then `deckz push` again",
+        problem=True,
     )
 
 
@@ -434,104 +467,82 @@ def repository_push(settings: "GlobalSettings", *, dry_run: bool) -> RepoPush:
     return RepoPush(main.name, "repository", shown, (pushed,), problem=pushed.problem)
 
 
-def copierz_command() -> tuple[str, ...]:
-    """How to run copierz: from deckz's own environment, never the `PATH`.
-
-    Returns:
-        The command.
-    """
-    return (sys.executable, "-c", "from copierz.cli import main; main()")
-
-
 def lab_pushes(
     settings: "GlobalSettings", *, dry_run: bool, force: bool
 ) -> list[RepoPush]:
-    """Push the labs' repositories' branches from their local clones, with copierz.
+    """Push the labs' repositories' branches from their local clones.
 
-    Each clone goes to `copierz --root <clone> push <clone> --json`, which \
-    fetches, pushes every branch carrying Copier answers that is ahead, and \
-    with `force` force-pushes with a lease the branches a rebase rewrote, \
-    only when their remote holds nothing they didn't have.
+    Every branch tracking a remote branch is pushed when ahead, and with \
+    `force` force-pushed with a lease when a rebase rewrote it \
+    (`branch_push`).
 
     Returns:
-        One per repository, in `labs.repos`' order.
+        One per repository, in `labs.repos`' order (a repository with \
+        several labs once).
     """
-    git_dir = settings.paths.git_dir
     first: dict[str, RepoCloneSettings] = {}
     for repo in settings.labs.repos:
         first.setdefault(repo.repo, repo)
-    if not first:
-        return []
-    command = copierz_command()
-    results = []
-    for name, repo in first.items():
-        clone = repo.clone_path(git_dir)
-        shown = _shown(clone, git_dir)
-        if not clone.is_dir():
-            results.append(
-                RepoPush(
-                    name,
-                    "lab",
-                    skipped=f"no local clone at {shown}, nothing to push: `git "
-                    f"clone {repo.fetch_url} {shown}` to work on it, or set its "
-                    "`clone` in deckz.yml's `labs.repos`",
-                )
-            )
-            continue
-        if (why := _not_a_clone(clone, repo, "labs.repos")) is not None:
-            results.append(RepoPush(name, "lab", shown, skipped=why))
-            continue
-        results.append(_copierz_push(command, name, clone, shown, dry_run, force))
-    return results
+    return [
+        _clone_push(settings, repo, "lab", dry_run=dry_run, force=force)
+        for repo in first.values()
+    ]
 
 
 def other_pushes(settings: "GlobalSettings", *, dry_run: bool) -> list[RepoPush]:
     """Push the other repositories' branches (`push.repos`) from their clones.
 
-    Each branch tracking a remote branch is pushed when ahead, never forced \
-    (`branch_push`); a branch tracking none is left alone.
+    Every branch tracking a remote branch is pushed when ahead, never forced.
 
     Returns:
         One per repository, in `push.repos`' order.
     """
+    return [
+        _clone_push(settings, repo, "other", dry_run=dry_run, force=None)
+        for repo in settings.push.repos
+    ]
+
+
+def _clone_push(
+    settings: "GlobalSettings",
+    repo: "RepoCloneSettings",
+    kind: str,
+    *,
+    dry_run: bool,
+    force: bool | None,
+) -> RepoPush:
+    # Push every branch of `repo`'s local clone that tracks a remote branch.
     git_dir = settings.paths.git_dir
-    results = []
-    for repo in settings.push.repos:
-        clone = repo.clone_path(git_dir)
-        shown = _shown(clone, git_dir)
-        if not clone.is_dir():
-            results.append(
-                RepoPush(
-                    repo.repo,
-                    "other",
-                    skipped=f"no local clone at {shown}, nothing to push: `git "
-                    f"clone {repo.fetch_url} {shown}` to work on it, or set its "
-                    "`clone` in deckz.yml's `push.repos`",
-                )
-            )
-            continue
-        if (why := _not_a_clone(clone, repo, "push.repos")) is not None:
-            results.append(RepoPush(repo.repo, "other", shown, skipped=why))
-            continue
-        tracking = _out(
-            clone,
-            "for-each-ref",
-            "--format=%(if)%(upstream)%(then)%(refname:short)%(end)",
-            "refs/heads",
-        ).split()
-        branches = tuple(
-            branch_push(clone, branch, shown, dry_run=dry_run) for branch in tracking
+    key = "labs.repos" if kind == "lab" else "push.repos"
+    clone = repo.clone_path(git_dir)
+    shown = _shown(clone, git_dir)
+    if not clone.is_dir():
+        return RepoPush(
+            repo.repo,
+            kind,
+            skipped=f"no local clone at {shown}, nothing to push: `git clone "
+            f"{repo.fetch_url} {shown}` to work on it, or set its `clone` in "
+            f"deckz.yml's `{key}`",
         )
-        results.append(
-            RepoPush(
-                repo.repo,
-                "other",
-                shown,
-                branches,
-                problem=any(branch.problem for branch in branches),
-            )
-        )
-    return results
+    if (why := _not_a_clone(clone, repo, key)) is not None:
+        return RepoPush(repo.repo, kind, shown, skipped=why)
+    tracking = _out(
+        clone,
+        "for-each-ref",
+        "--format=%(if)%(upstream)%(then)%(refname:short)%(end)",
+        "refs/heads",
+    ).split()
+    branches = tuple(
+        branch_push(clone, branch, shown, dry_run=dry_run, force=force)
+        for branch in tracking
+    )
+    return RepoPush(
+        repo.repo,
+        kind,
+        shown,
+        branches,
+        problem=any(branch.problem for branch in branches),
+    )
 
 
 def _not_a_clone(clone: Path, repo: "RepoCloneSettings", key: str) -> str | None:
@@ -550,87 +561,6 @@ def _not_a_clone(clone: Path, repo: "RepoCloneSettings", key: str) -> str | None
             f"{repo.repo}; set its `clone` in deckz.yml's `{key}`"
         )
     return None
-
-
-def _copierz_push(
-    command: tuple[str, ...],
-    name: str,
-    clone: Path,
-    shown: str,
-    dry_run: bool,
-    force: bool,
-) -> RepoPush:
-    args = [*command, "--root", str(clone), "push", str(clone), "--json"]
-    if force:
-        args.append("--force")
-    if dry_run:
-        args.append("--dry-run")
-    result = subprocess.run(
-        args,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=_PUSH_TIMEOUT,
-        env=_env(),
-    )
-    try:
-        branches = json.loads(result.stdout)["branches"]
-    except (ValueError, KeyError, TypeError):
-        # Its last lines: an error message, or a traceback's end.
-        stderr = "\n".join((result.stderr or result.stdout).strip().splitlines()[-5:])
-        if result.returncode == 2 and "matches no Copier-generated" in stderr:
-            # copierz pushes only the branches carrying Copier answers.
-            return RepoPush(
-                name,
-                "lab",
-                shown,
-                skipped=f"no branch of {shown} carries Copier answers, which copierz "
-                f"pushes: push its branches with `git -C {shown} push`",
-            )
-        return RepoPush(
-            name,
-            "lab",
-            shown,
-            skipped=f"`copierz push` failed (exit {result.returncode}): {stderr}",
-            problem=True,
-        )
-    pushed = tuple(_branch_from_copierz(branch, force=force) for branch in branches)
-    return RepoPush(name, "lab", shown, pushed, problem=any(b.problem for b in pushed))
-
-
-def _branch_from_copierz(found: dict, *, force: bool) -> BranchPush:
-    # One branch of `copierz push --json`'s output.
-    state = str(found.get("state", ""))
-    detail = str(found.get("detail") or "")
-    commits = int(found.get("commits") or 0)
-    if detail.startswith("pushed"):
-        outcome = PUSHED
-    elif detail.startswith("would push"):
-        outcome = WOULD_PUSH
-    elif detail.startswith("push failed"):
-        outcome = FAILED
-    elif state == "up_to_date":
-        outcome = UP_TO_DATE
-    else:
-        outcome = NOT_PUSHED
-    if state == "rewritten" and not force:
-        detail = (
-            f"{detail.removesuffix(' (pass --force)')}: `deckz push --force` "
-            "force-pushes it with a lease, only if its remote holds nothing it "
-            "didn't have"
-        )
-    problem = (
-        outcome == FAILED or state == "diverged" or (state == "rewritten" and not force)
-    )
-    return BranchPush(
-        str(found.get("branch", "")),
-        str(found.get("remote") or ""),
-        state,
-        outcome,
-        commits if outcome in (PUSHED, WOULD_PUSH) else 0,
-        detail,
-        problem,
-    )
 
 
 def publications(
