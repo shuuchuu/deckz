@@ -219,4 +219,169 @@ def test_reserve_dry_run_shows_the_links_given(
 def test_link_needs_reserve(repo: Path, caplog: Any) -> None:
     with raises(SystemExit):
         main(("upload", "--dry-run", "--link", "pdf/abc-handout.pdf=a-file-id-0001"))
-    assert "pass it with --reserve" in caplog.text
+    assert "pass them with --reserve" in caplog.text
+
+
+def _links_file(repo: Path, entries: dict[str, str]) -> Path:
+    path = repo.parent / "links.yml"
+    path.write_text(
+        "".join(f"{key}: {value}\n" for key, value in entries.items()),
+        encoding="utf8",
+    )
+    return path
+
+
+def test_links_file_groups_the_requests_by_deck(repo: Path) -> None:
+    copytree(_deck_dir(repo), repo / "company" / "xyz")
+    path = _links_file(
+        repo,
+        {
+            "company/abc/pdf/abc-handout.pdf": "file-id-0001",
+            "company/xyz/pdf/xyz-handout.pdf": "file-id-0002",
+            "company/xyz/pdf/en/xyz-handout.pdf": "file-id-0003",
+        },
+    )
+
+    assert drive_links.links_file(path, repo) == {
+        repo / "company" / "abc": ["company/abc/pdf/abc-handout.pdf=file-id-0001"],
+        repo / "company" / "xyz": [
+            "company/xyz/pdf/xyz-handout.pdf=file-id-0002",
+            "company/xyz/pdf/en/xyz-handout.pdf=file-id-0003",
+        ],
+    }
+
+
+def test_links_file_refuses_what_it_cant_reserve(repo: Path) -> None:
+    for entries, problem in (
+        ({"pdf/abc-handout.pdf": "file-id-0001"}, "is in no deck"),
+        (
+            {
+                "company/abc/pdf/abc-handout.pdf": "file-id-0001",
+                "company/abc/pdf/abc-print-handout.pdf": "file-id-0001",
+            },
+            "would share one Drive file",
+        ),
+    ):
+        with raises(DeckzError, match=problem):
+            drive_links.links_file(_links_file(repo, entries), repo)
+    path = repo.parent / "links.yml"
+    path.write_text("- company/abc/pdf/abc-handout.pdf\n", encoding="utf8")
+    with raises(DeckzError, match="should map each PDF's path"):
+        drive_links.links_file(path, repo)
+    with raises(DeckzError, match="no such file"):
+        drive_links.links_file(repo.parent / "missing.yml", repo)
+
+
+def test_reserve_with_a_links_file_covers_every_deck_it_names(
+    repo: Path, capsys: CaptureFixture[str], monkeypatch: Any
+) -> None:
+    xyz = repo / "company" / "xyz"
+    copytree(_deck_dir(repo), xyz)
+    deck_yml = xyz / "deck.yml"
+    deck_yml.write_text(
+        deck_yml.read_text(encoding="utf8").replace("name: ABC", "name: XYZ"),
+        encoding="utf8",
+    )
+    path = _links_file(
+        repo,
+        {
+            "company/abc/pdf/abc-handout.pdf": "file-id-0001",
+            "company/xyz/pdf/xyz-handout.pdf": "file-id-0002",
+        },
+    )
+    # From the repository's root, not a deck.
+    monkeypatch.chdir(repo)
+
+    found = _json(
+        capsys, "upload", "--reserve", "--dry-run", "--json", "--links", str(path)
+    )
+
+    assert found["link"] == {
+        "company/abc/pdf/abc-handout.pdf": "file-id-0001",
+        "company/xyz/pdf/xyz-handout.pdf": "file-id-0002",
+    }
+    assert "company/abc/pdf/abc-print-handout.pdf" in found["reserve"]
+    assert "company/xyz/pdf/xyz-print-handout.pdf" in found["reserve"]
+
+    # A deck's own refusals still apply.
+    settings = DeckSettings.from_yaml(_deck_dir(repo))
+    drive_links.save(
+        settings, {settings.paths.pdf_dir / "abc-handout.pdf": "other-id-01"}
+    )
+    with raises(SystemExit):
+        main(("upload", "--reserve", "--dry-run", "--links", str(path)))
+
+
+def test_links_file_and_link_dont_mix(repo: Path, caplog: Any) -> None:
+    path = _links_file(repo, {"company/abc/pdf/abc-handout.pdf": "file-id-0001"})
+    with raises(SystemExit):
+        main(
+            (
+                "upload",
+                "--reserve",
+                "--links",
+                str(path),
+                "--link",
+                "pdf/abc-handout.pdf=file-id-0002",
+            )
+        )
+    assert "not both" in caplog.text
+
+
+def test_reserve_with_a_links_file_adopts_every_file_at_once(
+    repo: Path, capsys: CaptureFixture[str], monkeypatch: Any
+) -> None:
+    from deckz.extras import uploading
+
+    xyz = repo / "company" / "xyz"
+    copytree(_deck_dir(repo), xyz)
+    deck_yml = xyz / "deck.yml"
+    deck_yml.write_text(
+        deck_yml.read_text(encoding="utf8").replace("name: ABC", "name: XYZ"),
+        encoding="utf8",
+    )
+    path = _links_file(
+        repo,
+        {
+            "company/abc/pdf/abc-handout.pdf": "file-id-0001",
+            "company/xyz/pdf/xyz-handout.pdf": "file-id-0002",
+        },
+    )
+    adopted: list[dict[Path, str]] = []
+
+    class FakeUploader:
+        def __init__(self, settings: DeckSettings) -> None:
+            self.settings = settings
+
+        def reserve(self, pdfs: list[Path], ids: dict[Path, str]) -> dict[Path, str]:
+            return ids | {pdf: f"new-{pdf.name}" for pdf in pdfs if pdf not in ids}
+
+    monkeypatch.setattr(uploading, "Uploader", FakeUploader)
+    monkeypatch.setattr(
+        uploading, "adopt", lambda _, ids: adopted.append(dict(ids)) or dict(ids)
+    )
+    monkeypatch.chdir(repo)
+
+    main(("upload", "--reserve", "--links", str(path)))
+
+    # One Picker for both decks.
+    assert adopted == [
+        {
+            _deck_dir(repo) / "pdf" / "abc-handout.pdf": "file-id-0001",
+            xyz / "pdf" / "xyz-handout.pdf": "file-id-0002",
+        }
+    ]
+    for deck, name, file_id in (
+        (_deck_dir(repo), "abc", "file-id-0001"),
+        (xyz, "xyz", "file-id-0002"),
+    ):
+        settings = DeckSettings.from_yaml(deck)
+        registry = drive_links.load(settings)
+        assert registry[settings.paths.pdf_dir / f"{name}-handout.pdf"] == file_id
+        printed = settings.paths.pdf_dir / f"{name}-print-handout.pdf"
+        assert registry[printed] == f"new-{name}-print-handout.pdf"
+    assert "2 of them existing files" in capsys.readouterr().out
+
+    # Again: nothing left to do, no Picker.
+    main(("upload", "--reserve", "--links", str(path)))
+    assert len(adopted) == 1

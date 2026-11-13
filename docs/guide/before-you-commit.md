@@ -74,6 +74,19 @@ browser with that file selected: confirm it, once. The file stays where it is, w
 name, shared read-only with anyone with its link. If the Picker shows an error, enable
 the Google Picker API in the Google Cloud project of your `gdrive-secrets.json`.
 
+For many decks at once, list the links in a YAML file, each PDF by its path in the
+repository:
+
+```yaml
+decks/x/pdf/x-handout.pdf: https://drive.google.com/file/d/<id>/view
+decks/y/pdf/y-handout.pdf: https://drive.google.com/file/d/<id>/view
+```
+
+and run `deckz upload --reserve --links <file>` from anywhere in the repository
+(`--dry-run` first): it reserves the links of every deck the file names, with a single
+pass in the Picker for all the files. If it stops halfway, run it again: it picks up
+where it stopped.
+
 ## Pushing
 
 ```sh

@@ -19,6 +19,7 @@ def upload(
     links: Annotated[
         tuple[str, ...], Parameter(name="--link", negative="", show_default=False)
     ] = (),
+    links_from: Annotated[Path | None, Parameter(name="--links")] = None,
     langs: Langs = ("fr",),
     include_stale: bool = False,
     skip_checks: bool = False,
@@ -58,6 +59,12 @@ def upload(
             with its name, shared read-only with anyone with its link; a file
             deckz didn't create is granted to it once, in Google's Picker,
             which opens in the browser
+        links_from: With --reserve, a YAML file mapping PDFs of any decks
+            (their paths in the repository) to their Drive links, as --link
+            does for one deck: each deck it names gets its links reserved,
+            those existing files with a single pass in the Picker for all of
+            them. Run it from anywhere in the repository; run again after a
+            failure, it picks up where it stopped
         langs: With --reserve, the languages to reserve links for
         include_stale: Upload the outdated PDFs too, those without a link,
             and without the reserved ones not built
@@ -90,13 +97,15 @@ def upload(
     from ..models import LANGS, lang_dir
     from ..pipelines import deck_targets, outdated_pdfs, published_targets
 
-    settings = DeckSettings.from_yaml(workdir)
     if reserve:
-        _reserve(settings, unique(langs), links, dry_run=dry_run, json=json)
+        _reserve_requested(
+            workdir, links, links_from, unique(langs), dry_run=dry_run, json=json
+        )
         return
-    if links:
-        msg = "--link reserves a Drive file: pass it with --reserve"
+    if links or links_from is not None:
+        msg = "--link and --links reserve Drive files: pass them with --reserve"
         raise DeckzError(msg)
+    settings = DeckSettings.from_yaml(workdir)
     paths = settings.paths
     git_dir = paths.git_dir
     slides = {
@@ -215,10 +224,38 @@ def _listed(pdfs: list[Path], git_dir: Path) -> str:
     return "\n".join(f"  {pdf.relative_to(git_dir)}" for pdf in pdfs)
 
 
-def _reserve(
-    settings: "DeckSettings",
-    langs: tuple["Lang", ...],
+def _reserve_requested(
+    workdir: Path,
     links: tuple[str, ...],
+    links_from: Path | None,
+    langs: tuple["Lang", ...],
+    *,
+    dry_run: bool,
+    json: bool,
+) -> None:
+    from .. import drive_links
+    from ..configuring.settings import DeckSettings, GlobalSettings
+    from ..exceptions import DeckzError
+
+    if links_from is None:
+        decks = [(DeckSettings.from_yaml(workdir), list(links))]
+    elif links:
+        msg = "--link or --links, not both: put every link in the --links file"
+        raise DeckzError(msg)
+    else:
+        git_dir = GlobalSettings.from_yaml(workdir).paths.git_dir
+        decks = [
+            (DeckSettings.from_yaml(deck_dir, git_dir=git_dir), requests)
+            for deck_dir, requests in drive_links.links_file(
+                links_from, git_dir
+            ).items()
+        ]
+    _reserve(decks, langs, dry_run=dry_run, json=json)
+
+
+def _reserve(
+    decks: list[tuple["DeckSettings", list[str]]],
+    langs: tuple["Lang", ...],
     *,
     dry_run: bool,
     json: bool,
@@ -227,35 +264,60 @@ def _reserve(
     from ..extras import extras_imports
     from ..pipelines import published_pdfs, published_targets
 
-    git_dir = settings.paths.git_dir
-    ids = drive_links.load(settings)
-    pdfs = published_pdfs(published_targets(settings, langs))
-    adopted = drive_links.adoptions(settings, pdfs, links)
-    missing = [pdf for pdf in pdfs if pdf not in ids]
+    # Every request is checked, in every deck, before Drive is reached.
+    plans = []
+    for settings, requests in decks:
+        ids = drive_links.load(settings)
+        pdfs = published_pdfs(published_targets(settings, langs))
+        adopted = drive_links.adoptions(settings, pdfs, requests)
+        plans.append((settings, ids, adopted, [pdf for pdf in pdfs if pdf not in ids]))
     if dry_run:
-        found = [str(pdf.relative_to(git_dir)) for pdf in missing]
-        given = {
-            str(pdf.relative_to(git_dir)): file_id for pdf, file_id in adopted.items()
-        }
-        if json:
-            from ._presentation import print_json
-
-            print_json({"reserve": found, "link": given})
-            return
-        for pdf in found:
-            print(f"{pdf} (link: {given[pdf]})" if pdf in given else pdf)
+        _print_reservations(plans, json=json)
         return
-    if not missing:
+    if not any(missing for *_, missing in plans):
         print("Every PDF has its Drive link already")
         return
     with extras_imports():
-        from ..extras.uploading import Uploader
+        from ..extras.uploading import Uploader, adopt
 
-    uploader = Uploader(settings)
-    reserved = ids | (uploader.adopt(adopted) if adopted else {})
-    drive_links.save(settings, uploader.reserve(missing, reserved))
-    print(
-        f"Reserved {len(missing)} Drive links in {settings.paths.drive_links}"
-        + (f", {len(adopted)} of them existing files" if adopted else "")
-        + ": rebuild the deck's PDFs to show them"
+    every_adopted = {
+        pdf: id_ for _, _, adopted, _ in plans for pdf, id_ in adopted.items()
+    }
+    if every_adopted:
+        adopt(plans[0][0], every_adopted)
+    reserved = 0
+    for settings, ids, adopted, missing in plans:
+        if missing:
+            uploader = Uploader(settings)
+            drive_links.save(settings, uploader.reserve(missing, ids | adopted))
+            reserved += len(missing)
+    registries = (
+        str(plans[0][0].paths.drive_links)
+        if len(plans) == 1
+        else f"the registries of {len(plans)} decks"
     )
+    print(
+        f"Reserved {reserved} Drive links in {registries}"
+        + (f", {len(every_adopted)} of them existing files" if every_adopted else "")
+        + ": rebuild the decks' PDFs to show them"
+    )
+
+
+def _print_reservations(
+    plans: list[tuple["DeckSettings", dict[Path, str], dict[Path, str], list[Path]]],
+    *,
+    json: bool,
+) -> None:
+    found: list[str] = []
+    given: dict[str, str] = {}
+    for settings, _, adopted, missing in plans:
+        git_dir = settings.paths.git_dir
+        found.extend(str(pdf.relative_to(git_dir)) for pdf in missing)
+        given |= {str(pdf.relative_to(git_dir)): id_ for pdf, id_ in adopted.items()}
+    if json:
+        from ._presentation import print_json
+
+        print_json({"reserve": found, "link": given})
+        return
+    for pdf in found:
+        print(f"{pdf} (link: {given[pdf]})" if pdf in given else pdf)

@@ -391,55 +391,69 @@ PDF_META = {
 }
 
 
-def test_adopt_shares_a_reachable_pdf_without_the_picker(tmp_path: Path) -> None:
-    pdf_dir = tmp_path / "pdf"
+def adopt(
+    tmp_path: Path, monkeypatch: MonkeyPatch, service: MagicMock
+) -> tuple[MagicMock, dict[Path, str]]:
+    """`uploading.adopt` on one PDF, Drive replaced by `service`, the Picker mocked.
+
+    Returns:
+        The Picker's mock, and what `adopt` returns.
+    """
+    picker = MagicMock()
+    monkeypatch.setattr(uploading, "_build_service", lambda _: service)
+    monkeypatch.setattr(uploading, "_pick", picker)
+    settings = build_uploader(tmp_path / "pdf", service)._settings
+    return picker, uploading.adopt(settings, {tmp_path / "a.pdf": "adopted-id"})
+
+
+def test_adopt_shares_a_reachable_pdf_without_the_picker(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
     service = adoptable_service(PDF_META)
-    uploader = build_uploader(pdf_dir, service)
-    uploader._pick = MagicMock()
 
-    ids = uploader.adopt({pdf_dir / "a.pdf": "adopted-id"})
+    picker, ids = adopt(tmp_path, monkeypatch, service)
 
-    assert ids == {pdf_dir / "a.pdf": "adopted-id"}
-    uploader._pick.assert_not_called()
+    assert ids == {tmp_path / "a.pdf": "adopted-id"}
+    picker.assert_not_called()
     service.permissions.return_value.create.assert_called_once_with(
         fileId="adopted-id", body={"type": "anyone", "role": "reader"}
     )
 
 
-def test_adopt_opens_the_picker_for_a_file_out_of_reach(tmp_path: Path) -> None:
-    pdf_dir = tmp_path / "pdf"
-    uploader = build_uploader(pdf_dir, adoptable_service(PDF_META, reachable=False))
-    uploader._pick = MagicMock()
+def test_adopt_opens_the_picker_for_a_file_out_of_reach(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    service = adoptable_service(PDF_META, reachable=False)
 
-    uploader.adopt({pdf_dir / "a.pdf": "adopted-id"})
+    picker, _ = adopt(tmp_path, monkeypatch, service)
 
-    uploader._pick.assert_called_once_with(["adopted-id"])
+    _, file_ids = picker.call_args.args
+    assert file_ids == ["adopted-id"]
 
 
-def test_adopt_refuses_what_isnt_an_editable_pdf(tmp_path: Path) -> None:
-    pdf_dir = tmp_path / "pdf"
+def test_adopt_refuses_what_isnt_an_editable_pdf(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
     for meta in (
         PDF_META | {"mimeType": "application/vnd.google-apps.document"},
         PDF_META | {"capabilities": {"canEdit": False}},
         PDF_META | {"trashed": True},
     ):
         service = adoptable_service(meta)
-        uploader = build_uploader(pdf_dir, service)
 
         with raises(DeckzError, match="isn't a PDF you can edit"):
-            uploader.adopt({pdf_dir / "a.pdf": "adopted-id"})
+            adopt(tmp_path, monkeypatch, service)
         service.permissions.return_value.create.assert_not_called()
 
 
-def test_adopt_refuses_a_file_still_out_of_reach(tmp_path: Path) -> None:
-    pdf_dir = tmp_path / "pdf"
+def test_adopt_refuses_a_file_still_out_of_reach(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
     service = build_service(existing_files=[])
     service.files.return_value.get.return_value.execute.side_effect = http_error(404)
-    uploader = build_uploader(pdf_dir, service)
-    uploader._pick = MagicMock()
 
     with raises(DeckzError, match="still out of reach"):
-        uploader.adopt({pdf_dir / "a.pdf": "adopted-id"})
+        adopt(tmp_path, monkeypatch, service)
 
 
 def pick(
@@ -480,7 +494,7 @@ def pick(
         Thread(target=lambda: urlopen(redirect).read(), daemon=True).start()
 
     monkeypatch.setattr(uploading.webbrowser, "open", browse)
-    build_uploader(tmp_path / "pdf", MagicMock())._pick(file_ids)
+    uploading._pick(build_uploader(tmp_path / "pdf", MagicMock())._settings, file_ids)
     return fetched
 
 

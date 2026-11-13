@@ -13,7 +13,8 @@ PDFs show no link.
 
 A link already handed out (a PDF put on Drive by hand) can be reused instead: \
 `deckz upload --reserve --link <pdf>=<link>` records that file for the PDF \
-(`adoptions` checks the request, `Uploader.adopt` gets deckz access to it).
+(`adoptions` checks the request, `extras.uploading.adopt` gets deckz access \
+to it), and `--links <file>` (`links_file`) does so for many decks at once.
 """
 
 import re
@@ -92,27 +93,27 @@ def adoptions(
         name = str(PurePosixPath(name.strip()))
         if not sep or (found := parse_file_id(given.strip())) is None:
             msg = (
-                f"--link {request}: give `<pdf>=<Drive link>`, e.g. --link "
+                f"{request}: give `<pdf>=<Drive link>`, e.g. --link "
                 "pdf/<deck>-handout.pdf=https://drive.google.com/file/d/<id>/view"
             )
             raise DeckzError(msg)
         if (pdf := by_name.get(name)) is None:
             msg = (
-                f"--link {request}: the deck builds no {name}. "
+                f"{request}: the deck builds no {name}. "
                 "`deckz upload --reserve --dry-run` lists those it reserves links "
                 "for, `--lang` selects the languages"
             )
             raise DeckzError(msg)
         if (known := registry.get(pdf)) is not None and known != found:
             msg = (
-                f"--link {request}: {name} has a link already ({link(known)}), "
+                f"{request}: {name} has a link already ({link(known)}), "
                 f"in {paths.drive_links}, which handed-out PDFs may show: it "
                 "keeps it. Remove its line there first if no PDF showing it was "
                 "ever handed out"
             )
             raise DeckzError(msg)
         if (other := adopted.get(pdf)) is not None and other != found:
-            msg = f"--link {request}: {name} is given two links"
+            msg = f"{request}: {name} is given two links"
             raise DeckzError(msg)
         if known is None:
             adopted[pdf] = found
@@ -121,12 +122,74 @@ def adoptions(
         owner = taken.setdefault(found, pdf)
         if owner != pdf:
             msg = (
-                f"--link: {owner.relative_to(paths.current_dir)} and "
+                f"{owner.relative_to(paths.current_dir)} and "
                 f"{pdf.relative_to(paths.current_dir)} would share one Drive file "
                 f"({found}): give each PDF its own"
             )
             raise DeckzError(msg)
     return adopted
+
+
+def links_file(path: Path, git_dir: Path) -> dict[Path, list[str]]:
+    """The requests of a `deckz upload --reserve --links` file, by deck.
+
+    The file maps each PDF's path in the repository to its Drive link \
+    (`decks/x/pdf/x-handout.pdf: https://drive.google.com/file/d/<id>/view`). \
+    A PDF's deck is the closest directory above it with a `deck.yml`.
+
+    Args:
+        path: The file.
+        git_dir: The repository's root.
+
+    Returns:
+        Each deck's directory, mapped to its `<pdf>=<link>` requests (as \
+        `adoptions` takes them).
+
+    Raises:
+        DeckzError: If the file isn't a mapping of paths to links, a path is \
+            in no deck, or two PDFs are given the same file.
+    """
+    if not path.is_file():
+        msg = f"--links {path}: no such file"
+        raise DeckzError(msg)
+    entries = load_yaml(path) or {}
+    if not isinstance(entries, dict) or not all(
+        isinstance(key, str) and isinstance(value, str)
+        for key, value in entries.items()
+    ):
+        msg = (
+            f"--links {path}: it should map each PDF's path in the repository to "
+            "its Drive link, e.g. `decks/x/pdf/x-handout.pdf: "
+            "https://drive.google.com/file/d/<id>/view`"
+        )
+        raise DeckzError(msg)
+    by_deck: dict[Path, list[str]] = {}
+    given: dict[str, str] = {}
+    for name, value in entries.items():
+        pdf = git_dir / name
+        deck = next(
+            (
+                parent
+                for parent in pdf.parents
+                if parent.is_relative_to(git_dir) and (parent / "deck.yml").is_file()
+            ),
+            None,
+        )
+        if deck is None:
+            msg = (
+                f"--links {path}: {name} is in no deck (no deck.yml above it): give "
+                "its path from the repository's root"
+            )
+            raise DeckzError(msg)
+        file_id = parse_file_id(value.strip())
+        if file_id is not None and (other := given.setdefault(file_id, name)) != name:
+            msg = (
+                f"--links {path}: {other} and {name} would share one Drive file "
+                f"({file_id}): give each PDF its own"
+            )
+            raise DeckzError(msg)
+        by_deck.setdefault(deck, []).append(f"{name}={value}")
+    return by_deck
 
 
 def load(settings: DeckSettings) -> dict[Path, str]:
