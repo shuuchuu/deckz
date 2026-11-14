@@ -8,7 +8,7 @@ from pytest import CaptureFixture, MonkeyPatch, fixture, raises
 
 from deckz.analyzing.content_checks import course_notes_code
 from deckz.cli import main
-from deckz.code_runner import examples, matches, programs
+from deckz.code_runner import Block, examples, matches, programs
 from deckz.configuring.settings import (
     CourseNotesCodeSettings,
     CourseNotesSettings,
@@ -338,6 +338,26 @@ def test_a_data_file_block_is_written_without_its_name_line(repo: Path) -> None:
 ```
 """
     assert _check(repo, chapter) == []
+
+
+def test_a_slash_comment_header_names_a_non_python_file(repo: Path) -> None:
+    chapter = """# C
+
+```c
+// somme.c
+int main(void) { return 0; }
+```
+
+```pycon
+>>> open("somme.c").read()
+'int main(void) { return 0; }\\n'
+```
+"""
+    assert _check(repo, chapter) == []
+
+
+def test_a_slash_comment_header_doesnt_name_a_python_file() -> None:
+    assert Block(1, ("python",), "// main.py\nx = 1\n", None).file_name is None
 
 
 def test_programs_speak_english(repo: Path, monkeypatch: MonkeyPatch) -> None:

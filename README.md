@@ -1028,7 +1028,8 @@ reader typing it in would: `pycon` sessions prompt by prompt, `python` blocks
 whole, all in one namespace, and compares each with the output the chapter
 shows (a `text` block right after a `python` one; `...` matches any text; a
 shown error counts by its last line). A block whose first line names a file
-(`# greeting.py`) is written to that file. A `console` block runs command by
+(`# greeting.py`, or `// hello.c` for a `//`-comment language) is written to
+that file. A `console` block runs command by
 command (each after `$ `, its output under it, as an 80-column terminal shows
 it) when `commands` lists every program it runs. `{.python .no-run}` keeps a
 block from running, `{.pycon

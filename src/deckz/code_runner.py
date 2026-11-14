@@ -15,8 +15,8 @@ a reader typing them in would:
 - a block whose first line names a file (`# bavard.py`, `# integrer.pyx`) is that
   file: it's written to the working directory, for the blocks after it to import
   or read, and runs as a script (in a namespace of its own) only when an output
-  block follows it; a file other than Python source (`# exemple.txt`, `#
-  somme.c`) is written without that first line;
+  block follows it; a file other than Python source (`# exemple.txt`, `//
+  somme.c`, the comment of its language) is written without that first line;
 - each ```` ```console ```` block, command by command (each after `$ `, its
   output under it), when every program it runs is one `--command` allows: in the
   working directory, with the interpreter's own programs (`python`, `pytest`)
@@ -81,7 +81,7 @@ OUTPUT_VARIES = "output-varies"
 _OUTPUT_LANGS = frozenset({"text", "output"})
 _FLAGS = doctest.ELLIPSIS
 _FENCE = re.compile(r"^(?P<fence>`{3,}|~{3,})[ \t]*(?P<info>[^\n]*)\n", re.MULTILINE)
-_FILE_HEADER = re.compile(r"#\s*(?P<name>[\w.-]+(?:/[\w.-]+)*\.\w+)\s*")
+_FILE_HEADER = re.compile(r"(?P<mark>#|//)\s*(?P<name>[\w.-]+(?:/[\w.-]+)*\.\w+)\s*")
 _PYTHON_SUFFIXES = (".py", ".pyi", ".pyx", ".pxd")
 _PROMPT = "$ "
 _UV_RUN = re.compile(r"(^|[|&;(]\s*)((?:\w+=\S*\s+)*)uv run (?=[^-\s])")
@@ -108,10 +108,14 @@ class Block:
 
     @property
     def file_name(self) -> str | None:
-        # The file a block is, from a first line like `# bavard.py`.
+        # The file a block is, from a first line like `# bavard.py`, or `//
+        # somme.c` in a language whose comments start with `//` (never a
+        # Python source, which keeps that line).
         first = self.body.split("\n", 1)[0]
         match = _FILE_HEADER.fullmatch(first)
         if match is None or ".." in match["name"].split("/"):
+            return None
+        if match["mark"] == "//" and match["name"].endswith(_PYTHON_SUFFIXES):
             return None
         return match["name"]
 

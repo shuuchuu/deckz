@@ -67,7 +67,8 @@ shown under it (`...` stands for any text: an address, a long tail), and each `p
 block, compared with the `text` block right after it, or else expected to print
 nothing. A shown error counts by its last line. A block whose first line names a file
 (`# greeting.py`) is written to that file, for the blocks after it to import (a file
-other than Python source, `# example.txt`, without that first line). The programs run
+other than Python source, `# example.txt` or `// hello.c` for a language whose comments
+start with `//`, without that first line). The programs run
 in English (`LC_ALL=C.UTF-8`), as on Colab. A `console` block runs command by command
 (`$ pytest -v`, its output under it, as an 80-column terminal shows it: line-buffered,
 `ls` in columns) when `course_notes.code.commands` lists every
