@@ -25,7 +25,7 @@ def _code(source: str) -> dict[str, Any]:
     return {"cell_type": "code", "metadata": {}, "source": source, "outputs": []}
 
 
-@mark.parametrize("line", [_FETCH, _PIPED_FETCH])
+@mark.parametrize("line", [_FETCH, _PIPED_FETCH, f"{_FETCH}/seg_test"])
 def test_the_dataset_fetch_is_recognized_in_both_forms(line: str) -> None:
     assert DATASET_FETCH.fullmatch(line)
 
@@ -38,6 +38,7 @@ def test_the_dataset_fetch_is_recognized_in_both_forms(line: str) -> None:
         _FETCH.replace("-O /tmp/ghsparse.sh", "-O /tmp/other.sh"),
         _FETCH.replace("shuuchuu/datasets", "someone/datasets"),
         f"{_PIPED_FETCH} && git push",
+        f"{_FETCH}/ && rm -rf ~",
     ],
 )
 def test_the_dataset_fetch_is_recognized_exactly(line: str) -> None:

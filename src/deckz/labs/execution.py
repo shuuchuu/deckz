@@ -148,11 +148,13 @@ del __deckz_smoke
 
 
 _GHSPARSE = r"https://github\.com/shuuchuu/datasets/raw/refs/heads/main/ghsparse\.sh"
+# A dataset's directory, or one of its subdirectories (`landscape/seg_test`).
+_DATA_DIR = r"[\w.-]+(?:/[\w.-]+)*"
 DATASET_FETCH = re.compile(
-    rf"wget -q {_GHSPARSE} -O /tmp/ghsparse\.sh && bash /tmp/ghsparse\.sh [\w.-]+"
+    rf"wget -q {_GHSPARSE} -O /tmp/ghsparse\.sh && bash /tmp/ghsparse\.sh {_DATA_DIR}"
     # The older form: `bash` exits 0 when `wget` fails (it reads an empty script),
     # and dash, Colab's `sh`, has no `pipefail`, so the failure showed a cell later.
-    rf"|wget -qO- {_GHSPARSE} \| bash -s [\w.-]+"
+    rf"|wget -qO- {_GHSPARSE} \| bash -s {_DATA_DIR}"
 )
 """The repo's standard dataset fetch (see labs/README.md), exactly: the local runner's
 `bash` runs nothing else."""
