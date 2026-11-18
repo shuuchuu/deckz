@@ -88,5 +88,7 @@ user's config directory and the machine's slots.
 - pandoc, git, manim, ffmpeg, ssh and the repository's declared commands run as
   subprocesses.
 - Repository-wide analyses that parse every deck (`deck-definitions`, `utils.all_decks`)
-  use a process pool (`utils.create_pool`).
+  use a process pool (`utils.create_pool`); one that needs both languages parses them
+  in a single pool (`utils.all_decks_by_lang`), each pool spawning its processes and
+  importing deckz again.
 - Fragments render in threads inside a deck's build.

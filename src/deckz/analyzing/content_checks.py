@@ -473,12 +473,20 @@ def lab_urls(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
     if published is None and not repos:
         return []
     git_dir = settings.paths.git_dir
+    patterns = [pattern for _, pattern in repos]
+    if published is not None:
+        patterns.append(published)
     problems = []
     files = [*_content_files(settings, paths), *_course_notes_files(settings, paths)]
     for path in files:
         text = path.read_text(encoding="utf-8")
+        # A line matching matches in the whole text too: most files have no
+        # link at all, and are read once instead of line by line.
+        if not any(pattern.search(text) for pattern in patterns):
+            continue
+        rel = _rel(path, git_dir)
         for lineno, line in enumerate(text.splitlines(), 1):
-            where = f"{_rel(path, git_dir)}:{lineno}"
+            where = f"{rel}:{lineno}"
             if published is not None and published.search(line):
                 problems.append(
                     f"{where}: hand-written link to the "

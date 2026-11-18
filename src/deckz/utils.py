@@ -345,12 +345,30 @@ def all_decks(git_dir: Path, lang: "Lang" = "fr") -> dict[Path, "ParsedDeck"]:
     Returns:
         The parsed decks, keyed by their directory relative to `git_dir`.
     """
-    from functools import partial
+    return all_decks_by_lang(git_dir, (lang,))[lang]
 
+
+def all_decks_by_lang(
+    git_dir: Path, langs: Iterable["Lang"]
+) -> dict["Lang", dict[Path, "ParsedDeck"]]:
+    """Parse every deck of the repository in each of `langs`, as `all_decks` does.
+
+    One pool parses them all: each pool started spawns its processes and
+    imports deckz in them again, which costs about as much as the parsing.
+
+    Returns:
+        For each language, the parsed decks keyed by their directory \
+        relative to `git_dir`.
+    """
+    langs = tuple(dict.fromkeys(langs))
+    settings = list(all_deck_settings(git_dir))
+    jobs = [(deck, lang) for lang in langs for deck in settings]
     with create_pool() as pool:
-        return dict(
-            pool.map(partial(parse_deck, lang=lang), list(all_deck_settings(git_dir)))
-        )
+        parsed = pool.starmap(parse_deck, jobs)
+    found: dict[Lang, dict[Path, ParsedDeck]] = {lang: {} for lang in langs}
+    for (_, lang), (path, deck) in zip(jobs, parsed, strict=True):
+        found[lang][path] = deck
+    return found
 
 
 def all_deck_settings(git_dir: Path) -> Iterator["DeckSettings"]:

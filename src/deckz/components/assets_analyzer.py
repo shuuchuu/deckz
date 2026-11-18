@@ -14,7 +14,7 @@ from ..models import (
     Section,
     UnresolvedPath,
 )
-from ..utils import all_decks, load_yaml
+from ..utils import all_decks_by_lang, load_yaml
 from .protocols import AssetsAnalyzerProtocol, RendererProtocol
 
 
@@ -45,8 +45,8 @@ class AssetsAnalyzer(AssetsAnalyzerProtocol):
         # en decks can reference assets their fr counterparts don't.
         return [
             parsed
-            for lang in get_args(Lang)
-            for parsed in all_decks(self._git_dir, lang).values()
+            for decks in all_decks_by_lang(self._git_dir, get_args(Lang)).values()
+            for parsed in decks.values()
         ]
 
     def _section_assets(

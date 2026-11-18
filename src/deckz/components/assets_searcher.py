@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import get_args
 
 from ..models import Lang, ParsedDeck, ResolvedPath
-from ..utils import all_decks, create_pool
+from ..utils import all_decks_by_lang, create_pool
 from .deck_builder import PartDependenciesNodeVisitor
 from .protocols import AssetsSearcherProtocol, RendererProtocol
 
@@ -21,8 +21,8 @@ class AssetsSearcher(AssetsSearcherProtocol):
         # en decks can reference assets their fr counterparts don't.
         decks = [
             parsed
-            for lang in get_args(Lang)
-            for parsed in all_decks(self._git_dir, lang).values()
+            for decks in all_decks_by_lang(self._git_dir, get_args(Lang)).values()
+            for parsed in decks.values()
         ]
         with create_pool() as pool:
             return reduce(set.union, pool.map(f, decks), set())

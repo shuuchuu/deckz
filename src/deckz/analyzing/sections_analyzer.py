@@ -11,6 +11,7 @@ from ..models import (
     Lang,
     Node,
     NodeVisitor,
+    ParsedDeck,
     Part,
     PartName,
     ResolvedPath,
@@ -18,7 +19,7 @@ from ..models import (
     SectionDefinition,
     UnresolvedPath,
 )
-from ..utils import all_decks, content_dirs, content_files, load_yaml
+from ..utils import all_decks_by_lang, content_dirs, content_files, load_yaml
 
 if TYPE_CHECKING:
     from ..configuring.settings import GlobalSettings
@@ -67,6 +68,7 @@ class SectionsAnalyzer:
         self._shared_content_dir = shared_content_dir
         self._git_dir = git_dir
         self._file_extensions = tuple(file_extensions)
+        self._parsed_decks: dict[Lang, dict[Path, ParsedDeck]] = {}
 
     def unused_flavors(self) -> dict[UnresolvedPath, set[FlavorName]]:
         unused_flavors = {
@@ -165,9 +167,17 @@ class SectionsAnalyzer:
             )
         return totals
 
+    def _parsed(self, langs: Iterable[Lang]) -> dict[Lang, dict[Path, ParsedDeck]]:
+        # Every deck in `langs`, each language parsed once whatever asks for
+        # it, those not parsed yet in a single pool (`all_decks_by_lang`).
+        if missing := [lang for lang in langs if lang not in self._parsed_decks]:
+            self._parsed_decks |= all_decks_by_lang(self._git_dir, missing)
+        return {lang: self._parsed_decks[lang] for lang in langs}
+
     @cached_property
     def _decks(self) -> Mapping[Path, Deck]:
-        return {path: parsed.deck for path, parsed in all_decks(self._git_dir).items()}
+        (parsed,) = self._parsed(["fr"]).values()
+        return {path: deck.deck for path, deck in parsed.items()}
 
     @cached_property
     def _shared_sections(self) -> dict[UnresolvedPath, SectionDefinition]:
@@ -199,8 +209,8 @@ class SectionsAnalyzer:
         """Files some deck resolves to, in fr or in en."""
         files_usage_processor = _FilesUsageNodeVisitor()
         used: set[ResolvedPath] = set()
-        for lang in get_args(Lang):
-            for parsed in all_decks(self._git_dir, lang).values():
+        for decks in self._parsed(get_args(Lang)).values():
+            for parsed in decks.values():
                 used.update(files_usage_processor.process(parsed.deck))
         return frozenset(used)
 
