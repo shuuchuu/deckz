@@ -12,10 +12,12 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ..processes import POLL_SECONDS, MemoryWatch, gib, kill_tree, scratch_parent
 from .inspecting import roles
 from .needs import RunNeeds, run_needs
 from .notebook import cell_source
@@ -392,8 +394,14 @@ def run_notebook(
     *,
     smoke: bool,
     timeout: int,
+    memory_max: int | None = None,
 ) -> Iterator[str]:
     """Run every code cell of `notebook`.
+
+    The run happens in a scratch directory, its `HOME` and `TMPDIR` (the
+    models and data sets it downloads), off `/tmp` when that is in memory
+    (`processes.scratch_parent`). A run whose processes use more than
+    `memory_max` bytes is stopped.
 
     Yields:
         The run's report lines (see `report_lines`).
@@ -403,31 +411,58 @@ def run_notebook(
         for i, (cell, role) in enumerate(zip(notebook["cells"], labels, strict=True))
         if cell.get("cell_type") == "code"
     ]
-    with tempfile.TemporaryDirectory() as tmp:
+    with (
+        tempfile.TemporaryDirectory(dir=scratch_parent()) as tmp,
+        tempfile.TemporaryFile(dir=scratch_parent()) as stderr_file,
+    ):
         spec = Path(tmp) / "cells.json"
         spec.write_text(json.dumps(cells))
         runner = Path(tmp) / "runner.py"
         runner.write_text(runner_source())
-        try:
-            proc = subprocess.run(
-                [python, str(runner), str(spec), *(["--smoke"] if smoke else [])],
-                cwd=tmp,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                env={"MPLBACKEND": "Agg", "PATH": "/usr/bin:/bin", "HOME": tmp},
-                check=False,
-            )
-        except subprocess.TimeoutExpired as e:
-            # What ran before the timeout still counts. (`stderr` is bytes here,
-            # whatever `text` says.)
-            stderr = e.stderr or b""
-            yield f"  execution timed out after {timeout}s, cells run until then:"
-            yield from report_lines(
-                stderr.decode() if isinstance(stderr, bytes) else stderr, 0
-            )
-            return
-    yield from report_lines(proc.stderr, proc.returncode)
+        proc = subprocess.Popen(
+            [python, str(runner), str(spec), *(["--smoke"] if smoke else [])],
+            cwd=tmp,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=stderr_file,
+            env={
+                "MPLBACKEND": "Agg",
+                "PATH": "/usr/bin:/bin",
+                "HOME": tmp,
+                "TMPDIR": tmp,
+            },
+            start_new_session=True,
+        )
+        watch = MemoryWatch(proc.pid, memory_max)
+        deadline = time.monotonic() + timeout
+        stopped = None
+        while proc.poll() is None:
+            if watch.over():
+                used, limit = gib(watch.peak), gib(watch.memory_max or 0)
+                stopped = (
+                    "  execution stopped: its processes went over "
+                    f"labs.memory_max ({used} > {limit}), "
+                    "cells run until then (raise the limit in deckz.yml if the "
+                    "machine has room, or run the notebook on a GPU machine, "
+                    "`deckz labs gpu`):"
+                )
+            elif time.monotonic() > deadline:
+                stopped = (
+                    f"  execution timed out after {timeout}s, cells run until then:"
+                )
+            if stopped:
+                kill_tree(proc.pid)
+                proc.wait()
+                break
+            time.sleep(POLL_SECONDS)
+        stderr_file.seek(0)
+        stderr = stderr_file.read().decode(errors="replace")
+    if stopped:
+        # What ran before the stop still counts.
+        yield stopped
+        yield from report_lines(stderr, 0)
+        return
+    yield from report_lines(stderr, proc.returncode)
 
 
 def check_notebook(
@@ -441,6 +476,7 @@ def check_notebook(
     name: str | None = None,
     run_settings: "LabsRunSettings | None" = None,
     hooks_cwd: Path | None = None,
+    memory_max: int | None = None,
 ) -> Iterator[str]:
     """Structural checks plus an execution report for one notebook.
 
@@ -450,7 +486,8 @@ def check_notebook(
     `name` (default: the file's name; see `labs.container`), its run needs
     (`labs.needs`, read as `run_settings` says) met, its hooks run from
     `hooks_cwd` (default: the current directory). This module's runner
-    skips the shell commands needing them: it fills none, and says so.
+    skips the shell commands needing them: it fills none, and says so; it
+    stops a run whose processes use more than `memory_max` bytes.
 
     Yields:
         One report line per problem or execution result.
@@ -481,7 +518,14 @@ def check_notebook(
     if container is None:
         if asked := [*sorted(set(needs.envs.values())), *_hook_names(needs)]:
             yield f"  run needs left unfilled without --container: {', '.join(asked)}"
-        yield from run_notebook(notebook, labels, python, smoke=smoke, timeout=timeout)
+        yield from run_notebook(
+            notebook,
+            labels,
+            python,
+            smoke=smoke,
+            timeout=timeout,
+            memory_max=memory_max,
+        )
         return
     from .container import run_with_needs
 

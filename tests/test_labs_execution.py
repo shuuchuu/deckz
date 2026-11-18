@@ -288,3 +288,24 @@ def test_cli_check_counts_deprecations_only_when_asked(
     out = capsys.readouterr().out
     assert "1 notebook(s) with problems:\n  demo.ipynb" in out
     assert "warnings only" not in out
+
+
+def test_a_run_over_memory_max_is_stopped_after_the_cells_it_ran(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "demo.ipynb"
+    _write_notebook(
+        path,
+        [
+            _code("x = 1"),
+            _code("import time\nbig = b'x' * 400 * 2**20\ntime.sleep(30)"),
+        ],
+    )
+
+    lines = list(
+        check_notebook(path, python=sys.executable, timeout=60, memory_max=200 * 2**20)
+    )
+
+    stopped = [line for line in lines if "labs.memory_max" in line]
+    assert stopped
+    assert is_problem(stopped[0])

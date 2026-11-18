@@ -63,6 +63,11 @@ helpers (`parse_deck`, `all_decks`, `all_deck_settings`) belong to a higher laye
 [Known exceptions](index.md#known-exceptions)). A new helper about one domain goes in
 that domain's module, not here.
 
+[`processes`][deckz.processes], beside it, watches the memory of a child process and its
+descendants (`labs.memory_max`, `course_notes.code.memory_max`): deckz stops a run of code
+it didn't write itself, with a message, rather than leave the kernel's OOM killer to pick
+a process. It also keeps a run's scratch directory off a `/tmp` in memory.
+
 ## `render_inputs`
 
 [`render_inputs`][deckz.render_inputs] tells a fragment's output from its source's: what

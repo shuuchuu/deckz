@@ -112,6 +112,7 @@ def check(
             name=f"{lab_id}.ipynb" if lab_id else None,
             run_settings=settings.labs.run,
             hooks_cwd=settings.paths.git_dir,
+            memory_max=settings.labs.memory_max,
         ):
             print(line)
             if is_problem(line, deprecations=deprecations):

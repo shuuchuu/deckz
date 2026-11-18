@@ -269,6 +269,36 @@ time.sleep(60)
     assert "after 1 s, stopped: mark the block" in problems[0]
 
 
+def test_a_chapter_over_memory_max_is_stopped_at_its_example(repo: Path) -> None:
+    chapter = """# C
+
+```python
+import time
+big = b"x" * 400 * 2**20
+time.sleep(20)
+```
+"""
+
+    problems = _check(repo, chapter, timeout=30, memory_max=200 * 2**20)
+
+    assert len(problems) == 1
+    assert problems[0].startswith("course-notes/topic/chapter.md:3: ")
+    assert "went over course_notes.code.memory_max" in problems[0]
+
+
+def test_env_reaches_the_chapter_with_its_scratch_directory(repo: Path) -> None:
+    chapter = """# C
+
+```pycon
+>>> import os
+>>> os.environ["WHERE"].endswith("/spark") and os.path.isdir(os.environ["WHERE"][:-6])
+True
+```
+"""
+
+    assert _check(repo, chapter, env={"WHERE": "{scratch}/spark"}) == []
+
+
 def test_an_interpreter_that_cant_start_names_the_setting(repo: Path) -> None:
     problems = _check(
         repo, "# C\n\n```pycon\n>>> 1\n1\n```\n", python=("no-such-python-here",)

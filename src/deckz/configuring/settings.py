@@ -332,6 +332,13 @@ class LabsSettings(BaseModel):
     repos: tuple[LabRepoSettings, ...] = ()
     """The labs with a repository of their own, which the `lab-urls` check \
     keeps content from linking by hand, and `deckz labs repos` reports on."""
+    memory_max: ByteSize | None = None
+    """Stop a notebook run on this machine (`deckz labs check` without \
+    `--container`) whose processes use more memory than this, e.g. `6GiB`.
+
+    The run then reports the cells it got through and the limit, instead of \
+    the machine running out of memory (the kernel's OOM killer stopping any \
+    process). Checked every half second, on Linux only. Unset: no limit."""
     repo_link_hint: str | None = None
     """What the `lab-urls` check says to write instead of a hand-written \
     link to a lab's repository, with `{lab}` filled in, e.g. the call of a \
@@ -708,6 +715,16 @@ class CourseNotesCodeSettings(BaseModel):
     timeout: int = 30
     """Seconds one example may run (a `pycon` prompt, a `python` block, a \
     console command)."""
+    memory_max: ByteSize | None = None
+    """Stop a chapter whose processes (its interpreter and what it starts, \
+    Spark's JVM) use more memory than this, e.g. `3GiB`, and report it, \
+    instead of the machine running out of memory. Checked every half \
+    second, on Linux only. Unset: no limit."""
+    env: dict[str, str] = Field(default_factory=dict)
+    """Environment variables for the chapters' interpreter, `{scratch}` \
+    standing for the chapter's scratch directory, deleted after its run \
+    (e.g. `SPARK_LOCAL_DIRS: "{scratch}/spark"`: Spark's shuffle files \
+    otherwise go to `/tmp`, which may be in memory)."""
     jobs: int = 4
     """Chapters run at the same time. Each loads its libraries and data: \
     lower it for chapters with big data sets."""

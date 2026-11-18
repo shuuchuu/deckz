@@ -19,7 +19,6 @@ import json
 import os
 import re
 import shutil
-import signal
 import subprocess
 import time
 from collections.abc import Iterable, Sequence
@@ -27,9 +26,10 @@ from concurrent.futures import ThreadPoolExecutor
 from os.path import relpath
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from . import code_runner
+from .processes import POLL_SECONDS, MemoryWatch, gib, kill_tree, scratch_parent
 
 if TYPE_CHECKING:
     from .configuring.settings import DatasetsSettings, GlobalSettings
@@ -363,7 +363,7 @@ def _run(settings: "GlobalSettings", chapter: Path) -> list[str]:
     data, problems = _datasets(settings, texts, rel)
     if any("doesn't exist" in problem for problem in problems):
         return problems
-    with TemporaryDirectory(prefix="deckz-code-") as scratch:
+    with TemporaryDirectory(prefix="deckz-code-", dir=scratch_parent()) as scratch:
         work = Path(scratch) / "work"
         work.mkdir()
         for file in setup_files:
@@ -408,6 +408,10 @@ def _execute(
         "NO_COLOR": "1",
         "QT_QPA_PLATFORM": "offscreen",
         "LC_ALL": "C.UTF-8",
+        **{
+            name: value.replace("{scratch}", str(result.parent))
+            for name, value in settings.course_notes.code.env.items()
+        },
     }
     try:
         process = subprocess.Popen(
@@ -424,9 +428,20 @@ def _execute(
             f"{rel}: can't run {command[0]} ({error}): set "
             "course_notes.code.python in deckz.yml to a command running Python"
         ]
-    timed_out = _wait(process, progress, timeout + _GRACE)
+    watch = MemoryWatch(process.pid, settings.course_notes.code.memory_max)
+    stop = _wait(process, progress, timeout + _GRACE, watch)
     _, stderr = process.communicate()
-    if timed_out:
+    if stop == "memory":
+        where = progress.read_text(encoding="utf-8") if progress.is_file() else rel
+        used, limit = gib(watch.peak), gib(watch.memory_max or 0)
+        return [
+            f"{_relative_where(where, git_dir)}: the chapter's processes went over "
+            f"course_notes.code.memory_max ({used} > {limit}) "
+            "at this example, stopped: make the example lighter (less data, "
+            "fewer partitions, `spark.driver.memory`), or raise the limit in "
+            "deckz.yml if the machine has room"
+        ]
+    if stop == "time":
         if not progress.is_file():
             return [
                 f"{rel}: the interpreter hasn't started after {_STARTUP_LIMIT} s, "
@@ -464,10 +479,16 @@ def _relative_where(where: str, git_dir: Path) -> str:
     return f"{_rel(Path(path), git_dir)}:{line}" if path else where
 
 
-def _wait(process: subprocess.Popen[bytes], progress: Path, limit: int) -> bool:
-    # Wait for `process`; kill its session and return True once it has stayed
-    # on one example for more than `limit` seconds, or hasn't reached its first
-    # one after `_STARTUP_LIMIT`. The runner writes the example it starts into
+def _wait(
+    process: subprocess.Popen[bytes],
+    progress: Path,
+    limit: int,
+    watch: MemoryWatch,
+) -> Literal["time", "memory"] | None:
+    # Wait for `process`; kill it with what it started once it has stayed on
+    # one example for more than `limit` seconds, or hasn't reached its first
+    # one after `_STARTUP_LIMIT` ("time"), or once `watch` finds them over its
+    # limit ("memory"). The runner writes the example it starts into
     # `progress`.
     current: str | None = None
     since = time.monotonic()
@@ -476,12 +497,13 @@ def _wait(process: subprocess.Popen[bytes], progress: Path, limit: int) -> bool:
         at = progress.read_text(encoding="utf-8") if progress.is_file() else None
         if at != current:
             current, since = at, now
-        if now - since > (_STARTUP_LIMIT if current is None else limit):
-            os.killpg(process.pid, signal.SIGKILL)
+        over = watch.over()
+        if over or now - since > (_STARTUP_LIMIT if current is None else limit):
+            kill_tree(process.pid)
             process.wait()
-            return True
-        time.sleep(0.2)
-    return False
+            return "memory" if over else "time"
+        time.sleep(POLL_SECONDS)
+    return None
 
 
 def check_chapters(settings: "GlobalSettings", chapters: Iterable[Path]) -> list[str]:

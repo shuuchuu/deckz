@@ -996,6 +996,13 @@ course_notes:
              "{git_dir}/requirements.txt", "{with}", python]
     timeout: 30  # seconds per example
     jobs: 4      # chapters at a time
+    # Stop a chapter whose processes (Spark's JVM included) use more than
+    # this, with a message naming the example. Unset: no limit.
+    memory_max: 3GiB
+    # Environment variables for the chapters, `{scratch}` standing for the
+    # chapter's scratch directory (Spark writes its shuffle files to `/tmp`).
+    env:
+      SPARK_LOCAL_DIRS: "{scratch}/spark"
     # What chapters need first: chapters whose code runs before theirs (the
     # example data they build), or files linked into the working directory.
     setup:
@@ -1593,7 +1600,12 @@ The main commands:
 - `deckz labs check [--smoke] [--python INTERPRETER] [--container]
   [--timeout SECONDS] NOTEBOOKS...`: structural checks (uncollapsed/empty
   solution sections, stored error outputs) plus an execution of every code
-  cell, in a throwaway directory, reporting which cells raise; it exits
+  cell, in a throwaway directory (its `HOME` and `TMPDIR`, so the models
+  and data sets it downloads; under `/var/tmp` when `/tmp` is a tmpfs and
+  `TMPDIR` is unset, not to fill the memory), reporting which cells raise
+  (`labs.memory_max`, e.g. `6GiB`, stops a run whose processes use more,
+  with the cells run until then, instead of the machine running out of
+  memory; checked every half second, on Linux only); it exits
   with code 1 on any problem, a failed shell command included (but
   `nvidia-smi` on a CPU), and lists the notebooks that have one. `--smoke`
   caps every Lightning `Trainer` to one short epoch, a Lightning the
