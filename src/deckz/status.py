@@ -960,16 +960,13 @@ def deck_status(
     Returns:
         `(the deck, the sections)`.
     """
-    from .analyzing.affected import deck_findings, reaches
+    from .analyzing.affected import deck_check_findings, reaches
     from .analyzing.i18n_stale import stale_files
-    from .components.factory import GlobalSettingsFactory
 
     where = settings.paths.current_dir.relative_to(settings.paths.git_dir)
     sections = {}
     if checks:
-        found = deck_findings(
-            settings, GlobalSettingsFactory(settings).checks_runner().findings()
-        )
+        found = deck_check_findings(settings)
         found.sort(key=lambda finding: not finding.blocking)
         summary = (
             f"{_count(len(found), 'problem')} in the deck's files: fix them before "

@@ -105,6 +105,58 @@ def deck_assets(settings: "DeckSettings") -> set[Path]:
     return found
 
 
+def deck_check_paths(settings: "DeckSettings") -> list[Path]:
+    """The files the content checks look at for the deck of `settings`.
+
+    Those `deck_findings` keeps the problems of: the files the deck resolves
+    to and their English siblings, every file under its directory (git's,
+    tracked or not ignored), and the assets it shows (`deck_assets`, each
+    metadata file with the files of its name). The checks given them skip
+    what no deck file needs (e.g. the repository's Python tooling), which a
+    run on the whole repository spends most of its time on.
+
+    Returns:
+        Their absolute paths, sorted.
+    """
+    import subprocess
+
+    deck_dir = settings.paths.current_dir.resolve()
+    found: set[Path] = set()
+    for path in deck_files(settings):
+        resolved = path.resolve()
+        found.add(resolved)
+        if (english := resolved.parent / "en" / resolved.name).is_file():
+            found.add(english)
+    listed = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        cwd=deck_dir,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    found |= {deck_dir / name for name in listed.split("\0") if name}
+    for metadata in deck_assets(settings):
+        found.add(metadata)
+        found.update(metadata.parent.glob(f"{metadata.stem}.*"))
+    return sorted(found)
+
+
+def deck_check_findings(settings: "DeckSettings") -> list["Finding"]:
+    """The content checks' problems about the deck of `settings`' files.
+
+    `deck_findings` of the checks run on `deck_check_paths`, not on the whole
+    repository: what `deckz upload` refuses a deck for, and `deckz status
+    <deck>` lists.
+
+    Returns:
+        Them, check by check.
+    """
+    from ..components.factory import GlobalSettingsFactory
+
+    runner = GlobalSettingsFactory(settings).checks_runner()
+    return deck_findings(settings, runner.findings(paths=deck_check_paths(settings)))
+
+
 def deck_findings(
     settings: "DeckSettings", findings: Iterable["Finding"]
 ) -> list["Finding"]:

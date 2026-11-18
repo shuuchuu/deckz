@@ -52,6 +52,50 @@ def test_deck_assets_are_those_its_content_shows_in_either_language(
     }
 
 
+def test_deck_check_paths_are_the_deck_files_and_the_assets_it_shows(
+    bilingual: DeckSettings,
+) -> None:
+    from deckz.analyzing.affected import deck_check_paths
+
+    deck_dir = bilingual.paths.current_dir.resolve()
+    _show(deck_dir / "content" / "hello.md", "img/logo")
+    assets = bilingual.paths.assets_dir.resolve()
+    (assets / "img" / "logo.yml").write_text("title: Logo\n")
+    (assets / "img" / "logo.png").write_bytes(b"")
+    (assets / "img" / "other.yml").write_text("title: Other\n")
+
+    paths = deck_check_paths(bilingual)
+
+    assert {
+        deck_dir / "deck.yml",
+        deck_dir / "content" / "hello.md",
+        deck_dir / "content" / "en" / "hello.md",
+        assets / "img" / "logo.yml",
+        assets / "img" / "logo.png",
+    } <= set(paths)
+    git_dir = bilingual.paths.git_dir.resolve()
+    assert git_dir / "content" / "questions.md" not in paths
+    assert assets / "img" / "other.yml" not in paths
+
+
+def test_deck_check_findings_reports_the_deck_problems_only(
+    bilingual: DeckSettings,
+) -> None:
+    from deckz.analyzing.affected import deck_check_findings
+
+    _show(bilingual.paths.current_dir / "content" / "hello.md", "img/logo")
+    latex = "title: Logo\nauthor: \\textbf{Me}\n"
+    for asset in ("logo", "other"):
+        (bilingual.paths.assets_dir / "img" / f"{asset}.yml").write_text(latex)
+
+    found = [
+        f.text for f in deck_check_findings(bilingual) if f.check == "asset-credits"
+    ]
+
+    assert len(found) == 1
+    assert found[0].startswith("assets/img/logo.yml:2:")
+
+
 def test_deck_findings_keeps_a_problem_in_an_asset_the_deck_shows(
     bilingual: DeckSettings,
 ) -> None:

@@ -102,8 +102,7 @@ def upload(
             or a file another PDF has.
     """
     from .. import drive_links
-    from ..analyzing.affected import deck_findings
-    from ..components.factory import GlobalSettingsFactory
+    from ..analyzing.affected import deck_check_findings
     from ..configuring.settings import DeckSettings
     from ..exceptions import DeckzError
     from ..extras import extras_imports
@@ -162,9 +161,7 @@ def upload(
         if skip_checks
         else [
             f"{finding.check}: {finding.text}"
-            for finding in deck_findings(
-                settings, GlobalSettingsFactory(settings).checks_runner().findings()
-            )
+            for finding in deck_check_findings(settings)
         ]
     )
     if dry_run:

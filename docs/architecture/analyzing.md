@@ -73,9 +73,12 @@ flowchart TB
   directory. Both commands accept `--skip-checks`.
 - `ChecksRunner.findings()` gives each problem as a `Finding`: its check, whether it
   blocks, and `path`, the file its text starts with. The gates filter findings by that
-  path: `deckz upload` keeps those of the files that reach the deck
-  (`affected.deck_findings`, `affected.reaches`), `deckz labs publish` those under the
-  notebooks directory, and `deckz status DECK` (`status.deck_status`) the deck's.
+  path: `deckz upload` and `deckz status DECK` (`status.deck_status`) keep those of
+  the files that reach the deck (`affected.deck_findings`, `affected.reaches`), and
+  `deckz labs publish` those under the notebooks directory. The two deck gates run
+  the checks on the deck's files only (`affected.deck_check_findings`, given
+  `affected.deck_check_paths`): a run on the whole repository spends most of its time
+  on files no deck includes (the repository's Python tooling, other decks' content).
 - A check in `checks.opt_in` (a slow, networked, or not yet passing check) runs only
   when named on the command line: `deckz check`, the pre-commit hook and the post-edit
   agent hook skip it (`ChecksSettings.runs_unnamed`). The built-in opt-in checks
