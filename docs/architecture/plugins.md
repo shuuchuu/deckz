@@ -60,10 +60,22 @@ In shuuchuu/slides, the plugins and scripts import:
 | `deckz.exceptions` | `DeckzError` |
 | `deckz.models` | `File`, `Node`, `NodeInclude`, `Section`, `SectionDefinition`, `SectionInclude`… |
 | `deckz.render_inputs` | `depends_on`, `depends_on_json`, `depends_on_presence` |
+| `deckz.run_cache` | `shared` |
+| `deckz.analyzing.sections_analyzer` | `SectionsAnalyzer` |
+| `deckz.analyzing.findings` | `fiche` |
 | `deckz.stamps` | `digest`, `is_fresh`, `python_sources`, `write_stamp` |
-| `deckz.utils` | `all_decks`, `load_yaml`, `copy_file_if_changed`, `import_module_and_submodules` |
+| `deckz.utils` | `all_decks`, `load_yaml`, `repo_files`, `copy_file_if_changed`, `import_module_and_submodules` |
 | `deckz.videos` | `register_scene`, `scenes`, `renders`, `video_file`, `quality`, `site_path`, `fetch_published`, `published_blobs`, `unpublished_reason` |
-| `deckz.labs.notebook` | `canonical_dump` |
+| `deckz.labs.notebook` | `canonical_dump`, `read_notebook` |
+
+A repository's check shares the work of the run it's part of by calling deckz's shared
+functions rather than doing it again: `utils.repo_files` (what git would commit),
+`utils.all_deck_settings` and `all_decks`, `labs.notebook.read_notebook`. In a run of
+checks (`run_cache.shared_run`), each computes once, whichever check asks first; what
+they return is read-only. A repository's own preprocessing step shared by several of
+its checks takes `run_cache.shared` likewise. A check that waits on a subprocess (a type
+checker) can be listed under `checks.in_thread`, to run alongside the others; it must
+then leave the process's state alone (no `redirect_stdout`, no `chdir`).
 
 To check what a repository uses before changing one of these names, run `git grep -E
 "(from|import) deckz"` in the repository.

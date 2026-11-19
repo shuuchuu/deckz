@@ -31,6 +31,8 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
+from ..run_cache import shared
+
 _ID_ALPHABET = string.ascii_letters + string.digits + "-_"
 
 
@@ -51,6 +53,19 @@ def notebook_paths(paths: Iterable[Path]) -> Iterator[Path]:
         else:
             found.add(path)
     yield from sorted(found)
+
+
+@shared
+def read_notebook(path: Path) -> dict[str, Any]:
+    """A notebook's JSON, read once per run of checks (`run_cache`).
+
+    The checks of a run read every notebook, a dozen times over: never change
+    what this returns (`Notebook` and `fmt_notebook` read their own copy).
+
+    Returns:
+        The parsed notebook.
+    """
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _make_cell_id() -> str:

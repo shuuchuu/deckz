@@ -56,7 +56,97 @@ def test_check_staged_only_counts_the_deferred_problems(
         main(("check", "--staged"))  # Should not raise: raw-latex is deferred.
 
     assert capsys.readouterr().out == ""
-    assert "1 problem of deferred checks (raw-latex 1)" in caplog.text
+    assert "1 problem of deferred checks in the staged files (raw-latex 1)" in (
+        caplog.text
+    )
+
+
+def _commit_all(repo: Path) -> None:
+    import subprocess
+
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "x"],
+        cwd=repo,
+        check=True,
+    )
+
+
+def test_check_staged_counts_the_deferred_problems_of_the_staged_files_only(
+    repo: Path, capsys: CaptureFixture[str], caplog: LogCaptureFixture
+) -> None:
+    import subprocess
+
+    _write(repo / "content" / "topic" / "old.tex", r"\section{x}")
+    _commit_all(repo)
+    _write(repo / "content" / "topic" / "new.tex", r"\section{x}")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+
+    with caplog.at_level("INFO"):
+        main(("check", "--staged"))
+
+    assert "1 problem of deferred checks in the staged files (raw-latex 1)" in (
+        caplog.text
+    )
+    main(("check", "--plain"))  # Without --staged: the whole backlog.
+    assert len(capsys.readouterr().out.splitlines()) == 2
+
+
+def test_check_staged_leaves_out_the_checks_needing_other_files(
+    repo: Path, capsys: CaptureFixture[str], caplog: LogCaptureFixture
+) -> None:
+    import subprocess
+
+    _write(repo / "deckz.yml", "checks:\n  not_after_edit: [raw-latex]\n")
+    _write(repo / "content" / "topic" / "notes.tex", r"\section{x}")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+
+    with caplog.at_level("INFO"):
+        main(("check", "--staged"))
+
+    assert "raw-latex not run on a commit (checks.not_after_edit" in caplog.text
+    assert "problem of deferred checks" not in caplog.text
+
+
+def test_check_staged_runs_blocking_checks_on_the_whole_export(
+    repo: Path, capsys: CaptureFixture[str]
+) -> None:
+    import subprocess
+
+    _write(repo / "deckz.yml", "checks:\n  deferred: []\n")
+    _write(repo / "content" / "topic" / "old.tex", r"\section{x}")
+    _commit_all(repo)
+    _write(repo / "content" / "topic" / "notes.md", "# Notes\n")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+
+    with raises(SystemExit) as exc_info:
+        main(("check", "--staged", "--plain"))
+
+    assert exc_info.value.code == 1
+    assert "old.tex" in capsys.readouterr().out
+
+
+def test_check_timings_report_each_check(
+    repo: Path, capsys: CaptureFixture[str]
+) -> None:
+    main(("check", "content", "--json", "--timings"))
+
+    found = json.loads(capsys.readouterr().out)
+    assert set(found["timings"]["raw-latex"]) == {"cpu", "wall"}
+    assert "deck-definitions" in found["timings"]
+
+
+def test_a_check_in_a_thread_reports_as_the_others(
+    repo: Path, capsys: CaptureFixture[str]
+) -> None:
+    _write(repo / "deckz.yml", "checks:\n  in_thread: [raw-latex, jinja-syntax]\n")
+    _write(repo / "content" / "topic" / "notes.tex", r"\section{x}")
+
+    main(("check", "content", "--plain"))
+
+    out = capsys.readouterr().out.splitlines()
+    assert len(out) == 1
+    assert out[0].startswith("deferred\traw-latex\tcontent/topic/notes.tex: ")
 
 
 def test_check_content_plain_reports_a_problem(

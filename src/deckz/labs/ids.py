@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from ..exceptions import LabIdConflictError
-from .notebook import canonical_dump
+from .notebook import canonical_dump, read_notebook
 
 
 def _get_metadata_id(metadata: dict[str, Any], key: str) -> str | None:
@@ -143,7 +143,7 @@ def assign_ids(
     ids: dict[str, list[Path]] = defaultdict(list)
     missing: list[Path] = []
     for path in sorted(notebooks_dir.rglob("*.ipynb")):
-        metadata = json.loads(path.read_text(encoding="utf-8"))["metadata"]
+        metadata = read_notebook(path)["metadata"]
         existing = _get_metadata_id(metadata, id_metadata_key)
         if existing:
             ids[existing].append(path)

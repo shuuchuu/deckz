@@ -68,6 +68,14 @@ descendants (`labs.memory_max`, `course_notes.code.memory_max`): deckz stops a r
 it didn't write itself, with a message, rather than leave the kernel's OOM killer to pick
 a process. It also keeps a run's scratch directory off a `/tmp` in memory.
 
+[`run_cache`][deckz.run_cache], below them, shares the work of one run of checks:
+inside `shared_run()`, a function decorated with `shared` computes its result once per
+arguments, for every check that asks (the repository's files, its decks, its
+notebooks), and `run_resource` keeps a process pool open until the run ends. Outside a
+run, a shared function computes on every call: a long process (`--watch`, studioz)
+never gets a stale result. `load_yaml` keeps what it read, by path and stat, and hands
+out copies.
+
 ## `render_inputs`
 
 [`render_inputs`][deckz.render_inputs] tells a fragment's output from its source's: what

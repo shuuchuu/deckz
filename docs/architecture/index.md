@@ -14,7 +14,7 @@ The [guide](../guide/index.md) is for the people running a deckz-managed reposit
 | [Analyses and checks](analyzing.md) | `analyzing`: read-only analyses, content checks |
 | [Components](components.md) | `components`: protocols, factories, and their implementations |
 | [Domain libraries](libraries.md) | `labs`, `videos`, `sessions`, `upstream`, `extras`, `worktrees`, `commits`, `remotes`, `agent_loop` |
-| [Foundations](foundations.md) | `configuring`, `models`, `exceptions`, `utils`, `processes`, `stamps`, `drive_links` |
+| [Foundations](foundations.md) | `configuring`, `models`, `exceptions`, `utils`, `processes`, `run_cache`, `stamps`, `drive_links` |
 | [The repository's plugins](plugins.md) | What a deckz-managed repository plugs in, and what it may import |
 | [studioz](studioz.md) | How studioz uses deckz |
 | [Files and concurrency](state.md) | What deckz writes, where, and who else may be writing it |
@@ -72,9 +72,10 @@ flowchart TB
     low["<b>drive_links</b> | <b>stamps</b>"]
     configuring["<b>configuring</b><br/>settings, variables"]
     utils["<b>utils</b> | <b>processes</b>"]
+    runcache["<b>run_cache</b><br/>work shared by one run's checks"]
     exceptions["<b>exceptions</b>"]
     models["<b>models</b> | <b>code_runner</b>"]
-    cli --> agent --> pushing --> tasks --> pipelines --> analyzing --> mid --> upstream --> components --> inputs --> low --> configuring --> utils --> exceptions --> models
+    cli --> agent --> pushing --> tasks --> pipelines --> analyzing --> mid --> upstream --> components --> inputs --> low --> configuring --> utils --> runcache --> exceptions --> models
 ```
 
 Imports into deckz's core are mostly lazy (inside the function that needs them), so

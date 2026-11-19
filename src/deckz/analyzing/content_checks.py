@@ -22,7 +22,6 @@ knows about (the content/labs directory layout, `labs.*` settings, the
 Markdown-to-Typst/HTML pipeline, asset metadata yaml files).
 """
 
-import json
 import re
 from collections.abc import Callable, Collection, Iterable, Iterator
 from pathlib import Path, PurePosixPath
@@ -31,11 +30,12 @@ from typing import TYPE_CHECKING, Any
 from ..exceptions import LabIdConflictError
 from ..labs.comparison import compare_pairs, missing_notebooks
 from ..labs.ids import assign_ids
-from ..labs.notebook import notebook_paths
+from ..labs.notebook import notebook_paths, read_notebook
 from ..utils import content_dirs, content_files, is_content_file
 
 if TYPE_CHECKING:
     from ..configuring.settings import DeckSettings, GlobalSettings
+    from ..exceptions import DeckzError
 
 _CREDIT_LINE = re.compile(r"^\s*(title|author|license)(_en)?\s*:.*\\[a-zA-Z{]")
 _LATEX_BLOCK = re.compile(r"^[ \t]*```+[ \t]*\{=latex\}", re.MULTILINE)
@@ -108,9 +108,11 @@ def lab_ids(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
         )
     except LabIdConflictError as error:
         return [str(error)]
+    wanted = None if paths is None else set(paths)
     return [
         f"{_rel(path, dirs.git_dir)}: no valid ID (run `deckz labs ids`)"
         for _, path in missing
+        if wanted is None or path in wanted
     ]
 
 
@@ -120,13 +122,21 @@ def lab_pairs(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
         return []
     notebooks_dir = settings.paths.labs_notebooks_dir
     git_dir = settings.paths.git_dir
+    # Given notebooks: the pairs of their labs only (comparing every pair
+    # tokenizes 3,000 code cells).
+    lab_dirs = (
+        ()
+        if paths is None
+        else tuple(sorted({p.parent for p in paths if _is_notebook(settings, p)}))
+    )
     problems = [
         f"{_rel(notebooks_dir / path, git_dir)}: missing: translate the other "
         "language's notebook into it (a copy without its ID metadata, then "
         "`deckz labs ids`)"
         for path in missing_notebooks(notebooks_dir)
+        if not lab_dirs or (notebooks_dir / path).parent in lab_dirs
     ]
-    for stem, pair_problems in compare_pairs(notebooks_dir):
+    for stem, pair_problems in compare_pairs(notebooks_dir, lab_dirs):
         where = _rel(notebooks_dir / stem, git_dir)
         lab_dir = _rel((notebooks_dir / stem).parent, git_dir)
         problems += [
@@ -148,7 +158,7 @@ def lab_outputs(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
         kind, _, _lang = path.stem.rpartition("-")
         if kind not in {"hands-on", "demo"}:
             continue
-        notebook = json.loads(path.read_text(encoding="utf-8"))
+        notebook = read_notebook(path)
         cells = notebook.get("cells", [])
         code_cells = [cell for cell in cells if cell.get("cell_type") == "code"]
         has_outputs = any(cell.get("outputs") for cell in code_cells)
@@ -233,7 +243,7 @@ def lab_secrets(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
     git_dir = settings.paths.git_dir
     problems = []
     for path in _notebooks(settings, paths):
-        notebook = json.loads(path.read_text(encoding="utf-8"))
+        notebook = read_notebook(path)
         problems += [
             f"{_rel(path, git_dir)}: {finding}: remove it, revoke it if it was "
             "real, and list it in labs.not_secrets if it isn't a secret"
@@ -365,29 +375,19 @@ def jinja_syntax(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
     return problems
 
 
-def _deck_problems(settings: "DeckSettings") -> list[str]:
-    from ..components.factory import DeckSettingsFactory
-    from ..configuring.variables import get_variables
-    from ..exceptions import DeckParsingError, DeckzError
+def _deck_problems(settings: "DeckSettings", error: "DeckzError") -> list[str]:
+    from ..exceptions import DeckParsingError
 
     git_dir = settings.paths.git_dir
-    definition = settings.paths.deck_definition
-    where = _rel(definition, git_dir)
-    try:
-        DeckSettingsFactory(settings, lang="fr").parser().from_deck_definition(
-            definition
-        )
-        get_variables(settings, "fr")
-    except DeckParsingError as error:
+    where = _rel(settings.paths.deck_definition, git_dir)
+    if isinstance(error, DeckParsingError):
         return [
             f"{where}: {problem.replace(f'{git_dir}/', '')}: fix the definition,"
             " or restore what it names"
             for problem in error.errors
         ]
-    except DeckzError as error:
-        message = str(error).replace(f"{git_dir}/", "")
-        return [message if message.startswith(where) else f"{where}: {message}"]
-    return []
+    message = str(error).replace(f"{git_dir}/", "")
+    return [message if message.startswith(where) else f"{where}: {message}"]
 
 
 def deck_definitions(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
@@ -396,23 +396,26 @@ def deck_definitions(settings: "GlobalSettings", paths: Paths = None) -> list[st
     # variables.yml. A deleted shared file still included, or a section
     # .yml that doesn't parse, fails here rather than in every build of
     # the decks using it. English is `missing-en`'s (a plugin's, slow).
-    # About a second for 43 decks, in deckz's process pool. Of `paths`,
-    # only a YAML file changes what parses: an existing content file can't.
+    # About a second for 43 decks, in deckz's process pool; the decks
+    # parsed are shared with the run's other checks (`unused-content`'s
+    # analyses: `utils.deck_results`). Of `paths`, only a YAML file changes
+    # what parses: an existing content file can't.
     from ..exceptions import DeckzError
-    from ..utils import all_deck_settings, create_pool
+    from ..utils import deck_results
 
     if not _any(paths, lambda path: path.suffix in {".yml", ".yaml"}):
         return []
     git_dir = settings.paths.git_dir
     try:
-        decks = list(all_deck_settings(git_dir))
+        results = deck_results(git_dir, "fr")
     except DeckzError as error:
         return [str(error).replace(f"{git_dir}/", "")]
-    if not decks:
-        return []
-    with create_pool(min(len(decks), 4)) as pool:
-        found = pool.map(_deck_problems, decks)
-    return [problem for deck in found for problem in deck]
+    return [
+        problem
+        for deck, result in results
+        if isinstance(result, DeckzError)
+        for problem in _deck_problems(deck, result)
+    ]
 
 
 def _published_notebooks_slug(settings: "GlobalSettings") -> str | None:
@@ -481,7 +484,16 @@ def lab_urls(settings: "GlobalSettings", paths: Paths = None) -> list[str]:
     for path in files:
         text = path.read_text(encoding="utf-8")
         # A line matching matches in the whole text too: most files have no
-        # link at all, and are read once instead of line by line.
+        # link at all, and are read once instead of line by line. And before
+        # the patterns (case-insensitive, slow on 3,500 files), the literal
+        # text one of them needs: a lab repository's host, the slug as is.
+        lowered = text.lower()
+        if not (
+            "github.com" in lowered
+            or "codespaces.new" in lowered
+            or (slug is not None and slug in text)
+        ):
+            continue
         if not any(pattern.search(text) for pattern in patterns):
             continue
         rel = _rel(path, git_dir)

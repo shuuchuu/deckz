@@ -1,9 +1,13 @@
+from collections.abc import Collection
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from cyclopts import Parameter
 
 from . import app
+
+if TYPE_CHECKING:
+    from ...configuring.settings import GlobalSettings
 
 
 @app.command(name="content")
@@ -16,6 +20,7 @@ def content(
         tuple[Path, ...], Parameter(consume_multiple=True, negative="")
     ] = (),
     staged: bool = False,
+    timings: bool = False,
     plain: bool = False,
     json: bool = False,
     workdir: Path = Path(),
@@ -63,10 +68,20 @@ def content(
             hide a problem that would otherwise be committed. A check
             needing the repository's git history or remotes (e.g.
             `lab-urls`) does nothing under `--staged`, since the export has
-            no `.git` of its own. The deferred checks' problems, which
-            aren't about the commit, are then only counted, and a check
-            of `checks.staged_triggers` runs, unless named, only when a
-            staged change matches one of its patterns
+            no `.git` of its own. Unless checks are named, the blocking
+            checks then read the whole export, but the deferred ones only
+            the staged files, and their problems are only counted: the
+            rest of their backlog isn't the commit's (`deckz status` lists
+            it). Those of `checks.not_after_edit`, whose verdict depends on
+            other files, don't run. A check of `checks.staged_triggers`
+            runs, unless named, only when a staged change matches one of
+            its patterns
+        timings: Also print what each check cost, slowest first: its CPU
+            time (deckz's and its subprocesses') and its wall-clock time.
+            The checks then all run one after the other, none in a thread
+            (`checks.in_thread`), so that each one's CPU time is its own;
+            the process pool parsing the decks for several checks gets a row
+            of its own, `(shared process pool)`
         plain: Compact, stable lines for a script or an agent, instead of
             one header per failing check: `blocking` or `deferred`, the
             check's name and the problem, separated by tabs
@@ -75,12 +90,11 @@ def content(
         workdir: Path to move into before running the command
 
     """
-    from logging import getLogger
     from sys import exit as sys_exit
     from sys import stderr
 
     from ...checking import export_staged, staged_changes
-    from ...components.checks import run_check
+    from ...components.checks import CheckTiming, run_checks
     from ...components.factory import GlobalSettingsFactory
     from ...configuring.settings import GlobalSettings
     from .._presentation import print_checks
@@ -105,24 +119,17 @@ def content(
     if unknown := [name for name in selected if name not in available]:
         print(f"unknown checks {unknown}: pick from {sorted(available)}", file=stderr)
         sys_exit(2)
+    jobs: dict[str, Collection[Path] | None] = dict.fromkeys(selected, paths)
     if checks is None and changed is not None:
-        skipped = [
-            name
-            for name in selected
-            if not settings.checks.runs_on_staged(name, changed)
-        ]
-        for name in skipped:
-            patterns = ", ".join(settings.checks.staged_triggers[name])
-            getLogger(__name__).info(
-                f"{name} not run: no staged change matches its "
-                f"checks.staged_triggers ({patterns})"
-            )
-        selected = [name for name in selected if name not in skipped]
+        jobs = _staged_jobs(settings, jobs, changed)
 
+    costs: dict[str, CheckTiming] | None = {} if timings else None
     results = {
         name: problems
-        for name in selected
-        if (problems := run_check(available[name], paths))
+        for name, problems in run_checks(
+            available, jobs, in_thread=settings.checks.in_thread, timings=costs
+        ).items()
+        if problems
     }
     blocking = {
         name: problems
@@ -133,6 +140,51 @@ def content(
         name: problems for name, problems in results.items() if name not in blocking
     }
 
-    print_checks(blocking, deferred, plain=plain, json=json, count_deferred=staged)
+    print_checks(
+        blocking,
+        deferred,
+        plain=plain,
+        json=json,
+        count_deferred=staged,
+        timings=costs,
+    )
     if blocking:
         sys_exit(1)
+
+
+def _staged_jobs(
+    settings: "GlobalSettings",
+    jobs: dict[str, Collection[Path] | None],
+    changed: Collection[str],
+) -> dict[str, Collection[Path] | None]:
+    # `deckz check --staged` run unnamed: a check of `staged_triggers` only for
+    # the changes that decide it; a deferred one on the staged files alone
+    # (their problems are only counted), unless its verdict depends on others.
+    from logging import getLogger
+
+    logger = getLogger(__name__)
+    checks = settings.checks
+    # `settings` are the export's (`export_staged`).
+    staged_paths = [settings.paths.git_dir / path for path in changed]
+    found: dict[str, Collection[Path] | None] = {}
+    left_out = []
+    for name, paths in jobs.items():
+        if not checks.runs_on_staged(name, changed):
+            patterns = ", ".join(checks.staged_triggers[name])
+            logger.info(
+                f"{name} not run: no staged change matches its "
+                f"checks.staged_triggers ({patterns})"
+            )
+        elif checks.blocking(name) or paths is not None:
+            found[name] = paths
+        elif name in checks.not_after_edit:
+            left_out.append(name)
+        else:
+            found[name] = staged_paths
+    if left_out:
+        logger.info(
+            f"{', '.join(left_out)} not run on a commit (checks.not_after_edit: "
+            "their verdict depends on files the commit doesn't change; `deckz "
+            "status` runs them)"
+        )
+    return found

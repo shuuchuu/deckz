@@ -88,6 +88,32 @@ def test_lab_pairs_flags_a_structural_difference(tmp_path: Path) -> None:
     assert "1 cells in fr, 0 in en" in problems[0]
 
 
+def test_lab_pairs_given_notebooks_compares_their_labs_only(tmp_path: Path) -> None:
+    init_repository(str(tmp_path))
+    notebooks = tmp_path / "labs" / "notebooks"
+    for lab in ("a", "b"):
+        _write(notebooks / lab / "demo-fr.ipynb", '{"metadata": {}, "cells": []}')
+    given = notebooks / "a" / "demo-fr.ipynb"
+
+    problems = lab_pairs(_settings(tmp_path), paths=[given])
+
+    assert len(problems) == 1
+    assert "labs/notebooks/a/demo-en.ipynb" in problems[0]
+    assert len(lab_pairs(_settings(tmp_path))) == 2
+
+
+def test_lab_ids_given_notebooks_reports_only_about_them(tmp_path: Path) -> None:
+    init_repository(str(tmp_path))
+    notebooks = tmp_path / "labs" / "notebooks"
+    for lab in ("a", "b"):
+        _write(notebooks / lab / "demo-fr.ipynb", '{"metadata": {}, "cells": []}')
+
+    problems = lab_ids(_settings(tmp_path), paths=[notebooks / "a" / "demo-fr.ipynb"])
+
+    assert len(problems) == 1
+    assert "labs/notebooks/a/demo-fr.ipynb" in problems[0]
+
+
 def test_lab_outputs_flags_a_hands_on_notebook_with_outputs(tmp_path: Path) -> None:
     init_repository(str(tmp_path))
     code_cell = (

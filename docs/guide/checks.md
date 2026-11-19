@@ -1,8 +1,9 @@
 # Checks
 
-`deckz check` runs every check (the pre-commit hook runs it on the staged files,
-and only counts the deferred checks' problems);
-`deckz check <name>` runs one. Each problem it reports ends with how to fix it.
+`deckz check` runs every check (the pre-commit hook runs it on the staged version of
+the repository: the blocking checks on all of it, the deferred ones on the staged files
+alone, their problems only counted);
+`deckz check <name>` runs one, and `--timings` adds what each check cost. Each problem it reports ends with how to fix it.
 Checks a repository lists under `deckz.yml`'s `checks.opt_in` only run when named (or
 in CI): they're slow, or need the network. So do deckz's own
 `course-notes-code`, which runs the course notes' code, and `review-dated-facts`,
@@ -40,7 +41,12 @@ a repository's own checks block unless it lists them.
 A check listed under `checks.staged_triggers` runs on a commit only when a staged
 change matches one of its patterns (e.g. a type check of the Python tooling, for a
 `.py` file): a commit changing none of the files it reads can't change its verdict.
-CI, and `deckz check` without `--staged`, still run it.
+CI, and `deckz check` without `--staged`, still run it. On a commit, a deferred check
+reads only the staged files: the commit's count is of the problems it can settle, and
+`deckz status` lists the rest; those of `checks.not_after_edit`, whose verdict depends
+on other files (a chapter another one names, a file no deck includes any more), don't
+run. A check of `checks.in_thread` (one that waits on a subprocess, such as a type
+checker) runs alongside the others.
 
 | Check | Blocks a commit | What it guards | Usual fix |
 |---|---|---|---|

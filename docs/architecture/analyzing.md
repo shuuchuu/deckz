@@ -89,7 +89,19 @@ flowchart TB
   each commit. `deckz check --file` passes its files as `paths`.
 - `--staged` runs the checks on the staged tree exported to `.check/staged/`
   (`checking.export_staged`), so another session's unfinished edits neither block a
-  commit nor hide a problem.
+  commit nor hide a problem. Run unnamed, the blocking checks read the whole export,
+  the deferred ones the staged files only (`cli.check.content._staged_jobs`): their
+  problems are only counted, and a commit's count is of what it can settle. Those of
+  `checks.not_after_edit` don't run there, as after an edit.
+- The checks of one run share their work (`components.checks.run_checks`, in a
+  `run_cache.shared_run`): the repository's files (`utils.repo_files`), its decks'
+  settings (`all_deck_settings`), its decks parsed with their errors
+  (`utils.deck_results`: `deck-definitions` reports the errors, `unused-content`'s
+  analyses parse no deck again), its notebooks (`labs.notebook.read_notebook`), each
+  computed once on demand, and the run's process pool. Nothing outlives the run, so a
+  long process never gets a stale result. The checks of `checks.in_thread` run in
+  threads meanwhile; `--timings` runs them all one after the other and reports each
+  one's CPU and wall-clock time.
 
 A new rule about content is a check here (generic) or in the repository's
 `templates/checks.py` (house rule), not a step in a skill or a reviewer's memory.

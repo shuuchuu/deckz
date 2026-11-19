@@ -1148,3 +1148,12 @@ def test_cli_compact_reduces_the_done_findings(repo: Path, capsys: Any) -> None:
     with raises(SystemExit) as exc_info:
         main(("review", "compact", A))
     assert exc_info.value.code == 1
+
+
+def test_a_malformed_front_matter_names_the_line_at_fault(repo: Path) -> None:
+    _write(repo / REPORT, "---\nreviewed: [\n  x: 1\n---\n# Fiche\n")
+
+    (problem,) = header_problems(_settings(repo), None)
+
+    assert problem.startswith(f"{REPORT}: its front matter is not valid YAML")
+    assert "reviewed: [" in problem  # The pure Python loader quotes the line.

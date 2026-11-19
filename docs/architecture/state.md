@@ -90,5 +90,9 @@ user's config directory and the machine's slots.
 - Repository-wide analyses that parse every deck (`deck-definitions`, `utils.all_decks`)
   use a process pool (`utils.create_pool`); one that needs both languages parses them
   in a single pool (`utils.all_decks_by_lang`), each pool spawning its processes and
-  importing deckz again.
+  importing deckz again. In a run of checks, one pool serves the whole run
+  (`run_cache.run_resource`), and each language is parsed once (`utils.deck_results`).
+- `deckz check` runs the checks of `checks.in_thread` (those waiting on a subprocess,
+  such as a type checker) in threads, alongside the others
+  (`components.checks.run_checks`).
 - Fragments render in threads inside a deck's build.

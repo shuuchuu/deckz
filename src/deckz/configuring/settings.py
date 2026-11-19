@@ -653,8 +653,18 @@ class ChecksSettings(BaseModel):
 
     Those whose verdict depends on files written later: the other \
     language's version of the file, a chapter it refers to. Reported after \
-    each edit, they'd ask for that file at once. A name no check has is \
-    ignored."""
+    each edit, they'd ask for that file at once. `deckz check --staged` \
+    (the pre-commit hook) leaves them out too, its deferred checks reading \
+    only the staged files. A name no check has is ignored."""
+    in_thread: tuple[str, ...] = ()
+    """Checks `deckz check` runs in threads, alongside the others.
+
+    Those that wait on a subprocess, e.g. a type checker of the \
+    repository's Python tooling taking most of a run's time: the other \
+    checks run meanwhile. A check doing its work in Python gains nothing \
+    there (the threads would contend for the GIL), and a check run in a \
+    thread must leave the process's state alone (no `redirect_stdout`, no \
+    `chdir`). A name no check has is ignored."""
     staged_triggers: dict[str, tuple[str, ...]] = {}
     """Checks `deckz check --staged` (the pre-commit hook) runs only for some changes.
 

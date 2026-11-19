@@ -31,6 +31,7 @@ from ..models import (
 )
 
 if TYPE_CHECKING:
+    from ..components.checks import CheckTiming
     from ..components.deck_builder import PlannedCompile
     from ..configuring.settings import DeckSettings
     from ..labs.gpu import GpuStatus, RunReport
@@ -527,6 +528,7 @@ def print_checks(
     plain: bool = False,
     json: bool = False,
     count_deferred: bool = False,
+    timings: "Mapping[str, CheckTiming] | None" = None,
 ) -> None:
     """Print `deckz check`'s findings, blocking checks' first.
 
@@ -536,18 +538,26 @@ def print_checks(
     printed) keeps one line in `plain`, its newlines escaped.
 
     `count_deferred` (the pre-commit hook, `deckz check --staged`) keeps the
-    deferred checks to that closing line, with each check's count: they
-    aren't about the commit, and `deckz status` lists them.
+    deferred checks to that closing line, with each check's count: they read
+    the staged files only, and `deckz status` lists the rest.
+
+    `timings` (`--timings`) adds what each check cost, slowest first: a
+    table, a `timings` key (`json`, seconds), or `timing` lines (`plain`).
     """
+    slowest = sorted(
+        (timings or {}).items(), key=lambda item: item[1].cpu, reverse=True
+    )
     if json:
-        print_json({"blocking": blocking, "deferred": deferred})
+        report: dict[str, object] = {"blocking": blocking, "deferred": deferred}
+        if timings is not None:
+            report["timings"] = {
+                name: {"cpu": round(cost.cpu, 3), "wall": round(cost.wall, 3)}
+                for name, cost in slowest
+            }
+        print_json(report)
         return
     if plain:
-        for level, found in (("blocking", blocking), ("deferred", deferred)):
-            for name, problems in found.items():
-                for problem in problems:
-                    one_line = problem.replace("\n", "\\n")
-                    print(f"{level}\t{name}\t{one_line}")
+        _print_plain_checks(blocking, deferred, slowest)
         return
     for found, mark in (
         (blocking, ""),
@@ -568,11 +578,43 @@ def print_checks(
             if count_deferred
             else ""
         )
+        where = " in the staged files" if count_deferred else ""
         getLogger(__name__).info(
-            f"{count} problem{'s' if count > 1 else ''} of deferred checks{by_check}:"
-            " they don't block a commit, fix them before publishing or teaching "
-            "(`deckz status` keeps showing them)"
+            f"{count} problem{'s' if count > 1 else ''} of deferred checks{where}"
+            f"{by_check}: they don't block a commit, fix them before publishing or "
+            "teaching (`deckz status` keeps showing them)"
         )
+    if slowest:
+        _print_timings(slowest)
+
+
+def _print_plain_checks(
+    blocking: Mapping[str, Sequence[str]],
+    deferred: Mapping[str, Sequence[str]],
+    slowest: "Sequence[tuple[str, CheckTiming]]",
+) -> None:
+    for level, found in (("blocking", blocking), ("deferred", deferred)):
+        for name, problems in found.items():
+            for problem in problems:
+                one_line = problem.replace("\n", "\\n")
+                print(f"{level}\t{name}\t{one_line}")
+    for name, cost in slowest:
+        print(f"timing\t{name}\t{cost.cpu:.2f}\t{cost.wall:.2f}")
+
+
+def _print_timings(slowest: "Sequence[tuple[str, CheckTiming]]") -> None:
+    from rich import box
+    from rich.table import Table
+
+    table = Table("check", "CPU (s)", "wall (s)", box=box.SIMPLE)
+    for name, cost in slowest:
+        table.add_row(name, f"{cost.cpu:.2f}", f"{cost.wall:.2f}")
+    table.add_row(
+        "total",
+        f"{sum(cost.cpu for _, cost in slowest):.2f}",
+        f"{sum(cost.wall for _, cost in slowest):.2f}",
+    )
+    Console().print(table)
 
 
 def warn_missing_chapters(settings: "DeckSettings", langs: "Sequence[Lang]") -> None:

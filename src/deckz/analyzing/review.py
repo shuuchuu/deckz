@@ -759,11 +759,19 @@ def _reviewed_value(text: str) -> Any:
     # The front matter's `reviewed` value, None if there's none.
     import yaml
 
+    from ..utils import yaml_safe_loader
+
     front = _front_matter(text)
     if front.start < 0:
         return None
+    header = text[front.start : front.end]
     try:
-        data = yaml.safe_load(text[front.start : front.end])
+        try:
+            data = yaml.load(header, Loader=yaml_safe_loader())
+        except yaml.YAMLError:
+            # libyaml's message doesn't quote the line at fault: the pure Python
+            # loader's does, for the person fixing it.
+            data = yaml.safe_load(header)
     except yaml.YAMLError as error:
         msg = f"its front matter is not valid YAML: {error}"
         raise ReviewError(msg) from error

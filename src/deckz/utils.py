@@ -11,8 +11,11 @@ from threading import Lock
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
+from .run_cache import in_shared_run, run_resource, shared
+
 if TYPE_CHECKING:
     from .configuring.settings import DeckSettings
+    from .exceptions import DeckzError
     from .models import Lang, Node, ParsedDeck
 
 # Modules loaded by `import_module_from_path`, keyed by what makes a reload
@@ -242,23 +245,56 @@ def get_git_dir(path: Path) -> Path:
     return Path(Repository(repository).workdir).resolve()
 
 
-def load_yaml(path: Path) -> Any:
-    from yaml import YAMLError, load
+def yaml_safe_loader() -> type:
+    """PyYAML's safe loader, libyaml's when PyYAML has it.
 
-    try:
-        # libyaml's scanner: a deck loads each section it includes, again for
-        # every deck (1,200 loads for 43 decks), most of their parse time.
-        from yaml import CSafeLoader as SafeLoader
-    except ImportError:  # A PyYAML built without libyaml.
-        from yaml import SafeLoader
+    libyaml's is 8 to 10 times faster than the pure Python one, for the same
+    data: a deck loads each section it includes, again for every deck (1,200
+    loads for 43 decks), and `review-headers` reads every report's header.
+
+    Returns:
+        The loader class, for `yaml.load(text, Loader=...)`.
+    """
+    import yaml
+
+    return getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
+
+# What `load_yaml` read, by path, with the stat that dates it: every deck loads
+# the repository's `deckz.yml` (a thousand lines) and the user's, and a deck
+# parse each section it includes, again for every deck. The stat keeps a long
+# process (`--watch`) reading an edited file anew; one entry per path keeps it
+# from growing with each edit.
+_yaml_cache: dict[Path, tuple[tuple[int, int, int], Any]] = {}
+
+
+def load_yaml(path: Path) -> Any:
+    """Load a YAML file, from a cache while it's unchanged.
+
+    Returns:
+        Its data, a copy of its own the caller may change.
+
+    Raises:
+        InvalidConfigurationError: If it isn't valid YAML.
+    """
+    from copy import deepcopy
+
+    from yaml import YAMLError, load
 
     from .exceptions import InvalidConfigurationError
 
+    stat = path.stat()
+    stamp = (stat.st_mtime_ns, stat.st_size, stat.st_ino)
+    cached = _yaml_cache.get(path)
+    if cached is not None and cached[0] == stamp:
+        return deepcopy(cached[1])
     try:
-        return load(path.read_text(encoding="utf8"), Loader=SafeLoader)
+        data = load(path.read_text(encoding="utf8"), Loader=yaml_safe_loader())
     except (YAMLError, UnicodeDecodeError) as e:
         msg = f"{path} is not valid YAML:\n{e}"
         raise InvalidConfigurationError(msg) from e
+    _yaml_cache[path] = (stamp, data)
+    return deepcopy(data)
 
 
 def load_all_yamls(paths: Iterable[Path]) -> Iterator[Any]:
@@ -355,20 +391,82 @@ def all_decks_by_lang(
 
     One pool parses them all: each pool started spawns its processes and
     imports deckz in them again, which costs about as much as the parsing.
+    In a `shared_run`, each language is parsed once for the whole run, in
+    the run's pool (`deck_results`). The first deck that doesn't parse (in
+    French), or whose variables don't load, raises its error.
 
     Returns:
         For each language, the parsed decks keyed by their directory \
         relative to `git_dir`.
     """
     langs = tuple(dict.fromkeys(langs))
-    settings = list(all_deck_settings(git_dir))
-    jobs = [(deck, lang) for lang in langs for deck in settings]
-    with create_pool() as pool:
-        parsed = pool.starmap(parse_deck, jobs)
-    found: dict[Lang, dict[Path, ParsedDeck]] = {lang: {} for lang in langs}
-    for (_, lang), (path, deck) in zip(jobs, parsed, strict=True):
-        found[lang][path] = deck
+    if in_shared_run():
+        results = {lang: deck_results(git_dir, lang) for lang in langs}
+    else:
+        settings = list(all_deck_settings(git_dir))
+        with create_pool() as pool:
+            results = _parsed_by_lang(settings, langs, pool)
+    found: dict[Lang, dict[Path, ParsedDeck]] = {}
+    for lang, parsed in results.items():
+        found[lang] = {}
+        for _, result in parsed:
+            if isinstance(result, BaseException):
+                raise result
+            path, deck = result
+            found[lang][path] = deck
     return found
+
+
+type DeckResult = tuple[Path, ParsedDeck] | DeckzError
+"""A deck parsed (its directory relative to the repository, and the deck), \
+or why it didn't parse."""
+
+
+@shared
+def deck_results(
+    git_dir: Path, lang: "Lang"
+) -> tuple[tuple["DeckSettings", DeckResult], ...]:
+    """Every deck parsed in `lang` as `parse_deck` does, or the error it raised.
+
+    A deck that doesn't parse leaves the others parsed: `deck-definitions`
+    reports it, and an analysis that needs every deck raises it
+    (`all_decks_by_lang`). Shared in a run (`run_cache`), in the run's pool.
+
+    Returns:
+        Each deck's settings and result, in `all_deck_settings`' order.
+    """
+    settings = list(all_deck_settings(git_dir))
+    if not settings:
+        return ()
+    if in_shared_run():
+        pool = run_resource("deckz.utils.create_pool", create_pool)
+        return _parsed_by_lang(settings, (lang,), pool)[lang]
+    with create_pool() as pool:
+        return _parsed_by_lang(settings, (lang,), pool)[lang]
+
+
+def _parsed_by_lang(
+    settings: list["DeckSettings"], langs: tuple["Lang", ...], pool: Pool
+) -> dict["Lang", tuple[tuple["DeckSettings", DeckResult], ...]]:
+    jobs = [(deck, lang) for lang in langs for deck in settings]
+    parsed = pool.starmap(_parse_deck_or_error, jobs) if jobs else []
+    found: dict[Lang, list[tuple[DeckSettings, DeckResult]]] = {
+        lang: [] for lang in langs
+    }
+    for (deck, lang), result in zip(jobs, parsed, strict=True):
+        found[lang].append((deck, result))
+    return {lang: tuple(results) for lang, results in found.items()}
+
+
+def _parse_deck_or_error(settings: "DeckSettings", lang: "Lang") -> DeckResult:
+    # In a pool's worker: an error comes back as a result, so one deck that
+    # doesn't parse doesn't lose the others' (`DeckParsingError` pickles).
+    from .exceptions import DeckzError
+
+    try:
+        return parse_deck(settings, lang)
+    except DeckzError as error:
+        return error
 
 
 def all_deck_settings(git_dir: Path) -> Iterator["DeckSettings"]:
@@ -376,21 +474,68 @@ def all_deck_settings(git_dir: Path) -> Iterator["DeckSettings"]:
 
     Each deck's own settings are loaded (a deck directory may have its own \
     `deckz.yml`), but the repository root is `git_dir`, not rediscovered.
+    Found once per run (`run_cache`).
 
     Yields:
         Settings of each deck found.
     """
+    yield from _all_deck_settings(git_dir)
+
+
+@shared
+def _all_deck_settings(git_dir: Path) -> tuple["DeckSettings", ...]:
     from os import walk
 
     from .configuring.settings import DeckSettings
 
+    found = []
     for root, dirs, files in walk(git_dir):
         # Skip hidden directories, pruned before descending into them: build
         # directories (`.build`, `.run`) can hold a deck.yml (e.g. a symlink to
         # their deck's) and aren't decks, and `.git`/`.venv` are large.
         dirs[:] = sorted(d for d in dirs if not d.startswith("."))
         if "deck.yml" in files:
-            yield DeckSettings.from_yaml(Path(root), git_dir=git_dir)
+            found.append(DeckSettings.from_yaml(Path(root), git_dir=git_dir))
+    return tuple(found)
+
+
+@shared
+def repo_files(git_dir: Path) -> tuple[str, ...]:
+    """Every file of `git_dir` git would commit, relative to it.
+
+    In a checkout: the tracked files that exist and the untracked ones
+    `.gitignore` doesn't exclude (builds are). In `deckz check --staged`'s
+    export, which has no `.git`: all of them. Listed once per run
+    (`run_cache`), for the checks of a repository's `templates/checks.py`.
+
+    Returns:
+        The paths, POSIX-style, sorted.
+    """
+    import subprocess
+
+    if not (git_dir / ".git").exists():
+        return tuple(
+            sorted(
+                path.relative_to(git_dir).as_posix()
+                for path in git_dir.rglob("*")
+                if not path.is_dir()
+            )
+        )
+    listing = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        cwd=git_dir,
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout
+    # --cached also lists the tracked files deleted from the checkout.
+    return tuple(
+        sorted(
+            path
+            for path in dict.fromkeys(listing.split("\0"))
+            if path and (git_dir / path).exists()
+        )
+    )
 
 
 def section_files(content_dirs: Iterator[Path]) -> Iterator[Path]:

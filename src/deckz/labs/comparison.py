@@ -6,13 +6,12 @@ looks for anything beyond that.
 """
 
 import io
-import json
 import keyword
 import tokenize
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 
-from .notebook import cell_source
+from .notebook import cell_source, read_notebook
 
 LANGS = ("fr", "en")
 
@@ -232,8 +231,8 @@ def pair_problems(fr: Path, en: Path) -> list[str]:
         One message per problem (cell count, cell types, code differing \
         beyond a translation).
     """
-    fr_cells = json.loads(fr.read_text(encoding="utf-8"))["cells"]
-    en_cells = json.loads(en.read_text(encoding="utf-8"))["cells"]
+    fr_cells = read_notebook(fr)["cells"]
+    en_cells = read_notebook(en)["cells"]
     problems = []
     if len(fr_cells) != len(en_cells):
         problems.append(f"{len(fr_cells)} cells in fr, {len(en_cells)} in en")
