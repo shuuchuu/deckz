@@ -68,6 +68,8 @@ def missing_en(
             {"kind": "variable", "status": status, "path": var_path, "key": key}
             for var_path, key, status in variable_gaps(settings)
         )
+    # Shared content several decks include: one gap, reported once.
+    records = list({tuple(record.items()): record for record in records}.values())
 
     if json:
         from .._presentation import print_json

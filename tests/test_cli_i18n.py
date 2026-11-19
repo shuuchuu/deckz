@@ -254,3 +254,18 @@ def test_missing_en_json(working_dir: Path, capsys: CaptureFixture[str]) -> None
     (record,) = loads(capsys.readouterr().out)
     assert record["kind"] == "file"
     assert record["en_path"].endswith("i18n-demo/en/hello.md")
+
+
+def test_missing_en_all_reports_a_shared_file_once(
+    working_dir: Path, capsys: CaptureFixture[str]
+) -> None:
+    # A second deck including the same shared file.
+    other = working_dir.parent / "abc"
+    _write(other / "deck.yml", (working_dir / "deck.yml").read_text(encoding="utf8"))
+    (working_dir.parent.parent / "content/i18n-demo/en/hello.md").unlink()
+
+    with raises(SystemExit):
+        main(("i18n", "missing-en", "--all"))
+
+    (line,) = capsys.readouterr().out.splitlines()
+    assert line.endswith("i18n-demo/en/hello.md")
