@@ -327,6 +327,10 @@ _NIGHTLY_CRON = "0 3 * * *"
 _WEEKLY_CRON = "0 4 * * 0"
 """Sundays, an hour after the nightly checks: `github.event.schedule` tells \
 the two runs apart."""
+NIGHTLY_BASELINE = "deckz-baseline/checks.txt"
+"""The problems the last nightly checks found, relative to the workspace \
+(`actions/cache`'s paths are), which the next night doesn't report again \
+(`deckz check --baseline`)."""
 LABS_VENV = "../labs-venv"
 """The labs' own environment, next to the checkout as the reports are."""
 
@@ -374,10 +378,14 @@ def labs_install_commands(labs: "CiLabsSettings") -> tuple[str, str]:
     return f"uv venv {LABS_VENV} --python {labs.python}", install
 
 
-def _checks_run(ci: "CiSettings", checks: tuple[str, ...], report: str) -> str:
+def _checks_run(
+    ci: "CiSettings", checks: tuple[str, ...], report: str, baseline: str = ""
+) -> str:
     # A scheduled `deckz check` step's script, its output the report when
     # it fails.
     command = f"uv run deckz check --plain {' '.join(checks)}"
+    if baseline:
+        command += f" --baseline ../{baseline}"
     if not ci.report_to:
         return command
     return f"""|
@@ -452,11 +460,32 @@ def ci_workflow(ci: "CiSettings") -> str:
         else ""
     )
     dispatched = "github.event_name == 'workflow_dispatch'"
+    nightly_event = f"github.event.schedule == '{_NIGHTLY_CRON}' || {dispatched}"
+    baseline_key = "deckz-checks-${{ github.run_id }}-${{ github.run_attempt }}"
     nightly = (
         f"""
+      # The problems the last nightly checks found, which these don't report
+      # again: a backlog fails one night, not every night until it's gone.
+      - name: Restore the problems the last nightly checks found
+        if: {nightly_event}
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: {NIGHTLY_BASELINE}
+          key: {baseline_key}
+          restore-keys: deckz-checks-
+
       - name: Nightly checks
-        if: github.event.schedule == '{_NIGHTLY_CRON}' || {dispatched}
-        run: {_checks_run(ci, ci.nightly_checks, "checks.txt")}
+        if: {nightly_event}
+        run: {_checks_run(ci, ci.nightly_checks, "checks.txt", NIGHTLY_BASELINE)}
+
+      # Saved when they fail too, which `actions/cache`'s own post step
+      # doesn't: the problems reported tonight would come back tomorrow.
+      - name: Save the problems the nightly checks found
+        if: ({nightly_event}) && !cancelled()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: {NIGHTLY_BASELINE}
+          key: {baseline_key}
 """
         if ci.nightly_checks
         else ""

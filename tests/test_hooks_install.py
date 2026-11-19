@@ -385,7 +385,10 @@ def test_install_ci_workflow_writes_a_valid_workflow(tmp_path: Path) -> None:
     )
     runs = [step.get("run", "") for step in steps]
     assert "uv run deckz check --plain" in runs
-    assert "uv run deckz check --plain missing-en" in runs
+    assert (
+        "uv run deckz check --plain missing-en --baseline ../deckz-baseline/checks.txt"
+        in runs
+    )
     assert any("deckz hooks check-commits" in run for run in runs)
     # A plain scalar would fold the line continuation into `\ `, which makes
     # the next package's name start with a space.
@@ -397,6 +400,38 @@ def test_install_ci_workflow_writes_a_valid_workflow(tmp_path: Path) -> None:
     assert trust < runs.index("uv run deckz check --plain")
     # Ours: overwritten without --force.
     install_ci_workflow(tmp_path, ci)
+
+
+def test_ci_workflow_keeps_the_nightly_problems_from_one_night_to_the_next() -> None:
+    import yaml
+
+    from deckz.configuring.settings import CiSettings
+    from deckz.hooks_install import ci_workflow
+
+    ci = CiSettings(nightly_checks=("missing-en",), report_to=("me",))
+    steps = yaml.safe_load(ci_workflow(ci))["jobs"]["check"]["steps"]
+    names = [step["name"] for step in steps]
+    restore = names.index("Restore the problems the last nightly checks found")
+    check = names.index("Nightly checks")
+    save = names.index("Save the problems the nightly checks found")
+    assert restore < check < save
+    assert steps[restore]["uses"].startswith("actions/cache/restore@")
+    # Saved by its own step, failed run included: `actions/cache`'s post
+    # step skips a failed job, and the night's problems would come back.
+    assert steps[save]["uses"].startswith("actions/cache/save@")
+    assert steps[save]["if"].endswith(" && !cancelled()")
+    # Relative to the workspace for the cache, to the checkout for deckz.
+    path = steps[restore]["with"]["path"]
+    assert steps[save]["with"]["path"] == path
+    assert f"--baseline ../{path} > checks.txt" in steps[check]["run"]
+    # A key of each run's own (a cache is never overwritten), the last one
+    # restored by its prefix.
+    key = steps[restore]["with"]["key"]
+    assert steps[save]["with"]["key"] == key
+    assert "github.run_id" in key
+    assert key.startswith(steps[restore]["with"]["restore-keys"])
+    # Without nightly checks, none of it.
+    assert "nightly checks found" not in ci_workflow(CiSettings())
 
 
 def test_ci_workflow_builds_the_decks_changed_in_the_week() -> None:
@@ -525,7 +560,9 @@ def test_ci_workflow_runs_the_weekly_checks_on_sundays_only_when_asked() -> None
         )
     )
     names = [s["name"] for s in reporting["jobs"]["check"]["steps"]]
-    assert names.index("Nightly checks") + 1 == names.index("Weekly checks")
+    saved = names.index("Save the problems the nightly checks found")
+    assert names.index("Nightly checks") + 1 == saved
+    assert saved + 1 == names.index("Weekly checks")
     steps = {s["name"]: s for s in reporting["jobs"]["check"]["steps"]}
     run = steps["Weekly checks"]["run"]
     assert "uv run deckz check --plain dead-links > weekly-checks.txt" in run

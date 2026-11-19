@@ -14,6 +14,11 @@ CI (`deckz hooks install --ci`) runs those `ci.nightly_checks` names every night
 and those of `ci.weekly_checks` every Sunday: a check that fetches every link, say,
 costs too many runner minutes for every night, and its problem would come back in the
 issue each night until it's fixed.
+A night only fails on the problems the night before didn't find (`deckz check
+--baseline <file>`, the previous run's list, which CI keeps in its cache): a backlog
+a repository chose to carry (content not translated yet) is reported once, then the
+nights stay green until something new breaks, while `deckz check <name>` still lists
+it all. A problem fixed and then back counts as new.
 No check compiles a deck: when `ci.builds` is set, CI builds every Sunday (or every
 night) the handouts of the decks the period's commits reach, and fails naming the deck
 that doesn't build (`deckz run decks --since <rev>` does the same before you push).

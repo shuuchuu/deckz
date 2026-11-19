@@ -103,9 +103,21 @@ def report_body(
         The body, or None when no report holds anything.
     """
     sections = []
-    for name, title, command in (
-        (CHECKS_REPORT, "Checks", checks_command),
-        (WEEKLY_CHECKS_REPORT, "Weekly checks", weekly_checks_command),
+    for name, title, command, which in (
+        (
+            CHECKS_REPORT,
+            "Checks",
+            checks_command,
+            # `--baseline`: what the previous night's run didn't find.
+            "these problems, new since the previous nightly run (those it"
+            " reported aren't repeated: the command lists them all)",
+        ),
+        (
+            WEEKLY_CHECKS_REPORT,
+            "Weekly checks",
+            weekly_checks_command,
+            "these problems",
+        ),
     ):
         checks = reports_dir / name
         if checks.is_file() and (text := checks.read_text(encoding="utf8").strip()):
@@ -114,7 +126,7 @@ def report_body(
                     [
                         f"# {title} that failed",
                         "",
-                        f"`{command}` reported these problems, each ending with"
+                        f"`{command}` reported {which}, each ending with"
                         " its fix. Run it again to see that they're gone.",
                         "",
                         "```text",

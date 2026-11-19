@@ -23,6 +23,7 @@ def content(
     timings: bool = False,
     plain: bool = False,
     json: bool = False,
+    baseline: Path | None = None,
     workdir: Path = Path(),
 ) -> None:
     """Run deckz's generic content checks, plus the target repo's own plugin ones.
@@ -87,6 +88,14 @@ def content(
             check's name and the problem, separated by tabs
         json: Print the findings as one JSON object, instead: `blocking`
             and `deferred`, each mapping a check's name to its problems
+        baseline: Report only the problems this file doesn't list (the
+            `--plain` lines of an earlier run, e.g. last night's), then
+            rewrite it with every problem found, for the next run: a
+            backlog fails the run, and is printed, once, and a problem
+            fixed then back is new again. No file yet: every problem is new.
+            The scheduled CI checks use it (`deckz hooks install --ci`), so
+            their issue gets what changed rather than the same list every
+            night; `deckz check` without it still lists them all
         workdir: Path to move into before running the command
 
     """
@@ -139,6 +148,8 @@ def content(
     deferred = {
         name: problems for name, problems in results.items() if name not in blocking
     }
+    if baseline is not None:
+        blocking, deferred = _new_since(baseline, blocking, deferred)
 
     print_checks(
         blocking,
@@ -150,6 +161,46 @@ def content(
     )
     if blocking:
         sys_exit(1)
+
+
+type _Found = dict[str, list[str]]
+
+
+def _new_since(
+    baseline: Path, blocking: _Found, deferred: _Found
+) -> tuple[_Found, _Found]:
+    # `--baseline`: what `baseline` doesn't list, then all of it written there.
+    from logging import getLogger
+
+    from .._presentation import plain_check_line, plain_check_lines
+
+    known = (
+        set(baseline.read_text(encoding="utf-8").splitlines())
+        if baseline.is_file()
+        else set()
+    )
+
+    def new(found: _Found, level: str) -> _Found:
+        kept = {
+            name: [
+                problem
+                for problem in problems
+                if plain_check_line(level, name, problem) not in known
+            ]
+            for name, problems in found.items()
+        }
+        return {name: problems for name, problems in kept.items() if problems}
+
+    new_blocking, new_deferred = new(blocking, "blocking"), new(deferred, "deferred")
+    lines = plain_check_lines(blocking, deferred)
+    baseline.parent.mkdir(parents=True, exist_ok=True)
+    baseline.write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
+    if repeated := len(lines) - len(plain_check_lines(new_blocking, new_deferred)):
+        getLogger(__name__).info(
+            f"{repeated} problem{'s' if repeated > 1 else ''} already in {baseline},"
+            " not repeated (`deckz check` without --baseline lists them)"
+        )
+    return new_blocking, new_deferred
 
 
 def _staged_jobs(

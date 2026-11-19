@@ -35,6 +35,8 @@ def test_report_body_holds_the_checks_and_the_builds(tmp_path: Path) -> None:
         " follows. @me\n\n# Checks that failed\n"
     )
     assert "`deckz check --plain missing-en` reported" in body
+    # The nightly checks report what the previous night didn't find.
+    assert "new since the previous nightly run" in body
     assert "content/a.md: no en/a.md" in body
     assert body.endswith("## d, in fr")
 

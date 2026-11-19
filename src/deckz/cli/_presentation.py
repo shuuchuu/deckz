@@ -588,16 +588,39 @@ def print_checks(
         _print_timings(slowest)
 
 
+def plain_check_line(level: str, name: str, problem: str) -> str:
+    """One problem as `deckz check --plain` prints it: tab-separated, one line.
+
+    Returns:
+        Its level (`blocking`, `deferred`), check and problem, newlines escaped.
+    """
+    one_line = problem.replace("\n", "\\n")
+    return f"{level}\t{name}\t{one_line}"
+
+
+def plain_check_lines(
+    blocking: Mapping[str, Sequence[str]], deferred: Mapping[str, Sequence[str]]
+) -> list[str]:
+    """`deckz check --plain`'s problem lines (`plain_check_line`).
+
+    Returns:
+        One line per problem, blocking checks' first.
+    """
+    return [
+        plain_check_line(level, name, problem)
+        for level, found in (("blocking", blocking), ("deferred", deferred))
+        for name, problems in found.items()
+        for problem in problems
+    ]
+
+
 def _print_plain_checks(
     blocking: Mapping[str, Sequence[str]],
     deferred: Mapping[str, Sequence[str]],
     slowest: "Sequence[tuple[str, CheckTiming]]",
 ) -> None:
-    for level, found in (("blocking", blocking), ("deferred", deferred)):
-        for name, problems in found.items():
-            for problem in problems:
-                one_line = problem.replace("\n", "\\n")
-                print(f"{level}\t{name}\t{one_line}")
+    for line in plain_check_lines(blocking, deferred):
+        print(line)
     for name, cost in slowest:
         print(f"timing\t{name}\t{cost.cpu:.2f}\t{cost.wall:.2f}")
 

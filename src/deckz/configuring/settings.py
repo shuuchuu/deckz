@@ -947,7 +947,10 @@ class CiSettings(BaseModel):
     `libcairo2-dev` and `pkg-config` to build pycairo."""
     nightly_checks: tuple[str, ...] = ()
     """Checks too slow for every push (usually some of `checks.opt_in`), run \
-    every night, e.g. `missing-en`."""
+    every night, e.g. `missing-en`. A night fails on the problems the last \
+    one didn't find only (`deckz check --baseline`, its list kept with \
+    `actions/cache`): a backlog is reported once, and `deckz check` lists it \
+    all."""
     weekly_checks: tuple[str, ...] = ()
     """Checks run every Sunday instead, e.g. a dead links check: those too \
     slow, or too costly in runner minutes, for every night, or whose \

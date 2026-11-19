@@ -161,6 +161,46 @@ def test_check_content_plain_reports_a_problem(
     assert out[0].startswith("deferred\traw-latex\tcontent/topic/notes.tex: ")
 
 
+def test_check_baseline_reports_and_fails_on_new_problems_only(
+    repo: Path, capsys: CaptureFixture[str], caplog: LogCaptureFixture
+) -> None:
+    _write(repo / "deckz.yml", "checks:\n  deferred: []\n")
+    _write(repo / "content" / "topic" / "old.tex", r"\section{x}")
+    baseline = repo / "reports" / "baseline.txt"
+
+    # No baseline yet: every problem is new, and the file gets them all.
+    with raises(SystemExit) as exc_info:
+        main(("check", "content", "--plain", "--baseline", str(baseline)))
+    assert exc_info.value.code == 1
+    first = capsys.readouterr().out
+    assert "old.tex" in first
+    assert baseline.read_text(encoding="utf-8") == first
+
+    # The same problem the next run: neither printed nor failing.
+    with caplog.at_level("INFO"):
+        main(("check", "content", "--plain", "--baseline", str(baseline)))
+    assert capsys.readouterr().out == ""
+    assert f"1 problem already in {baseline}, not repeated" in caplog.text
+
+    # A new one fails alone, and the file then holds both.
+    _write(repo / "content" / "topic" / "new.tex", r"\section{y}")
+    with raises(SystemExit) as exc_info:
+        main(("check", "content", "--plain", "--baseline", str(baseline)))
+    assert exc_info.value.code == 1
+    out = capsys.readouterr().out
+    assert "new.tex" in out
+    assert "old.tex" not in out
+    assert "old.tex" in baseline.read_text(encoding="utf-8")
+
+    # Fixed, then back: new again.
+    (repo / "content" / "topic" / "old.tex").unlink()
+    main(("check", "content", "raw-latex", "--plain", "--baseline", str(baseline)))
+    _write(repo / "content" / "topic" / "old.tex", r"\section{x}")
+    with raises(SystemExit):
+        main(("check", "content", "raw-latex", "--plain", "--baseline", str(baseline)))
+    assert "old.tex" in capsys.readouterr().out
+
+
 def test_check_content_fails_on_a_blocking_check(
     repo: Path, capsys: CaptureFixture[str]
 ) -> None:
