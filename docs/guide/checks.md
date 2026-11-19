@@ -37,6 +37,10 @@ checks it names, deferred or not.
 
 `deckz.yml`'s `checks.deferred` changes which checks are deferred (see the README);
 a repository's own checks block unless it lists them.
+A check listed under `checks.staged_triggers` runs on a commit only when a staged
+change matches one of its patterns (e.g. a type check of the Python tooling, for a
+`.py` file): a commit changing none of the files it reads can't change its verdict.
+CI, and `deckz check` without `--staged`, still run it.
 
 | Check | Blocks a commit | What it guards | Usual fix |
 |---|---|---|---|

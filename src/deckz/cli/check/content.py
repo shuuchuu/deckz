@@ -64,7 +64,9 @@ def content(
             needing the repository's git history or remotes (e.g.
             `lab-urls`) does nothing under `--staged`, since the export has
             no `.git` of its own. The deferred checks' problems, which
-            aren't about the commit, are then only counted
+            aren't about the commit, are then only counted, and a check
+            of `checks.staged_triggers` runs, unless named, only when a
+            staged change matches one of its patterns
         plain: Compact, stable lines for a script or an agent, instead of
             one header per failing check: `blocking` or `deferred`, the
             check's name and the problem, separated by tabs
@@ -73,10 +75,11 @@ def content(
         workdir: Path to move into before running the command
 
     """
+    from logging import getLogger
     from sys import exit as sys_exit
     from sys import stderr
 
-    from ...checking import export_staged
+    from ...checking import export_staged, staged_changes
     from ...components.checks import run_check
     from ...components.factory import GlobalSettingsFactory
     from ...configuring.settings import GlobalSettings
@@ -84,8 +87,10 @@ def content(
 
     settings = GlobalSettings.from_yaml(workdir)
     paths = [(workdir / path).resolve() for path in file] or None
+    changed = None
     if staged:
         git_dir = settings.paths.git_dir.resolve()
+        changed = staged_changes(git_dir)
         exported = export_staged(settings.paths.git_dir)
         settings = GlobalSettings.from_yaml(exported, git_dir=exported)
         if paths is not None:
@@ -100,6 +105,19 @@ def content(
     if unknown := [name for name in selected if name not in available]:
         print(f"unknown checks {unknown}: pick from {sorted(available)}", file=stderr)
         sys_exit(2)
+    if checks is None and changed is not None:
+        skipped = [
+            name
+            for name in selected
+            if not settings.checks.runs_on_staged(name, changed)
+        ]
+        for name in skipped:
+            patterns = ", ".join(settings.checks.staged_triggers[name])
+            getLogger(__name__).info(
+                f"{name} not run: no staged change matches its "
+                f"checks.staged_triggers ({patterns})"
+            )
+        selected = [name for name in selected if name not in skipped]
 
     results = {
         name: problems

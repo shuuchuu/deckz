@@ -1,4 +1,5 @@
 import re
+from collections.abc import Iterable
 from datetime import date, datetime
 from functools import reduce
 from pathlib import Path
@@ -654,6 +655,34 @@ class ChecksSettings(BaseModel):
     language's version of the file, a chapter it refers to. Reported after \
     each edit, they'd ask for that file at once. A name no check has is \
     ignored."""
+    staged_triggers: dict[str, tuple[str, ...]] = {}
+    """Checks `deckz check --staged` (the pre-commit hook) runs only for some changes.
+
+    Each check named maps to patterns (`fnmatch`, on paths relative to the \
+    repository, `*` crossing directories): unless named on the command line, \
+    the check runs on a commit only when a staged change (an added, \
+    modified or deleted file) matches one, e.g. a slow type check of the \
+    repository's Python tooling: `["*.py", pyproject.toml, uv.lock]`. A \
+    commit changing nothing it reads can't change its verdict; `deckz \
+    check` without `--staged` (CI) still runs it. A name no check has is \
+    ignored."""
+
+    def runs_on_staged(self, name: str, changed: Iterable[str]) -> bool:
+        """Whether `deckz check --staged`, run unnamed, runs check `name`.
+
+        Args:
+            name: The check.
+            changed: The staged changes, relative to the repository (POSIX).
+
+        Returns:
+            True unless `staged_triggers` lists it and no change matches.
+        """
+        from fnmatch import fnmatchcase
+
+        patterns = self.staged_triggers.get(name)
+        return patterns is None or any(
+            fnmatchcase(path, pattern) for path in changed for pattern in patterns
+        )
 
     def runs_unnamed(self, name: str) -> bool:
         """Whether `deckz check`, run without naming checks, runs check `name`.

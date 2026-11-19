@@ -104,6 +104,30 @@ def export_staged(git_dir: Path) -> Path:
     return target
 
 
+def staged_changes(git_dir: Path) -> list[str]:
+    """The files the next commit adds, modifies or deletes.
+
+    Used by `deckz check --staged` for `checks.staged_triggers`. A rename
+    counts as both of its paths.
+
+    Args:
+        git_dir: Root of the deckz-managed repository.
+
+    Returns:
+        Their paths relative to `git_dir`, POSIX, sorted.
+    """
+    from subprocess import run
+
+    listing = run(
+        ["git", "diff", "--cached", "--name-only", "--no-renames", "-z"],
+        cwd=git_dir,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return sorted(path for path in listing.split("\0") if path)
+
+
 def export_tree(git_dir: Path, commit: str, name: str) -> Path:
     """Export `commit`'s tree into a persistent scratch directory, as `export_staged`.
 

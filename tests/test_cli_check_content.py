@@ -148,3 +148,78 @@ def test_check_content_staged_ignores_unstaged_changes(
     main(("check", "content", "--staged"))
 
     assert capsys.readouterr().out == ""
+
+
+def _stage_raw_latex(repo: Path, triggers: str) -> None:
+    import subprocess
+
+    _write(
+        repo / "deckz.yml",
+        f"checks:\n  deferred: []\n  staged_triggers:\n    raw-latex: {triggers}\n",
+    )
+    _write(repo / "content" / "topic" / "notes.tex", r"\section{x}")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+
+
+def test_check_staged_skips_a_check_no_staged_change_triggers(
+    repo: Path, capsys: CaptureFixture[str], caplog: LogCaptureFixture
+) -> None:
+    _stage_raw_latex(repo, '["*.py"]')
+
+    with caplog.at_level("INFO"):
+        main(("check", "--staged"))
+
+    assert capsys.readouterr().out == ""
+    assert "raw-latex not run: no staged change matches" in caplog.text
+
+
+def test_check_staged_runs_a_check_a_staged_change_triggers(
+    repo: Path, capsys: CaptureFixture[str]
+) -> None:
+    _stage_raw_latex(repo, '["content/*.tex"]')
+
+    with raises(SystemExit) as exc_info:
+        main(("check", "--staged", "--plain"))
+
+    assert exc_info.value.code == 1
+    assert capsys.readouterr().out.startswith("blocking\traw-latex\t")
+
+
+def test_check_staged_runs_a_triggered_check_named(
+    repo: Path, capsys: CaptureFixture[str]
+) -> None:
+    _stage_raw_latex(repo, '["*.py"]')
+
+    with raises(SystemExit) as exc_info:
+        main(("check", "--staged", "raw-latex"))
+
+    assert exc_info.value.code == 1
+
+
+def test_check_without_staged_runs_a_triggered_check(
+    repo: Path, capsys: CaptureFixture[str]
+) -> None:
+    _stage_raw_latex(repo, '["*.py"]')
+
+    with raises(SystemExit) as exc_info:
+        main(("check", "--plain"))
+
+    assert exc_info.value.code == 1
+
+
+def test_staged_changes_list_a_deleted_file(repo: Path) -> None:
+    import subprocess
+
+    from deckz.checking import staged_changes
+
+    _write(repo / "tools" / "a.py", "x = 1\n")
+    _write(repo / "README.md", "x\n")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "x"],
+        cwd=repo,
+        check=True,
+    )
+    subprocess.run(["git", "rm", "-q", "tools/a.py"], cwd=repo, check=True)
+
+    assert staged_changes(repo) == ["tools/a.py"]

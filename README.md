@@ -778,6 +778,19 @@ checks:
   deferred: [lab-ids, lab-pairs, lab-format, asset-credits, raw-latex, lab-frames]
 ```
 
+A slow check whose verdict only some files decide can wait for a commit
+changing one of them: under `checks.staged_triggers`, the pre-commit hook
+(`deckz check --staged`) runs it only when a staged change (added,
+modified or deleted) matches one of its `fnmatch` patterns, on paths
+relative to the repository (`*` crosses directories). Named on the command
+line, or without `--staged` (CI), it always runs:
+
+```yaml
+checks:
+  staged_triggers:
+    python: ["*.py", pyproject.toml, uv.lock]
+```
+
 ### Claude Code hooks
 
 `deckz hooks install` also adds deckz's own Claude Code hooks to
